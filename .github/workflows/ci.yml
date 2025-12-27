@@ -73,11 +73,16 @@ jobs:
       - name: Free disk space (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          # Remove unnecessary large directories to free up disk space
+          # Remove unnecessary large directories to free up disk space (~15GB)
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          # Additional cleanup for more space (~10GB more)
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/share/swift
           df -h
 
       - name: Checkout repository
@@ -141,11 +146,16 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-          # Remove unnecessary large directories to free up disk space
+          # Remove unnecessary large directories to free up disk space (~15GB)
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          # Additional cleanup for more space (~10GB more)
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/share/swift
           df -h
 
       - name: Checkout repository
