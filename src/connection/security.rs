@@ -520,9 +520,8 @@ impl HostKeyPolicy {
 
                     if expected == actual {
                         return Ok(KnownHostsCheckResult::Verified);
-                    } else {
-                        return Ok(KnownHostsCheckResult::Mismatch { expected });
                     }
+                    return Ok(KnownHostsCheckResult::Mismatch { expected });
                 }
             }
         }

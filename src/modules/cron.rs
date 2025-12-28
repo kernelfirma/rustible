@@ -135,21 +135,20 @@ impl CronJob {
                                 disabled,
                                 env_vars: Vec::new(),
                             });
-                        } else {
-                            return Some(Self {
-                                name,
-                                minute: parts[0].to_string(),
-                                hour: parts[1].to_string(),
-                                day: parts[2].to_string(),
-                                month: parts[3].to_string(),
-                                weekday: parts[4].to_string(),
-                                job: parts[5..].join(" "),
-                                user: None,
-                                special_time: None,
-                                disabled,
-                                env_vars: Vec::new(),
-                            });
                         }
+                        return Some(Self {
+                            name,
+                            minute: parts[0].to_string(),
+                            hour: parts[1].to_string(),
+                            day: parts[2].to_string(),
+                            month: parts[3].to_string(),
+                            weekday: parts[4].to_string(),
+                            job: parts[5..].join(" "),
+                            user: None,
+                            special_time: None,
+                            disabled,
+                            env_vars: Vec::new(),
+                        });
                     }
                 }
             }

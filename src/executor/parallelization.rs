@@ -164,9 +164,8 @@ impl ParallelizationManager {
                                     module_name, host
                                 );
                                 break;
-                            } else {
-                                bucket.time_until_available()
                             }
+                            bucket.time_until_available()
                         } else {
                             Duration::from_millis(0)
                         }

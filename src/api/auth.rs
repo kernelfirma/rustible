@@ -1,11 +1,13 @@
 //! JWT authentication for the API.
 
-use axum::extract::{FromRequestParts, State};
+use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::http::HeaderMap;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use super::error::ApiError;
@@ -158,25 +160,14 @@ pub struct AuthenticatedUser {
     pub claims: Claims,
 }
 
-impl<S> FromRequestParts<S> for AuthenticatedUser
-where
-    S: Send + Sync,
-    Arc<AppState>: FromRequestParts<S>,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Get the app state
-        let app_state = Arc::<AppState>::from_request_parts(parts, state)
-            .await
-            .map_err(|_| ApiError::Internal("Failed to get app state".to_string()))?;
-
+impl AuthenticatedUser {
+    /// Validate token from headers using the provided JWT auth handler.
+    fn validate_from_headers(headers: &HeaderMap, jwt_auth: &JwtAuth) -> Result<Self, ApiError> {
         // Extract the Authorization header
-        let auth_header = extract_auth_header(&parts.headers)?;
+        let auth_header = extract_auth_header(headers)?;
 
         // Validate the token
-        let claims = app_state
-            .jwt_auth
+        let claims = jwt_auth
             .validate_token(auth_header)
             .map_err(|e| ApiError::Unauthorized(format!("Invalid token: {}", e)))?;
 
@@ -186,6 +177,23 @@ where
         }
 
         Ok(AuthenticatedUser { claims })
+    }
+}
+
+impl FromRequestParts<Arc<AppState>> for AuthenticatedUser {
+    type Rejection = ApiError;
+
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 Arc<AppState>,
+    ) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        let result = Self::validate_from_headers(&parts.headers, &state.jwt_auth);
+        Box::pin(async move { result })
     }
 }
 
@@ -214,21 +222,26 @@ pub struct OptionalUser {
     pub claims: Option<Claims>,
 }
 
-impl<S> FromRequestParts<S> for OptionalUser
-where
-    S: Send + Sync,
-    Arc<AppState>: FromRequestParts<S>,
-{
+impl FromRequestParts<Arc<AppState>> for OptionalUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Try to get authentication, but don't fail if not present
-        match AuthenticatedUser::from_request_parts(parts, state).await {
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 Arc<AppState>,
+    ) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        let result = match AuthenticatedUser::validate_from_headers(&parts.headers, &state.jwt_auth)
+        {
             Ok(user) => Ok(OptionalUser {
                 claims: Some(user.claims),
             }),
             Err(_) => Ok(OptionalUser { claims: None }),
-        }
+        };
+        Box::pin(async move { result })
     }
 }
 
@@ -240,23 +253,32 @@ pub struct AdminUser {
     pub claims: Claims,
 }
 
-impl<S> FromRequestParts<S> for AdminUser
-where
-    S: Send + Sync,
-    Arc<AppState>: FromRequestParts<S>,
-{
+impl FromRequestParts<Arc<AppState>> for AdminUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let user = AuthenticatedUser::from_request_parts(parts, state).await?;
-
-        if !user.claims.is_admin() {
-            return Err(ApiError::Forbidden("Admin privileges required".to_string()));
-        }
-
-        Ok(AdminUser {
-            claims: user.claims,
-        })
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 Arc<AppState>,
+    ) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        let result = match AuthenticatedUser::validate_from_headers(&parts.headers, &state.jwt_auth)
+        {
+            Ok(user) => {
+                if !user.claims.is_admin() {
+                    Err(ApiError::Forbidden("Admin privileges required".to_string()))
+                } else {
+                    Ok(AdminUser {
+                        claims: user.claims,
+                    })
+                }
+            }
+            Err(e) => Err(e),
+        };
+        Box::pin(async move { result })
     }
 }
 

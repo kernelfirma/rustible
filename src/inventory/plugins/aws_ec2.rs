@@ -409,7 +409,7 @@ impl AwsEc2Plugin {
         let parts: Vec<&str> = key.split('.').collect();
 
         match parts.as_slice() {
-            ["tags", tag_name] | ["tag", tag_name] => instance.tags.get(*tag_name).cloned(),
+            ["tags" | "tag", tag_name] => instance.tags.get(*tag_name).cloned(),
             ["placement", "availability_zone"] => Some(instance.availability_zone.clone()),
             ["placement", "region"] => Some(instance.region.clone()),
             ["instance_type"] => Some(instance.instance_type.clone()),

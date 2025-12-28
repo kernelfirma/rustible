@@ -470,6 +470,61 @@ pub mod metrics;
 pub mod state;
 
 // ============================================================================
+// Infrastructure Provisioning (Terraform-like)
+// ============================================================================
+
+/// Infrastructure provisioning module for declarative cloud resource management.
+///
+/// This module provides Terraform-like capabilities for provisioning infrastructure
+/// resources via cloud provider APIs. It enables Rustible to serve as a unified
+/// replacement for both Ansible and Terraform.
+///
+/// # Features
+///
+/// - **Declarative Resources**: Define infrastructure in YAML
+/// - **Plan/Apply Workflow**: Preview changes before applying
+/// - **State Management**: Track provisioned resources
+/// - **Provider Support**: AWS, Azure, GCP (with AWS as primary)
+/// - **Dependency Resolution**: Automatic ordering based on references
+///
+/// # Example
+///
+/// ```yaml
+/// # infrastructure.rustible.yml
+/// providers:
+///   aws:
+///     region: us-east-1
+///
+/// resources:
+///   aws_vpc:
+///     main:
+///       cidr_block: "10.0.0.0/16"
+///       tags:
+///         Name: production-vpc
+///
+///   aws_subnet:
+///     public:
+///       vpc_id: "{{ resources.aws_vpc.main.id }}"
+///       cidr_block: "10.0.1.0/24"
+/// ```
+///
+/// ```rust,ignore
+/// use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
+///
+/// let config = InfrastructureConfig::from_file("infrastructure.yml").await?;
+/// let executor = ProvisioningExecutor::new(config).await?;
+///
+/// // Generate and review plan
+/// let plan = executor.plan().await?;
+/// println!("{}", plan.summary());
+///
+/// // Apply changes
+/// let result = executor.apply(&plan).await?;
+/// ```
+#[cfg(feature = "provisioning")]
+pub mod provisioning;
+
+// ============================================================================
 // REST API (Optional)
 // ============================================================================
 

@@ -278,10 +278,10 @@ struct EapiParams {
     format: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     timestamps: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    autoComplete: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    expandAliases: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "autoComplete")]
+    auto_complete: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "expandAliases")]
+    expand_aliases: Option<bool>,
 }
 
 /// eAPI command - can be a simple string or an object for session commands
@@ -626,8 +626,8 @@ impl EosConfigModule {
                 cmds: commands.to_vec(),
                 format: "text".to_string(),
                 timestamps: None,
-                autoComplete: None,
-                expandAliases: None,
+                auto_complete: None,
+                expand_aliases: None,
             },
             id: uuid::Uuid::new_v4().to_string(),
         };

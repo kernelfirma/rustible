@@ -424,22 +424,21 @@ impl InventoryCache {
                     self.metrics.record_hit();
                 }
                 return Some(entry.inventory.clone());
-            } else {
-                // Entry is invalid, remove it
-                let removed = entries.remove(key);
-                if let Some(removed_entry) = removed {
-                    self.metrics.memory_bytes.fetch_sub(
-                        removed_entry
-                            .size_bytes
-                            .min(self.metrics.memory_bytes.load(Ordering::Relaxed)),
-                        Ordering::Relaxed,
-                    );
-                }
-                self.metrics.entries.store(entries.len(), Ordering::Relaxed);
-                if self.config.enable_metrics {
-                    self.metrics.record_miss();
-                    self.metrics.record_eviction();
-                }
+            }
+            // Entry is invalid, remove it
+            let removed = entries.remove(key);
+            if let Some(removed_entry) = removed {
+                self.metrics.memory_bytes.fetch_sub(
+                    removed_entry
+                        .size_bytes
+                        .min(self.metrics.memory_bytes.load(Ordering::Relaxed)),
+                    Ordering::Relaxed,
+                );
+            }
+            self.metrics.entries.store(entries.len(), Ordering::Relaxed);
+            if self.config.enable_metrics {
+                self.metrics.record_miss();
+                self.metrics.record_eviction();
             }
         } else if self.config.enable_metrics {
             self.metrics.record_miss();

@@ -446,7 +446,10 @@ impl UnarchiveModule {
                 if let Ok(target_meta) = fs::metadata(&target_path) {
                     let entry_mtime = file
                         .last_modified()
-                        .and_then(|dt| dt.to_time().ok())
+                        .and_then(|dt| {
+                            #[allow(deprecated)]
+                            dt.to_time().ok()
+                        })
                         .map(|dt| dt.unix_timestamp() as u64)
                         .unwrap_or(0);
                     let target_mtime = target_meta

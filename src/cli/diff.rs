@@ -336,7 +336,6 @@ impl ColorizedDiff {
         let diff = TextDiff::from_lines(old, new);
         let mut additions = 0;
         let mut deletions = 0;
-        let mut changes = 0;
 
         for change in diff.iter_all_changes() {
             match change.tag() {
@@ -347,7 +346,7 @@ impl ColorizedDiff {
         }
 
         // Count changes as min of additions and deletions (rough estimate)
-        changes = additions.min(deletions);
+        let changes = additions.min(deletions);
         additions -= changes;
         deletions -= changes;
 

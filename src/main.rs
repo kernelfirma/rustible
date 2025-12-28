@@ -54,6 +54,7 @@ async fn main() -> Result<()> {
         Commands::Vault(args) => args.execute(&mut ctx).await?,
         Commands::Init(args) => init_project(&args.path, &args.template, &mut ctx).await?,
         Commands::Validate(args) => validate_playbook(&args.playbook, &mut ctx).await?,
+        Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
     };
 
     std::process::exit(exit_code);
@@ -314,6 +315,24 @@ Thumbs.db
         .info("Run 'rustible run playbooks/site.yml' to test your setup.");
 
     Ok(0)
+}
+
+/// Execute a provisioning command
+async fn execute_provision(
+    command: &cli::commands::provision::ProvisionCommands,
+    ctx: &mut CommandContext,
+) -> Result<i32> {
+    use cli::commands::provision::ProvisionCommands;
+
+    match command {
+        ProvisionCommands::Plan(args) => args.execute(ctx).await,
+        ProvisionCommands::Apply(args) => args.execute(ctx).await,
+        ProvisionCommands::Destroy(args) => args.execute(ctx).await,
+        ProvisionCommands::Import(args) => args.execute(ctx).await,
+        ProvisionCommands::Show(args) => args.execute(ctx).await,
+        ProvisionCommands::Refresh(args) => args.execute(ctx).await,
+        ProvisionCommands::Init(args) => args.execute(ctx).await,
+    }
 }
 
 /// Validate a playbook

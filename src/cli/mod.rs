@@ -117,6 +117,10 @@ pub enum Commands {
 
     /// Validate playbook syntax
     Validate(ValidateArgs),
+
+    /// Infrastructure provisioning (Terraform-like)
+    #[command(name = "provision")]
+    Provision(commands::provision::ProvisionArgs),
 }
 
 /// Arguments for init command

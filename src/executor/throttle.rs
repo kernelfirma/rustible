@@ -315,9 +315,8 @@ impl ThrottleManager {
                     if bucket.try_acquire() {
                         debug!("Rate limit token acquired for module '{}'", module_name);
                         break;
-                    } else {
-                        bucket.time_until_available()
                     }
+                    bucket.time_until_available()
                 } else {
                     Duration::from_millis(0)
                 }

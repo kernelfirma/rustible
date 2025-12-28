@@ -65,7 +65,7 @@ async fn handle_socket(
 
     // Spawn task to handle incoming messages (ping/pong)
     let _state_clone = state.clone();
-    let mut send_task = tokio::spawn(async move {
+    let send_task = tokio::spawn(async move {
         loop {
             tokio::select! {
                 // Receive broadcast messages

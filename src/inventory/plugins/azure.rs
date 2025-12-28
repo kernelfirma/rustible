@@ -491,7 +491,7 @@ impl AzurePlugin {
         let parts: Vec<&str> = key.split('.').collect();
 
         match parts.as_slice() {
-            ["tags", tag_name] | ["tag", tag_name] => vm.tags.get(*tag_name).cloned(),
+            ["tags" | "tag", tag_name] => vm.tags.get(*tag_name).cloned(),
             ["location"] => Some(vm.location.clone()),
             ["resource_group"] => Some(vm.resource_group.clone()),
             ["vm_size"] => Some(vm.vm_size.clone()),

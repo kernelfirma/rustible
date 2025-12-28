@@ -9,6 +9,7 @@
 //! - [`aws_ec2`]: AWS EC2 instances inventory
 //! - [`azure`]: Azure Virtual Machines inventory
 //! - [`gcp`]: Google Cloud Platform Compute Engine inventory
+//! - [`terraform`]: Terraform state file inventory
 //! - [`docker`]: Docker containers inventory
 //!
 //! # Configuration
@@ -48,6 +49,7 @@ pub mod aws_ec2;
 pub mod azure;
 pub mod config;
 pub mod gcp;
+pub mod terraform;
 
 pub use aws_ec2::AwsEc2Plugin;
 pub use azure::AzurePlugin;
@@ -56,6 +58,7 @@ pub use config::{
     KeyedGroupConfig, PluginConfig, PluginConfigBuilder, PluginConfigError, PluginConfigResult,
 };
 pub use gcp::GcpPlugin;
+pub use terraform::TerraformPlugin;
 
 use super::{Inventory, InventoryError, InventoryResult};
 use async_trait::async_trait;
@@ -249,6 +252,11 @@ impl DynamicPluginRegistry {
             registry.register("gcp", Arc::new(plugin));
         }
 
+        // Register Terraform plugin
+        if let Ok(plugin) = TerraformPlugin::with_defaults() {
+            registry.register("terraform", Arc::new(plugin));
+        }
+
         registry
     }
 }
@@ -310,8 +318,17 @@ pub fn create_plugin_from_config(
             })?;
             Ok(Arc::new(plugin))
         }
+        "terraform" | "cloud.terraform.terraform_state" => {
+            let plugin = TerraformPlugin::new(config).map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Failed to create Terraform plugin: {}",
+                    e
+                ))
+            })?;
+            Ok(Arc::new(plugin))
+        }
         _ => Err(InventoryError::DynamicInventoryFailed(format!(
-            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp",
+            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp, terraform",
             plugin_name
         ))),
     }

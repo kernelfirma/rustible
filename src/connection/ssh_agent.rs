@@ -477,7 +477,7 @@ impl AgentConnectionPool {
     }
 
     /// Get a connection from the pool or create a new one
-    pub async fn get_connection(&self) -> Result<PooledConnection, AgentError> {
+    pub async fn get_connection(&self) -> Result<PooledConnection<'_>, AgentError> {
         // First, try to get an existing idle connection
         {
             let mut connections = self.connections.write().await;

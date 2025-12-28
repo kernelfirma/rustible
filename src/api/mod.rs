@@ -156,7 +156,7 @@ impl ApiServer {
     /// Run the server with graceful shutdown support.
     pub async fn run_with_shutdown(
         self,
-        shutdown: impl std::future::Future<Output = ()>,
+        shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     ) -> Result<(), std::io::Error> {
         let addr = self.config.bind_address;
         let router = self.router();

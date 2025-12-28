@@ -4,6 +4,7 @@
 
 pub mod check;
 pub mod inventory;
+pub mod provision;
 pub mod run;
 pub mod vault;
 

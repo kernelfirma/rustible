@@ -794,8 +794,9 @@ impl StreamingUploader {
     }
 
     fn calculate_md5(data: &[u8]) -> String {
+        use base64::Engine;
         let digest = md5::compute(data);
-        base64::encode(digest.0)
+        base64::engine::general_purpose::STANDARD.encode(digest.0)
     }
 
     /// Get upload progress

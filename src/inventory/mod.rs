@@ -130,7 +130,7 @@ pub use plugins::{
     create_plugin_from_config, create_plugin_from_file, sanitize_group_name, AwsEc2Plugin,
     AzurePlugin, ComposeConfig, DynamicInventoryPlugin, DynamicPluginRegistry, FilterConfig,
     FilterOperator, GcpPlugin, HostnameConfig, KeyedGroupConfig, PluginConfig, PluginConfigBuilder,
-    PluginConfigError, PluginConfigResult, PluginOption, PluginOptionType,
+    PluginConfigError, PluginConfigResult, PluginOption, PluginOptionType, TerraformPlugin,
 };
 
 use indexmap::IndexMap;
