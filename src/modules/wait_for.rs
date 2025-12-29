@@ -129,8 +129,10 @@ struct WaitForConfig {
     port: Option<u16>,
     /// Path to check
     path: Option<String>,
-    /// Regex to search for in file
+    /// Regex to search for in file (original string)
     search_regex: Option<String>,
+    /// Compiled regex for search
+    compiled_regex: Option<Regex>,
     /// Desired state
     state: WaitState,
     /// Maximum time to wait in seconds
@@ -168,6 +170,15 @@ impl WaitForConfig {
 
         let path = params.get_string("path")?;
         let search_regex = params.get_string("search_regex")?;
+
+        // Compile regex if provided
+        let compiled_regex = if let Some(ref pattern) = search_regex {
+            Some(Regex::new(pattern).map_err(|e| {
+                ModuleError::InvalidParameter(format!("Invalid search_regex pattern: {}", e))
+            })?)
+        } else {
+            None
+        };
 
         // Determine default state based on what's being waited for
         let default_state = if port.is_some() {
@@ -226,6 +237,7 @@ impl WaitForConfig {
             port,
             path,
             search_regex,
+            compiled_regex,
             state,
             timeout,
             delay,
@@ -273,12 +285,7 @@ impl WaitForConfig {
             ));
         }
 
-        // Validate regex if provided
-        if let Some(ref pattern) = self.search_regex {
-            Regex::new(pattern).map_err(|e| {
-                ModuleError::InvalidParameter(format!("Invalid search_regex pattern: {}", e))
-            })?;
-        }
+        // Regex is already validated in from_params via compilation
 
         Ok(())
     }
@@ -318,10 +325,7 @@ impl WaitForModule {
     }
 
     /// Check if a regex pattern is found in a file
-    fn check_regex_in_file(path: &str, pattern: &str) -> ModuleResult<bool> {
-        let regex = Regex::new(pattern)
-            .map_err(|e| ModuleError::InvalidParameter(format!("Invalid regex pattern: {}", e)))?;
-
+    fn check_regex_in_file(path: &str, regex: &Regex) -> ModuleResult<bool> {
         let file = match std::fs::File::open(path) {
             Ok(f) => f,
             Err(_) => return Ok(false), // File doesn't exist yet
@@ -492,11 +496,11 @@ impl WaitForModule {
                     .expect("path required for present state");
 
                 // If search_regex is provided, check for pattern
-                if let Some(ref pattern) = config.search_regex {
+                if let Some(ref regex) = config.compiled_regex {
                     if !Self::check_path_exists(path) {
                         return Ok(false);
                     }
-                    Self::check_regex_in_file(path, pattern)
+                    Self::check_regex_in_file(path, regex)
                 } else {
                     Ok(Self::check_path_exists(path))
                 }
@@ -663,6 +667,7 @@ mod tests {
 
         let config = WaitForConfig::from_params(&params).unwrap();
         assert_eq!(config.search_regex, Some("Application started".to_string()));
+        assert!(config.compiled_regex.is_some());
         // Default state for path is present
         assert_eq!(config.state, WaitState::Present);
     }
@@ -728,8 +733,8 @@ mod tests {
             ("search_regex", serde_json::json!("[invalid(")),
         ]);
 
-        let config = WaitForConfig::from_params(&params).unwrap();
-        assert!(config.validate().is_err());
+        // Error should happen in from_params now
+        assert!(WaitForConfig::from_params(&params).is_err());
     }
 
     #[test]
@@ -762,7 +767,8 @@ mod tests {
 
     #[test]
     fn test_check_regex_in_file_nonexistent() {
-        let result = WaitForModule::check_regex_in_file("/nonexistent/file", "pattern");
+        let regex = Regex::new("pattern").unwrap();
+        let result = WaitForModule::check_regex_in_file("/nonexistent/file", &regex);
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
@@ -781,12 +787,14 @@ mod tests {
         let path = file.path().to_str().unwrap();
 
         // Pattern exists
-        let result = WaitForModule::check_regex_in_file(path, "started successfully");
+        let regex = Regex::new("started successfully").unwrap();
+        let result = WaitForModule::check_regex_in_file(path, &regex);
         assert!(result.is_ok());
         assert!(result.unwrap());
 
         // Pattern doesn't exist
-        let result = WaitForModule::check_regex_in_file(path, "does not exist");
+        let regex_not_found = Regex::new("does not exist").unwrap();
+        let result = WaitForModule::check_regex_in_file(path, &regex_not_found);
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
