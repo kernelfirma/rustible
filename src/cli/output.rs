@@ -351,14 +351,41 @@ impl OutputFormatter {
         // Print final status summary
         if self.use_color {
             if stats.has_failures() {
-                println!("{}", "Playbook run failed.".red().bold());
+                let failures = stats.total_failed();
+                println!(
+                    "{}",
+                    format!("Playbook run failed ({} failed).", failures)
+                        .red()
+                        .bold()
+                );
             } else {
-                println!("{}", "Playbook completed successfully.".green().bold());
+                let changes = stats.total_changed();
+                if changes > 0 {
+                    println!(
+                        "{}",
+                        format!("Playbook completed successfully ({} changed).", changes)
+                            .green()
+                            .bold()
+                    );
+                } else {
+                    println!(
+                        "{}",
+                        "Playbook completed successfully (no changes)."
+                            .green()
+                            .bold()
+                    );
+                }
             }
         } else if stats.has_failures() {
-            println!("Playbook run failed.");
+            let failures = stats.total_failed();
+            println!("Playbook run failed ({} failed).", failures);
         } else {
-            println!("Playbook completed successfully.");
+            let changes = stats.total_changed();
+            if changes > 0 {
+                println!("Playbook completed successfully ({} changed).", changes);
+            } else {
+                println!("Playbook completed successfully (no changes).");
+            }
         }
     }
 
@@ -716,6 +743,16 @@ impl RecapStats {
                 h.ok + h.changed + h.failed + h.unreachable + h.skipped + h.rescued + h.ignored
             })
             .sum()
+    }
+
+    /// Get total changed count
+    pub fn total_changed(&self) -> u32 {
+        self.hosts.values().map(|h| h.changed).sum()
+    }
+
+    /// Get total failed count (failed + unreachable)
+    pub fn total_failed(&self) -> u32 {
+        self.hosts.values().map(|h| h.failed + h.unreachable).sum()
     }
 }
 
