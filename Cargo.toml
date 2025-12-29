@@ -8,7 +8,7 @@ local = []
 docker = ["dep:bollard"]
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 # AWS cloud modules (EC2, S3, VPC, etc.) - requires optional AWS SDK
-aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-s3"]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-s3", "dep:aws-sdk-iam"]
 # Azure cloud modules (VMs, Resource Groups, Networking) - stub implementation
 azure = []
 # GCP cloud modules (Compute Engine, Networking) - stub implementation
@@ -148,6 +148,7 @@ petgraph = "0.6"
 # HTTP client for API modules
 reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking"], default-features = false }
 url = "2.5"
+bytes = "1.5"
 
 # Validation
 validator = { version = "0.19", features = ["derive"] }
@@ -166,6 +167,7 @@ k8s-openapi = { version = "0.20", features = ["v1_28"], optional = true }
 aws-config = { version = "1.1", optional = true }
 aws-sdk-ec2 = { version = "1.15", optional = true }
 aws-sdk-s3 = { version = "1.15", optional = true }
+aws-sdk-iam = { version = "1.15", optional = true }
 
 # Hostname resolution
 hostname = "0.3"

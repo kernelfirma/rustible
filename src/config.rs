@@ -406,6 +406,12 @@ pub struct GalaxyConfig {
     /// Cache path
     pub cache_dir: Option<PathBuf>,
 
+    /// Collections installation path
+    pub collections_path: Option<PathBuf>,
+
+    /// Roles installation path
+    pub roles_path: Option<PathBuf>,
+
     /// Ignore certs
     pub ignore_certs: bool,
 }
@@ -416,6 +422,8 @@ impl Default for GalaxyConfig {
             server: "https://galaxy.ansible.com".to_string(),
             server_list: vec![],
             cache_dir: None,
+            collections_path: None,
+            roles_path: None,
             ignore_certs: false,
         }
     }

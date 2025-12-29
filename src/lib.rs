@@ -557,6 +557,45 @@ pub mod provisioning;
 pub mod api;
 
 // ============================================================================
+// Galaxy Support (Ansible Galaxy integration)
+// ============================================================================
+
+/// Ansible Galaxy support for installing collections and roles.
+///
+/// This module provides comprehensive support for installing and managing
+/// Ansible Galaxy collections and roles with:
+///
+/// - **Robust API client**: HTTP client with retry logic and timeout handling
+/// - **Collection installation**: Install collections from Galaxy or tarballs
+/// - **Role installation**: Install roles from Galaxy or Git repositories
+/// - **Requirements parsing**: Parse and process requirements.yml files
+/// - **Local caching**: Cache downloaded artifacts with integrity verification
+/// - **Offline mode**: Fall back to cached artifacts when Galaxy is unavailable
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use rustible::galaxy::{Galaxy, GalaxyConfig, RequirementsFile};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<()> {
+///     // Create Galaxy client with default configuration
+///     let config = GalaxyConfig::default();
+///     let galaxy = Galaxy::new(config)?;
+///
+///     // Install a collection
+///     galaxy.install_collection("community.general", Some("5.0.0"), None).await?;
+///
+///     // Install from requirements.yml
+///     let requirements = RequirementsFile::from_path("requirements.yml").await?;
+///     galaxy.install_requirements(&requirements).await?;
+///
+///     Ok(())
+/// }
+/// ```
+pub mod galaxy;
+
+// ============================================================================
 // Version Information
 // ============================================================================
 

@@ -861,6 +861,7 @@ impl Resource for AwsElasticIpResource {
                         resource_type: "aws_instance".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }
@@ -877,6 +878,7 @@ impl Resource for AwsElasticIpResource {
                         resource_type: "aws_network_interface".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }

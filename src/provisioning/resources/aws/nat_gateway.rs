@@ -112,7 +112,7 @@ impl AwsNatGatewayResource {
                 field_type: FieldType::String,
                 description: "The subnet ID to create the NAT Gateway in".to_string(),
                 default: None,
-                constraints: vec![FieldConstraint::Pattern(r"^subnet-[a-f0-9]+$".to_string())],
+                constraints: vec![FieldConstraint::Pattern { regex: r"^subnet-[a-f0-9]+$".to_string() }],
                 sensitive: false,
             }],
             optional_args: vec![
@@ -429,7 +429,7 @@ impl AwsNatGatewayResource {
             .connectivity_type(connectivity_type)
             .tag_specifications(
                 TagSpecification::builder()
-                    .resource_type(ResourceType::NatGateway)
+                    .resource_type(ResourceType::Natgateway)
                     .set_tags(Some(all_tags))
                     .build(),
             );
@@ -737,6 +737,7 @@ impl AwsNatGatewayResource {
                         resource_type: "aws_subnet".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }
@@ -753,6 +754,7 @@ impl AwsNatGatewayResource {
                         resource_type: "aws_eip".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }

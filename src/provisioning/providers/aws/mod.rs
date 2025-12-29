@@ -110,6 +110,8 @@ const AWS_REGIONS: &[&str] = &[
 /// Supported resource types
 const RESOURCE_TYPES: &[&str] = &[
     "aws_eip",
+    "aws_iam_policy",
+    "aws_iam_role",
     "aws_instance",
     "aws_internet_gateway",
     "aws_nat_gateway",

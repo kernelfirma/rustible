@@ -105,6 +105,12 @@ impl InternetGatewayConfig {
 
         Value::Object(map)
     }
+
+    /// Validate the configuration
+    pub fn validate(&self) -> ProvisioningResult<()> {
+        // Internet Gateway config is always valid - vpc_id is optional
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -130,73 +136,59 @@ impl AwsInternetGatewayResource {
     /// Build schema for Internet Gateway resource
     fn build_schema() -> ResourceSchema {
         ResourceSchema {
-            provider: "aws".to_string(),
             resource_type: "aws_internet_gateway".to_string(),
             description: "AWS Internet Gateway for VPC internet access".to_string(),
-            fields: vec![
+            required_args: vec![],
+            optional_args: vec![
                 SchemaField {
                     name: "vpc_id".to_string(),
                     field_type: FieldType::String,
                     description: "VPC ID to attach the Internet Gateway to".to_string(),
-                    required: false,
-                    computed: false,
-                    force_new: false,
-                    sensitive: false,
                     default: None,
                     constraints: vec![],
+                    sensitive: false,
                 },
                 SchemaField {
                     name: "tags".to_string(),
-                    field_type: FieldType::Map,
+                    field_type: FieldType::Map(Box::new(FieldType::String)),
                     description: "Tags to apply to the Internet Gateway".to_string(),
-                    required: false,
-                    computed: false,
-                    force_new: false,
-                    sensitive: false,
-                    default: None,
+                    default: Some(Value::Object(Default::default())),
                     constraints: vec![],
+                    sensitive: false,
                 },
             ],
-            computed_fields: vec![
+            computed_attrs: vec![
                 SchemaField {
                     name: "id".to_string(),
                     field_type: FieldType::String,
                     description: "Internet Gateway ID".to_string(),
-                    required: false,
-                    computed: true,
-                    force_new: false,
-                    sensitive: false,
                     default: None,
                     constraints: vec![],
+                    sensitive: false,
                 },
                 SchemaField {
                     name: "arn".to_string(),
                     field_type: FieldType::String,
                     description: "Internet Gateway ARN".to_string(),
-                    required: false,
-                    computed: true,
-                    force_new: false,
-                    sensitive: false,
                     default: None,
                     constraints: vec![],
+                    sensitive: false,
                 },
                 SchemaField {
                     name: "owner_id".to_string(),
                     field_type: FieldType::String,
                     description: "AWS account ID of the owner".to_string(),
-                    required: false,
-                    computed: true,
-                    force_new: false,
-                    sensitive: false,
                     default: None,
                     constraints: vec![],
+                    sensitive: false,
                 },
             ],
+            force_new: vec![],
             timeouts: ResourceTimeouts {
-                create: Some(std::time::Duration::from_secs(300)),
-                read: Some(std::time::Duration::from_secs(60)),
-                update: Some(std::time::Duration::from_secs(300)),
-                delete: Some(std::time::Duration::from_secs(300)),
+                create: 300,
+                read: 60,
+                update: 300,
+                delete: 300,
             },
         }
     }
@@ -266,6 +258,11 @@ impl Resource for AwsInternetGatewayResource {
         Self::build_schema()
     }
 
+    fn validate(&self, config: &Value) -> ProvisioningResult<()> {
+        let igw_config = InternetGatewayConfig::from_value(config)?;
+        igw_config.validate()
+    }
+
     #[cfg(feature = "aws")]
     async fn read(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceReadResult> {
         let client = Self::create_client(ctx).await?;
@@ -323,30 +320,20 @@ impl Resource for AwsInternetGatewayResource {
 
                     Ok(ResourceReadResult {
                         exists: true,
-                        id: Some(igw_id.to_string()),
+                        cloud_id: Some(igw_id.to_string()),
                         attributes: serde_json::to_value(&attributes)
                             .unwrap_or(Value::Object(serde_json::Map::new())),
-                        config: Value::Object(config_map),
+                        metadata: HashMap::new(),
                     })
                 } else {
-                    Ok(ResourceReadResult {
-                        exists: false,
-                        id: None,
-                        attributes: Value::Null,
-                        config: Value::Null,
-                    })
+                    Ok(ResourceReadResult::not_found())
                 }
             }
             Err(e) => {
                 if e.to_string().contains("InvalidInternetGatewayID.NotFound") {
-                    Ok(ResourceReadResult {
-                        exists: false,
-                        id: None,
-                        attributes: Value::Null,
-                        config: Value::Null,
-                    })
+                    Ok(ResourceReadResult::not_found())
                 } else {
-                    Err(ProvisioningError::ProviderError(format!(
+                    Err(ProvisioningError::CloudApiError(format!(
                         "Failed to read Internet Gateway: {}",
                         e
                     )))
@@ -357,7 +344,7 @@ impl Resource for AwsInternetGatewayResource {
 
     #[cfg(not(feature = "aws"))]
     async fn read(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceReadResult> {
-        Err(ProvisioningError::ProviderError(
+        Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
     }
@@ -371,54 +358,54 @@ impl Resource for AwsInternetGatewayResource {
         let desired_config = InternetGatewayConfig::from_value(desired)?;
 
         match current {
-            None => Ok(ResourceDiff {
-                change_type: ChangeType::Create,
-                before: None,
-                after: Some(desired_config.to_value()),
-                changed_fields: vec!["vpc_id".to_string(), "tags".to_string()],
-                forces_replacement: false,
-            }),
+            None => Ok(ResourceDiff::create(desired.clone())),
             Some(current_val) => {
                 let current_config = InternetGatewayConfig::from_value(current_val)?;
-                let mut changed_fields = Vec::new();
-                let mut forces_replacement = false;
+                let mut modifications = HashMap::new();
+                let mut replacement_fields = Vec::new();
 
                 // VPC attachment change forces replacement
                 if desired_config.vpc_id != current_config.vpc_id {
-                    changed_fields.push("vpc_id".to_string());
-                    forces_replacement = true;
+                    modifications.insert(
+                        "vpc_id".to_string(),
+                        (
+                            serde_json::to_value(&current_config.vpc_id).unwrap_or(Value::Null),
+                            serde_json::to_value(&desired_config.vpc_id).unwrap_or(Value::Null),
+                        ),
+                    );
+                    replacement_fields.push("vpc_id".to_string());
                 }
 
                 // Tags can be updated in place
                 if Self::tags_changed(&current_config.tags, &desired_config.tags) {
-                    changed_fields.push("tags".to_string());
+                    modifications.insert(
+                        "tags".to_string(),
+                        (
+                            serde_json::to_value(&current_config.tags).unwrap_or(Value::Null),
+                            serde_json::to_value(&desired_config.tags).unwrap_or(Value::Null),
+                        ),
+                    );
                 }
 
-                if changed_fields.is_empty() {
-                    Ok(ResourceDiff {
-                        change_type: ChangeType::NoOp,
-                        before: Some(current_config.to_value()),
-                        after: Some(desired_config.to_value()),
-                        changed_fields: vec![],
-                        forces_replacement: false,
-                    })
-                } else if forces_replacement {
-                    Ok(ResourceDiff {
-                        change_type: ChangeType::Replace,
-                        before: Some(current_config.to_value()),
-                        after: Some(desired_config.to_value()),
-                        changed_fields,
-                        forces_replacement: true,
-                    })
+                let requires_replacement = !replacement_fields.is_empty();
+                let has_changes = !modifications.is_empty();
+
+                let change_type = if requires_replacement {
+                    ChangeType::Replace
+                } else if has_changes {
+                    ChangeType::Update
                 } else {
-                    Ok(ResourceDiff {
-                        change_type: ChangeType::Update,
-                        before: Some(current_config.to_value()),
-                        after: Some(desired_config.to_value()),
-                        changed_fields,
-                        forces_replacement: false,
-                    })
-                }
+                    ChangeType::NoOp
+                };
+
+                Ok(ResourceDiff {
+                    change_type,
+                    additions: HashMap::new(),
+                    modifications,
+                    deletions: Vec::new(),
+                    requires_replacement,
+                    replacement_fields,
+                })
             }
         }
     }
@@ -441,15 +428,15 @@ impl Resource for AwsInternetGatewayResource {
         }
 
         let create_result = create_request.send().await.map_err(|e| {
-            ProvisioningError::ProviderError(format!("Failed to create Internet Gateway: {}", e))
+            ProvisioningError::CloudApiError(format!("Failed to create Internet Gateway: {}", e))
         })?;
 
         let igw = create_result.internet_gateway().ok_or_else(|| {
-            ProvisioningError::ProviderError("No Internet Gateway returned".to_string())
+            ProvisioningError::CloudApiError("No Internet Gateway returned".to_string())
         })?;
 
         let igw_id = igw.internet_gateway_id().ok_or_else(|| {
-            ProvisioningError::ProviderError("No Internet Gateway ID returned".to_string())
+            ProvisioningError::CloudApiError("No Internet Gateway ID returned".to_string())
         })?;
 
         // Attach to VPC if specified
@@ -461,7 +448,7 @@ impl Resource for AwsInternetGatewayResource {
                 .send()
                 .await
                 .map_err(|e| {
-                    ProvisioningError::ProviderError(format!(
+                    ProvisioningError::CloudApiError(format!(
                         "Failed to attach Internet Gateway to VPC: {}",
                         e
                     ))
@@ -471,16 +458,12 @@ impl Resource for AwsInternetGatewayResource {
         // Read back the resource to get all attributes
         let read_result = self.read(igw_id, ctx).await?;
 
-        Ok(ResourceResult {
-            id: igw_id.to_string(),
-            attributes: read_result.attributes,
-            outputs: HashMap::new(),
-        })
+        Ok(ResourceResult::success(igw_id, read_result.attributes))
     }
 
     #[cfg(not(feature = "aws"))]
     async fn create(&self, _config: &Value, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
-        Err(ProvisioningError::ProviderError(
+        Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
     }
@@ -517,7 +500,7 @@ impl Resource for AwsInternetGatewayResource {
                                 .send()
                                 .await
                                 .map_err(|e| {
-                                    ProvisioningError::ProviderError(format!(
+                                    ProvisioningError::CloudApiError(format!(
                                         "Failed to delete tags: {}",
                                         e
                                     ))
@@ -535,18 +518,14 @@ impl Resource for AwsInternetGatewayResource {
                 .send()
                 .await
                 .map_err(|e| {
-                    ProvisioningError::ProviderError(format!("Failed to create tags: {}", e))
+                    ProvisioningError::CloudApiError(format!("Failed to create tags: {}", e))
                 })?;
         }
 
         // Read back the resource
         let read_result = self.read(id, ctx).await?;
 
-        Ok(ResourceResult {
-            id: id.to_string(),
-            attributes: read_result.attributes,
-            outputs: HashMap::new(),
-        })
+        Ok(ResourceResult::success(id, read_result.attributes))
     }
 
     #[cfg(not(feature = "aws"))]
@@ -557,7 +536,7 @@ impl Resource for AwsInternetGatewayResource {
         _new: &Value,
         _ctx: &ProviderContext,
     ) -> ProvisioningResult<ResourceResult> {
-        Err(ProvisioningError::ProviderError(
+        Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
     }
@@ -581,7 +560,7 @@ impl Resource for AwsInternetGatewayResource {
                     .send()
                     .await
                     .map_err(|e| {
-                        ProvisioningError::ProviderError(format!(
+                        ProvisioningError::CloudApiError(format!(
                             "Failed to detach Internet Gateway: {}",
                             e
                         ))
@@ -596,19 +575,15 @@ impl Resource for AwsInternetGatewayResource {
             .send()
             .await
             .map_err(|e| {
-                ProvisioningError::ProviderError(format!("Failed to delete Internet Gateway: {}", e))
+                ProvisioningError::CloudApiError(format!("Failed to delete Internet Gateway: {}", e))
             })?;
 
-        Ok(ResourceResult {
-            id: id.to_string(),
-            attributes: Value::Null,
-            outputs: HashMap::new(),
-        })
+        Ok(ResourceResult::success(id, Value::Null))
     }
 
     #[cfg(not(feature = "aws"))]
     async fn destroy(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
-        Err(ProvisioningError::ProviderError(
+        Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
     }
@@ -618,22 +593,18 @@ impl Resource for AwsInternetGatewayResource {
         let read_result = self.read(id, ctx).await?;
 
         if !read_result.exists {
-            return Err(ProvisioningError::ResourceNotFound(format!(
-                "Internet Gateway {} not found",
-                id
-            )));
+            return Err(ProvisioningError::ResourceNotFound {
+                provider: "aws".to_string(),
+                resource_type: format!("aws_internet_gateway/{}", id),
+            });
         }
 
-        Ok(ResourceResult {
-            id: id.to_string(),
-            attributes: read_result.attributes,
-            outputs: HashMap::new(),
-        })
+        Ok(ResourceResult::success(id, read_result.attributes))
     }
 
     #[cfg(not(feature = "aws"))]
     async fn import(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
-        Err(ProvisioningError::ProviderError(
+        Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
     }
@@ -653,6 +624,7 @@ impl Resource for AwsInternetGatewayResource {
                         resource_type: "aws_vpc".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }
@@ -669,6 +641,21 @@ impl Resource for AwsInternetGatewayResource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provisioning::traits::{DebugCredentials, RetryConfig};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    fn test_provider_context() -> ProviderContext {
+        ProviderContext {
+            provider: "aws".to_string(),
+            region: Some("us-east-1".to_string()),
+            config: serde_json::json!({"region": "us-east-1"}),
+            credentials: Arc::new(DebugCredentials::new("test")),
+            timeout_seconds: 60,
+            retry_config: RetryConfig::default(),
+            default_tags: HashMap::new(),
+        }
+    }
 
     #[test]
     fn test_internet_gateway_config_parsing() {
@@ -703,7 +690,8 @@ mod tests {
         let resource = AwsInternetGatewayResource::new();
         let schema = resource.schema();
         assert_eq!(schema.resource_type, "aws_internet_gateway");
-        assert_eq!(schema.provider, "aws");
+        // Check that provider() returns "aws"
+        assert_eq!(resource.provider(), "aws");
     }
 
     #[test]
@@ -729,10 +717,7 @@ mod tests {
     #[tokio::test]
     async fn test_plan_create() {
         let resource = AwsInternetGatewayResource::new();
-        let ctx = ProviderContext {
-            config: serde_json::json!({"region": "us-east-1"}),
-            credentials: None,
-        };
+        let ctx = test_provider_context();
 
         let desired = serde_json::json!({
             "vpc_id": "vpc-12345678",
@@ -746,10 +731,7 @@ mod tests {
     #[tokio::test]
     async fn test_plan_no_change() {
         let resource = AwsInternetGatewayResource::new();
-        let ctx = ProviderContext {
-            config: serde_json::json!({"region": "us-east-1"}),
-            credentials: None,
-        };
+        let ctx = test_provider_context();
 
         let config = serde_json::json!({
             "vpc_id": "vpc-12345678",
@@ -763,10 +745,7 @@ mod tests {
     #[tokio::test]
     async fn test_plan_update_tags() {
         let resource = AwsInternetGatewayResource::new();
-        let ctx = ProviderContext {
-            config: serde_json::json!({"region": "us-east-1"}),
-            credentials: None,
-        };
+        let ctx = test_provider_context();
 
         let current = serde_json::json!({
             "vpc_id": "vpc-12345678",
@@ -780,16 +759,13 @@ mod tests {
 
         let diff = resource.plan(&desired, Some(&current), &ctx).await.unwrap();
         assert!(matches!(diff.change_type, ChangeType::Update));
-        assert!(diff.changed_fields.contains(&"tags".to_string()));
+        assert!(diff.modifications.contains_key("tags"));
     }
 
     #[tokio::test]
     async fn test_plan_replace_vpc() {
         let resource = AwsInternetGatewayResource::new();
-        let ctx = ProviderContext {
-            config: serde_json::json!({"region": "us-east-1"}),
-            credentials: None,
-        };
+        let ctx = test_provider_context();
 
         let current = serde_json::json!({
             "vpc_id": "vpc-12345678"
@@ -801,6 +777,6 @@ mod tests {
 
         let diff = resource.plan(&desired, Some(&current), &ctx).await.unwrap();
         assert!(matches!(diff.change_type, ChangeType::Replace));
-        assert!(diff.forces_replacement);
+        assert!(diff.requires_replacement);
     }
 }

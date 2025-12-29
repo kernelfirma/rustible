@@ -112,6 +112,9 @@ pub enum Commands {
     /// Vault operations (encrypt/decrypt secrets)
     Vault(commands::vault::VaultArgs),
 
+    /// Galaxy operations (install/manage collections and roles)
+    Galaxy(commands::galaxy::GalaxyArgs),
+
     /// Initialize a new Rustible project
     Init(InitArgs),
 

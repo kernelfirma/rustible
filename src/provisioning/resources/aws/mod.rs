@@ -6,6 +6,8 @@
 //! # Available Resources
 //!
 //! - `aws_eip` - Elastic IPs
+//! - `aws_iam_policy` - IAM Policies
+//! - `aws_iam_role` - IAM Roles
 //! - `aws_instance` - EC2 Instances
 //! - `aws_internet_gateway` - Internet Gateways
 //! - `aws_nat_gateway` - NAT Gateways
@@ -15,6 +17,8 @@
 //! - `aws_vpc` - Virtual Private Clouds
 
 pub mod elastic_ip;
+pub mod iam_policy;
+pub mod iam_role;
 pub mod instance;
 pub mod internet_gateway;
 pub mod nat_gateway;
@@ -24,6 +28,8 @@ pub mod subnet;
 pub mod vpc;
 
 pub use elastic_ip::{AwsElasticIpResource, ElasticIpAttributes, ElasticIpConfig};
+pub use iam_policy::{AwsIamPolicyResource, IamPolicyAttributes, IamPolicyConfig};
+pub use iam_role::{AwsIamRoleResource, IamRoleAttributes, IamRoleConfig};
 pub use instance::{AwsInstanceResource, InstanceAttributes, InstanceConfig, RootBlockDevice};
 pub use internet_gateway::{AwsInternetGatewayResource, InternetGatewayAttributes, InternetGatewayConfig};
 pub use nat_gateway::{AwsNatGatewayResource, NatGatewayAttributes, NatGatewayConfig};

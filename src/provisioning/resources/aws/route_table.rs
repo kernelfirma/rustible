@@ -194,13 +194,13 @@ impl AwsRouteTableResource {
                 field_type: FieldType::String,
                 description: "The VPC ID to create the route table in".to_string(),
                 default: None,
-                constraints: vec![FieldConstraint::Pattern(r"^vpc-[a-f0-9]+$".to_string())],
+                constraints: vec![FieldConstraint::Pattern { regex: r"^vpc-[a-f0-9]+$".to_string() }],
                 sensitive: false,
             }],
             optional_args: vec![
                 SchemaField {
                     name: "routes".to_string(),
-                    field_type: FieldType::List(Box::new(FieldType::Object)),
+                    field_type: FieldType::List(Box::new(FieldType::Any)),
                     description: "List of route configurations".to_string(),
                     default: Some(Value::Array(vec![])),
                     constraints: vec![],
@@ -242,7 +242,7 @@ impl AwsRouteTableResource {
                 },
                 SchemaField {
                     name: "associations".to_string(),
-                    field_type: FieldType::List(Box::new(FieldType::Object)),
+                    field_type: FieldType::List(Box::new(FieldType::Any)),
                     description: "Route table associations".to_string(),
                     default: None,
                     constraints: vec![],
@@ -693,6 +693,7 @@ impl AwsRouteTableResource {
                         resource_type: "aws_vpc".to_string(),
                         resource_name: name.to_string(),
                         attribute: "id".to_string(),
+                        hard: true,
                     });
                 }
             }
@@ -712,6 +713,7 @@ impl AwsRouteTableResource {
                                 resource_type: "aws_internet_gateway".to_string(),
                                 resource_name: name.to_string(),
                                 attribute: "id".to_string(),
+                                hard: true,
                             });
                         }
                     }
@@ -728,6 +730,7 @@ impl AwsRouteTableResource {
                                 resource_type: "aws_nat_gateway".to_string(),
                                 resource_name: name.to_string(),
                                 attribute: "id".to_string(),
+                                hard: true,
                             });
                         }
                     }
