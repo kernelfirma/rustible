@@ -1036,13 +1036,13 @@ impl RunArgs {
             let result = self.execute_module(ctx, host, task, vars).await;
 
             match result {
-                Ok(changed) => {
+                Ok((changed, message)) => {
                     let status = if changed {
                         TaskStatus::Changed
                     } else {
                         TaskStatus::Ok
                     };
-                    ctx.output.task_result(host, status, None);
+                    ctx.output.task_result(host, status, message.as_deref());
                     stats.lock().await.record(host, status);
                 }
                 Err(e) => {
@@ -1160,7 +1160,7 @@ impl RunArgs {
         host: &str,
         task: &serde_yaml::Value,
         vars: &IndexMap<String, serde_yaml::Value>,
-    ) -> Result<bool> {
+    ) -> Result<(bool, Option<String>)> {
         let (module, args) = self.detect_module(task);
 
         ctx.output
@@ -1168,29 +1168,34 @@ impl RunArgs {
 
         // Handle debug module locally
         if module == "debug" {
+            let mut message = String::new();
             if let Some(args) = args {
                 if let Some(msg) = args.get("msg").and_then(|m| m.as_str()) {
                     let templated_msg = Self::template_string(msg, vars);
-                    ctx.output.info(&format!("DEBUG: {}", templated_msg));
-                }
-                if let Some(var) = args.get("var").and_then(|v| v.as_str()) {
+                    message = templated_msg;
+                } else if let Some(var) = args.get("var").and_then(|v| v.as_str()) {
                     // Look up the variable value
                     let var_name = Self::template_string(var, vars);
                     if let Some(value) = vars.get(&var_name) {
-                        ctx.output
-                            .info(&format!("DEBUG: {} = {:?}", var_name, value));
+                        message = format!("{} = {:?}", var_name, value);
                     } else {
-                        ctx.output
-                            .info(&format!("DEBUG: {} = <undefined>", var_name));
+                        message = format!("{} = <undefined>", var_name);
                     }
                 }
             }
-            return Ok(false);
+            return Ok((
+                false,
+                if message.is_empty() {
+                    None
+                } else {
+                    Some(message)
+                },
+            ));
         }
 
         // Handle set_fact locally (no remote execution needed)
         if module == "set_fact" {
-            return Ok(true);
+            return Ok((true, None));
         }
 
         // For command/shell modules, execute remotely if not localhost
@@ -1231,19 +1236,20 @@ impl RunArgs {
                         .map_err(|e| anyhow::anyhow!("Failed to execute command: {}", e))?;
 
                 if output.status.success() {
-                    return Ok(true);
+                    return Ok((true, None));
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     return Err(anyhow::anyhow!("Command failed: {}", stderr));
                 }
             } else {
                 // Remote execution via SSH
-                return self.execute_remote_command(ctx, host, &cmd).await;
+                let success = self.execute_remote_command(ctx, host, &cmd).await?;
+                return Ok((success, None));
             }
         }
 
         // For other modules, simulate execution for now
-        Ok(true)
+        Ok((true, None))
     }
 
     /// Execute a command on a remote host via SSH

@@ -1,4 +1,3 @@
-## 2024-05-23 - Emojis in CLI Output
-
-**Learning:** Even when constraints specify 'no emojis', they can slip into less common output paths like 'plan mode'. Always search for unicode characters/emojis when auditing for accessibility/compatibility.
-**Action:** Use `grep -P "[^\x00-\x7F]"` to scan codebase for hidden non-ASCII characters.
+## 2024-05-24 - [Improved Debug Module Visibility]
+**Learning:** CLI tools often hide module-specific output in "simplified" execution paths unless explicitly handled. Users coming from Ansible expect `debug` output to be visible inline with the task status, not buried in verbose logs.
+**Action:** When implementing CLI task runners, ensure that task results can propagate an optional "message" field that is displayed alongside the status (e.g., `ok: [host] => message`), even for non-failure states.
