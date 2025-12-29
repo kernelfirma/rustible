@@ -68,11 +68,16 @@ use crate::modules::{
 };
 use crate::template::TemplateEngine;
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
+
+/// Global template engine instance for IOS config
+/// This avoids recreating the engine for every template rendering, improving performance
+static TEMPLATE_ENGINE: Lazy<TemplateEngine> = Lazy::new(TemplateEngine::new);
 
 // ============================================================================
 // Configuration Match Modes
@@ -831,10 +836,11 @@ impl IosConfigModule {
         })?;
 
         // Render template
-        let engine = TemplateEngine::new();
-        engine.render(&content, &context.vars).map_err(|e| {
-            ModuleError::TemplateError(format!("Failed to render template '{}': {}", path, e))
-        })
+        TEMPLATE_ENGINE
+            .render(&content, &context.vars)
+            .map_err(|e| {
+                ModuleError::TemplateError(format!("Failed to render template '{}': {}", path, e))
+            })
     }
 
     /// Render templates in configuration lines
@@ -843,14 +849,18 @@ impl IosConfigModule {
         lines: &[String],
         context: &ModuleContext,
     ) -> ModuleResult<Vec<String>> {
-        let engine = TemplateEngine::new();
         let mut rendered = Vec::with_capacity(lines.len());
 
         for line in lines {
             if TemplateEngine::is_template(line) {
-                let result = engine.render(line, &context.vars).map_err(|e| {
-                    ModuleError::TemplateError(format!("Failed to render line '{}': {}", line, e))
-                })?;
+                let result = TEMPLATE_ENGINE
+                    .render(line, &context.vars)
+                    .map_err(|e| {
+                        ModuleError::TemplateError(format!(
+                            "Failed to render line '{}': {}",
+                            line, e
+                        ))
+                    })?;
                 rendered.push(result);
             } else {
                 rendered.push(line.clone());
