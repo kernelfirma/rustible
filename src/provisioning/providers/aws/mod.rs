@@ -109,10 +109,14 @@ const AWS_REGIONS: &[&str] = &[
 
 /// Supported resource types
 const RESOURCE_TYPES: &[&str] = &[
-    "aws_vpc",
-    "aws_subnet",
-    "aws_security_group",
+    "aws_eip",
     "aws_instance",
+    "aws_internet_gateway",
+    "aws_nat_gateway",
+    "aws_route_table",
+    "aws_security_group",
+    "aws_subnet",
+    "aws_vpc",
 ];
 
 // ============================================================================
@@ -655,10 +659,14 @@ mod tests {
         let provider = AwsProvider::new();
         let types = provider.resource_types();
 
-        assert!(types.contains(&"aws_vpc".to_string()));
-        assert!(types.contains(&"aws_subnet".to_string()));
-        assert!(types.contains(&"aws_security_group".to_string()));
+        assert!(types.contains(&"aws_eip".to_string()));
         assert!(types.contains(&"aws_instance".to_string()));
+        assert!(types.contains(&"aws_internet_gateway".to_string()));
+        assert!(types.contains(&"aws_nat_gateway".to_string()));
+        assert!(types.contains(&"aws_route_table".to_string()));
+        assert!(types.contains(&"aws_security_group".to_string()));
+        assert!(types.contains(&"aws_subnet".to_string()));
+        assert!(types.contains(&"aws_vpc".to_string()));
     }
 
     #[test]
