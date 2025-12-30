@@ -11,6 +11,7 @@ use super::{
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
+use crate::utils::shell_escape;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -355,18 +356,6 @@ impl CommandModule {
             }
         })
     }
-}
-
-/// Escape a string for use in shell commands
-fn shell_escape(s: &str) -> String {
-    // If the string contains no special characters, return as-is
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        return s.to_string();
-    }
-    // Otherwise, wrap in single quotes and escape any single quotes within
-    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 impl Module for CommandModule {

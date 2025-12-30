@@ -40,6 +40,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
+use crate::utils::shell_escape;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::Arc;
@@ -721,16 +722,6 @@ impl Module for TimezoneModule {
     }
 }
 
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '+')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
 
 #[cfg(test)]
 mod tests {

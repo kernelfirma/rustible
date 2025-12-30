@@ -193,6 +193,9 @@ pub mod error;
 /// that can be extended by users.
 pub mod traits;
 
+/// Shared utility functions.
+pub mod utils;
+
 /// Variable management and precedence handling.
 ///
 /// This module handles the complex variable precedence rules similar to Ansible,

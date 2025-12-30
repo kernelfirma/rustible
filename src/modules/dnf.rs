@@ -17,6 +17,7 @@ use super::{
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::connection::ExecuteOptions;
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 
 /// DNF module configuration options
@@ -777,32 +778,9 @@ impl Module for DnfModule {
     }
 }
 
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    // Simple escape: wrap in single quotes and escape any single quotes
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_shell_escape() {
-        assert_eq!(shell_escape("simple"), "simple");
-        assert_eq!(shell_escape("nginx"), "nginx");
-        assert_eq!(shell_escape("with space"), "'with space'");
-        assert_eq!(shell_escape("with'quote"), "'with'\\''quote'");
-        assert_eq!(shell_escape("pkg; rm -rf /"), "'pkg; rm -rf /'");
-        assert_eq!(shell_escape("$(malicious)"), "'$(malicious)'");
-        assert_eq!(shell_escape("`cmd`"), "'`cmd`'");
-    }
 
     #[test]
     fn test_dnf_state_from_str() {
