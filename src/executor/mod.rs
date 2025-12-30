@@ -121,6 +121,7 @@ use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::playbook::{Play, Playbook};
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
 use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 /// Errors that can occur during playbook and task execution.
 ///
@@ -379,6 +380,7 @@ pub struct Executor {
     notified_handlers: Arc<Mutex<HashSet<String>>>,
     semaphore: Arc<Semaphore>,
     parallelization_manager: Arc<ParallelizationManager>,
+    recovery_manager: Option<Arc<RecoveryManager>>,
 }
 
 impl Executor {
@@ -392,6 +394,7 @@ impl Executor {
             notified_handlers: Arc::new(Mutex::new(HashSet::new())),
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
+            recovery_manager: None,
         }
     }
 
@@ -405,7 +408,14 @@ impl Executor {
             notified_handlers: Arc::new(Mutex::new(HashSet::new())),
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
+            recovery_manager: None,
         }
+    }
+
+    /// Set the recovery manager for this executor
+    pub fn with_recovery_manager(mut self, recovery_manager: Arc<RecoveryManager>) -> Self {
+        self.recovery_manager = Some(recovery_manager);
+        self
     }
 
     /// Run a complete playbook
@@ -416,47 +426,87 @@ impl Executor {
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         info!("Starting playbook: {}", playbook.name);
 
-        let mut all_results: HashMap<String, HostResult> = HashMap::new();
+        let tx_id = if let Some(rm) = &self.recovery_manager {
+            Some(
+                rm.begin_transaction(&playbook.name)
+                    .await
+                    .map_err(|e| ExecutorError::Other(e.to_string()))?,
+            )
+        } else {
+            None
+        };
 
-        // Set playbook-level variables
-        {
-            let mut runtime = self.runtime.write().await;
-            for (key, value) in &playbook.vars {
-                runtime.set_global_var(key.clone(), value.clone());
+        let result = async {
+            let mut all_results: HashMap<String, HostResult> = HashMap::new();
+
+            // Set playbook-level variables
+            {
+                let mut runtime = self.runtime.write().await;
+                for (key, value) in &playbook.vars {
+                    runtime.set_global_var(key.clone(), value.clone());
+                }
+                // Add extra vars (highest precedence)
+                for (key, value) in &self.config.extra_vars {
+                    runtime.set_global_var(key.clone(), value.clone());
+                }
             }
-            // Add extra vars (highest precedence)
-            for (key, value) in &self.config.extra_vars {
-                runtime.set_global_var(key.clone(), value.clone());
+
+            // Execute each play in sequence
+            for play in &playbook.plays {
+                let play_results = self.run_play(play, tx_id).await?;
+
+                // Merge results
+                for (host, result) in play_results {
+                    all_results
+                        .entry(host)
+                        .and_modify(|existing| {
+                            existing.stats.merge(&result.stats);
+                            existing.failed = existing.failed || result.failed;
+                            existing.unreachable = existing.unreachable || result.unreachable;
+                        })
+                        .or_insert(result);
+                }
+            }
+
+            // Run any remaining notified handlers
+            self.flush_handlers(tx_id).await?;
+
+            info!("Playbook completed: {}", playbook.name);
+            Ok(all_results)
+        }
+        .await;
+
+        if let Some(rm) = &self.recovery_manager {
+            if let Some(id) = tx_id {
+                match &result {
+                    Ok(_) => {
+                        if let Err(e) = rm.commit_transaction(&id).await {
+                            error!("Failed to commit transaction: {}", e);
+                            return Err(ExecutorError::Other(format!(
+                                "Transaction commit failed: {}",
+                                e
+                            )));
+                        }
+                    }
+                    Err(_) => {
+                        if let Err(e) = rm.rollback_transaction(&id).await {
+                            error!("Failed to rollback transaction: {}", e);
+                        }
+                    }
+                }
             }
         }
 
-        // Execute each play in sequence
-        for play in &playbook.plays {
-            let play_results = self.run_play(play).await?;
-
-            // Merge results
-            for (host, result) in play_results {
-                all_results
-                    .entry(host)
-                    .and_modify(|existing| {
-                        existing.stats.merge(&result.stats);
-                        existing.failed = existing.failed || result.failed;
-                        existing.unreachable = existing.unreachable || result.unreachable;
-                    })
-                    .or_insert(result);
-            }
-        }
-
-        // Run any remaining notified handlers
-        self.flush_handlers().await?;
-
-        info!("Playbook completed: {}", playbook.name);
-        Ok(all_results)
+        result
     }
 
     /// Run a single play
     #[instrument(skip(self, play), fields(play_name = %play.name))]
-    pub async fn run_play(&self, play: &Play) -> ExecutorResult<HashMap<String, HostResult>> {
+    pub async fn run_play(
+        &self,
+        play: &Play,
+        tx_id: Option<TransactionId>,
+    ) -> ExecutorResult<HashMap<String, HostResult>> {
         info!("Starting play: {}", play.name);
 
         // Register handlers for this play
@@ -551,14 +601,22 @@ impl Executor {
 
         // Execute based on serial specification and strategy
         let execution_result = if let Some(ref serial_spec) = play.serial {
-            self.run_serial(serial_spec, &hosts, &all_tasks, play.max_fail_percentage)
-                .await
+            self.run_serial(
+                serial_spec,
+                &hosts,
+                &all_tasks,
+                play.max_fail_percentage,
+                tx_id,
+            )
+            .await
         } else {
             // Execute based on strategy without serial batching
             match self.config.strategy {
-                ExecutionStrategy::Linear => self.run_linear(&hosts, &all_tasks).await,
-                ExecutionStrategy::Free => self.run_free(&hosts, &all_tasks).await,
-                ExecutionStrategy::HostPinned => self.run_host_pinned(&hosts, &all_tasks).await,
+                ExecutionStrategy::Linear => self.run_linear(&hosts, &all_tasks, tx_id).await,
+                ExecutionStrategy::Free => self.run_free(&hosts, &all_tasks, tx_id).await,
+                ExecutionStrategy::HostPinned => {
+                    self.run_host_pinned(&hosts, &all_tasks, tx_id).await
+                }
             }
         };
 
@@ -574,7 +632,7 @@ impl Executor {
             if play.force_handlers && play_failed {
                 info!("Running handlers despite play failure (force_handlers=true)");
             }
-            self.flush_handlers().await?;
+            self.flush_handlers(tx_id).await?;
         } else {
             // Clear notified handlers without running them
             let notified_count = {
@@ -600,6 +658,7 @@ impl Executor {
         &self,
         hosts: &[String],
         tasks: &[Task],
+        tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         use crate::executor::task::BlockRole;
 
@@ -692,7 +751,7 @@ impl Executor {
             }
 
             // Run task on all active hosts in parallel (limited by semaphore)
-            let task_results = self.run_task_on_hosts(&active_hosts, task).await?;
+            let task_results = self.run_task_on_hosts(&active_hosts, task, tx_id).await?;
 
             debug!(
                 "Task '{}' completed on {} hosts",
@@ -791,6 +850,7 @@ impl Executor {
         &self,
         hosts: &[String],
         tasks: &[Task],
+        tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         // OPTIMIZATION: Fast path for single host
         if hosts.len() == 1 {
@@ -823,6 +883,39 @@ impl Executor {
                         &self.parallelization_manager,
                     )
                     .await;
+
+                if let Some(rm) = &self.recovery_manager {
+                    if let Some(tid) = tx_id {
+                        let (outcome, changed) = match &task_result {
+                            Ok(r) => {
+                                let outcome = match r.status {
+                                    TaskStatus::Ok => TaskOutcome::Success,
+                                    TaskStatus::Changed => TaskOutcome::Changed,
+                                    TaskStatus::Failed => TaskOutcome::Failed {
+                                        message: r.msg.clone().unwrap_or_default(),
+                                    },
+                                    TaskStatus::Skipped => TaskOutcome::Skipped,
+                                    TaskStatus::Unreachable => TaskOutcome::Unreachable {
+                                        message: r.msg.clone().unwrap_or_default(),
+                                    },
+                                };
+                                (outcome, r.changed)
+                            }
+                            Err(e) => (
+                                TaskOutcome::Failed {
+                                    message: e.to_string(),
+                                },
+                                false,
+                            ),
+                        };
+                        if let Err(e) = rm
+                            .record_task(tid, task.name.clone(), host.clone(), outcome, changed)
+                            .await
+                        {
+                            warn!("Failed to record task outcome for host {}: {}", host, e);
+                        }
+                    }
+                }
 
                 match task_result {
                     Ok(result) => {
@@ -863,6 +956,7 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
+                let recovery_manager = self.recovery_manager.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -887,6 +981,45 @@ impl Executor {
                         let task_result = task
                             .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
                             .await;
+
+                        if let Some(rm) = &recovery_manager {
+                            if let Some(tid) = tx_id {
+                                let (outcome, changed) = match &task_result {
+                                    Ok(r) => {
+                                        let outcome = match r.status {
+                                            TaskStatus::Ok => TaskOutcome::Success,
+                                            TaskStatus::Changed => TaskOutcome::Changed,
+                                            TaskStatus::Failed => TaskOutcome::Failed {
+                                                message: r.msg.clone().unwrap_or_default(),
+                                            },
+                                            TaskStatus::Skipped => TaskOutcome::Skipped,
+                                            TaskStatus::Unreachable => TaskOutcome::Unreachable {
+                                                message: r.msg.clone().unwrap_or_default(),
+                                            },
+                                        };
+                                        (outcome, r.changed)
+                                    }
+                                    Err(e) => (
+                                        TaskOutcome::Failed {
+                                            message: e.to_string(),
+                                        },
+                                        false,
+                                    ),
+                                };
+                                if let Err(e) = rm
+                                    .record_task(
+                                        tid,
+                                        task.name.clone(),
+                                        host.clone(),
+                                        outcome,
+                                        changed,
+                                    )
+                                    .await
+                                {
+                                    warn!("Failed to record task outcome for host {}: {}", host, e);
+                                }
+                            }
+                        }
 
                         match task_result {
                             Ok(result) => {
@@ -921,10 +1054,11 @@ impl Executor {
         &self,
         hosts: &[String],
         tasks: &[Task],
+        tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         // For now, host_pinned behaves like free strategy
         // In a full implementation, this would pin workers to specific hosts
-        self.run_free(hosts, tasks).await
+        self.run_free(hosts, tasks, tx_id).await
     }
 
     /// Run tasks with serial batching
@@ -934,6 +1068,7 @@ impl Executor {
         hosts: &[String],
         tasks: &[Task],
         max_fail_percentage: Option<u8>,
+        tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         info!(
             "Running with serial batching: {:?}, max_fail_percentage: {:?}",
@@ -968,10 +1103,13 @@ impl Executor {
 
             // Execute this batch based on the configured strategy
             let batch_results = match self.config.strategy {
-                ExecutionStrategy::Linear => self.run_linear(&batch_hosts_owned, tasks).await?,
-                ExecutionStrategy::Free => self.run_free(&batch_hosts_owned, tasks).await?,
+                ExecutionStrategy::Linear => {
+                    self.run_linear(&batch_hosts_owned, tasks, tx_id).await?
+                }
+                ExecutionStrategy::Free => self.run_free(&batch_hosts_owned, tasks, tx_id).await?,
                 ExecutionStrategy::HostPinned => {
-                    self.run_host_pinned(&batch_hosts_owned, tasks).await?
+                    self.run_host_pinned(&batch_hosts_owned, tasks, tx_id)
+                        .await?
                 }
             };
 
@@ -1037,6 +1175,7 @@ impl Executor {
         &self,
         hosts: &[String],
         task: &Task,
+        tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, TaskResult>> {
         debug!("Running task '{}' on {} hosts", task.name, hosts.len());
 
@@ -1077,6 +1216,30 @@ impl Executor {
                             diff: None,
                         },
                     );
+                }
+            }
+            if let Some(rm) = &self.recovery_manager {
+                if let Some(tid) = tx_id {
+                    for (host, res) in &results {
+                        let outcome = match res.status {
+                            TaskStatus::Ok => TaskOutcome::Success,
+                            TaskStatus::Changed => TaskOutcome::Changed,
+                            TaskStatus::Failed => TaskOutcome::Failed {
+                                message: res.msg.clone().unwrap_or_default(),
+                            },
+                            TaskStatus::Skipped => TaskOutcome::Skipped,
+                            TaskStatus::Unreachable => TaskOutcome::Unreachable {
+                                message: res.msg.clone().unwrap_or_default(),
+                            },
+                        };
+
+                        if let Err(e) = rm
+                            .record_task(tid, task.name.clone(), host.clone(), outcome, res.changed)
+                            .await
+                        {
+                            warn!("Failed to record task outcome for host {}: {}", host, e);
+                        }
+                    }
                 }
             }
             return Ok(results);
@@ -1143,6 +1306,30 @@ impl Executor {
             .map_err(|_| ExecutorError::RuntimeError("Failed to unwrap results".into()))?
             .into_inner();
 
+        if let Some(rm) = &self.recovery_manager {
+            if let Some(tid) = tx_id {
+                for (host, res) in &results {
+                    let outcome = match res.status {
+                        TaskStatus::Ok => TaskOutcome::Success,
+                        TaskStatus::Changed => TaskOutcome::Changed,
+                        TaskStatus::Failed => TaskOutcome::Failed {
+                            message: res.msg.clone().unwrap_or_default(),
+                        },
+                        TaskStatus::Skipped => TaskOutcome::Skipped,
+                        TaskStatus::Unreachable => TaskOutcome::Unreachable {
+                            message: res.msg.clone().unwrap_or_default(),
+                        },
+                    };
+
+                    if let Err(e) = rm
+                        .record_task(tid, task.name.clone(), host.clone(), outcome, res.changed)
+                        .await
+                    {
+                        warn!("Failed to record task outcome for host {}: {}", host, e);
+                    }
+                }
+            }
+        }
         Ok(results)
     }
 
@@ -1197,7 +1384,7 @@ impl Executor {
     /// 2. Ensures handlers run in definition order
     /// 3. Supports handler chaining (handlers can notify other handlers)
     /// 4. Deduplicates handlers so each runs only once per flush
-    async fn flush_handlers(&self) -> ExecutorResult<()> {
+    async fn flush_handlers(&self, tx_id: Option<TransactionId>) -> ExecutorResult<()> {
         let notified: Vec<String> = {
             let mut notified = self.notified_handlers.lock().await;
             let handlers: Vec<_> = notified.drain().collect();
@@ -1320,7 +1507,7 @@ impl Executor {
                 };
 
                 // Run handler on all hosts
-                let results = self.run_task_on_hosts(&hosts, &task).await?;
+                let results = self.run_task_on_hosts(&hosts, &task, tx_id).await?;
 
                 // Check if handler execution triggered any changes
                 // If so, check if any handlers listen to this handler's name (handler chaining)

@@ -65,16 +65,16 @@ pub use degradation::{
     FallbackAction, GracefulDegradation,
 };
 pub use retry::{
-    BackoffStrategy, RetryAction, RetryConfig, RetryContext, RetryError, RetryPolicy,
-    RetryResult, RetryableError,
+    BackoffStrategy, RetryAction, RetryConfig, RetryContext, RetryError, RetryPolicy, RetryResult,
+    RetryableError,
 };
 pub use rollback::{
     RollbackAction, RollbackContext, RollbackError, RollbackManager, RollbackPlan, RollbackState,
     StateChange, StateSnapshot, UndoOperation,
 };
 pub use transaction::{
-    Transaction, TransactionConfig, TransactionContext, TransactionError, TransactionId,
-    TransactionManager, TransactionPhase, TransactionState,
+    TaskOutcome, Transaction, TransactionConfig, TransactionContext, TransactionError,
+    TransactionId, TransactionManager, TransactionState,
 };
 
 use std::collections::HashMap;
@@ -231,9 +231,10 @@ impl RecoveryManager {
         };
 
         let transaction_manager = if config.enable_transactions {
-            Some(Arc::new(RwLock::new(TransactionManager::new(
-                config.transaction_config.clone(),
-            ))))
+            Some(Arc::new(RwLock::new(
+                TransactionManager::new(config.transaction_config.clone())
+                    .expect("Failed to initialize TransactionManager"),
+            )))
         } else {
             None
         };
@@ -272,8 +273,7 @@ impl RecoveryManager {
         E: std::error::Error + RetryableError,
     {
         if !self.config.enable_retry {
-            return operation()
-                .map_err(|e| RecoveryError::Unrecoverable(e.to_string()));
+            return operation().map_err(|e| RecoveryError::Unrecoverable(e.to_string()));
         }
 
         let policy = &self.config.retry_policy;
@@ -426,9 +426,10 @@ impl RecoveryManager {
 
     /// Begin tracking state changes for potential rollback
     pub async fn begin_rollback_tracking(&self) -> RecoveryResult<RollbackContext> {
-        let manager = self.rollback_manager.as_ref().ok_or_else(|| {
-            RecoveryError::Unrecoverable("Rollback is not enabled".to_string())
-        })?;
+        let manager = self
+            .rollback_manager
+            .as_ref()
+            .ok_or_else(|| RecoveryError::Unrecoverable("Rollback is not enabled".to_string()))?;
 
         let mut manager = manager.write().await;
         let context = manager.begin_context();
@@ -443,9 +444,10 @@ impl RecoveryManager {
         context_id: &str,
         change: StateChange,
     ) -> RecoveryResult<()> {
-        let manager = self.rollback_manager.as_ref().ok_or_else(|| {
-            RecoveryError::Unrecoverable("Rollback is not enabled".to_string())
-        })?;
+        let manager = self
+            .rollback_manager
+            .as_ref()
+            .ok_or_else(|| RecoveryError::Unrecoverable("Rollback is not enabled".to_string()))?;
 
         let mut manager = manager.write().await;
         manager.record_change(context_id, change)?;
@@ -455,9 +457,10 @@ impl RecoveryManager {
 
     /// Execute a rollback for a context
     pub async fn rollback(&self, context_id: &str) -> RecoveryResult<()> {
-        let manager = self.rollback_manager.as_ref().ok_or_else(|| {
-            RecoveryError::Unrecoverable("Rollback is not enabled".to_string())
-        })?;
+        let manager = self
+            .rollback_manager
+            .as_ref()
+            .ok_or_else(|| RecoveryError::Unrecoverable("Rollback is not enabled".to_string()))?;
 
         let mut manager = manager.write().await;
         let plan = manager.create_rollback_plan(context_id)?;
@@ -506,10 +509,7 @@ impl RecoveryManager {
     }
 
     /// Rollback a transaction
-    pub async fn rollback_transaction(
-        &self,
-        transaction_id: &TransactionId,
-    ) -> RecoveryResult<()> {
+    pub async fn rollback_transaction(&self, transaction_id: &TransactionId) -> RecoveryResult<()> {
         let manager = self.transaction_manager.as_ref().ok_or_else(|| {
             RecoveryError::Unrecoverable("Transactions are not enabled".to_string())
         })?;
@@ -519,6 +519,27 @@ impl RecoveryManager {
 
         info!("Rolled back transaction {}", transaction_id);
         Ok(())
+    }
+
+    /// Record a task execution within a transaction
+    pub async fn record_task(
+        &self,
+        transaction_id: TransactionId,
+        task_name: String,
+        host: String,
+        status: TaskOutcome,
+        changed: bool,
+    ) -> RecoveryResult<()> {
+        let manager = self.transaction_manager.as_ref().ok_or_else(|| {
+            RecoveryError::Unrecoverable("Transactions are not enabled".to_string())
+        })?;
+
+        let manager = manager.read().await;
+        manager
+            .record_task(&transaction_id, &host, &task_name, 0, 0, status, None)
+            .await
+            .map(|_| ())
+            .map_err(RecoveryError::Transaction)
     }
 
     /// Execute an operation within a transaction
@@ -544,9 +565,9 @@ impl RecoveryManager {
             Err(e) => {
                 error!("Transaction '{}' failed: {}", name, e);
                 self.rollback_transaction(&tx_id).await?;
-                Err(RecoveryError::Transaction(TransactionError::OperationFailed(
-                    e.to_string(),
-                )))
+                Err(RecoveryError::Transaction(
+                    TransactionError::OperationFailed(e.to_string()),
+                ))
             }
         }
     }

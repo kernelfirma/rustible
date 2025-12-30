@@ -6,9 +6,7 @@
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
-use rustible::lockfile::{
-    DependencySource, LockedCollection, LockedRole, Lockfile, LockfileManager,
-};
+use rustible::lockfile::Lockfile;
 
 /// Arguments for the lock command
 #[derive(Args, Debug, Clone)]

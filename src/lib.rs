@@ -472,6 +472,9 @@ pub mod metrics;
 /// rollback capability, and dependency tracking between tasks.
 pub mod state;
 
+/// Recovery system for handling failures, checkpoints, and transactions.
+pub mod recovery;
+
 // ============================================================================
 // Infrastructure Provisioning (Terraform-like)
 // ============================================================================
