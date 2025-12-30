@@ -1429,8 +1429,100 @@ mod integration_tests {
             return;
         }
 
-        // TODO: Test concurrent command execution
-        eprintln!("Would test concurrent execution");
+        let (host, port, user) = get_ssh_test_config().expect("SSH test config required");
+
+        eprintln!("Connecting to {}:{} as {}", host, port, user);
+        let conn = RusshConnection::connect(&host, port, &user, None, &ConnectionConfig::default())
+            .await
+            .expect("Failed to connect");
+
+        // Wrap in Arc for shared access in tasks
+        let conn = Arc::new(conn);
+
+        // 1. Test standard concurrent execution via Arc sharing
+        eprintln!("Testing standard concurrent execution (tokio::spawn)...");
+        let start = std::time::Instant::now();
+        let mut handles = vec![];
+
+        // Run 5 concurrent commands that sleep for 1 second each
+        // If sequential: ~5s
+        // If parallel: ~1s + overhead
+        for i in 0..5 {
+            let c = conn.clone();
+            handles.push(tokio::spawn(async move {
+                c.execute(&format!("sleep 1 && echo done_{}", i), None).await
+            }));
+        }
+
+        let mut success_count = 0;
+        for handle in handles {
+            let res = handle
+                .await
+                .expect("Task join failed")
+                .expect("Command execution failed");
+
+            if res.success {
+                success_count += 1;
+            } else {
+                eprintln!("Command failed: {}", res.stderr);
+            }
+        }
+        assert_eq!(success_count, 5, "Not all concurrent commands succeeded");
+
+        let elapsed = start.elapsed();
+        eprintln!("Standard concurrent execution took {:?}", elapsed);
+
+        // Assert it ran in parallel (allowing overhead, but clearly < 3s)
+        assert!(
+            elapsed.as_secs() < 3,
+            "Execution took {:?} which implies sequential execution (expected < 3s)",
+            elapsed
+        );
+        // Also assert it took at least 1s (sanity check that it actually slept)
+        assert!(
+            elapsed.as_millis() >= 1000,
+            "Execution was too fast, sleep didn't work: {:?}",
+            elapsed
+        );
+
+        // 2. Test execute_batch (channel multiplexing)
+        eprintln!("Testing batch execution (channel multiplexing)...");
+        let commands = vec![
+            "sleep 1 && echo batch1",
+            "sleep 1 && echo batch2",
+            "sleep 1 && echo batch3",
+        ];
+
+        let start = std::time::Instant::now();
+        let results = conn.execute_batch(&commands, None).await;
+        let elapsed = start.elapsed();
+
+        eprintln!("Batch execution took {:?}", elapsed);
+
+        assert_eq!(results.len(), 3);
+        for (i, res) in results.into_iter().enumerate() {
+            let r = res.expect("Batch command failed");
+            assert!(
+                r.success,
+                "Batch command {} failed: {}",
+                i,
+                r.combined_output()
+            );
+        }
+
+        // Should also be parallel
+        assert!(
+            elapsed.as_secs() < 3,
+            "Batch execution took {:?} which implies sequential execution (expected < 3s)",
+            elapsed
+        );
+        assert!(
+            elapsed.as_millis() >= 1000,
+            "Batch execution was too fast: {:?}",
+            elapsed
+        );
+
+        conn.close().await.unwrap();
     }
 }
 
