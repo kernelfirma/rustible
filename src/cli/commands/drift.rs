@@ -242,10 +242,11 @@ impl DriftArgs {
                     // Check drift for each task
                     for host in &play_hosts {
                         if let Some(finding) = self.check_task_drift(ctx, host, task).await? {
-                            findings.push(finding);
-
                             if self.fail_fast && finding.status != DriftStatus::InSync {
+                                findings.push(finding.clone());
                                 break;
+                            } else {
+                                findings.push(finding);
                             }
                         }
                     }
@@ -426,11 +427,11 @@ impl DriftArgs {
 
         if report.summary.in_sync > 0 {
             ctx.output
-                .ok(&format!("  In Sync: {}", report.summary.in_sync));
+                .info(&format!("  In Sync: {}", report.summary.in_sync));
         }
         if report.summary.drifted > 0 {
             ctx.output
-                .warn(&format!("  Drifted: {}", report.summary.drifted));
+                .warning(&format!("  Drifted: {}", report.summary.drifted));
         }
         if report.summary.missing > 0 {
             ctx.output
@@ -438,7 +439,7 @@ impl DriftArgs {
         }
         if report.summary.extra > 0 {
             ctx.output
-                .warn(&format!("  Extra: {}", report.summary.extra));
+                .warning(&format!("  Extra: {}", report.summary.extra));
         }
         if report.summary.unknown > 0 {
             ctx.output
@@ -455,7 +456,7 @@ impl DriftArgs {
             for finding in &report.findings {
                 match finding.status {
                     DriftStatus::Drifted => {
-                        ctx.output.warn(&format!(
+                        ctx.output.warning(&format!(
                             "~ {} [{}] on {}",
                             finding.resource, finding.resource_type, finding.host
                         ));
@@ -467,7 +468,7 @@ impl DriftArgs {
                         ));
                     }
                     DriftStatus::Extra => {
-                        ctx.output.warn(&format!(
+                        ctx.output.warning(&format!(
                             "+ {} [{}] on {}",
                             finding.resource, finding.resource_type, finding.host
                         ));
@@ -493,9 +494,9 @@ impl DriftArgs {
         println!();
         if report.summary.drifted == 0 && report.summary.missing == 0 {
             ctx.output
-                .ok("No drift detected. System is in sync with desired state.");
+                .info("No drift detected. System is in sync with desired state.");
         } else {
-            ctx.output.warn(&format!(
+            ctx.output.warning(&format!(
                 "Drift detected: {} drifted, {} missing resources",
                 report.summary.drifted, report.summary.missing
             ));

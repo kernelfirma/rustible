@@ -82,6 +82,9 @@ impl RunArgs {
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
         let start_time = Instant::now();
 
+        // Initialize progress bars
+        ctx.output.init_progress();
+
         // Validate playbook exists
         if !self.playbook.exists() {
             ctx.output.error(&format!(
@@ -1033,7 +1036,15 @@ impl RunArgs {
             }
 
             // Execute the task (simplified)
+            let spinner = ctx
+                .output
+                .create_spinner(&format!("Executing on {}...", host));
+
             let result = self.execute_module(ctx, host, task, vars).await;
+
+            if let Some(sp) = spinner {
+                sp.finish_and_clear();
+            }
 
             match result {
                 Ok((changed, message)) => {
