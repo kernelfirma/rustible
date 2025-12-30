@@ -17,6 +17,7 @@ use super::{
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::connection::ExecuteOptions;
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 
 /// YUM module configuration options
@@ -38,18 +39,6 @@ struct YumOptions {
     installroot: Option<String>,
     /// Release version to use
     releasever: Option<String>,
-}
-
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    // Simple escape: wrap in single quotes and escape any single quotes
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
 }
 
 /// Desired state for a package
@@ -774,17 +763,6 @@ impl Module for YumModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_shell_escape() {
-        assert_eq!(shell_escape("simple"), "simple");
-        assert_eq!(shell_escape("nginx-1.0"), "nginx-1.0");
-        assert_eq!(shell_escape("with space"), "'with space'");
-        assert_eq!(shell_escape("with'quote"), "'with'\\''quote'");
-        assert_eq!(shell_escape("; rm -rf /"), "'; rm -rf /'");
-        assert_eq!(shell_escape("$(whoami)"), "'$(whoami)'");
-        assert_eq!(shell_escape("`id`"), "'`id`'");
-    }
 
     #[test]
     fn test_yum_state_from_str() {

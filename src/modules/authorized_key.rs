@@ -12,6 +12,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions, TransferOptions};
+use crate::utils::shell_escape;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
@@ -920,17 +921,6 @@ impl Module for AuthorizedKeyModule {
     }
 }
 
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1152,14 +1142,6 @@ mod tests {
         params.insert("key".to_string(), serde_json::json!(""));
 
         assert!(module.validate_params(&params).is_err());
-    }
-
-    #[test]
-    fn test_shell_escape() {
-        assert_eq!(shell_escape("simple"), "simple");
-        assert_eq!(shell_escape("/path/to/file"), "/path/to/file");
-        assert_eq!(shell_escape("with space"), "'with space'");
-        assert_eq!(shell_escape("with'quote"), "'with'\\''quote'");
     }
 
     #[test]

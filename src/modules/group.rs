@@ -7,6 +7,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -409,18 +410,6 @@ impl Module for GroupModule {
     }
 }
 
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    // Simple escape: wrap in single quotes and escape any single quotes
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -433,13 +422,6 @@ mod tests {
         );
         assert_eq!(GroupState::from_str("absent").unwrap(), GroupState::Absent);
         assert!(GroupState::from_str("invalid").is_err());
-    }
-
-    #[test]
-    fn test_shell_escape() {
-        assert_eq!(shell_escape("simple"), "simple");
-        assert_eq!(shell_escape("with space"), "'with space'");
-        assert_eq!(shell_escape("with'quote"), "'with'\\''quote'");
     }
 
     #[test]

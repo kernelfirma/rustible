@@ -8,6 +8,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
+use crate::utils::shell_escape;
 use minijinja::value::Kwargs;
 use minijinja::{Environment, Error, Value};
 use once_cell::sync::Lazy;
@@ -17,18 +18,6 @@ use std::io::Read;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use tokio::runtime::Handle;
-
-/// Escape a string for use in shell commands
-fn shell_escape(s: &str) -> String {
-    // If the string contains no special characters, return as-is
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        return s.to_string();
-    }
-    // Otherwise, wrap in single quotes and escape any single quotes within
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
 
 /// Global Minijinja environment with pre-registered filters
 static TEMPLATE_ENV: Lazy<Environment<'static>> = Lazy::new(|| {
@@ -770,14 +759,5 @@ mod tests {
 
         assert!(result.changed);
         assert_eq!(fs::read_to_string(&dest).unwrap(), "HELLO");
-    }
-
-    #[test]
-    fn test_shell_escape() {
-        assert_eq!(shell_escape("foo"), "foo");
-        assert_eq!(shell_escape("foo/bar"), "foo/bar");
-        assert_eq!(shell_escape("foo bar"), "'foo bar'");
-        assert_eq!(shell_escape("foo;bar"), "'foo;bar'");
-        assert_eq!(shell_escape("foo'bar"), "'foo'\\''bar'");
     }
 }
