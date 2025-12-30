@@ -1179,7 +1179,7 @@ impl Task {
         }
 
         // Create module context
-        let module_ctx = ModuleContext::default();
+        let module_ctx = ModuleContext::default().with_verbosity(_ctx.verbosity);
 
         // Execute the facts module
         let facts_module = crate::modules::facts::FactsModule;
@@ -1299,6 +1299,7 @@ impl Task {
                 let module_ctx = crate::modules::ModuleContext {
                     check_mode: ctx.check_mode,
                     diff_mode: ctx.diff_mode,
+                    verbosity: ctx.verbosity,
                     vars: vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                     facts: std::collections::HashMap::new(),
                     work_dir: None,
@@ -1339,6 +1340,7 @@ impl Task {
         let module_ctx = crate::modules::ModuleContext {
             check_mode: ctx.check_mode,
             diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
             vars: std::collections::HashMap::new(),
             facts: std::collections::HashMap::new(),
             work_dir: None,
@@ -1384,6 +1386,7 @@ impl Task {
         let module_ctx = crate::modules::ModuleContext {
             check_mode: ctx.check_mode,
             diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
             vars: std::collections::HashMap::new(),
             facts: std::collections::HashMap::new(),
             work_dir: None,
@@ -1436,6 +1439,7 @@ impl Task {
         let module_ctx = crate::modules::ModuleContext {
             check_mode: ctx.check_mode,
             diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
             vars: vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
             facts: std::collections::HashMap::new(),
             work_dir: None,

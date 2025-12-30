@@ -79,17 +79,10 @@ impl DebugModule {
     }
 
     /// Check if the current verbosity level allows this message to be shown
-    fn should_show(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<bool> {
+    fn should_show(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<bool> {
         // Get the verbosity parameter (default to 0)
         let required_verbosity = params.get_i64("verbosity")?.unwrap_or(0);
-
-        // TODO: In the future, we should get the actual verbosity level from context or environment
-        // For now, we'll always show messages (assume verbosity is sufficient)
-        // In a real implementation, you'd check against the -v/-vv/-vvv flags passed to rustible
-        let current_verbosity = std::env::var("RUSTIBLE_VERBOSITY")
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(0);
+        let current_verbosity = i64::from(context.verbosity);
 
         Ok(current_verbosity >= required_verbosity)
     }
@@ -213,6 +206,7 @@ impl Module for DebugModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modules::ModuleStatus;
 
     #[test]
     fn test_debug_with_msg() {
@@ -305,12 +299,16 @@ mod tests {
         );
         params.insert("verbosity".to_string(), Value::Number(2.into()));
 
+        // Default context has verbosity 0, so this should be skipped
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
+        assert_eq!(result.status, ModuleStatus::Skipped);
 
-        // Without setting RUSTIBLE_VERBOSITY, this should be skipped
-        // But since we're assuming verbosity is sufficient for now, it will show
-        assert!(!result.changed);
+        // Context with verbosity 2 should show the message
+        let context = ModuleContext::default().with_verbosity(2);
+        let result = module.execute(&params, &context).unwrap();
+        assert_eq!(result.status, ModuleStatus::Ok);
+        assert_eq!(result.msg, "Debug message");
     }
 
     #[test]

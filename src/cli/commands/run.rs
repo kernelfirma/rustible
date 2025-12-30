@@ -788,7 +788,7 @@ impl RunArgs {
             use rustible::modules::{facts::FactsModule, Module, ModuleContext};
             let facts_module = FactsModule;
             let params = std::collections::HashMap::new();
-            let module_ctx = ModuleContext::default();
+            let module_ctx = ModuleContext::default().with_verbosity(ctx.verbosity);
 
             match facts_module.execute(&params, &module_ctx) {
                 Ok(output) => {

@@ -503,6 +503,8 @@ pub struct ModuleContext {
     pub check_mode: bool,
     /// Whether to show diffs
     pub diff_mode: bool,
+    /// Verbosity level (0-4)
+    pub verbosity: u8,
     /// Variables available to the module
     pub vars: HashMap<String, serde_json::Value>,
     /// Facts about the target system
@@ -543,6 +545,7 @@ impl Default for ModuleContext {
         Self {
             check_mode: false,
             diff_mode: false,
+            verbosity: 0,
             vars: HashMap::new(),
             facts: HashMap::new(),
             work_dir: None,
@@ -566,6 +569,11 @@ impl ModuleContext {
 
     pub fn with_diff_mode(mut self, diff_mode: bool) -> Self {
         self.diff_mode = diff_mode;
+        self
+    }
+
+    pub fn with_verbosity(mut self, verbosity: u8) -> Self {
+        self.verbosity = verbosity;
         self
     }
 
