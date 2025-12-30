@@ -75,6 +75,7 @@
 
 pub mod dependencies;
 pub mod diff;
+pub mod hashing;
 pub mod persistence;
 pub mod rollback;
 
@@ -93,6 +94,9 @@ use uuid::Uuid;
 
 pub use dependencies::{DependencyGraph, DependencyNode, TaskDependency};
 pub use diff::{DiffEngine, DiffReport, StateChange, StateDiff};
+pub use hashing::{
+    CachedTaskResult, HashCacheStats, HashingConfig, StateHashCache, TaskHashBuilder, TaskStateHash,
+};
 pub use persistence::{JsonPersistence, PersistenceBackend, SqlitePersistence, StatePersistence};
 pub use rollback::{RollbackAction, RollbackExecutor, RollbackPlan, RollbackStatus};
 

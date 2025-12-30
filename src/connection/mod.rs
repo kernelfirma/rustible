@@ -79,6 +79,9 @@ pub mod ssh;
 /// Circuit breaker pattern for connection resilience.
 pub mod circuit_breaker;
 
+/// SSH pipelining for reduced round-trip latency.
+pub mod pipelining;
+
 /// Connection health monitoring and diagnostics.
 pub mod health;
 
@@ -167,6 +170,12 @@ pub use security::{
     AuditEvent, AuditEventType, AuditLevel, EncryptionAuditLog, HostKeyPolicy,
     HostKeyVerificationMode, HostKeyVerificationResult, NetworkIsolation, NetworkSecurityConfig,
     PinnedHostKey, SecurityError, SecurityResult, TlsValidationConfig, TlsVersion,
+};
+
+// Re-export pipelining types
+pub use pipelining::{
+    HostPipeline, PipelineManager, PipelinedCommand, PipelinedResult, PipeliningConfig,
+    PipeliningStats,
 };
 
 /// Russh-related error type - wraps russh::Error for compatibility with the Handler trait

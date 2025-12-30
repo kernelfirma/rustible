@@ -3,6 +3,7 @@
 //! This module contains all the subcommand implementations.
 
 pub mod check;
+pub mod drift;
 pub mod galaxy;
 pub mod inventory;
 pub mod provision;

@@ -124,6 +124,10 @@ pub enum Commands {
     /// Infrastructure provisioning (Terraform-like)
     #[command(name = "provision")]
     Provision(commands::provision::ProvisionArgs),
+
+    /// Detect configuration drift from desired state
+    #[command(name = "drift")]
+    Drift(commands::drift::DriftArgs),
 }
 
 /// Arguments for init command

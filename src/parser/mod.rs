@@ -6,10 +6,15 @@
 //! - Jinja2-style templating using minijinja
 
 pub mod playbook;
+pub mod schema;
 
 pub use playbook::{
     Handler, IncludeType, LoopControl, LoopSpec, ModuleCall, Play, PlayOrder, Playbook,
     RoleInclusion, RoleSpec, SerialSpec, Task, TaskBuilder, VarsPrompt,
+};
+pub use schema::{
+    ArgumentSpec, ArgumentType, ErrorSeverity, ModuleSchema, SchemaError, SchemaResult,
+    SchemaValidator, ValidationError, ValidationResult, ValidatorConfig,
 };
 
 use indexmap::IndexMap;

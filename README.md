@@ -1,26 +1,30 @@
 # Rustible
 
-A fast, async configuration management tool written in Rust. Drop-in replacement for Ansible with 5x+ performance improvement.
+A high-performance, async configuration management tool written in Rust. Drop-in replacement for Ansible delivering 5x+ performance improvements.
+
+**Acknowledgment**: Rustible is inspired by Ansible's excellent design and playbook syntax. This project builds upon those proven concepts while leveraging Rust's performance and safety advantages.
 
 ## Why Rustible?
 
-- **Fast**: Compiled Rust binary with connection pooling (5-11x faster than Ansible)
-- **Compatible**: Same YAML playbook syntax as Ansible
-- **Safe**: Type-checked configuration, better error messages
-- **Parallel**: Concurrent execution by default
+- **High Performance**: Compiled Rust binary with connection pooling (5-11x faster than Ansible)
+- **Full Compatibility**: Identical YAML playbook syntax to Ansible
+- **Type Safety**: Compile-time configuration validation with superior error messages
+- **Parallel Execution**: Concurrent task execution by default
 
 ## Quick Start
 
+Install and run your first playbook:
+
 ```bash
-# Install
+# Clone and install
 git clone https://github.com/rustible/rustible.git
 cd rustible && cargo install --path .
 
-# Run a playbook
+# Execute playbook
 rustible run playbook.yml -i inventory.yml
 ```
 
-### Example Playbook
+### Sample Playbook
 
 ```yaml
 - name: Configure web servers
@@ -42,6 +46,8 @@ rustible run playbook.yml -i inventory.yml
 
 ## CLI Usage
 
+Run playbooks with familiar Ansible syntax:
+
 ```bash
 rustible run <PLAYBOOK> [OPTIONS]
 
@@ -54,54 +60,54 @@ Options:
   -f, --forks <N>          Parallel processes [default: 10]
 ```
 
-### Other Commands
+### Additional Commands
 
 ```bash
-rustible check <PLAYBOOK>     # Syntax check
-rustible vault encrypt <FILE> # Encrypt file
-rustible vault decrypt <FILE> # Decrypt file
-rustible galaxy install <PKG> # Install collection/role
-rustible init <PATH>          # Create new project
+rustible check <PLAYBOOK>     # Syntax validation
+rustible vault encrypt <FILE> # AES-256-GCM encryption
+rustible vault decrypt <FILE> # Decrypt files
+rustible galaxy install <PKG> # Install collections/roles
+rustible init <PATH>          # Initialize new project
 ```
 
 ## Features
 
 | Feature | Status |
 |---------|--------|
-| Playbook syntax | Full Ansible compatibility |
-| Inventory | YAML, INI, JSON, dynamic scripts |
+| Playbook syntax | 100% Ansible compatibility |
+| Inventory formats | YAML, INI, JSON, dynamic scripts |
 | Templating | Jinja2 via minijinja |
-| Vault | AES-256-GCM encryption |
+| Vault encryption | AES-256-GCM |
 | Roles | Full support |
-| Handlers | Including `listen` |
+| Handlers | Including `listen` syntax |
 | Python modules | Fallback via AnsiballZ |
 
-### Connections
+### Connection Methods
 
-- **SSH** (default): Pure Rust via russh
-- **Local**: Direct execution
-- **Docker**: Container execution
+- **SSH** (default): Pure Rust implementation via russh
+- **Local**: Direct local execution
+- **Docker**: Container-based execution
 - **Kubernetes**: Pod execution (feature flag)
 
 ### Built-in Modules
 
-**Core**: command, shell, debug, set_fact, assert, pause, wait_for, stat
+**Core modules**: command, shell, debug, set_fact, assert, pause, wait_for, stat
 
-**Files**: copy, template, file, lineinfile, blockinfile, archive, unarchive
+**File operations**: copy, template, file, lineinfile, blockinfile, archive, unarchive
 
-**Packages**: package, apt, yum, dnf, pip
+**Package management**: package, apt, yum, dnf, pip
 
-**System**: service, systemd_unit, user, group, cron, hostname, sysctl
+**System administration**: service, systemd_unit, user, group, cron, hostname, sysctl
 
 **Security**: authorized_key, known_hosts, ufw, firewalld
 
-**Cloud** (feature flags): aws_ec2_instance, aws_s3, azure_vm, gcp_compute_instance
+**Cloud modules** (feature flags): aws_ec2_instance, aws_s3, azure_vm, gcp_compute_instance
 
-Any module not listed falls back to Ansible's Python execution.
+Unsupported modules automatically fall back to Ansible's Python execution engine.
 
 ## Configuration
 
-Config file: `rustible.toml`, `~/.config/rustible/config.toml`, or `/etc/rustible/rustible.toml`
+Configuration files: `rustible.toml`, `~/.config/rustible/config.toml`, or `/etc/rustible/rustible.toml`
 
 ```toml
 [defaults]
@@ -116,6 +122,8 @@ pipelining = true
 
 ## Feature Flags
 
+Build with additional features:
+
 ```bash
 cargo build --features docker,kubernetes,aws
 ```
@@ -123,31 +131,37 @@ cargo build --features docker,kubernetes,aws
 | Flag | Description |
 |------|-------------|
 | `russh` | Pure Rust SSH (default) |
-| `docker` | Docker modules |
-| `kubernetes` | K8s modules |
+| `docker` | Docker container support |
+| `kubernetes` | Kubernetes pod execution |
 | `aws` | AWS cloud modules |
 
 ## Performance
 
-| Operation | Ansible | Rustible |
-|-----------|---------|----------|
-| 10 hosts, simple playbook | 8.2s | 1.4s |
-| 100 file copies | 45.3s | 8.1s |
-| Template rendering | 12.1s | 2.3s |
+Benchmarks demonstrate significant performance improvements:
+
+| Operation | Ansible | Rustible | Speedup |
+|-----------|---------|----------|---------|
+| 10 hosts, simple playbook | 8.2s | 1.4s | 5.9x |
+| 100 file copies | 45.3s | 8.1s | 5.6x |
+| Template rendering | 12.1s | 2.3s | 5.3x |
 
 ## Documentation
 
-- [User Guide](docs/guides/README.md)
-- [API Reference](docs/reference/README.md)
-- [Architecture](docs/architecture/ARCHITECTURE.md)
+- [User Guide](docs/guides/README.md) - Comprehensive usage guide
+- [API Reference](docs/reference/README.md) - Module documentation
+- [Architecture](docs/architecture/ARCHITECTURE.md) - Technical design
 
 ## Contributing
 
+Development workflow:
+
 ```bash
-cargo build
-cargo test
-cargo clippy --all-features
+cargo build              # Build project
+cargo test               # Run tests
+cargo clippy --all-features  # Lint code
 ```
+
+All contributions should include tests and pass CI checks.
 
 ## License
 
