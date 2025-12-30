@@ -109,6 +109,17 @@ fn get_ssh_test_config() -> Option<(String, u16, String)> {
     Some((host, port, user))
 }
 
+/// Get SSH private key path from environment
+fn get_ssh_test_key() -> PathBuf {
+    std::env::var("RUSTIBLE_SSH_TEST_KEY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("~"))
+                .join(".ssh/id_ed25519")
+        })
+}
+
 // ============================================================================
 // MOCK RUSSH CONNECTION FOR UNIT TESTS
 // ============================================================================
@@ -1382,8 +1393,38 @@ mod integration_tests {
             return;
         }
 
-        // TODO: Test key authentication
-        eprintln!("Would test key authentication");
+        let (host, port, user) = get_ssh_test_config().expect("SSH test config required");
+        let key_path = get_ssh_test_key();
+
+        if !key_path.exists() {
+            eprintln!("Skipping: SSH key not found at {:?}", key_path);
+            return;
+        }
+
+        // Configure host with identity file
+        let host_config = HostConfig::new()
+            .hostname(&host)
+            .port(port)
+            .user(&user)
+            .identity_file(key_path.to_string_lossy());
+
+        let conn = RusshConnection::connect(
+            &host,
+            port,
+            &user,
+            Some(host_config),
+            &ConnectionConfig::default(),
+        )
+        .await
+        .expect("Failed to connect to SSH server with key auth");
+
+        assert!(conn.is_alive().await);
+
+        let result = conn.execute("whoami", None).await.unwrap();
+        assert!(result.success);
+        assert!(result.stdout.trim().contains(&user));
+
+        conn.close().await.unwrap();
     }
 
     /// Test SSH connection with password authentication
