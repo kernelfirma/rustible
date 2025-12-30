@@ -2195,6 +2195,7 @@ fn test_module_with_all_context_options() {
     let context = ModuleContext {
         check_mode: true,
         diff_mode: true,
+        verbosity: 0,
         vars,
         facts,
         work_dir: Some("/tmp".to_string()),

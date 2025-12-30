@@ -811,7 +811,8 @@ impl Executor {
 
                 let ctx = ExecutionContext::new(host.clone())
                     .with_check_mode(self.config.check_mode)
-                    .with_diff_mode(self.config.diff_mode);
+                    .with_diff_mode(self.config.diff_mode)
+                    .with_verbosity(self.config.verbosity);
 
                 let task_result = task
                     .execute(
@@ -845,6 +846,7 @@ impl Executor {
         // OPTIMIZATION: Pre-extract config values to avoid cloning entire config per host
         let check_mode = self.config.check_mode;
         let diff_mode = self.config.diff_mode;
+        let verbosity = self.config.verbosity;
 
         // Avoid cloning entire task list - use Arc slice instead
         let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
@@ -879,7 +881,8 @@ impl Executor {
 
                         let ctx = ExecutionContext::new(host.clone())
                             .with_check_mode(check_mode)
-                            .with_diff_mode(diff_mode);
+                            .with_diff_mode(diff_mode)
+                            .with_verbosity(verbosity);
 
                         let task_result = task
                             .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
@@ -1044,7 +1047,8 @@ impl Executor {
 
             let ctx = ExecutionContext::new(host.clone())
                 .with_check_mode(self.config.check_mode)
-                .with_diff_mode(self.config.diff_mode);
+                .with_diff_mode(self.config.diff_mode)
+                .with_verbosity(self.config.verbosity);
 
             let result = task
                 .execute(
@@ -1081,6 +1085,7 @@ impl Executor {
         // OPTIMIZATION: Pre-extract config values to avoid cloning entire config per host
         let check_mode = self.config.check_mode;
         let diff_mode = self.config.diff_mode;
+        let verbosity = self.config.verbosity;
 
         // OPTIMIZATION: For small host counts, share task via Arc instead of cloning per host
         let task_arc = Arc::new(task.clone());
@@ -1103,7 +1108,8 @@ impl Executor {
 
                     let ctx = ExecutionContext::new(host.clone())
                         .with_check_mode(check_mode)
-                        .with_diff_mode(diff_mode);
+                        .with_diff_mode(diff_mode)
+                        .with_verbosity(verbosity);
 
                     let result = task
                         .execute(&ctx, &runtime, &handlers, &notified, &parallelization)

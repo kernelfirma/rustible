@@ -209,6 +209,8 @@ pub struct ExecutionContext {
     pub check_mode: bool,
     /// Whether to show diffs
     pub diff_mode: bool,
+    /// Verbosity level (0-4)
+    pub verbosity: u8,
     /// Optional connection for remote execution
     pub connection: Option<Arc<dyn Connection>>,
     /// Python interpreter path on remote host
@@ -221,6 +223,7 @@ impl std::fmt::Debug for ExecutionContext {
             .field("host", &self.host)
             .field("check_mode", &self.check_mode)
             .field("diff_mode", &self.diff_mode)
+            .field("verbosity", &self.verbosity)
             .field(
                 "connection",
                 &self.connection.as_ref().map(|c| c.identifier()),
@@ -236,6 +239,7 @@ impl ExecutionContext {
             host: host.into(),
             check_mode: false,
             diff_mode: false,
+            verbosity: 0,
             connection: None,
             python_interpreter: "/usr/bin/python3".to_string(),
         }
@@ -248,6 +252,11 @@ impl ExecutionContext {
 
     pub fn with_diff_mode(mut self, diff: bool) -> Self {
         self.diff_mode = diff;
+        self
+    }
+
+    pub fn with_verbosity(mut self, verbosity: u8) -> Self {
+        self.verbosity = verbosity;
         self
     }
 
