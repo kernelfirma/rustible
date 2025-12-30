@@ -128,6 +128,10 @@ pub enum Commands {
     /// Detect configuration drift from desired state
     #[command(name = "drift")]
     Drift(commands::drift::DriftArgs),
+
+    /// Manage lockfile for reproducible playbook execution
+    #[command(name = "lock")]
+    Lock(commands::lock::LockArgs),
 }
 
 /// Arguments for init command

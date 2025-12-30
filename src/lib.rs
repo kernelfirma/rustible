@@ -596,6 +596,33 @@ pub mod api;
 pub mod galaxy;
 
 // ============================================================================
+// Lockfile Support (Reproducible Builds)
+// ============================================================================
+
+/// Lockfile support for reproducible playbook execution.
+///
+/// This module provides lockfile functionality similar to Cargo.lock or package-lock.json,
+/// enabling reproducible playbook executions by pinning versions of:
+///
+/// - Ansible Galaxy roles and collections
+/// - Python module dependencies
+/// - External resources (URLs, git refs)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use rustible::lockfile::{Lockfile, LockfileManager};
+///
+/// // Create lockfile for a playbook
+/// let mut lockfile = Lockfile::new("playbook.yml")?;
+///
+/// // Verify playbook matches locked state
+/// let manager = LockfileManager::new("playbook.yml").frozen(true);
+/// manager.verify("playbook.yml")?;
+/// ```
+pub mod lockfile;
+
+// ============================================================================
 // Version Information
 // ============================================================================
 

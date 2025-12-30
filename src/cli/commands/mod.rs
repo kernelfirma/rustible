@@ -6,6 +6,7 @@ pub mod check;
 pub mod drift;
 pub mod galaxy;
 pub mod inventory;
+pub mod lock;
 pub mod provision;
 pub mod run;
 pub mod vault;
