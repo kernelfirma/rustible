@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use russh::client::{Handle, Handler};
 use russh::keys::key::PublicKey;
 use russh::keys::load_secret_key;
+use russh_keys::PublicKeyBase64;
 use russh::ChannelMsg;
 use russh_keys::agent::client::AgentClient;
 use russh_sftp::client::SftpSession;
@@ -323,6 +324,8 @@ struct ClientHandler {
     port: u16,
     /// Known hosts entries loaded from ~/.ssh/known_hosts
     known_hosts: Vec<KnownHostEntry>,
+    /// Path to known_hosts file
+    known_hosts_path: Option<PathBuf>,
     /// Whether to accept unknown hosts (first connection)
     accept_unknown: bool,
 }
@@ -338,30 +341,33 @@ struct KnownHostEntry {
 
 impl ClientHandler {
     /// Create a new client handler with host key verification
-    fn new(host: &str, port: u16, accept_unknown: bool) -> Self {
-        let known_hosts = Self::load_known_hosts();
+    fn new(host: &str, port: u16, accept_unknown: bool, known_hosts_path: Option<PathBuf>) -> Self {
+        let path = known_hosts_path.clone().or_else(|| {
+            dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"))
+        });
+
+        let known_hosts = Self::load_known_hosts(path.as_deref());
+
         Self {
             host: host.to_string(),
             port,
             known_hosts,
+            known_hosts_path: path,
             accept_unknown,
         }
     }
 
     /// Load and parse ~/.ssh/known_hosts file
-    fn load_known_hosts() -> Vec<KnownHostEntry> {
+    fn load_known_hosts(path: Option<&Path>) -> Vec<KnownHostEntry> {
         let mut entries = Vec::new();
 
-        // Get path to known_hosts
-        let known_hosts_path = dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"));
-
-        let path = match known_hosts_path {
+        let path = match path {
             Some(p) if p.exists() => p,
             _ => return entries,
         };
 
         // Read and parse the file
-        let content = match std::fs::read_to_string(&path) {
+        let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 debug!(error = %e, "Failed to read known_hosts file");
@@ -515,6 +521,56 @@ impl ClientHandler {
         // Compare the key fingerprints
         a.fingerprint() == b.fingerprint()
     }
+
+    /// Add a new host key to known_hosts file
+    fn add_to_known_hosts(&self, server_key: &PublicKey) {
+        let path = match &self.known_hosts_path {
+            Some(p) => p,
+            None => return,
+        };
+
+        // Ensure directory exists
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    warn!(error = %e, "Failed to create .ssh directory");
+                    return;
+                }
+            }
+        }
+
+        // Format the host string
+        let host_str = if self.port == 22 {
+            self.host.clone()
+        } else {
+            format!("[{}]:{}", self.host, self.port)
+        };
+
+        // Format the key
+        let key_type = server_key.name();
+        let key_base64 = server_key.public_key_base64();
+
+        let entry_line = format!("{} {} {}\n", host_str, key_type, key_base64);
+
+        // Append to file
+        use std::io::Write;
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            Ok(mut file) => {
+                if let Err(e) = file.write_all(entry_line.as_bytes()) {
+                    warn!(error = %e, "Failed to write to known_hosts file");
+                } else {
+                    info!(host = %self.host, path = %path.display(), "Added new host key to known_hosts");
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to open known_hosts file for writing");
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -536,7 +592,7 @@ impl Handler for ClientHandler {
                         host = %self.host,
                         "Host not found in known_hosts, accepting (first connection)"
                     );
-                    // TODO: Optionally add to known_hosts file
+                    self.add_to_known_hosts(server_public_key);
                     Ok(true)
                 } else {
                     warn!(
@@ -944,8 +1000,17 @@ impl RusshConnection {
         })?;
 
         // Create client handler with host key verification
-        // Accept unknown hosts by default (like StrictHostKeyChecking=accept-new)
-        let handler = ClientHandler::new(host, port, true);
+        // Determine strict host key checking setting
+        // If strict_host_key_checking is:
+        // - Some(true): reject unknown hosts (accept_unknown = false)
+        // - Some(false): accept unknown hosts (accept_unknown = true)
+        // - None: default to accepting unknown hosts (accept_unknown = true)
+        let accept_unknown = !host_config.strict_host_key_checking.unwrap_or(false);
+
+        // Use configured known_hosts file if provided
+        let known_hosts_path = host_config.user_known_hosts_file.as_ref().map(PathBuf::from);
+
+        let handler = ClientHandler::new(host, port, accept_unknown, known_hosts_path);
 
         let mut session = russh::client::connect_stream(config, socket, handler)
             .await
@@ -3696,5 +3761,113 @@ mod tests {
         assert_eq!(cmd.command(), "echo hello");
         assert_eq!(cmd.options().cwd, Some("/tmp".to_string()));
         assert_eq!(cmd.options().timeout, Some(30));
+    }
+}
+#[cfg(test)]
+mod verification_tests {
+    use super::*;
+    use russh::keys::key::KeyPair;
+    use tempfile::NamedTempFile;
+    use std::io::Write;
+
+    // Helper to generate a dummy key
+    fn generate_key() -> KeyPair {
+        let mut rng = rand::thread_rng();
+        // Just use Ed25519 for test as it is standard and supported by russh
+        KeyPair::generate_ed25519().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_verify_host_key_verified() {
+        let key_pair = generate_key();
+        // Depending on russh version, we might get PublicKey directly from KeyPair
+        // russh 0.45 KeyPair usually has clone_public_key()
+        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+
+        // Setup known_hosts file
+        let mut temp_file = NamedTempFile::new().unwrap();
+
+        // Format entry
+        let key_type = public_key.name();
+        let key_base64 = public_key.public_key_base64();
+        let entry = format!("example.com {} {}\n", key_type, key_base64);
+
+        temp_file.write_all(entry.as_bytes()).unwrap();
+
+        let path = temp_file.path().to_path_buf();
+        let mut handler = ClientHandler::new("example.com", 22, false, Some(path));
+
+        let result = handler.check_server_key(&public_key).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[tokio::test]
+    async fn test_verify_host_key_mismatch() {
+        let key_pair1 = generate_key();
+        let key_pair2 = generate_key();
+
+        let public_key1 = key_pair1.clone_public_key().expect("Failed to get public key");
+        let public_key2 = key_pair2.clone_public_key().expect("Failed to get public key");
+
+        // Write key1 to known_hosts
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let key_type = public_key1.name();
+        let key_base64 = public_key1.public_key_base64();
+        let entry = format!("example.com {} {}\n", key_type, key_base64);
+        temp_file.write_all(entry.as_bytes()).unwrap();
+
+        let path = temp_file.path().to_path_buf();
+
+        // Check with key2 (mismatch)
+        let mut handler = ClientHandler::new("example.com", 22, false, Some(path));
+        let result = handler.check_server_key(&public_key2).await;
+
+        // Should return false (reject) because of mismatch, even if accept_unknown is true (mismatch != unknown)
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[tokio::test]
+    async fn test_unknown_host_accept() {
+        let key_pair = generate_key();
+        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+
+        // Empty known_hosts
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // accept_unknown = true
+        let mut handler = ClientHandler::new("example.com", 22, true, Some(path.clone()));
+
+        let result = handler.check_server_key(&public_key).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+
+        // Verify it was written to file
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("example.com"));
+        assert!(content.contains(public_key.name()));
+    }
+
+    #[tokio::test]
+    async fn test_unknown_host_reject() {
+        let key_pair = generate_key();
+        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+
+        // Empty known_hosts
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // accept_unknown = false
+        let mut handler = ClientHandler::new("example.com", 22, false, Some(path.clone()));
+
+        let result = handler.check_server_key(&public_key).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+
+        // Verify it was NOT written to file
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.is_empty());
     }
 }
