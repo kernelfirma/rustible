@@ -3,6 +3,7 @@
 //! This module handles SSH config parsing, host-specific settings,
 //! timeout configuration, and retry logic.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -425,9 +426,9 @@ impl SshConfigParser {
         let mut current_config = HostConfig::default();
 
         // Regex for matching Host directive
-        let host_re = Regex::new(r"^\s*Host\s+(.+)$").unwrap();
+        static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").unwrap());
         // Regex for matching key-value pairs
-        let kv_re = Regex::new(r"^\s*(\w+)\s+(.+)$").unwrap();
+        static KV_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").unwrap());
 
         for line in content.lines() {
             let line = line.trim();
@@ -438,7 +439,7 @@ impl SshConfigParser {
             }
 
             // Check for Host directive
-            if let Some(captures) = host_re.captures(line) {
+            if let Some(captures) = HOST_RE.captures(line) {
                 // Save previous host config
                 if !current_hosts.is_empty() {
                     for host in &current_hosts {
@@ -454,7 +455,7 @@ impl SshConfigParser {
             }
 
             // Parse key-value pairs
-            if let Some(captures) = kv_re.captures(line) {
+            if let Some(captures) = KV_RE.captures(line) {
                 let key = captures.get(1).unwrap().as_str().to_lowercase();
                 let value = captures.get(2).unwrap().as_str().trim().to_string();
 
@@ -520,6 +521,11 @@ impl SshConfigParser {
 
 /// Match a host against a pattern (supports * and ?)
 fn matches_pattern(pattern: &str, host: &str) -> bool {
+    // Fast path for wildcard
+    if pattern == "*" {
+        return true;
+    }
+
     // Convert glob pattern to regex
     let regex_pattern = pattern
         .replace('.', r"\.")

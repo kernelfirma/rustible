@@ -57,10 +57,7 @@ async fn main() -> Result<()> {
         Commands::Validate(args) => validate_playbook(&args.playbook, &mut ctx).await?,
         Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
         Commands::Drift(args) => args.execute(&mut ctx).await?,
-        Commands::Lock(args) => {
-            args.execute().await?;
-            0
-        }
+Commands::Lock(args) => { args.execute().await?; 0 },
     };
 
     std::process::exit(exit_code);

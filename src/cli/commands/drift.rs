@@ -242,12 +242,13 @@ impl DriftArgs {
                     // Check drift for each task
                     for host in &play_hosts {
                         if let Some(finding) = self.check_task_drift(ctx, host, task).await? {
-                            if self.fail_fast && finding.status != DriftStatus::InSync {
-                                findings.push(finding.clone());
+let status = finding.status.clone();
+                            findings.push(finding);
+
+                            if self.fail_fast && status != DriftStatus::InSync {
                                 break;
-                            } else {
-                                findings.push(finding);
                             }
+                        }
                         }
                     }
                 }
