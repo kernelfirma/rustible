@@ -40,6 +40,7 @@ use russh::client::{self, Handle, Handler, KeyboardInteractiveAuthResponse, Sess
 use russh::keys::key::PublicKey;
 use russh::ChannelId;
 use russh_keys::agent::client::AgentClient;
+use russh_keys::check_known_hosts_path;
 use russh_keys::key::KeyPair;
 
 use super::config::{expand_path, HostConfig};
@@ -652,15 +653,21 @@ pub struct RusshClientHandler {
     server_key: Arc<Mutex<Option<PublicKey>>>,
     /// Whether the server key has been verified
     key_verified: Arc<Mutex<bool>>,
+    /// The hostname we're connecting to
+    host: String,
+    /// The port we're connecting to
+    port: u16,
 }
 
 impl RusshClientHandler {
     /// Create a new client handler
-    pub fn new(auth_config: AuthConfig) -> Self {
+    pub fn new(auth_config: AuthConfig, host: String, port: u16) -> Self {
         Self {
             auth_config,
             server_key: Arc::new(Mutex::new(None)),
             key_verified: Arc::new(Mutex::new(false)),
+            host,
+            port,
         }
     }
 
@@ -728,10 +735,27 @@ impl Handler for RusshClientHandler {
         if let Some(home) = dirs::home_dir() {
             let default_known_hosts = home.join(".ssh").join("known_hosts");
             if default_known_hosts.exists() {
-                // TODO: Implement proper known_hosts verification
                 debug!("Using default known_hosts at {:?}", default_known_hosts);
-                *self.key_verified.lock().await = true;
-                return Ok(true);
+                match check_known_hosts_path(
+                    &self.host,
+                    self.port,
+                    server_public_key,
+                    &default_known_hosts,
+                ) {
+                    Ok(true) => {
+                        debug!("Host key verified against default known_hosts");
+                        *self.key_verified.lock().await = true;
+                        return Ok(true);
+                    }
+                    Ok(false) => {
+                        warn!("Host key verification failed against default known_hosts");
+                        return Ok(false);
+                    }
+                    Err(e) => {
+                        warn!("Error verifying host key: {}", e);
+                        return Ok(false);
+                    }
+                }
             }
         }
 
@@ -1499,5 +1523,18 @@ mod tests {
         for file in &files {
             assert!(file.exists());
         }
+    }
+
+    #[test]
+    fn test_russh_client_handler_initialization() {
+        let auth_config = AuthConfig::default();
+        let host = "example.com".to_string();
+        let port = 2222;
+
+        let handler = RusshClientHandler::new(auth_config.clone(), host.clone(), port);
+
+        assert_eq!(handler.host, host);
+        assert_eq!(handler.port, port);
+        assert_eq!(handler.auth_config.username, auth_config.username);
     }
 }
