@@ -489,7 +489,7 @@ impl RecoveryManager {
         })?;
 
         let mut manager = manager.write().await;
-        let id = manager.begin(name);
+        let id = manager.begin(name).await?;
 
         info!("Started transaction '{}' with id {}", name, id);
         Ok(id)
@@ -502,7 +502,7 @@ impl RecoveryManager {
         })?;
 
         let mut manager = manager.write().await;
-        manager.commit(transaction_id)?;
+        manager.commit(transaction_id).await?;
 
         info!("Committed transaction {}", transaction_id);
         Ok(())

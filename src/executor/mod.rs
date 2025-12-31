@@ -453,7 +453,7 @@ impl Executor {
 
             // Execute each play in sequence
             for play in &playbook.plays {
-                let play_results = self.run_play(play, tx_id).await?;
+                let play_results = self.run_play(play, tx_id.clone()).await?;
 
                 // Merge results
                 for (host, result) in play_results {
@@ -469,7 +469,7 @@ impl Executor {
             }
 
             // Run any remaining notified handlers
-            self.flush_handlers(tx_id).await?;
+            self.flush_handlers(tx_id.clone()).await?;
 
             info!("Playbook completed: {}", playbook.name);
             Ok(all_results)
@@ -606,16 +606,19 @@ impl Executor {
                 &hosts,
                 &all_tasks,
                 play.max_fail_percentage,
-                tx_id,
+                tx_id.clone(),
             )
             .await
         } else {
             // Execute based on strategy without serial batching
             match self.config.strategy {
-                ExecutionStrategy::Linear => self.run_linear(&hosts, &all_tasks, tx_id).await,
-                ExecutionStrategy::Free => self.run_free(&hosts, &all_tasks, tx_id).await,
+                ExecutionStrategy::Linear => {
+                    self.run_linear(&hosts, &all_tasks, tx_id.clone()).await
+                }
+                ExecutionStrategy::Free => self.run_free(&hosts, &all_tasks, tx_id.clone()).await,
                 ExecutionStrategy::HostPinned => {
-                    self.run_host_pinned(&hosts, &all_tasks, tx_id).await
+                    self.run_host_pinned(&hosts, &all_tasks, tx_id.clone())
+                        .await
                 }
             }
         };
@@ -632,7 +635,7 @@ impl Executor {
             if play.force_handlers && play_failed {
                 info!("Running handlers despite play failure (force_handlers=true)");
             }
-            self.flush_handlers(tx_id).await?;
+            self.flush_handlers(tx_id.clone()).await?;
         } else {
             // Clear notified handlers without running them
             let notified_count = {
@@ -751,7 +754,9 @@ impl Executor {
             }
 
             // Run task on all active hosts in parallel (limited by semaphore)
-            let task_results = self.run_task_on_hosts(&active_hosts, task, tx_id).await?;
+            let task_results = self
+                .run_task_on_hosts(&active_hosts, task, tx_id.clone())
+                .await?;
 
             debug!(
                 "Task '{}' completed on {} hosts",
@@ -885,7 +890,7 @@ impl Executor {
                     .await;
 
                 if let Some(rm) = &self.recovery_manager {
-                    if let Some(tid) = tx_id {
+                    if let Some(tid) = tx_id.as_ref() {
                         let (outcome, changed) = match &task_result {
                             Ok(r) => {
                                 let outcome = match r.status {
@@ -909,7 +914,13 @@ impl Executor {
                             ),
                         };
                         if let Err(e) = rm
-                            .record_task(tid, task.name.clone(), host.clone(), outcome, changed)
+                            .record_task(
+                                tid.clone(),
+                                task.name.clone(),
+                                host.clone(),
+                                outcome,
+                                changed,
+                            )
                             .await
                         {
                             warn!("Failed to record task outcome for host {}: {}", host, e);
@@ -957,6 +968,7 @@ impl Executor {
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
                 let recovery_manager = self.recovery_manager.clone();
+                let tx_id = tx_id.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -983,7 +995,7 @@ impl Executor {
                             .await;
 
                         if let Some(rm) = &recovery_manager {
-                            if let Some(tid) = tx_id {
+                            if let Some(tid) = tx_id.as_ref() {
                                 let (outcome, changed) = match &task_result {
                                     Ok(r) => {
                                         let outcome = match r.status {
@@ -1008,7 +1020,7 @@ impl Executor {
                                 };
                                 if let Err(e) = rm
                                     .record_task(
-                                        tid,
+                                        tid.clone(),
                                         task.name.clone(),
                                         host.clone(),
                                         outcome,
@@ -1104,11 +1116,15 @@ impl Executor {
             // Execute this batch based on the configured strategy
             let batch_results = match self.config.strategy {
                 ExecutionStrategy::Linear => {
-                    self.run_linear(&batch_hosts_owned, tasks, tx_id).await?
+                    self.run_linear(&batch_hosts_owned, tasks, tx_id.clone())
+                        .await?
                 }
-                ExecutionStrategy::Free => self.run_free(&batch_hosts_owned, tasks, tx_id).await?,
+                ExecutionStrategy::Free => {
+                    self.run_free(&batch_hosts_owned, tasks, tx_id.clone())
+                        .await?
+                }
                 ExecutionStrategy::HostPinned => {
-                    self.run_host_pinned(&batch_hosts_owned, tasks, tx_id)
+                    self.run_host_pinned(&batch_hosts_owned, tasks, tx_id.clone())
                         .await?
                 }
             };
@@ -1219,7 +1235,7 @@ impl Executor {
                 }
             }
             if let Some(rm) = &self.recovery_manager {
-                if let Some(tid) = tx_id {
+                if let Some(tid) = tx_id.as_ref() {
                     for (host, res) in &results {
                         let outcome = match res.status {
                             TaskStatus::Ok => TaskOutcome::Success,
@@ -1234,7 +1250,13 @@ impl Executor {
                         };
 
                         if let Err(e) = rm
-                            .record_task(tid, task.name.clone(), host.clone(), outcome, res.changed)
+                            .record_task(
+                                tid.clone(),
+                                task.name.clone(),
+                                host.clone(),
+                                outcome,
+                                res.changed,
+                            )
                             .await
                         {
                             warn!("Failed to record task outcome for host {}: {}", host, e);
@@ -1307,7 +1329,7 @@ impl Executor {
             .into_inner();
 
         if let Some(rm) = &self.recovery_manager {
-            if let Some(tid) = tx_id {
+            if let Some(tid) = tx_id.as_ref() {
                 for (host, res) in &results {
                     let outcome = match res.status {
                         TaskStatus::Ok => TaskOutcome::Success,
@@ -1322,7 +1344,13 @@ impl Executor {
                     };
 
                     if let Err(e) = rm
-                        .record_task(tid, task.name.clone(), host.clone(), outcome, res.changed)
+                        .record_task(
+                            tid.clone(),
+                            task.name.clone(),
+                            host.clone(),
+                            outcome,
+                            res.changed,
+                        )
                         .await
                     {
                         warn!("Failed to record task outcome for host {}: {}", host, e);
@@ -1507,7 +1535,7 @@ impl Executor {
                 };
 
                 // Run handler on all hosts
-                let results = self.run_task_on_hosts(&hosts, &task, tx_id).await?;
+                let results = self.run_task_on_hosts(&hosts, &task, tx_id.clone()).await?;
 
                 // Check if handler execution triggered any changes
                 // If so, check if any handlers listen to this handler's name (handler chaining)

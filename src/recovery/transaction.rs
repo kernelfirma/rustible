@@ -89,6 +89,9 @@ pub enum TransactionError {
 
     #[error("Concurrent modification detected")]
     ConcurrentModification,
+
+    #[error("Operation failed: {0}")]
+    OperationFailed(String),
 }
 
 /// Result type for transaction operations
@@ -166,7 +169,7 @@ impl TransactionContext {
 }
 
 /// Configuration for transaction management
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionConfig {
     /// Base directory for transaction data
     pub data_dir: PathBuf,
