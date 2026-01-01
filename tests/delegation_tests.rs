@@ -6,6 +6,7 @@ use rustible::executor::parallelization::ParallelizationManager;
 use rustible::executor::runtime::ExecutionContext;
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::task::{Task, TaskStatus};
+use rustible::modules::ModuleRegistry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
@@ -21,6 +22,7 @@ async fn test_delegate_to_basic() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     // Create a task that delegates to localhost
     let task = Task::new("Debug on localhost", "debug").arg("msg", "Hello from delegated task");
@@ -33,7 +35,7 @@ async fn test_delegate_to_basic() {
     let ctx = ExecutionContext::new("web1");
 
     let result = delegated_task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
@@ -52,6 +54,7 @@ async fn test_delegate_facts_false() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     // Create a set_fact task that delegates to localhost but stores facts on web1
     let mut task = Task::new("Set fact", "set_fact");
@@ -63,7 +66,7 @@ async fn test_delegate_facts_false() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
@@ -88,6 +91,7 @@ async fn test_delegate_facts_true() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     // Create a set_fact task that delegates to localhost and stores facts there
     let mut task = Task::new("Set fact on delegate", "set_fact");
@@ -101,7 +105,7 @@ async fn test_delegate_facts_true() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
@@ -126,6 +130,7 @@ async fn test_delegate_facts_default_false() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     // Create a set_fact task that delegates but doesn't specify delegate_facts
     // Default should be false (facts go to original host)
@@ -140,7 +145,7 @@ async fn test_delegate_facts_default_false() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
@@ -165,6 +170,7 @@ async fn test_delegate_with_register() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     // Create a task that delegates and registers result
     let mut task = Task::new("Debug and register", "debug");
@@ -176,7 +182,7 @@ async fn test_delegate_with_register() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
@@ -200,6 +206,7 @@ async fn test_no_delegation() {
     let handlers = Arc::new(RwLock::new(HashMap::new()));
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
+    let module_registry = Arc::new(ModuleRegistry::with_builtins());
 
     let mut task = Task::new("Normal task", "set_fact");
     task.args
@@ -208,7 +215,7 @@ async fn test_no_delegation() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
         .await;
 
     assert!(result.is_ok());
