@@ -6,6 +6,7 @@ use super::{CommandContext, Runnable};
 use crate::cli::output::{RecapStats, TaskStatus};
 use anyhow::Result;
 use clap::Parser;
+use futures::future::join_all;
 use indexmap::IndexMap;
 use regex::Regex;
 use std::path::PathBuf;
@@ -1046,7 +1047,11 @@ impl RunArgs {
         Ok(vec![pattern.to_string()])
     }
 
-    /// Execute a single task
+    /// Execute a single task across all hosts concurrently (respecting forks limit)
+    ///
+    /// Uses batch-based concurrency where hosts are processed in parallel batches
+    /// of size `forks`. Each batch completes before the next batch starts.
+    /// Results are buffered and printed in host order for deterministic output.
     async fn execute_task(
         &self,
         ctx: &mut CommandContext,
@@ -1072,81 +1077,127 @@ impl RunArgs {
 
         ctx.output.task_header(task_name);
 
-        // Check conditions (when)
+        // Check conditions (when) - extract condition once
         let when_condition = task.get("when");
+        let when_is_false = when_condition
+            .and_then(|w| w.as_str())
+            .map(|s| s == "false")
+            .unwrap_or(false);
 
-        // Execute on each host
-        for host in hosts {
-            // Check when condition (simplified)
-            if let Some(when) = when_condition {
-                let condition = when.as_str().unwrap_or("true");
-                if condition == "false" {
-                    ctx.output.task_result(
-                        host,
-                        TaskStatus::Skipped,
-                        Some("conditional check failed"),
-                    );
-                    stats.lock().await.record(host, TaskStatus::Skipped);
-                    continue;
-                }
-            }
+        // Determine the module being used (for check mode message)
+        let (module, _args) = self.detect_module(task);
 
-            // Determine the module being used
-            let (module, _args) = self.detect_module(task);
+        // Check for ignore_errors flag
+        let ignore_errors = task
+            .get("ignore_errors")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
-            // In check mode, don't actually execute
-            if ctx.check_mode {
-                ctx.output.task_result(
-                    host,
-                    TaskStatus::Changed,
-                    Some(&format!("[check mode] would run: {}", module)),
-                );
-                stats.lock().await.record(host, TaskStatus::Changed);
-                continue;
-            }
+        // Get forks limit from context
+        let forks = ctx.forks;
+        let check_mode = ctx.check_mode;
 
-            // Execute the task (simplified)
-            let spinner = ctx
-                .output
-                .create_spinner(&format!("Executing on {}...", host));
+        // Result struct to hold host execution results
+        struct HostResult {
+            host: String,
+            status: TaskStatus,
+            message: Option<String>,
+        }
 
-            let result = self.execute_module(ctx, host, task, vars).await;
+        let mut all_results: Vec<HostResult> = Vec::with_capacity(hosts.len());
 
+        // Process hosts in batches of `forks` for concurrent execution
+        for batch in hosts.chunks(forks) {
+            // Create a spinner for this batch
+            let spinner = if batch.len() > 1 {
+                ctx.output.create_spinner(&format!(
+                    "Executing on {} hosts (batch of {})...",
+                    batch.len(),
+                    forks
+                ))
+            } else {
+                ctx.output
+                    .create_spinner(&format!("Executing on {}...", batch[0]))
+            };
+
+            // Execute all hosts in this batch concurrently
+            let batch_futures: Vec<_> = batch
+                .iter()
+                .map(|host| {
+                    let host = host.clone();
+                    async {
+                        // Check when condition
+                        if when_is_false {
+                            return HostResult {
+                                host,
+                                status: TaskStatus::Skipped,
+                                message: Some("conditional check failed".to_string()),
+                            };
+                        }
+
+                        // In check mode, don't actually execute
+                        if check_mode {
+                            return HostResult {
+                                host,
+                                status: TaskStatus::Changed,
+                                message: Some(format!("[check mode] would run: {}", module)),
+                            };
+                        }
+
+                        // Execute the task
+                        let exec_result = self.execute_module(ctx, &host, task, vars).await;
+
+                        match exec_result {
+                            Ok((changed, message)) => {
+                                let status = if changed {
+                                    TaskStatus::Changed
+                                } else {
+                                    TaskStatus::Ok
+                                };
+                                HostResult {
+                                    host,
+                                    status,
+                                    message,
+                                }
+                            }
+                            Err(e) => {
+                                if ignore_errors {
+                                    HostResult {
+                                        host,
+                                        status: TaskStatus::Ignored,
+                                        message: Some(format!("ignored error: {}", e)),
+                                    }
+                                } else {
+                                    HostResult {
+                                        host,
+                                        status: TaskStatus::Failed,
+                                        message: Some(e.to_string()),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+                .collect();
+
+            // Wait for all hosts in this batch to complete
+            let batch_results = join_all(batch_futures).await;
+            all_results.extend(batch_results);
+
+            // Clear spinner after batch completes
             if let Some(sp) = spinner {
                 sp.finish_and_clear();
             }
+        }
 
-            match result {
-                Ok((changed, message)) => {
-                    let status = if changed {
-                        TaskStatus::Changed
-                    } else {
-                        TaskStatus::Ok
-                    };
-                    ctx.output.task_result(host, status, message.as_deref());
-                    stats.lock().await.record(host, status);
-                }
-                Err(e) => {
-                    // Check for ignore_errors
-                    let ignore_errors = task
-                        .get("ignore_errors")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
+        // Results are already in host order since we process batches in order
+        // and join_all preserves order within each batch
 
-                    if ignore_errors {
-                        ctx.output.task_result(
-                            host,
-                            TaskStatus::Ignored,
-                            Some(&format!("ignored error: {}", e)),
-                        );
-                        stats.lock().await.record(host, TaskStatus::Ignored);
-                    } else {
-                        ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
-                        stats.lock().await.record(host, TaskStatus::Failed);
-                    }
-                }
-            }
+        // Print results and update stats in host order
+        for result in all_results {
+            ctx.output
+                .task_result(&result.host, result.status, result.message.as_deref());
+            stats.lock().await.record(&result.host, result.status);
         }
 
         Ok(())
