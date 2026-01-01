@@ -325,15 +325,59 @@ impl RuntimeContext {
     }
 
     /// Create a runtime context from an inventory
+    ///
+    /// This properly wires all inventory data into the runtime context:
+    /// - Groups with their hosts, variables, and children
+    /// - Hosts added to all_hosts via add_host()
+    /// - Host variables with correct precedence
     pub fn from_inventory(inventory: &crate::inventory::Inventory) -> Self {
         let mut ctx = Self::new();
 
-        // Add hosts from inventory
+        // First pass: Add all groups with their structure
+        for group in inventory.groups() {
+            let inventory_group = InventoryGroup {
+                hosts: group.hosts.iter().cloned().collect(),
+                vars: group
+                    .vars
+                    .iter()
+                    .filter_map(|(k, v)| serde_json::to_value(v).ok().map(|jv| (k.clone(), jv)))
+                    .collect(),
+                children: group.children.iter().cloned().collect(),
+            };
+            ctx.add_group(group.name.clone(), inventory_group);
+        }
+
+        // Second pass: Add all hosts and their variables
         for host in inventory.hosts() {
-            // Convert host variables from serde_yaml to serde_json
+            let host_name = host.name().to_string();
+
+            // Determine which groups this host belongs to
+            let mut host_groups = Vec::new();
+            for group in inventory.groups() {
+                if group.hosts.contains(&host_name) {
+                    host_groups.push(group.name.clone());
+                }
+            }
+
+            // Add host to runtime context
+            if let Some(first_group) = host_groups.first() {
+                ctx.add_host(host_name.clone(), Some(first_group));
+                // Add to additional groups
+                for group_name in host_groups.iter().skip(1) {
+                    if let Some(group) = ctx.groups.get_mut(group_name) {
+                        if !group.hosts.contains(&host_name) {
+                            group.hosts.push(host_name.clone());
+                        }
+                    }
+                }
+            } else {
+                ctx.add_host(host_name.clone(), None);
+            }
+
+            // Set host variables
             for (key, value) in &host.vars {
                 if let Ok(json_value) = serde_json::to_value(value) {
-                    ctx.set_host_var(host.name(), key.clone(), json_value);
+                    ctx.set_host_var(&host_name, key.clone(), json_value);
                 }
             }
         }
