@@ -264,7 +264,11 @@ impl Resource for AwsInternetGatewayResource {
     }
 
     #[cfg(feature = "aws")]
-    async fn read(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceReadResult> {
+    async fn read(
+        &self,
+        id: &str,
+        ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceReadResult> {
         let client = Self::create_client(ctx).await?;
 
         let result = client
@@ -343,7 +347,11 @@ impl Resource for AwsInternetGatewayResource {
     }
 
     #[cfg(not(feature = "aws"))]
-    async fn read(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceReadResult> {
+    async fn read(
+        &self,
+        _id: &str,
+        _ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceReadResult> {
         Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
@@ -411,7 +419,11 @@ impl Resource for AwsInternetGatewayResource {
     }
 
     #[cfg(feature = "aws")]
-    async fn create(&self, config: &Value, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
+    async fn create(
+        &self,
+        config: &Value,
+        ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceResult> {
         let client = Self::create_client(ctx).await?;
         let igw_config = InternetGatewayConfig::from_value(config)?;
 
@@ -462,7 +474,11 @@ impl Resource for AwsInternetGatewayResource {
     }
 
     #[cfg(not(feature = "aws"))]
-    async fn create(&self, _config: &Value, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
+    async fn create(
+        &self,
+        _config: &Value,
+        _ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceResult> {
         Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
@@ -575,14 +591,21 @@ impl Resource for AwsInternetGatewayResource {
             .send()
             .await
             .map_err(|e| {
-                ProvisioningError::CloudApiError(format!("Failed to delete Internet Gateway: {}", e))
+                ProvisioningError::CloudApiError(format!(
+                    "Failed to delete Internet Gateway: {}",
+                    e
+                ))
             })?;
 
         Ok(ResourceResult::success(id, Value::Null))
     }
 
     #[cfg(not(feature = "aws"))]
-    async fn destroy(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
+    async fn destroy(
+        &self,
+        _id: &str,
+        _ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceResult> {
         Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))
@@ -603,7 +626,11 @@ impl Resource for AwsInternetGatewayResource {
     }
 
     #[cfg(not(feature = "aws"))]
-    async fn import(&self, _id: &str, _ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
+    async fn import(
+        &self,
+        _id: &str,
+        _ctx: &ProviderContext,
+    ) -> ProvisioningResult<ResourceResult> {
         Err(ProvisioningError::ConfigError(
             "AWS feature not enabled".to_string(),
         ))

@@ -63,12 +63,12 @@ mod integrity;
 mod requirements;
 mod role;
 
-pub use cache::{GalaxyCache, GalaxyCacheConfig, CachedArtifact};
+pub use cache::{CachedArtifact, GalaxyCache, GalaxyCacheConfig};
 pub use client::{GalaxyClient, GalaxyClientBuilder};
 pub use collection::{Collection, CollectionInfo, CollectionInstaller, CollectionVersion};
 pub use error::{GalaxyError, GalaxyResult};
-pub use integrity::{IntegrityVerifier, ChecksumAlgorithm, FileIntegrity};
-pub use requirements::{RequirementsFile, Requirement, RequirementSource, RequirementType};
+pub use integrity::{ChecksumAlgorithm, FileIntegrity, IntegrityVerifier};
+pub use requirements::{Requirement, RequirementSource, RequirementType, RequirementsFile};
 pub use role::{GalaxyRole, RoleInfo, RoleInstaller};
 
 use std::path::PathBuf;
@@ -103,15 +103,10 @@ impl Galaxy {
         let cache = Arc::new(GalaxyCache::new(cache_config)?);
         let client = Arc::new(GalaxyClient::new(&config)?);
 
-        let collection_installer = CollectionInstaller::new(
-            Arc::clone(&client),
-            Arc::clone(&cache),
-        );
+        let collection_installer =
+            CollectionInstaller::new(Arc::clone(&client), Arc::clone(&cache));
 
-        let role_installer = RoleInstaller::new(
-            Arc::clone(&client),
-            Arc::clone(&cache),
-        );
+        let role_installer = RoleInstaller::new(Arc::clone(&client), Arc::clone(&cache));
 
         Ok(Self {
             client,
@@ -232,11 +227,7 @@ impl Galaxy {
         // Install collections
         for collection in &requirements.collections {
             let path = self
-                .install_collection(
-                    &collection.name,
-                    collection.version.as_deref(),
-                    None,
-                )
+                .install_collection(&collection.name, collection.version.as_deref(), None)
                 .await?;
             installed_paths.push(path);
         }
@@ -244,11 +235,7 @@ impl Galaxy {
         // Install roles
         for role in &requirements.roles {
             let path = self
-                .install_role(
-                    &role.name,
-                    role.version.as_deref(),
-                    None,
-                )
+                .install_role(&role.name, role.version.as_deref(), None)
                 .await?;
             installed_paths.push(path);
         }

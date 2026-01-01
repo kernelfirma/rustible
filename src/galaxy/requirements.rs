@@ -76,8 +76,11 @@ impl RequirementsFile {
 
         match parsed {
             Ok(raw) => {
-                debug!("Parsed requirements file: {} collections, {} roles",
-                       raw.collections.len(), raw.roles.len());
+                debug!(
+                    "Parsed requirements file: {} collections, {} roles",
+                    raw.collections.len(),
+                    raw.roles.len()
+                );
                 Self::from_raw(raw)
             }
             Err(e) => {
@@ -85,10 +88,8 @@ impl RequirementsFile {
                 let legacy: Result<Vec<RequirementRaw>, _> = serde_yaml::from_str(content);
                 if let Ok(roles) = legacy {
                     debug!("Parsed legacy requirements format: {} roles", roles.len());
-                    let requirements: Vec<Requirement> = roles
-                        .into_iter()
-                        .map(|r| r.into())
-                        .collect();
+                    let requirements: Vec<Requirement> =
+                        roles.into_iter().map(|r| r.into()).collect();
                     Ok(Self {
                         collections: Vec::new(),
                         roles: requirements,
@@ -105,17 +106,9 @@ impl RequirementsFile {
 
     /// Convert from raw parsed format
     fn from_raw(raw: RequirementsRaw) -> GalaxyResult<Self> {
-        let collections: Vec<Requirement> = raw
-            .collections
-            .into_iter()
-            .map(|r| r.into())
-            .collect();
+        let collections: Vec<Requirement> = raw.collections.into_iter().map(|r| r.into()).collect();
 
-        let roles: Vec<Requirement> = raw
-            .roles
-            .into_iter()
-            .map(|r| r.into())
-            .collect();
+        let roles: Vec<Requirement> = raw.roles.into_iter().map(|r| r.into()).collect();
 
         Ok(Self { collections, roles })
     }
@@ -142,9 +135,8 @@ impl RequirementsFile {
 
     /// Serialize to YAML string
     pub fn to_yaml(&self) -> GalaxyResult<String> {
-        serde_yaml::to_string(self).map_err(|e| {
-            GalaxyError::Other(format!("Failed to serialize requirements: {}", e))
-        })
+        serde_yaml::to_string(self)
+            .map_err(|e| GalaxyError::Other(format!("Failed to serialize requirements: {}", e)))
     }
 
     /// Write to a file
@@ -414,8 +406,14 @@ collections:
 "#;
         let requirements = RequirementsFile::from_str(yaml, "test.yml").unwrap();
         assert_eq!(requirements.collections.len(), 2);
-        assert_eq!(requirements.collections[0].version, Some(">=5.0.0".to_string()));
-        assert_eq!(requirements.collections[1].version, Some("2.0.0".to_string()));
+        assert_eq!(
+            requirements.collections[0].version,
+            Some(">=5.0.0".to_string())
+        );
+        assert_eq!(
+            requirements.collections[1].version,
+            Some("2.0.0".to_string())
+        );
     }
 
     #[test]
@@ -476,17 +474,15 @@ roles:
 
     #[test]
     fn test_requirement_builders() {
-        let collection = Requirement::collection("community.general")
-            .with_version(">=5.0.0");
+        let collection = Requirement::collection("community.general").with_version(">=5.0.0");
         assert_eq!(collection.name, "community.general");
         assert_eq!(collection.version, Some(">=5.0.0".to_string()));
         assert_eq!(collection.requirement_type, RequirementType::Collection);
 
-        let role = Requirement::role("geerlingguy.nginx")
-            .with_source(RequirementSource::git_tag(
-                "https://github.com/geerlingguy/ansible-role-nginx",
-                "2.8.0",
-            ));
+        let role = Requirement::role("geerlingguy.nginx").with_source(RequirementSource::git_tag(
+            "https://github.com/geerlingguy/ansible-role-nginx",
+            "2.8.0",
+        ));
         assert_eq!(role.name, "geerlingguy.nginx");
         assert!(matches!(role.source, Some(RequirementSource::Git { .. })));
     }
@@ -513,7 +509,8 @@ roles:
     #[test]
     fn test_to_yaml() {
         let mut requirements = RequirementsFile::new();
-        requirements.add_collection(Requirement::collection("community.general").with_version("5.0.0"));
+        requirements
+            .add_collection(Requirement::collection("community.general").with_version("5.0.0"));
 
         let yaml = requirements.to_yaml().unwrap();
         assert!(yaml.contains("community.general"));

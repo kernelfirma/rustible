@@ -16,7 +16,6 @@ pub enum GalaxyError {
     // ========================================================================
     // Network Errors
     // ========================================================================
-
     /// HTTP request failed.
     #[error("HTTP request failed: {message}")]
     HttpError {
@@ -27,60 +26,38 @@ pub enum GalaxyError {
 
     /// Connection to Galaxy server failed.
     #[error("Failed to connect to Galaxy server '{server}': {message}")]
-    ConnectionFailed {
-        server: String,
-        message: String,
-    },
+    ConnectionFailed { server: String, message: String },
 
     /// Request timed out.
     #[error("Request to '{url}' timed out after {timeout_secs} seconds")]
-    Timeout {
-        url: String,
-        timeout_secs: u64,
-    },
+    Timeout { url: String, timeout_secs: u64 },
 
     /// Rate limited by Galaxy server.
     #[error("Rate limited by Galaxy server. Retry after {retry_after_secs} seconds")]
-    RateLimited {
-        retry_after_secs: u64,
-    },
+    RateLimited { retry_after_secs: u64 },
 
     /// Authentication failed.
     #[error("Authentication failed for Galaxy server: {message}")]
-    AuthenticationFailed {
-        message: String,
-    },
+    AuthenticationFailed { message: String },
 
     // ========================================================================
     // Collection Errors
     // ========================================================================
-
     /// Collection not found.
     #[error("Collection '{name}' not found on Galaxy")]
-    CollectionNotFound {
-        name: String,
-    },
+    CollectionNotFound { name: String },
 
     /// Collection version not found.
     #[error("Version '{version}' not found for collection '{name}'")]
-    CollectionVersionNotFound {
-        name: String,
-        version: String,
-    },
+    CollectionVersionNotFound { name: String, version: String },
 
     /// Invalid collection name format.
     #[error("Invalid collection name '{name}': {reason}")]
-    InvalidCollectionName {
-        name: String,
-        reason: String,
-    },
+    InvalidCollectionName { name: String, reason: String },
 
     /// Collection installation failed.
     #[error("Failed to install collection '{name}': {message}")]
-    CollectionInstallFailed {
-        name: String,
-        message: String,
-    },
+    CollectionInstallFailed { name: String, message: String },
 
     /// Collection already installed.
     #[error("Collection '{name}' version '{version}' is already installed at '{path}'")]
@@ -92,107 +69,72 @@ pub enum GalaxyError {
 
     /// Collection dependency resolution failed.
     #[error("Failed to resolve dependencies for collection '{name}': {message}")]
-    DependencyResolutionFailed {
-        name: String,
-        message: String,
-    },
+    DependencyResolutionFailed { name: String, message: String },
 
     // ========================================================================
     // Role Errors
     // ========================================================================
-
     /// Role not found.
     #[error("Role '{name}' not found on Galaxy")]
-    RoleNotFound {
-        name: String,
-    },
+    RoleNotFound { name: String },
 
     /// Role version not found.
     #[error("Version '{version}' not found for role '{name}'")]
-    RoleVersionNotFound {
-        name: String,
-        version: String,
-    },
+    RoleVersionNotFound { name: String, version: String },
 
     /// Invalid role name format.
     #[error("Invalid role name '{name}': {reason}")]
-    InvalidRoleName {
-        name: String,
-        reason: String,
-    },
+    InvalidRoleName { name: String, reason: String },
 
     /// Role installation failed.
     #[error("Failed to install role '{name}': {message}")]
-    RoleInstallFailed {
-        name: String,
-        message: String,
-    },
+    RoleInstallFailed { name: String, message: String },
 
     // ========================================================================
     // Requirements Errors
     // ========================================================================
-
     /// Requirements file not found.
     #[error("Requirements file not found: {path}")]
-    RequirementsFileNotFound {
-        path: PathBuf,
-    },
+    RequirementsFileNotFound { path: PathBuf },
 
     /// Requirements file parsing failed.
     #[error("Failed to parse requirements file '{path}': {message}")]
-    RequirementsParseError {
-        path: PathBuf,
-        message: String,
-    },
+    RequirementsParseError { path: PathBuf, message: String },
 
     /// Invalid requirement specification.
     #[error("Invalid requirement: {message}")]
-    InvalidRequirement {
-        message: String,
-    },
+    InvalidRequirement { message: String },
 
     // ========================================================================
     // Cache Errors
     // ========================================================================
-
     /// Cache directory creation failed.
     #[error("Failed to create cache directory '{path}': {message}")]
-    CacheDirectoryError {
-        path: PathBuf,
-        message: String,
-    },
+    CacheDirectoryError { path: PathBuf, message: String },
 
     /// Cache read error.
     #[error("Failed to read from cache: {message}")]
-    CacheReadError {
-        message: String,
-    },
+    CacheReadError { message: String },
 
     /// Cache write error.
     #[error("Failed to write to cache: {message}")]
-    CacheWriteError {
-        message: String,
-    },
+    CacheWriteError { message: String },
 
     /// Artifact not found in cache.
     #[error("Artifact '{name}' version '{version}' not found in cache")]
-    CacheMiss {
-        name: String,
-        version: String,
-    },
+    CacheMiss { name: String, version: String },
 
     /// Cache is corrupted.
     #[error("Cache is corrupted: {message}")]
-    CacheCorrupted {
-        message: String,
-    },
+    CacheCorrupted { message: String },
 
     // ========================================================================
     // Integrity Errors
     // ========================================================================
-
     /// Checksum verification failed.
-    #[error("Checksum verification failed for '{artifact}': expected '{expected}', got '{actual}'")]
+    #[error(
+        "Checksum verification failed for '{artifact}': expected '{expected}', got '{actual}'"
+    )]
     ChecksumMismatch {
         artifact: String,
         expected: String,
@@ -201,77 +143,52 @@ pub enum GalaxyError {
 
     /// Signature verification failed.
     #[error("Signature verification failed for '{artifact}': {message}")]
-    SignatureVerificationFailed {
-        artifact: String,
-        message: String,
-    },
+    SignatureVerificationFailed { artifact: String, message: String },
 
     /// Missing checksum in manifest.
     #[error("Missing checksum for file '{file}' in collection manifest")]
-    MissingChecksum {
-        file: String,
-    },
+    MissingChecksum { file: String },
 
     // ========================================================================
     // Archive Errors
     // ========================================================================
-
     /// Failed to extract archive.
     #[error("Failed to extract archive '{path}': {message}")]
-    ExtractionFailed {
-        path: PathBuf,
-        message: String,
-    },
+    ExtractionFailed { path: PathBuf, message: String },
 
     /// Invalid archive format.
     #[error("Invalid archive format for '{path}': {message}")]
-    InvalidArchive {
-        path: PathBuf,
-        message: String,
-    },
+    InvalidArchive { path: PathBuf, message: String },
 
     // ========================================================================
     // Version Errors
     // ========================================================================
-
     /// Invalid version constraint.
     #[error("Invalid version constraint '{constraint}': {message}")]
-    InvalidVersionConstraint {
-        constraint: String,
-        message: String,
-    },
+    InvalidVersionConstraint { constraint: String, message: String },
 
     /// Version conflict.
     #[error("Version conflict: {message}")]
-    VersionConflict {
-        message: String,
-    },
+    VersionConflict { message: String },
 
     /// No matching version found.
     #[error("No version of '{name}' matches constraint '{constraint}'")]
-    NoMatchingVersion {
-        name: String,
-        constraint: String,
-    },
+    NoMatchingVersion { name: String, constraint: String },
 
     // ========================================================================
     // Offline Mode Errors
     // ========================================================================
-
     /// Operation requires network but offline mode is enabled.
     #[error("Operation requires network access but offline mode is enabled")]
     OfflineModeEnabled,
 
     /// No cached version available for offline installation.
     #[error("No cached version of '{name}' available for offline installation")]
-    NoCachedVersion {
-        name: String,
-    },
+    NoCachedVersion { name: String },
 
     // ========================================================================
     // IO and System Errors
     // ========================================================================
-
     /// IO error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -448,7 +365,9 @@ impl From<reqwest::Error> for GalaxyError {
             }
         } else if err.is_connect() {
             GalaxyError::ConnectionFailed {
-                server: err.url().map(|u| u.host_str().unwrap_or("unknown").to_string())
+                server: err
+                    .url()
+                    .map(|u| u.host_str().unwrap_or("unknown").to_string())
                     .unwrap_or_else(|| "unknown".to_string()),
                 message: err.to_string(),
             }
@@ -468,7 +387,9 @@ mod tests {
     #[test]
     fn test_error_creation() {
         let err = GalaxyError::collection_not_found("community.general");
-        assert!(matches!(err, GalaxyError::CollectionNotFound { name } if name == "community.general"));
+        assert!(
+            matches!(err, GalaxyError::CollectionNotFound { name } if name == "community.general")
+        );
     }
 
     #[test]

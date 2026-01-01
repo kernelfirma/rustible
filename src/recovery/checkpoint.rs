@@ -335,16 +335,23 @@ impl PlaybookState {
             || status == TaskCheckpointStatus::Failed
             || status == TaskCheckpointStatus::Skipped
         {
-            self.completed_tasks = self.hosts.values()
+            self.completed_tasks = self
+                .hosts
+                .values()
                 .flat_map(|h| &h.tasks)
-                .filter(|t| t.status != TaskCheckpointStatus::Pending && t.status != TaskCheckpointStatus::InProgress)
+                .filter(|t| {
+                    t.status != TaskCheckpointStatus::Pending
+                        && t.status != TaskCheckpointStatus::InProgress
+                })
                 .count();
         }
     }
 
     /// Get the next task to execute for a host
     pub fn next_task_for_host(&self, host: &str) -> Option<(usize, usize)> {
-        self.hosts.get(host).map(|h| (h.current_play, h.current_task))
+        self.hosts
+            .get(host)
+            .map(|h| (h.current_play, h.current_task))
     }
 
     /// Check if playbook is complete
@@ -577,7 +584,10 @@ impl CheckpointStore {
         let all = self.list_all();
         let mut by_playbook: HashMap<String, Vec<Checkpoint>> = HashMap::new();
         for cp in all {
-            by_playbook.entry(cp.playbook_name.clone()).or_default().push(cp);
+            by_playbook
+                .entry(cp.playbook_name.clone())
+                .or_default()
+                .push(cp);
         }
 
         for (_, mut checkpoints) in by_playbook {
@@ -624,9 +634,9 @@ impl CheckpointStore {
 
 /// Compress data using flate2 (gzip)
 fn compress_data(data: &[u8]) -> Result<Vec<u8>, CheckpointError> {
-    use std::io::Write;
     use flate2::write::GzEncoder;
     use flate2::Compression;
+    use std::io::Write;
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(data)?;
@@ -635,8 +645,8 @@ fn compress_data(data: &[u8]) -> Result<Vec<u8>, CheckpointError> {
 
 /// Decompress gzip data
 fn decompress_data(data: &[u8]) -> Result<Vec<u8>, CheckpointError> {
-    use std::io::Read;
     use flate2::read::GzDecoder;
+    use std::io::Read;
 
     let mut decoder = GzDecoder::new(data);
     let mut decompressed = Vec::new();

@@ -722,7 +722,6 @@ impl Module for TimezoneModule {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

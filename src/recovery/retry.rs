@@ -141,33 +141,19 @@ impl RetryContext {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BackoffStrategy {
     /// Constant delay between retries
-    Constant {
-        delay: Duration,
-    },
+    Constant { delay: Duration },
 
     /// Linear increase: delay = base * attempt
-    Linear {
-        base: Duration,
-        max: Duration,
-    },
+    Linear { base: Duration, max: Duration },
 
     /// Exponential increase: delay = base * 2^attempt
-    Exponential {
-        base: Duration,
-        max: Duration,
-    },
+    Exponential { base: Duration, max: Duration },
 
     /// Fibonacci sequence: delay follows fib(attempt)
-    Fibonacci {
-        base: Duration,
-        max: Duration,
-    },
+    Fibonacci { base: Duration, max: Duration },
 
     /// Decorrelated jitter (AWS-style)
-    DecorrelatedJitter {
-        base: Duration,
-        max: Duration,
-    },
+    DecorrelatedJitter { base: Duration, max: Duration },
 }
 
 impl Default for BackoffStrategy {
@@ -194,9 +180,7 @@ impl BackoffStrategy {
                 // Prevent overflow by capping the exponent
                 let exp = attempt.min(30);
                 let multiplier = 2u64.saturating_pow(exp);
-                let delay = Duration::from_millis(
-                    base.as_millis() as u64 * multiplier,
-                );
+                let delay = Duration::from_millis(base.as_millis() as u64 * multiplier);
                 delay.min(*max)
             }
 
@@ -266,7 +250,7 @@ impl Default for RetryPolicy {
             max_retries: 3,
             backoff: BackoffStrategy::default(),
             max_duration: Some(Duration::from_secs(300)), // 5 minutes
-            jitter: 0.1, // 10% jitter
+            jitter: 0.1,                                  // 10% jitter
             non_retryable_patterns: vec![
                 "permission denied".to_string(),
                 "not found".to_string(),
@@ -327,7 +311,11 @@ impl RetryPolicy {
     }
 
     /// Determine whether to retry based on context and error
-    pub fn should_retry<E: RetryableError>(&self, context: &RetryContext, error: &E) -> RetryAction {
+    pub fn should_retry<E: RetryableError>(
+        &self,
+        context: &RetryContext,
+        error: &E,
+    ) -> RetryAction {
         // Check max retries
         if context.attempt >= self.max_retries {
             return RetryAction::Stop {
@@ -358,7 +346,10 @@ impl RetryPolicy {
 
         // Check if error is retryable
         let is_retryable = error.is_retryable()
-            || self.retryable_patterns.iter().any(|p| error_str.contains(&p.to_lowercase()));
+            || self
+                .retryable_patterns
+                .iter()
+                .any(|p| error_str.contains(&p.to_lowercase()));
 
         if !is_retryable {
             return RetryAction::Stop {

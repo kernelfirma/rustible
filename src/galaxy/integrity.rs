@@ -2,9 +2,9 @@
 //!
 //! Provides checksum computation and verification for downloaded collections and roles.
 
-use std::path::Path;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
+use std::path::Path;
 
 use super::error::{GalaxyError, GalaxyResult};
 
@@ -89,11 +89,7 @@ impl IntegrityVerifier {
     }
 
     /// Verify checksum matches expected value
-    pub fn verify_checksum(
-        data: &[u8],
-        expected: &str,
-        algorithm: ChecksumAlgorithm,
-    ) -> bool {
+    pub fn verify_checksum(data: &[u8], expected: &str, algorithm: ChecksumAlgorithm) -> bool {
         let actual = Self::compute_checksum(data, algorithm);
         actual.eq_ignore_ascii_case(expected)
     }
@@ -109,9 +105,7 @@ impl IntegrityVerifier {
     }
 
     /// Verify a collection artifact against its manifest
-    pub async fn verify_collection(
-        collection_path: &Path,
-    ) -> GalaxyResult<IntegrityReport> {
+    pub async fn verify_collection(collection_path: &Path) -> GalaxyResult<IntegrityReport> {
         let manifest_path = collection_path.join("FILES.json");
 
         if !manifest_path.exists() {
@@ -140,7 +134,8 @@ impl IntegrityVerifier {
             files_checked += 1;
 
             if let Some(ref expected_checksum) = file_info.chksum_sha256 {
-                let actual = Self::compute_file_checksum(&file_path, ChecksumAlgorithm::Sha256).await?;
+                let actual =
+                    Self::compute_file_checksum(&file_path, ChecksumAlgorithm::Sha256).await?;
                 if !actual.eq_ignore_ascii_case(expected_checksum) {
                     files_failed += 1;
                 }
@@ -198,13 +193,21 @@ mod tests {
     fn test_verify_checksum() {
         let data = b"hello world";
         let expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
-        assert!(IntegrityVerifier::verify_checksum(data, expected, ChecksumAlgorithm::Sha256));
+        assert!(IntegrityVerifier::verify_checksum(
+            data,
+            expected,
+            ChecksumAlgorithm::Sha256
+        ));
     }
 
     #[test]
     fn test_checksum_case_insensitive() {
         let data = b"hello world";
         let expected = "B94D27B9934D3E08A52E52D7DA7DABFAC484EFE37A5380EE9088F7ACE2EFCDE9";
-        assert!(IntegrityVerifier::verify_checksum(data, expected, ChecksumAlgorithm::Sha256));
+        assert!(IntegrityVerifier::verify_checksum(
+            data,
+            expected,
+            ChecksumAlgorithm::Sha256
+        ));
     }
 }

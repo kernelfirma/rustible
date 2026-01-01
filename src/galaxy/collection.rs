@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 use super::cache::GalaxyCache;
 use super::client::GalaxyClient;
 use super::error::{GalaxyError, GalaxyResult};
-use super::integrity::{IntegrityVerifier, ChecksumAlgorithm};
+use super::integrity::{ChecksumAlgorithm, IntegrityVerifier};
 
 /// Information about a collection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,7 +198,11 @@ impl Collection {
         let manifest: CollectionManifest = serde_json::from_str(&manifest_content)?;
 
         Ok(Self {
-            namespace: manifest.collection_info.namespace.clone().unwrap_or_default(),
+            namespace: manifest
+                .collection_info
+                .namespace
+                .clone()
+                .unwrap_or_default(),
             name: manifest.collection_info.name.clone().unwrap_or_default(),
             version: manifest.collection_info.version.clone().unwrap_or_default(),
             path: path.to_path_buf(),
@@ -344,7 +348,11 @@ impl CollectionInstaller {
             .and_then(|a| a.sha256.clone());
 
         // Try cache first
-        if let Some(cached) = self.cache.get_collection(name, &version_info.version).await? {
+        if let Some(cached) = self
+            .cache
+            .get_collection(name, &version_info.version)
+            .await?
+        {
             info!("Using cached collection {}-{}", name, version_info.version);
 
             // Verify integrity if enabled
@@ -353,17 +361,22 @@ impl CollectionInstaller {
                     let actual = IntegrityVerifier::compute_file_checksum(
                         &cached.path,
                         ChecksumAlgorithm::Sha256,
-                    ).await?;
+                    )
+                    .await?;
 
                     if actual != *expected {
                         warn!("Cache integrity check failed, re-downloading");
                         self.cache.remove_collection(name, &version_info.version)?;
                     } else {
-                        return self.extract_and_install(&cached.path, &dest, namespace, collection_name).await;
+                        return self
+                            .extract_and_install(&cached.path, &dest, namespace, collection_name)
+                            .await;
                     }
                 }
             } else {
-                return self.extract_and_install(&cached.path, &dest, namespace, collection_name).await;
+                return self
+                    .extract_and_install(&cached.path, &dest, namespace, collection_name)
+                    .await;
             }
         }
 
@@ -393,7 +406,8 @@ impl CollectionInstaller {
             .await?;
 
         // Extract and install
-        self.extract_and_install(&cache_path, &dest, namespace, collection_name).await
+        self.extract_and_install(&cache_path, &dest, namespace, collection_name)
+            .await
     }
 
     /// Install a collection from cache (offline mode)
@@ -422,18 +436,14 @@ impl CollectionInstaller {
             self.cache.get_latest_collection(name).await?
         };
 
-        let cached = cached.ok_or_else(|| {
-            GalaxyError::NoCachedVersion {
-                name: name.to_string(),
-            }
+        let cached = cached.ok_or_else(|| GalaxyError::NoCachedVersion {
+            name: name.to_string(),
         })?;
 
-        info!(
-            "Installing cached collection {}-{}",
-            name, cached.version
-        );
+        info!("Installing cached collection {}-{}", name, cached.version);
 
-        self.extract_and_install(&cached.path, &dest, namespace, collection_name).await
+        self.extract_and_install(&cached.path, &dest, namespace, collection_name)
+            .await
     }
 
     /// Extract a collection tarball and install it
@@ -447,12 +457,12 @@ impl CollectionInstaller {
         let collection_path = dest.join(namespace).join(name);
 
         // Create destination directory
-        tokio::fs::create_dir_all(&collection_path).await.map_err(|e| {
-            GalaxyError::CollectionInstallFailed {
+        tokio::fs::create_dir_all(&collection_path)
+            .await
+            .map_err(|e| GalaxyError::CollectionInstallFailed {
                 name: format!("{}.{}", namespace, name),
                 message: format!("Failed to create directory: {}", e),
-            }
-        })?;
+            })?;
 
         // Extract tarball
         let tarball_data = tokio::fs::read(tarball).await?;
@@ -461,12 +471,12 @@ impl CollectionInstaller {
 
         // Find the root directory in the tarball (usually namespace-name-version)
         let temp_dir = tempfile::tempdir()?;
-        archive.unpack(temp_dir.path()).map_err(|e| {
-            GalaxyError::ExtractionFailed {
+        archive
+            .unpack(temp_dir.path())
+            .map_err(|e| GalaxyError::ExtractionFailed {
                 path: tarball.to_path_buf(),
                 message: e.to_string(),
-            }
-        })?;
+            })?;
 
         // Find the extracted directory
         let mut entries = std::fs::read_dir(temp_dir.path())?;

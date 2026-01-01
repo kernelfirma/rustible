@@ -217,15 +217,9 @@ pub async fn execute(args: &GalaxyArgs, ctx: &CommandContext) -> Result<i32> {
         GalaxyCommands::Collection(collection_args) => {
             execute_collection(collection_args, ctx).await
         }
-        GalaxyCommands::Role(role_args) => {
-            execute_role(role_args, ctx).await
-        }
-        GalaxyCommands::Search(search_args) => {
-            execute_search(search_args, ctx).await
-        }
-        GalaxyCommands::Install(install_args) => {
-            execute_install(install_args, ctx).await
-        }
+        GalaxyCommands::Role(role_args) => execute_role(role_args, ctx).await,
+        GalaxyCommands::Search(search_args) => execute_search(search_args, ctx).await,
+        GalaxyCommands::Install(install_args) => execute_install(install_args, ctx).await,
     }
 }
 
@@ -235,12 +229,8 @@ async fn execute_collection(args: &CollectionArgs, ctx: &CommandContext) -> Resu
         CollectionCommands::Install(install_args) => {
             execute_collection_install(install_args, ctx).await
         }
-        CollectionCommands::List(list_args) => {
-            execute_collection_list(list_args, ctx).await
-        }
-        CollectionCommands::Info(info_args) => {
-            execute_collection_info(info_args, ctx).await
-        }
+        CollectionCommands::List(list_args) => execute_collection_list(list_args, ctx).await,
+        CollectionCommands::Info(info_args) => execute_collection_info(info_args, ctx).await,
         CollectionCommands::Verify(verify_args) => {
             execute_collection_verify(verify_args, ctx).await
         }
@@ -250,24 +240,20 @@ async fn execute_collection(args: &CollectionArgs, ctx: &CommandContext) -> Resu
 /// Execute role subcommand
 async fn execute_role(args: &RoleArgs, ctx: &CommandContext) -> Result<i32> {
     match &args.command {
-        RoleCommands::Install(install_args) => {
-            execute_role_install(install_args, ctx).await
-        }
-        RoleCommands::List(list_args) => {
-            execute_role_list(list_args, ctx).await
-        }
-        RoleCommands::Info(info_args) => {
-            execute_role_info(info_args, ctx).await
-        }
-        RoleCommands::Remove(remove_args) => {
-            execute_role_remove(remove_args, ctx).await
-        }
+        RoleCommands::Install(install_args) => execute_role_install(install_args, ctx).await,
+        RoleCommands::List(list_args) => execute_role_list(list_args, ctx).await,
+        RoleCommands::Info(info_args) => execute_role_info(info_args, ctx).await,
+        RoleCommands::Remove(remove_args) => execute_role_remove(remove_args, ctx).await,
     }
 }
 
 /// Install a collection from Galaxy
-async fn execute_collection_install(args: &CollectionInstallArgs, ctx: &CommandContext) -> Result<i32> {
-    ctx.output.info(&format!("Installing collection: {}", args.name));
+async fn execute_collection_install(
+    args: &CollectionInstallArgs,
+    ctx: &CommandContext,
+) -> Result<i32> {
+    ctx.output
+        .info(&format!("Installing collection: {}", args.name));
 
     let galaxy_config = build_galaxy_config(ctx, args.collections_path.as_ref(), None);
     let galaxy = if args.offline {
@@ -276,13 +262,24 @@ async fn execute_collection_install(args: &CollectionInstallArgs, ctx: &CommandC
         Galaxy::new(galaxy_config)?
     };
 
-    match galaxy.install_collection(&args.name, args.version.as_deref(), args.collections_path.as_ref()).await {
+    match galaxy
+        .install_collection(
+            &args.name,
+            args.version.as_deref(),
+            args.collections_path.as_ref(),
+        )
+        .await
+    {
         Ok(path) => {
-            ctx.output.info(&format!("Collection '{}' installed to {:?}", args.name, path));
+            ctx.output.info(&format!(
+                "Collection '{}' installed to {:?}",
+                args.name, path
+            ));
             Ok(0)
         }
         Err(e) => {
-            ctx.output.error(&format!("Failed to install collection: {}", e));
+            ctx.output
+                .error(&format!("Failed to install collection: {}", e));
             Ok(1)
         }
     }
@@ -290,11 +287,14 @@ async fn execute_collection_install(args: &CollectionInstallArgs, ctx: &CommandC
 
 /// List installed collections
 async fn execute_collection_list(args: &CollectionListArgs, ctx: &CommandContext) -> Result<i32> {
-    let collections_path = args.collections_path.clone()
+    let collections_path = args
+        .collections_path
+        .clone()
         .or_else(|| ctx.config.galaxy.collections_path.clone())
         .unwrap_or_else(|| PathBuf::from("./collections"));
 
-    ctx.output.info(&format!("Listing collections from: {:?}", collections_path));
+    ctx.output
+        .info(&format!("Listing collections from: {:?}", collections_path));
 
     if !collections_path.exists() {
         ctx.output.warning("Collections path does not exist");
@@ -316,7 +316,9 @@ async fn execute_collection_list(args: &CollectionListArgs, ctx: &CommandContext
                         let version = if manifest_path.exists() {
                             // Try to read version from MANIFEST.json
                             if let Ok(content) = std::fs::read_to_string(&manifest_path) {
-                                if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Ok(manifest) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                                {
                                     manifest["collection_info"]["version"]
                                         .as_str()
                                         .map(|s| s.to_string())
@@ -350,7 +352,8 @@ async fn execute_collection_list(args: &CollectionListArgs, ctx: &CommandContext
 
 /// Show collection info
 async fn execute_collection_info(args: &CollectionInfoArgs, ctx: &CommandContext) -> Result<i32> {
-    ctx.output.info(&format!("Fetching info for collection: {}", args.name));
+    ctx.output
+        .info(&format!("Fetching info for collection: {}", args.name));
 
     let galaxy_config = build_galaxy_config(ctx, None, None);
     let galaxy = Galaxy::new(galaxy_config)?;
@@ -372,14 +375,18 @@ async fn execute_collection_info(args: &CollectionInfoArgs, ctx: &CommandContext
             Ok(0)
         }
         Err(e) => {
-            ctx.output.error(&format!("Failed to fetch collection info: {}", e));
+            ctx.output
+                .error(&format!("Failed to fetch collection info: {}", e));
             Ok(1)
         }
     }
 }
 
 /// Verify collection integrity
-async fn execute_collection_verify(args: &CollectionVerifyArgs, ctx: &CommandContext) -> Result<i32> {
+async fn execute_collection_verify(
+    args: &CollectionVerifyArgs,
+    ctx: &CommandContext,
+) -> Result<i32> {
     ctx.output.info("Verifying collection cache integrity...");
 
     let galaxy_config = build_galaxy_config(ctx, None, None);
@@ -395,13 +402,17 @@ async fn execute_collection_verify(args: &CollectionVerifyArgs, ctx: &CommandCon
                     }
                 } else {
                     if args.name.is_none() || args.name.as_deref() == Some(&report.artifact) {
-                        ctx.output.error(&format!("✗ {} - invalid: {:?}", report.artifact, report.error));
+                        ctx.output.error(&format!(
+                            "✗ {} - invalid: {:?}",
+                            report.artifact, report.error
+                        ));
                         failed += 1;
                     }
                 }
             }
             if failed > 0 {
-                ctx.output.error(&format!("{} artifacts failed integrity check", failed));
+                ctx.output
+                    .error(&format!("{} artifacts failed integrity check", failed));
                 Ok(1)
             } else {
                 ctx.output.info("All artifacts passed integrity check");
@@ -426,9 +437,17 @@ async fn execute_role_install(args: &RoleInstallArgs, ctx: &CommandContext) -> R
         Galaxy::new(galaxy_config)?
     };
 
-    match galaxy.install_role(&args.name, args.version.as_deref(), args.roles_path.as_ref()).await {
+    match galaxy
+        .install_role(
+            &args.name,
+            args.version.as_deref(),
+            args.roles_path.as_ref(),
+        )
+        .await
+    {
         Ok(path) => {
-            ctx.output.info(&format!("Role '{}' installed to {:?}", args.name, path));
+            ctx.output
+                .info(&format!("Role '{}' installed to {:?}", args.name, path));
             Ok(0)
         }
         Err(e) => {
@@ -440,11 +459,14 @@ async fn execute_role_install(args: &RoleInstallArgs, ctx: &CommandContext) -> R
 
 /// List installed roles
 async fn execute_role_list(args: &RoleListArgs, ctx: &CommandContext) -> Result<i32> {
-    let roles_path = args.roles_path.clone()
+    let roles_path = args
+        .roles_path
+        .clone()
         .or_else(|| ctx.config.galaxy.roles_path.clone())
         .unwrap_or_else(|| PathBuf::from("./roles"));
 
-    ctx.output.info(&format!("Listing roles from: {:?}", roles_path));
+    ctx.output
+        .info(&format!("Listing roles from: {:?}", roles_path));
 
     if !roles_path.exists() {
         ctx.output.warning("Roles path does not exist");
@@ -484,7 +506,8 @@ async fn execute_role_list(args: &RoleListArgs, ctx: &CommandContext) -> Result<
 
 /// Show role info
 async fn execute_role_info(args: &RoleInfoArgs, ctx: &CommandContext) -> Result<i32> {
-    ctx.output.info(&format!("Fetching info for role: {}", args.name));
+    ctx.output
+        .info(&format!("Fetching info for role: {}", args.name));
 
     let galaxy_config = build_galaxy_config(ctx, None, None);
     let galaxy = Galaxy::new(galaxy_config)?;
@@ -510,7 +533,8 @@ async fn execute_role_info(args: &RoleInfoArgs, ctx: &CommandContext) -> Result<
             Ok(0)
         }
         Err(e) => {
-            ctx.output.error(&format!("Failed to fetch role info: {}", e));
+            ctx.output
+                .error(&format!("Failed to fetch role info: {}", e));
             Ok(1)
         }
     }
@@ -518,14 +542,19 @@ async fn execute_role_info(args: &RoleInfoArgs, ctx: &CommandContext) -> Result<
 
 /// Remove an installed role
 async fn execute_role_remove(args: &RoleRemoveArgs, ctx: &CommandContext) -> Result<i32> {
-    let roles_path = args.roles_path.clone()
+    let roles_path = args
+        .roles_path
+        .clone()
         .or_else(|| ctx.config.galaxy.roles_path.clone())
         .unwrap_or_else(|| PathBuf::from("./roles"));
 
     let role_path = roles_path.join(&args.name);
 
     if !role_path.exists() {
-        ctx.output.error(&format!("Role '{}' not found in {:?}", args.name, roles_path));
+        ctx.output.error(&format!(
+            "Role '{}' not found in {:?}",
+            args.name, roles_path
+        ));
         return Ok(1);
     }
 
@@ -539,76 +568,84 @@ async fn execute_role_remove(args: &RoleRemoveArgs, ctx: &CommandContext) -> Res
 
 /// Search Galaxy
 async fn execute_search(args: &SearchArgs, ctx: &CommandContext) -> Result<i32> {
-    ctx.output.info(&format!("Searching Galaxy for: {}", args.query));
+    ctx.output
+        .info(&format!("Searching Galaxy for: {}", args.query));
 
     let galaxy_config = build_galaxy_config(ctx, None, None);
     let galaxy = Galaxy::new(galaxy_config)?;
 
     match args.search_type {
-        SearchType::Collection => {
-            match galaxy.search_collections(&args.query).await {
-                Ok(results) => {
-                    if results.is_empty() {
-                        println!("No collections found matching '{}'", args.query);
-                    } else {
-                        println!("Found {} collections:", results.len().min(args.limit));
-                        for (i, collection) in results.iter().take(args.limit).enumerate() {
-                            println!(
-                                "{}. {}.{} - {}",
-                                i + 1,
-                                collection.namespace,
-                                collection.name,
-                                collection.description.as_deref().unwrap_or("No description")
-                            );
-                        }
+        SearchType::Collection => match galaxy.search_collections(&args.query).await {
+            Ok(results) => {
+                if results.is_empty() {
+                    println!("No collections found matching '{}'", args.query);
+                } else {
+                    println!("Found {} collections:", results.len().min(args.limit));
+                    for (i, collection) in results.iter().take(args.limit).enumerate() {
+                        println!(
+                            "{}. {}.{} - {}",
+                            i + 1,
+                            collection.namespace,
+                            collection.name,
+                            collection
+                                .description
+                                .as_deref()
+                                .unwrap_or("No description")
+                        );
                     }
-                    Ok(0)
                 }
-                Err(e) => {
-                    ctx.output.error(&format!("Search failed: {}", e));
-                    Ok(1)
-                }
+                Ok(0)
             }
-        }
-        SearchType::Role => {
-            match galaxy.search_roles(&args.query).await {
-                Ok(results) => {
-                    if results.is_empty() {
-                        println!("No roles found matching '{}'", args.query);
-                    } else {
-                        println!("Found {} roles:", results.len().min(args.limit));
-                        for (i, role) in results.iter().take(args.limit).enumerate() {
-                            let owner = role.namespace.as_deref()
-                                .or(role.github_user.as_deref())
-                                .unwrap_or("unknown");
-                            println!(
-                                "{}. {}.{} - {}",
-                                i + 1,
-                                owner,
-                                role.name,
-                                role.description.as_deref().unwrap_or("No description")
-                            );
-                        }
+            Err(e) => {
+                ctx.output.error(&format!("Search failed: {}", e));
+                Ok(1)
+            }
+        },
+        SearchType::Role => match galaxy.search_roles(&args.query).await {
+            Ok(results) => {
+                if results.is_empty() {
+                    println!("No roles found matching '{}'", args.query);
+                } else {
+                    println!("Found {} roles:", results.len().min(args.limit));
+                    for (i, role) in results.iter().take(args.limit).enumerate() {
+                        let owner = role
+                            .namespace
+                            .as_deref()
+                            .or(role.github_user.as_deref())
+                            .unwrap_or("unknown");
+                        println!(
+                            "{}. {}.{} - {}",
+                            i + 1,
+                            owner,
+                            role.name,
+                            role.description.as_deref().unwrap_or("No description")
+                        );
                     }
-                    Ok(0)
                 }
-                Err(e) => {
-                    ctx.output.error(&format!("Search failed: {}", e));
-                    Ok(1)
-                }
+                Ok(0)
             }
-        }
+            Err(e) => {
+                ctx.output.error(&format!("Search failed: {}", e));
+                Ok(1)
+            }
+        },
     }
 }
 
 /// Install from requirements file
 async fn execute_install(args: &InstallArgs, ctx: &CommandContext) -> Result<i32> {
     if !args.requirements.exists() {
-        ctx.output.error(&format!("Requirements file not found: {:?}", args.requirements));
+        ctx.output.error(&format!(
+            "Requirements file not found: {:?}",
+            args.requirements
+        ));
         return Ok(1);
     }
 
-    ctx.output.info(&format!("Installing from requirements file: {:?}", args.requirements));
+    ctx.output.info(&format!(
+        "Installing from requirements file: {:?}",
+        args.requirements
+    ));
 
     let galaxy_config = build_galaxy_config(ctx, None, None);
     let galaxy = if args.offline {
@@ -628,14 +665,16 @@ async fn execute_install(args: &InstallArgs, ctx: &CommandContext) -> Result<i32
 
     match galaxy.install_requirements(&requirements).await {
         Ok(paths) => {
-            ctx.output.info(&format!("Successfully installed {} items", paths.len()));
+            ctx.output
+                .info(&format!("Successfully installed {} items", paths.len()));
             for path in &paths {
                 println!("  - {:?}", path);
             }
             Ok(0)
         }
         Err(e) => {
-            ctx.output.error(&format!("Failed to install requirements: {}", e));
+            ctx.output
+                .error(&format!("Failed to install requirements: {}", e));
             Ok(1)
         }
     }
@@ -652,13 +691,15 @@ fn build_galaxy_config(
 
     let mut config = rustible::config::GalaxyConfig {
         server: cli_config.server.clone(),
-        server_list: cli_config.server_list.iter().map(|s| {
-            rustible::config::GalaxyServer {
+        server_list: cli_config
+            .server_list
+            .iter()
+            .map(|s| rustible::config::GalaxyServer {
                 name: s.name.clone(),
                 url: s.url.clone(),
                 token: s.token.clone(),
-            }
-        }).collect(),
+            })
+            .collect(),
         cache_dir: cli_config.cache_dir.clone(),
         collections_path: cli_config.collections_path.clone(),
         roles_path: cli_config.roles_path.clone(),
