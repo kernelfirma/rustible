@@ -1,5 +1,8 @@
 //! Shared utility functions for Rustible.
 
+pub mod regex_cache;
+pub use regex_cache::get_regex;
+
 /// Escape a string for safe use in shell commands.
 ///
 /// This function is essential for preventing command injection vulnerabilities.

@@ -17,8 +17,10 @@ pub use schema::{
     SchemaValidator, ValidationError, ValidationResult, ValidatorConfig,
 };
 
+use crate::utils::get_regex;
 use indexmap::IndexMap;
 use minijinja::{Environment, Value};
+use once_cell::sync::Lazy;
 use std::path::Path;
 use thiserror::Error;
 
@@ -422,7 +424,7 @@ impl Parser {
 
         // Regex filters
         env.add_filter("regex_search", |s: String, pattern: String| -> bool {
-            regex::Regex::new(&pattern)
+            get_regex(&pattern)
                 .map(|re| re.is_match(&s))
                 .unwrap_or(false)
         });
@@ -430,7 +432,7 @@ impl Parser {
         env.add_filter(
             "regex_replace",
             |s: String, pattern: String, replacement: String| -> String {
-                regex::Regex::new(&pattern)
+                get_regex(&pattern)
                     .map(|re| re.replace_all(&s, replacement.as_str()).to_string())
                     .unwrap_or(s)
             },
@@ -615,7 +617,7 @@ impl Parser {
         env.add_filter(
             "regex_findall",
             |s: String, pattern: String| -> Vec<String> {
-                regex::Regex::new(&pattern)
+                get_regex(&pattern)
                     .map(|re| re.find_iter(&s).map(|m| m.as_str().to_string()).collect())
                     .unwrap_or_default()
             },
@@ -1182,11 +1184,12 @@ pub fn evaluate_condition(
 
 /// Extract variable references from a template string
 pub fn extract_variables(template: &str) -> Vec<String> {
-    let var_pattern =
+    static VAR_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
         regex::Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}")
-            .unwrap();
+            .expect("Invalid variable regex")
+    });
 
-    var_pattern
+    VAR_PATTERN
         .captures_iter(template)
         .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
         .collect()

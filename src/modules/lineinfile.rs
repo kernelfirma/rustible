@@ -12,6 +12,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
+use crate::utils::get_regex;
 use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -118,7 +119,7 @@ impl LineinfileModule {
                 "EOF" => Ok((InsertPosition::EndOfFile, None)),
                 "BOF" => Ok((InsertPosition::BeginningOfFile, None)),
                 _ => {
-                    let re = Regex::new(pattern).map_err(|e| {
+                    let re = get_regex(pattern).map_err(|e| {
                         ModuleError::InvalidParameter(format!("Invalid insertafter regex: {}", e))
                     })?;
                     let idx = lines.iter().rposition(|l| re.is_match(l));
@@ -130,7 +131,7 @@ impl LineinfileModule {
                 "EOF" => Ok((InsertPosition::EndOfFile, None)),
                 "BOF" => Ok((InsertPosition::BeginningOfFile, None)),
                 _ => {
-                    let re = Regex::new(pattern).map_err(|e| {
+                    let re = get_regex(pattern).map_err(|e| {
                         ModuleError::InvalidParameter(format!("Invalid insertbefore regex: {}", e))
                     })?;
                     let idx = lines.iter().position(|l| re.is_match(l));
@@ -618,7 +619,7 @@ impl Module for LineinfileModule {
         // Compile regexp if provided
         let regexp = if let Some(ref re_str) = regexp_str {
             Some(
-                Regex::new(re_str)
+                get_regex(re_str)
                     .map_err(|e| ModuleError::InvalidParameter(format!("Invalid regexp: {}", e)))?,
             )
         } else {
