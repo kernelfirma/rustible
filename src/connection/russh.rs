@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use russh::client::{Handle, Handler};
 use russh::keys::key::PublicKey;
 use russh::keys::load_secret_key;
-use russh_keys::PublicKeyBase64;
 use russh::ChannelMsg;
 use russh_keys::agent::client::AgentClient;
+use russh_keys::PublicKeyBase64;
 use russh_sftp::client::SftpSession;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -342,9 +342,9 @@ struct KnownHostEntry {
 impl ClientHandler {
     /// Create a new client handler with host key verification
     fn new(host: &str, port: u16, accept_unknown: bool, known_hosts_path: Option<PathBuf>) -> Self {
-        let path = known_hosts_path.clone().or_else(|| {
-            dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"))
-        });
+        let path = known_hosts_path
+            .clone()
+            .or_else(|| dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts")));
 
         let known_hosts = Self::load_known_hosts(path.as_deref());
 
@@ -1008,7 +1008,10 @@ impl RusshConnection {
         let accept_unknown = !host_config.strict_host_key_checking.unwrap_or(false);
 
         // Use configured known_hosts file if provided
-        let known_hosts_path = host_config.user_known_hosts_file.as_ref().map(PathBuf::from);
+        let known_hosts_path = host_config
+            .user_known_hosts_file
+            .as_ref()
+            .map(PathBuf::from);
 
         let handler = ClientHandler::new(host, port, accept_unknown, known_hosts_path);
 
@@ -3767,8 +3770,8 @@ mod tests {
 mod verification_tests {
     use super::*;
     use russh::keys::key::KeyPair;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     // Helper to generate a dummy key
     fn generate_key() -> KeyPair {
@@ -3782,7 +3785,9 @@ mod verification_tests {
         let key_pair = generate_key();
         // Depending on russh version, we might get PublicKey directly from KeyPair
         // russh 0.45 KeyPair usually has clone_public_key()
-        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+        let public_key = key_pair
+            .clone_public_key()
+            .expect("Failed to get public key");
 
         // Setup known_hosts file
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -3807,8 +3812,12 @@ mod verification_tests {
         let key_pair1 = generate_key();
         let key_pair2 = generate_key();
 
-        let public_key1 = key_pair1.clone_public_key().expect("Failed to get public key");
-        let public_key2 = key_pair2.clone_public_key().expect("Failed to get public key");
+        let public_key1 = key_pair1
+            .clone_public_key()
+            .expect("Failed to get public key");
+        let public_key2 = key_pair2
+            .clone_public_key()
+            .expect("Failed to get public key");
 
         // Write key1 to known_hosts
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -3831,7 +3840,9 @@ mod verification_tests {
     #[tokio::test]
     async fn test_unknown_host_accept() {
         let key_pair = generate_key();
-        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+        let public_key = key_pair
+            .clone_public_key()
+            .expect("Failed to get public key");
 
         // Empty known_hosts
         let temp_file = NamedTempFile::new().unwrap();
@@ -3853,7 +3864,9 @@ mod verification_tests {
     #[tokio::test]
     async fn test_unknown_host_reject() {
         let key_pair = generate_key();
-        let public_key = key_pair.clone_public_key().expect("Failed to get public key");
+        let public_key = key_pair
+            .clone_public_key()
+            .expect("Failed to get public key");
 
         // Empty known_hosts
         let temp_file = NamedTempFile::new().unwrap();

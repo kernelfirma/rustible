@@ -853,14 +853,9 @@ impl IosConfigModule {
 
         for line in lines {
             if TemplateEngine::is_template(line) {
-                let result = TEMPLATE_ENGINE
-                    .render(line, &context.vars)
-                    .map_err(|e| {
-                        ModuleError::TemplateError(format!(
-                            "Failed to render line '{}': {}",
-                            line, e
-                        ))
-                    })?;
+                let result = TEMPLATE_ENGINE.render(line, &context.vars).map_err(|e| {
+                    ModuleError::TemplateError(format!("Failed to render line '{}': {}", line, e))
+                })?;
                 rendered.push(result);
             } else {
                 rendered.push(line.clone());

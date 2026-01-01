@@ -372,15 +372,12 @@ impl AwsElasticIpResource {
             DomainType::Standard
         };
 
-        let mut req = client
-            .allocate_address()
-            .domain(domain)
-            .tag_specifications(
-                TagSpecification::builder()
-                    .resource_type(ResourceType::ElasticIp)
-                    .set_tags(Some(all_tags))
-                    .build(),
-            );
+        let mut req = client.allocate_address().domain(domain).tag_specifications(
+            TagSpecification::builder()
+                .resource_type(ResourceType::ElasticIp)
+                .set_tags(Some(all_tags))
+                .build(),
+        );
 
         if let Some(ref addr) = config.address {
             req = req.address(addr);
@@ -626,7 +623,8 @@ impl AwsElasticIpResource {
 
                 if let Some(current_val) = current_obj.get(key) {
                     if desired_val != current_val {
-                        modifications.insert(key.clone(), (current_val.clone(), desired_val.clone()));
+                        modifications
+                            .insert(key.clone(), (current_val.clone(), desired_val.clone()));
 
                         if force_new_fields.contains(key) {
                             replacement_fields.push(key.clone());
@@ -649,7 +647,8 @@ impl AwsElasticIpResource {
         }
 
         let requires_replacement = !replacement_fields.is_empty();
-        let has_changes = !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
+        let has_changes =
+            !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
 
         let change_type = if requires_replacement {
             ChangeType::Replace
@@ -739,8 +738,12 @@ impl Resource for AwsElasticIpResource {
                     .map_err(|e| ProvisioningError::SerializationError(e.to_string()))?;
 
                 let mut result = ResourceResult::success(&attrs.id, attributes);
-                result.outputs.insert("id".to_string(), Value::String(attrs.id.clone()));
-                result.outputs.insert("public_ip".to_string(), Value::String(attrs.public_ip));
+                result
+                    .outputs
+                    .insert("id".to_string(), Value::String(attrs.id.clone()));
+                result
+                    .outputs
+                    .insert("public_ip".to_string(), Value::String(attrs.public_ip));
                 Ok(result)
             }
             Err(e) => Ok(ResourceResult::failure(e.to_string())),

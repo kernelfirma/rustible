@@ -204,9 +204,7 @@ impl TerraformHost {
         if !self.name.is_empty() {
             Some(self.name.clone())
         } else {
-            self.private_ip
-                .clone()
-                .or_else(|| Some(self.id.clone()))
+            self.private_ip.clone().or_else(|| Some(self.id.clone()))
         }
     }
 
@@ -370,9 +368,11 @@ impl TerraformPlugin {
     async fn load_state(&self) -> InventoryResult<TerraformState> {
         match &self.state_backend {
             StateBackend::Local { path } => self.load_local_state(path).await,
-            StateBackend::S3 { bucket, key, region } => {
-                self.load_s3_state(bucket, key, region).await
-            }
+            StateBackend::S3 {
+                bucket,
+                key,
+                region,
+            } => self.load_s3_state(bucket, key, region).await,
             StateBackend::Http { address } => self.load_http_state(address).await,
         }
     }
@@ -480,12 +480,9 @@ impl TerraformPlugin {
             let provider = extract_provider(&resource.provider);
 
             for (index, instance) in resource.instances.iter().enumerate() {
-                if let Some(host) = self.extract_host_from_instance(
-                    resource,
-                    instance,
-                    index,
-                    &provider,
-                ) {
+                if let Some(host) =
+                    self.extract_host_from_instance(resource, instance, index, &provider)
+                {
                     hosts.push(host);
                 }
             }
@@ -618,16 +615,10 @@ impl TerraformPlugin {
         let mut groups = vec!["terraform".to_string()];
 
         // Add resource type group
-        groups.push(format!(
-            "tf_{}",
-            sanitize_group_name(&host.resource_type)
-        ));
+        groups.push(format!("tf_{}", sanitize_group_name(&host.resource_type)));
 
         // Add provider group
-        groups.push(format!(
-            "provider_{}",
-            sanitize_group_name(&host.provider)
-        ));
+        groups.push(format!("provider_{}", sanitize_group_name(&host.provider)));
 
         // Process keyed_groups configuration
         for keyed_group in &self.config.keyed_groups {
@@ -859,10 +850,7 @@ impl DynamicInventoryPlugin for TerraformPlugin {
                 );
             }
             StateBackend::Http { address } => {
-                tracing::info!(
-                    "Terraform plugin: Will fetch state from {}",
-                    address
-                );
+                tracing::info!("Terraform plugin: Will fetch state from {}", address);
             }
         }
         Ok(())
@@ -892,11 +880,7 @@ impl DynamicInventoryPlugin for TerraformPlugin {
                 "local",
             ),
             PluginOption::optional_string("bucket", "S3 bucket name (for S3 backend)", ""),
-            PluginOption::optional_string(
-                "key",
-                "S3 key/path to state file (for S3 backend)",
-                "",
-            ),
+            PluginOption::optional_string("key", "S3 key/path to state file (for S3 backend)", ""),
             PluginOption::optional_string("region", "AWS region (for S3 backend)", "")
                 .with_env_var("AWS_REGION"),
             PluginOption::optional_string(
@@ -959,7 +943,9 @@ fn extract_provider(provider: &str) -> String {
         }
         // No closing quote, return everything after the last slash
         // stripping any trailing characters like ]
-        return remaining.trim_end_matches(|c: char| c == '"' || c == ']').to_string();
+        return remaining
+            .trim_end_matches(|c: char| c == '"' || c == ']')
+            .to_string();
     }
 
     // Fallback: try to extract from provider["aws"]
@@ -1189,7 +1175,9 @@ mod tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "id".to_string(),
-            serde_json::Value::String("projects/my-project/zones/us-central1-a/instances/gcp-vm-01".to_string()),
+            serde_json::Value::String(
+                "projects/my-project/zones/us-central1-a/instances/gcp-vm-01".to_string(),
+            ),
         );
         attrs.insert(
             "name".to_string(),
@@ -1304,7 +1292,11 @@ mod tests {
 
         let plugin = TerraformPlugin::new(config).unwrap();
         match &plugin.state_backend {
-            StateBackend::S3 { bucket, key, region } => {
+            StateBackend::S3 {
+                bucket,
+                key,
+                region,
+            } => {
                 assert_eq!(bucket, "my-bucket");
                 assert_eq!(key, "prod/terraform.tfstate");
                 assert_eq!(region, "us-west-2");
@@ -1541,7 +1533,10 @@ mod tests {
         assert_eq!(host.provider, "aws");
         assert_eq!(host.private_ip, Some("10.0.1.100".to_string()));
         assert_eq!(host.public_ip, Some("54.123.45.67".to_string()));
-        assert_eq!(host.tags.get("Environment"), Some(&"production".to_string()));
+        assert_eq!(
+            host.tags.get("Environment"),
+            Some(&"production".to_string())
+        );
     }
 
     // Test 15: Extract Azure VM
@@ -1583,7 +1578,10 @@ mod tests {
         assert_eq!(host.provider, "google");
         assert_eq!(host.private_ip, Some("10.0.3.100".to_string()));
         assert_eq!(host.public_ip, Some("35.192.0.100".to_string()));
-        assert_eq!(host.tags.get("environment"), Some(&"production".to_string()));
+        assert_eq!(
+            host.tags.get("environment"),
+            Some(&"production".to_string())
+        );
     }
 
     // Test 17: Skip data sources
@@ -1820,12 +1818,24 @@ mod tests {
         let plugin = TerraformPlugin::new(config).unwrap();
 
         let mut attrs1 = HashMap::new();
-        attrs1.insert("id".to_string(), serde_json::Value::String("i-001".to_string()));
-        attrs1.insert("private_ip".to_string(), serde_json::Value::String("10.0.0.1".to_string()));
+        attrs1.insert(
+            "id".to_string(),
+            serde_json::Value::String("i-001".to_string()),
+        );
+        attrs1.insert(
+            "private_ip".to_string(),
+            serde_json::Value::String("10.0.0.1".to_string()),
+        );
 
         let mut attrs2 = HashMap::new();
-        attrs2.insert("id".to_string(), serde_json::Value::String("i-002".to_string()));
-        attrs2.insert("private_ip".to_string(), serde_json::Value::String("10.0.0.2".to_string()));
+        attrs2.insert(
+            "id".to_string(),
+            serde_json::Value::String("i-002".to_string()),
+        );
+        attrs2.insert(
+            "private_ip".to_string(),
+            serde_json::Value::String("10.0.0.2".to_string()),
+        );
 
         let resource = TerraformResource {
             mode: "managed".to_string(),

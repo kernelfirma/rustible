@@ -89,10 +89,7 @@ pub enum StateChange {
     },
 
     /// A file was deleted
-    FileDeleted {
-        path: PathBuf,
-        backup_path: PathBuf,
-    },
+    FileDeleted { path: PathBuf, backup_path: PathBuf },
 
     /// A directory was created
     DirectoryCreated { path: PathBuf },
@@ -203,13 +200,19 @@ pub enum UndoOperation {
     DeleteDirectory { path: PathBuf, recursive: bool },
 
     /// Change service state
-    ChangeServiceState { service: String, target_state: String },
+    ChangeServiceState {
+        service: String,
+        target_state: String,
+    },
 
     /// Remove a package
     RemovePackage { name: String },
 
     /// Install a package
-    InstallPackage { name: String, version: Option<String> },
+    InstallPackage {
+        name: String,
+        version: Option<String>,
+    },
 
     /// Delete a user
     DeleteUser { username: String },
@@ -312,7 +315,9 @@ impl RollbackAction {
                 10,
             ),
 
-            StateChange::FileModified { path, backup_path, .. } => (
+            StateChange::FileModified {
+                path, backup_path, ..
+            } => (
                 UndoOperation::RestoreFile {
                     path: path.clone(),
                     backup_path: backup_path.clone(),
@@ -591,7 +596,10 @@ impl RollbackManager {
     }
 
     /// Create a rollback plan for a context
-    pub fn create_rollback_plan(&mut self, context_id: &str) -> Result<RollbackPlan, RollbackError> {
+    pub fn create_rollback_plan(
+        &mut self,
+        context_id: &str,
+    ) -> Result<RollbackPlan, RollbackError> {
         let context = self
             .contexts
             .get(context_id)
@@ -653,7 +661,10 @@ impl RollbackManager {
                 }
             }
 
-            UndoOperation::ChangeServiceState { service, target_state } => {
+            UndoOperation::ChangeServiceState {
+                service,
+                target_state,
+            } => {
                 // This would typically call systemctl or similar
                 warn!(
                     "Service state change not implemented: {} -> {}",
@@ -671,7 +682,10 @@ impl RollbackManager {
                 warn!(
                     "Package installation not implemented: {}{}",
                     name,
-                    version.as_ref().map(|v| format!("={}", v)).unwrap_or_default()
+                    version
+                        .as_ref()
+                        .map(|v| format!("={}", v))
+                        .unwrap_or_default()
                 );
             }
 
@@ -686,9 +700,7 @@ impl RollbackManager {
             }
 
             UndoOperation::ExecuteCommand { command, args } => {
-                let output = std::process::Command::new(command)
-                    .args(args)
-                    .output()?;
+                let output = std::process::Command::new(command).args(args).output()?;
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -843,7 +855,9 @@ mod tests {
 
         // Create rollback action
         let action = RollbackAction {
-            operation: UndoOperation::DeleteFile { path: file_path.clone() },
+            operation: UndoOperation::DeleteFile {
+                path: file_path.clone(),
+            },
             description: "Delete test file".to_string(),
             priority: 10,
             critical: false,

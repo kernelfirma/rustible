@@ -313,9 +313,9 @@ impl Default for DegradationPolicy {
     fn default() -> Self {
         Self {
             level_thresholds: vec![
-                (DegradationLevel::Minor, 0.1),    // 10% failure rate
+                (DegradationLevel::Minor, 0.1),     // 10% failure rate
                 (DegradationLevel::Moderate, 0.25), // 25% failure rate
-                (DegradationLevel::Severe, 0.5),   // 50% failure rate
+                (DegradationLevel::Severe, 0.5),    // 50% failure rate
                 (DegradationLevel::Critical, 0.75), // 75% failure rate
             ],
             fallback_actions: HashMap::new(),

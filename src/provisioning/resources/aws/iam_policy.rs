@@ -388,10 +388,7 @@ impl Resource for AwsIamPolicyResource {
             match client.get_policy().policy_arn(id).send().await {
                 Ok(response) => {
                     let policy = response.policy().ok_or_else(|| {
-                        ProvisioningError::CloudApiError(format!(
-                            "IAM policy '{}' not found",
-                            id
-                        ))
+                        ProvisioningError::CloudApiError(format!("IAM policy '{}' not found", id))
                     })?;
 
                     // Extract tags - IAM SDK Tag has &str for key/value
@@ -479,20 +476,29 @@ impl Resource for AwsIamPolicyResource {
         let mut replacement_fields = Vec::new();
 
         // Compare fields
-        if let (Some(desired_obj), Some(current_obj)) = (desired.as_object(), current_val.as_object())
+        if let (Some(desired_obj), Some(current_obj)) =
+            (desired.as_object(), current_val.as_object())
         {
             // Check for additions and modifications
             for (key, desired_val) in desired_obj {
                 // Skip computed fields
-                if ["arn", "policy_id", "default_version_id", "attachment_count", "create_date", "update_date"]
-                    .contains(&key.as_str())
+                if [
+                    "arn",
+                    "policy_id",
+                    "default_version_id",
+                    "attachment_count",
+                    "create_date",
+                    "update_date",
+                ]
+                .contains(&key.as_str())
                 {
                     continue;
                 }
 
                 if let Some(current_field) = current_obj.get(key) {
                     if desired_val != current_field {
-                        modifications.insert(key.clone(), (current_field.clone(), desired_val.clone()));
+                        modifications
+                            .insert(key.clone(), (current_field.clone(), desired_val.clone()));
 
                         if force_new_fields.iter().any(|f| f == key) {
                             replacement_fields.push(key.clone());
@@ -506,7 +512,8 @@ impl Resource for AwsIamPolicyResource {
 
         // Determine change type
         let requires_replacement = !replacement_fields.is_empty();
-        let has_changes = !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
+        let has_changes =
+            !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
 
         let change_type = if requires_replacement {
             ChangeType::Replace
@@ -570,10 +577,7 @@ impl Resource for AwsIamPolicyResource {
                 policy_id: policy.policy_id().unwrap_or_default().to_string(),
                 name: policy.policy_name().unwrap_or_default().to_string(),
                 path: policy.path().unwrap_or_default().to_string(),
-                default_version_id: policy
-                    .default_version_id()
-                    .unwrap_or_default()
-                    .to_string(),
+                default_version_id: policy.default_version_id().unwrap_or_default().to_string(),
                 attachment_count: 0,
                 create_date: policy
                     .create_date()
@@ -687,7 +691,9 @@ impl Resource for AwsIamPolicyResource {
             let read_result = self.read(id, ctx).await?;
 
             let mut result = ResourceResult::success(id, read_result.attributes);
-            result.outputs.insert("arn".to_string(), Value::String(id.to_string()));
+            result
+                .outputs
+                .insert("arn".to_string(), Value::String(id.to_string()));
             Ok(result)
         }
 
@@ -754,7 +760,9 @@ impl Resource for AwsIamPolicyResource {
         }
 
         let mut result = ResourceResult::success(id, read_result.attributes);
-        result.outputs.insert("arn".to_string(), Value::String(id.to_string()));
+        result
+            .outputs
+            .insert("arn".to_string(), Value::String(id.to_string()));
         Ok(result)
     }
 
@@ -805,18 +813,30 @@ mod tests {
         assert_eq!(schema.resource_type, "aws_iam_policy");
 
         // Check required args
-        let required_names: Vec<&str> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+        let required_names: Vec<&str> = schema
+            .required_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(required_names.contains(&"name"));
         assert!(required_names.contains(&"policy"));
 
         // Check optional args
-        let optional_names: Vec<&str> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+        let optional_names: Vec<&str> = schema
+            .optional_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(optional_names.contains(&"description"));
         assert!(optional_names.contains(&"path"));
         assert!(optional_names.contains(&"tags"));
 
         // Check computed attrs
-        let computed_names: Vec<&str> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+        let computed_names: Vec<&str> = schema
+            .computed_attrs
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(computed_names.contains(&"arn"));
         assert!(computed_names.contains(&"policy_id"));
         assert!(computed_names.contains(&"default_version_id"));

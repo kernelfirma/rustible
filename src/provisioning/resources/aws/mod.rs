@@ -31,9 +31,14 @@ pub use elastic_ip::{AwsElasticIpResource, ElasticIpAttributes, ElasticIpConfig}
 pub use iam_policy::{AwsIamPolicyResource, IamPolicyAttributes, IamPolicyConfig};
 pub use iam_role::{AwsIamRoleResource, IamRoleAttributes, IamRoleConfig};
 pub use instance::{AwsInstanceResource, InstanceAttributes, InstanceConfig, RootBlockDevice};
-pub use internet_gateway::{AwsInternetGatewayResource, InternetGatewayAttributes, InternetGatewayConfig};
+pub use internet_gateway::{
+    AwsInternetGatewayResource, InternetGatewayAttributes, InternetGatewayConfig,
+};
 pub use nat_gateway::{AwsNatGatewayResource, NatGatewayAttributes, NatGatewayConfig};
-pub use route_table::{AwsRouteTableResource, RouteConfig, RouteTableAssociation, RouteTableAttributes, RouteTableConfig};
+pub use route_table::{
+    AwsRouteTableResource, RouteConfig, RouteTableAssociation, RouteTableAttributes,
+    RouteTableConfig,
+};
 pub use security_group::AwsSecurityGroupResource;
 pub use subnet::AwsSubnetResource;
 pub use vpc::AwsVpcResource;

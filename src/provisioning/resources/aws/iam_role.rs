@@ -628,11 +628,9 @@ impl AwsIamRoleResource {
         }
 
         // Read updated role
-        Self::read_role_by_name(client, name)
-            .await?
-            .ok_or_else(|| {
-                ProvisioningError::CloudApiError("Failed to read updated role".to_string())
-            })
+        Self::read_role_by_name(client, name).await?.ok_or_else(|| {
+            ProvisioningError::CloudApiError("Failed to read updated role".to_string())
+        })
     }
 
     /// Delete IAM Role in AWS
@@ -645,10 +643,7 @@ impl AwsIamRoleResource {
             .send()
             .await
             .map_err(|e| {
-                ProvisioningError::CloudApiError(format!(
-                    "Failed to list attached policies: {}",
-                    e
-                ))
+                ProvisioningError::CloudApiError(format!("Failed to list attached policies: {}", e))
             })?;
 
         for policy in attached.attached_policies() {
@@ -1007,9 +1002,7 @@ impl Resource for AwsIamRoleResource {
 
         // Validate it's valid JSON
         serde_json::from_str::<Value>(policy).map_err(|_| {
-            ProvisioningError::ValidationError(
-                "assume_role_policy must be valid JSON".to_string(),
-            )
+            ProvisioningError::ValidationError("assume_role_policy must be valid JSON".to_string())
         })?;
 
         // Validate max_session_duration if provided
