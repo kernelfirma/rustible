@@ -212,7 +212,7 @@ pub struct ExecutionContext {
     /// Verbosity level (0-4)
     pub verbosity: u8,
     /// Optional connection for remote execution
-    pub connection: Option<Arc<dyn Connection>>,
+    pub connection: Option<Arc<dyn Connection + Send + Sync>>,
     /// Python interpreter path on remote host
     pub python_interpreter: String,
 }
@@ -261,7 +261,7 @@ impl ExecutionContext {
     }
 
     /// Set the connection for remote execution
-    pub fn with_connection(mut self, conn: Arc<dyn Connection>) -> Self {
+    pub fn with_connection(mut self, conn: Arc<dyn Connection + Send + Sync>) -> Self {
         self.connection = Some(conn);
         self
     }
