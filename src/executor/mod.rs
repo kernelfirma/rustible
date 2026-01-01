@@ -447,7 +447,7 @@ impl Executor {
                 }
                 // Add extra vars (highest precedence)
                 for (key, value) in &self.config.extra_vars {
-                    runtime.set_global_var(key.clone(), value.clone());
+                    runtime.set_extra_var(key.clone(), value.clone());
                 }
             }
 
