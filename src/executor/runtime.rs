@@ -380,6 +380,36 @@ impl RuntimeContext {
                     ctx.set_host_var(&host_name, key.clone(), json_value);
                 }
             }
+
+            // Also set connection-related ansible variables
+            if let Some(ansible_host) = &host.ansible_host {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_host".to_string(),
+                    serde_json::json!(ansible_host),
+                );
+            }
+            if host.connection.ssh.port != 22 {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_port".to_string(),
+                    serde_json::json!(host.connection.ssh.port),
+                );
+            }
+            if let Some(user) = &host.connection.ssh.user {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_user".to_string(),
+                    serde_json::json!(user),
+                );
+            }
+            if let Some(key_file) = &host.connection.ssh.private_key_file {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_ssh_private_key_file".to_string(),
+                    serde_json::json!(key_file),
+                );
+            }
         }
 
         ctx

@@ -4,7 +4,7 @@
 
 use super::{CommandContext, Runnable};
 use crate::cli::output::{RecapStats, TaskStatus};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use indexmap::IndexMap;
 use regex::Regex;
@@ -78,8 +78,12 @@ pub struct RunArgs {
 }
 
 impl RunArgs {
-    /// Execute the run command
+    /// Execute the run command using the executor as the single runtime
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy, Playbook};
+        use rustible::executor::runtime::RuntimeContext;
+        use rustible::inventory::Inventory;
+
         let start_time = Instant::now();
 
         // Initialize progress bars
@@ -103,22 +107,42 @@ impl RunArgs {
                 .to_string_lossy()
         ));
 
-        // Load playbook
+        // Load playbook using executor's Playbook parser
         ctx.output.info("Loading playbook...");
-        let playbook_content = std::fs::read_to_string(&self.playbook)
-            .with_context(|| format!("Failed to read playbook: {}", self.playbook.display()))?;
+        let playbook = match Playbook::load(&self.playbook) {
+            Ok(pb) => pb,
+            Err(e) => {
+                ctx.output.error(&format!("Failed to parse playbook: {}", e));
+                return Ok(1);
+            }
+        };
 
-        let playbook: serde_yaml::Value = serde_yaml::from_str(&playbook_content)
-            .with_context(|| "Failed to parse playbook YAML")?;
-
-        // Get inventory
+        // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
-        if inventory_path.is_none() {
-            ctx.output
-                .warning("No inventory specified, using localhost");
-            ctx.output
-                .hint("Use -i <inventory_file> to specify an inventory");
-        }
+        let runtime = if let Some(inv_path) = &inventory_path {
+            if inv_path.exists() {
+                match Inventory::load(inv_path) {
+                    Ok(inventory) => {
+                        ctx.output.debug(&format!("Loaded inventory from: {}", inv_path.display()));
+                        RuntimeContext::from_inventory(&inventory)
+                    }
+                    Err(e) => {
+                        ctx.output.warning(&format!("Failed to load inventory: {}", e));
+                        RuntimeContext::new()
+                    }
+                }
+            } else {
+                ctx.output.warning(&format!("Inventory file not found: {}", inv_path.display()));
+                RuntimeContext::new()
+            }
+        } else {
+            ctx.output.warning("No inventory specified, using localhost");
+            ctx.output.hint("Use -i <inventory_file> to specify an inventory");
+            // Create runtime with localhost only
+            let mut runtime = RuntimeContext::new();
+            runtime.add_host("localhost".to_string(), Some("all"));
+            runtime
+        };
 
         // Validate limit pattern if specified
         if let Some(ref limit) = ctx.limit {
@@ -128,47 +152,89 @@ impl RunArgs {
             }
         }
 
-        // Parse extra vars
-        let extra_vars = ctx.parse_extra_vars()?;
+        // Parse extra vars and convert to serde_json::Value
+        let extra_vars_yaml = ctx.parse_extra_vars()?;
+        let mut extra_vars = std::collections::HashMap::new();
+        for (k, v) in extra_vars_yaml {
+            if let Ok(json_value) = serde_json::to_value(&v) {
+                extra_vars.insert(k, json_value);
+            }
+        }
         ctx.output.debug(&format!("Extra vars: {:?}", extra_vars));
 
-        // Plan mode notice
+        // Plan mode - use legacy show_plan for now as per issue #48:
+        // "Plan mode is implemented on top of executor or clearly separated as non-executing"
         if self.plan {
-            ctx.output
-                .plan("WARNING: Running in PLAN MODE - showing execution plan only");
+            ctx.output.plan("WARNING: Running in PLAN MODE - showing execution plan only");
+            let playbook_content = std::fs::read_to_string(&self.playbook)?;
+            let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
+            if let Some(plays) = playbook_yaml.as_sequence() {
+                let extra_vars_for_plan: std::collections::HashMap<String, serde_yaml::Value> =
+                    ctx.parse_extra_vars()?;
+                self.show_plan(ctx, plays, &extra_vars_for_plan).await?;
+            }
+            let duration = start_time.elapsed();
+            ctx.output.info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
+            return Ok(0);
         }
 
         // Check mode notice
         if ctx.check_mode {
-            ctx.output
-                .warning("Running in CHECK MODE - no changes will be made");
+            ctx.output.warning("Running in CHECK MODE - no changes will be made");
         }
 
-        // Initialize stats (wrapped in Arc<Mutex<>> for thread-safe parallel execution)
-        let stats = Arc::new(Mutex::new(RecapStats::new()));
+        // Build executor configuration from CLI args
+        let executor_config = ExecutorConfig {
+            forks: ctx.forks,
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            strategy: ExecutionStrategy::Linear,
+            task_timeout: 300,
+            gather_facts: true,
+            extra_vars,
+        };
 
-        // Process playbook plays
-        if let Some(plays) = playbook.as_sequence() {
-            if self.plan {
-                // In plan mode, show what would be executed
-                self.show_plan(ctx, plays, &extra_vars).await?;
-            } else {
-                // Normal execution
-                for play in plays {
-                    self.execute_play(ctx, play, &stats).await?;
-                }
+        // Create executor with runtime context
+        let executor = Executor::with_runtime(executor_config, runtime);
+
+        // Run playbook using executor
+        ctx.output.info(&format!("Running playbook: {}", playbook.name));
+        let results = match executor.run_playbook(&playbook).await {
+            Ok(results) => results,
+            Err(e) => {
+                ctx.output.error(&format!("Playbook execution failed: {}", e));
+                return Ok(2);
             }
-        } else {
-            ctx.output.error("Playbook must be a list of plays");
-            return Ok(1);
-        }
+        };
 
         // Close all pooled connections
         ctx.close_connections().await;
 
+        // Convert executor results to RecapStats
+        use crate::cli::output::HostStats;
+        let mut stats = RecapStats::new();
+        let mut has_failures = false;
+
+        for (host, result) in &results {
+            let host_stats = HostStats {
+                ok: result.stats.ok as u32,
+                changed: result.stats.changed as u32,
+                skipped: result.stats.skipped as u32,
+                failed: result.stats.failed as u32,
+                unreachable: if result.unreachable { 1 } else { 0 },
+                rescued: 0,
+                ignored: 0,
+            };
+            stats.hosts.insert(host.clone(), host_stats);
+
+            if result.failed || result.unreachable {
+                has_failures = true;
+            }
+        }
+
         // Print recap
-        let stats_guard = stats.lock().await;
-        ctx.output.recap(&stats_guard);
+        ctx.output.recap(&stats);
 
         // Print timing
         let duration = start_time.elapsed();
@@ -178,7 +244,7 @@ impl RunArgs {
         ));
 
         // Return exit code
-        if stats_guard.has_failures() {
+        if has_failures {
             Ok(2)
         } else {
             Ok(0)
