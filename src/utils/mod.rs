@@ -30,8 +30,11 @@ pub use regex_cache::get_regex;
 pub fn shell_escape(s: &str) -> String {
     // If the string contains no special characters, return as-is
     // This makes the output more readable for simple cases
+    // Safe characters: alphanumeric, underscore, hyphen, dot, slash, colon, plus
+    // Colon is needed for SELinux contexts (user:role:type:level)
+    // Plus is needed for timezone offsets (GMT+5)
     if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+')
     {
         return s.to_string();
     }

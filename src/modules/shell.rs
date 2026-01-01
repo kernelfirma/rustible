@@ -44,33 +44,16 @@ impl ShellModule {
             .get_string("executable")?
             .unwrap_or_else(|| "/bin/sh".to_string());
 
-        // Handle Windows cmd.exe separately
-        // cmd.exe /c "command" expects the command to be wrapped in double quotes
-        // if it contains special characters like &, |, etc.
-        // Importantly, we do NOT escape internal quotes because cmd.exe's parsing
-        // logic is unique: if the first character is a quote, it strips the first
-        // and last quote, preserving internal quotes.
-        if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
-            return Ok(format!("{} /c \"{}\"", executable, cmd));
-        }
-
-        // Different shells have different syntax for running commands
-        let flag = if executable.ends_with("fish") {
-            "-c"
-        } else {
-            "-c"
-        };
-
         // Escape the command for shell execution
         if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
             // Windows cmd.exe does not respect single quotes.
             // We use double quotes and escape internal double quotes with "".
             let escaped_cmd = cmd.replace('"', "\"\"");
-            Ok(format!("{} {} \"{}\"", executable, flag, escaped_cmd))
+            Ok(format!("{} /c \"{}\"", executable, escaped_cmd))
         } else {
             // Unix-like shells (sh, bash, zsh, fish)
             let escaped_cmd = cmd.replace('\'', "'\\''");
-            Ok(format!("{} {} '{}'", executable, flag, escaped_cmd))
+            Ok(format!("{} -c '{}'", executable, escaped_cmd))
         }
     }
 
@@ -550,12 +533,12 @@ mod tests {
 
         // Should be: /bin/sh -c 'echo '\''hello'\'''
         assert_eq!(result, "/bin/sh -c 'echo '\\''hello'\\'''");
+
         let cmd = "echo hello & whoami";
         let result = module.build_shell_command(cmd, &params).unwrap();
 
-        // Should use double quotes for cmd.exe to prevent command injection
-        // Single quotes would allow & to be interpreted as a command separator by cmd.exe
-        assert_eq!(result, "cmd.exe /c \"echo hello & whoami\"");
+        // With default /bin/sh, should use single quotes for POSIX shell
+        assert_eq!(result, "/bin/sh -c 'echo hello & whoami'");
     }
 
     #[test]

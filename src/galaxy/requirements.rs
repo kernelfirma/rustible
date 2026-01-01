@@ -307,9 +307,9 @@ enum RequirementRaw {
 
 #[derive(Debug, Deserialize)]
 struct RequirementFull {
-    /// Name of the collection/role
-    #[serde(alias = "src")]
-    name: String,
+    /// Name of the collection/role (optional - can use src as name if not provided)
+    #[serde(default)]
+    name: Option<String>,
     /// Version constraint
     #[serde(default)]
     version: Option<String>,
@@ -338,9 +338,10 @@ impl From<RequirementRaw> for Requirement {
                 include_prerelease: false,
             },
             RequirementRaw::Full(full) => {
-                let source = if let Some(git_src) = full.src {
+                // Build source from src or source field
+                let source = if let Some(ref git_src) = full.src {
                     Some(RequirementSource::Git {
-                        url: git_src,
+                        url: git_src.clone(),
                         branch: None,
                         tag: None,
                         commit: None,
@@ -366,8 +367,13 @@ impl From<RequirementRaw> for Requirement {
                     None
                 };
 
+                // Use explicit name if provided, otherwise fall back to src URL
+                let name = full.name.unwrap_or_else(|| {
+                    full.src.unwrap_or_else(|| "unknown".to_string())
+                });
+
                 Requirement {
-                    name: full.name,
+                    name,
                     version: full.version,
                     source,
                     requirement_type: RequirementType::Collection,

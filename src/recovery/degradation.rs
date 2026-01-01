@@ -176,6 +176,18 @@ impl CircuitBreaker {
     pub async fn record_success(&self) {
         let mut state = self.state.write().await;
 
+        // First, check if we need to transition from Open to HalfOpen based on timeout
+        if state.state == CircuitState::Open {
+            let elapsed = state.last_state_change.elapsed();
+            if elapsed >= self.config.reset_timeout {
+                // Transition to HalfOpen
+                state.state = CircuitState::HalfOpen;
+                state.success_count = 0;
+                state.half_open_requests = 0;
+                state.last_state_change = Instant::now();
+            }
+        }
+
         match state.state {
             CircuitState::Closed => {
                 // Reset failure count on success
@@ -196,7 +208,7 @@ impl CircuitBreaker {
                 }
             }
             CircuitState::Open => {
-                // Shouldn't happen, but handle gracefully
+                // Shouldn't happen after the check above, but handle gracefully
             }
         }
     }
@@ -517,6 +529,9 @@ mod tests {
 
         breaker.record_failure().await;
         tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // Verify we're in half-open state before proceeding
+        assert_eq!(breaker.state().await, CircuitState::HalfOpen);
 
         // Record successes in half-open state
         breaker.record_success().await;
