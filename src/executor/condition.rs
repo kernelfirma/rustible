@@ -3,6 +3,7 @@
 //! This module provides condition evaluation capabilities for determining
 //! whether tasks have changed state or failed based on their output.
 
+use crate::template::TEMPLATE_ENGINE;
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
 
@@ -105,6 +106,31 @@ impl ConditionContext {
     pub fn is_defined(&self, name: &str) -> bool {
         self.variables.contains_key(name)
     }
+
+    /// Build variables map for the template engine
+    ///
+    /// Merges context variables with task result fields (rc, stdout, stderr, etc.)
+    /// so they can be accessed in condition expressions.
+    pub fn build_template_vars(&self) -> IndexMap<String, JsonValue> {
+        let mut vars = self.variables.clone();
+
+        // Add task result fields if available
+        if let Some(result) = &self.task_result {
+            if let Some(rc) = result.rc {
+                vars.insert("rc".to_string(), JsonValue::Number(rc.into()));
+            }
+            if let Some(stdout) = &result.stdout {
+                vars.insert("stdout".to_string(), JsonValue::String(stdout.clone()));
+            }
+            if let Some(stderr) = &result.stderr {
+                vars.insert("stderr".to_string(), JsonValue::String(stderr.clone()));
+            }
+            vars.insert("changed".to_string(), JsonValue::Bool(result.changed));
+            vars.insert("failed".to_string(), JsonValue::Bool(result.failed));
+        }
+
+        vars
+    }
 }
 
 /// Evaluator for condition expressions.
@@ -137,7 +163,7 @@ impl ConditionEvaluator {
         }
     }
 
-    /// Evaluate a string expression
+    /// Evaluate a string expression using the unified template engine
     fn evaluate_expression(&self, expr: &str, ctx: &ConditionContext) -> Result<bool, String> {
         let expr = expr.trim();
 
@@ -146,66 +172,57 @@ impl ConditionEvaluator {
             return Ok(true);
         }
 
-        // Handle simple boolean literals
+        // Handle simple boolean literals (fast path before engine)
         match expr.to_lowercase().as_str() {
             "true" | "yes" => return Ok(true),
             "false" | "no" => return Ok(false),
             _ => {}
         }
 
-        // Handle variable references
-        if let Some(value) = ctx.get_variable(expr) {
-            return Ok(is_truthy(value));
-        }
+        // Transform Ansible-style defined(var)/undefined(var) to Jinja2-style "var is defined"
+        let transformed_expr = transform_defined_syntax(expr);
 
-        // Handle defined() check
-        if let Some(inner) = expr
-            .strip_prefix("defined(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
-            return Ok(ctx.is_defined(inner.trim()));
-        }
+        // Build variables from context for the template engine
+        let vars = ctx.build_template_vars();
 
-        // Handle undefined() check
-        if let Some(inner) = expr
-            .strip_prefix("undefined(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
-            return Ok(!ctx.is_defined(inner.trim()));
-        }
-
-        // Handle 'not' prefix
-        if let Some(inner) = expr.strip_prefix("not ") {
-            return self.evaluate_expression(inner.trim(), ctx).map(|v| !v);
-        }
-
-        // Handle simple comparisons with 'rc'
-        if let Some(result) = &ctx.task_result {
-            if let Some(rc) = result.rc {
-                // Pattern: rc == N or rc != N
-                if let Some(rest) = expr.strip_prefix("rc") {
-                    let rest = rest.trim();
-                    if let Some(num_str) = rest.strip_prefix("==") {
-                        if let Ok(n) = num_str.trim().parse::<i32>() {
-                            return Ok(rc == n);
-                        }
-                    } else if let Some(num_str) = rest.strip_prefix("!=") {
-                        if let Ok(n) = num_str.trim().parse::<i32>() {
-                            return Ok(rc != n);
-                        }
-                    }
+        // Use the unified template engine for expression evaluation
+        match TEMPLATE_ENGINE.evaluate_condition(&transformed_expr, &vars) {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                if self.strict_mode {
+                    Err(format!("Condition evaluation failed: {}", e))
+                } else {
+                    // Non-strict: treat evaluation errors as false
+                    Ok(false)
                 }
             }
         }
+    }
+}
 
-        // Default: if in strict mode, fail on unknown expressions
-        if self.strict_mode {
-            Err(format!("Unable to evaluate expression: {}", expr))
-        } else {
-            // Non-strict: treat unknown as false
-            Ok(false)
+/// Transform Ansible-style defined(var)/undefined(var) to Jinja2-style expressions
+fn transform_defined_syntax(expr: &str) -> String {
+    let mut result = expr.to_string();
+
+    // Handle defined(var) -> var is defined
+    if let Some(start) = result.find("defined(") {
+        if let Some(end) = result[start..].find(')') {
+            let var_name = &result[start + 8..start + end].trim();
+            let replacement = format!("{} is defined", var_name);
+            result = format!("{}{}{}", &result[..start], replacement, &result[start + end + 1..]);
         }
     }
+
+    // Handle undefined(var) -> var is undefined
+    if let Some(start) = result.find("undefined(") {
+        if let Some(end) = result[start..].find(')') {
+            let var_name = &result[start + 10..start + end].trim();
+            let replacement = format!("{} is undefined", var_name);
+            result = format!("{}{}{}", &result[..start], replacement, &result[start + end + 1..]);
+        }
+    }
+
+    result
 }
 
 /// Check if a JSON value is truthy
