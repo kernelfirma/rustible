@@ -1246,33 +1246,45 @@ impl Task {
         ctx: &ExecutionContext,
         _runtime: &Arc<RwLock<RuntimeContext>>,
     ) -> ExecutorResult<TaskResult> {
-        let cmd = args
-            .get("cmd")
-            .or_else(|| args.get("_raw_params"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ExecutorError::RuntimeError("command module requires 'cmd' argument".into())
-            })?;
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-        if ctx.check_mode {
-            return Ok(TaskResult::skipped("Check mode - command not executed"));
-        }
-
-        debug!("Would execute command: {}", cmd);
-
-        // In a real implementation, this would actually run the command
-        // For now, simulate successful execution
-        let result = RegisteredResult {
-            changed: true,
-            rc: Some(0),
-            stdout: Some(String::new()),
-            stderr: Some(String::new()),
-            ..Default::default()
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
         };
 
-        Ok(TaskResult::changed()
-            .with_msg(format!("Command executed: {}", cmd))
-            .with_result(result.to_json()))
+        // Get the command module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("command").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("command module not found in registry".into())
+        })?;
+
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("command module failed: {}", e))),
+        }
     }
 
     async fn execute_copy(
@@ -1477,24 +1489,45 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let name = args.get("name").ok_or_else(|| {
-            ExecutorError::RuntimeError("package module requires 'name' argument".into())
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        // Get the package module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("package").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("package module not found in registry".into())
         })?;
 
-        let state = args
-            .get("state")
-            .and_then(|v| v.as_str())
-            .unwrap_or("present");
-
-        if ctx.check_mode {
-            return Ok(TaskResult::ok().with_msg(format!(
-                "Check mode - would ensure package {:?} is {}",
-                name, state
-            )));
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("package module failed: {}", e))),
         }
-
-        debug!("Would ensure package {:?} is {}", name, state);
-        Ok(TaskResult::changed().with_msg(format!("Package {:?} state: {}", name, state)))
     }
 
     async fn execute_service(
@@ -1502,24 +1535,45 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-            ExecutorError::RuntimeError("service module requires 'name' argument".into())
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        // Get the service module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("service").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("service module not found in registry".into())
         })?;
 
-        let state = args.get("state").and_then(|v| v.as_str());
-        let enabled = args.get("enabled").and_then(|v| v.as_bool());
-
-        if ctx.check_mode {
-            return Ok(
-                TaskResult::ok().with_msg(format!("Check mode - would manage service {}", name))
-            );
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("service module failed: {}", e))),
         }
-
-        debug!(
-            "Would manage service: {} (state: {:?}, enabled: {:?})",
-            name, state, enabled
-        );
-        Ok(TaskResult::changed().with_msg(format!("Service {} managed", name)))
     }
 
     async fn execute_user(
@@ -1527,18 +1581,45 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-            ExecutorError::RuntimeError("user module requires 'name' argument".into())
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        // Get the user module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("user").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("user module not found in registry".into())
         })?;
 
-        if ctx.check_mode {
-            return Ok(
-                TaskResult::ok().with_msg(format!("Check mode - would manage user {}", name))
-            );
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("user module failed: {}", e))),
         }
-
-        debug!("Would manage user: {}", name);
-        Ok(TaskResult::changed().with_msg(format!("User {} managed", name)))
     }
 
     async fn execute_group(
@@ -1546,18 +1627,45 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-            ExecutorError::RuntimeError("group module requires 'name' argument".into())
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        // Get the group module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("group").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("group module not found in registry".into())
         })?;
 
-        if ctx.check_mode {
-            return Ok(
-                TaskResult::ok().with_msg(format!("Check mode - would manage group {}", name))
-            );
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("group module failed: {}", e))),
         }
-
-        debug!("Would manage group: {}", name);
-        Ok(TaskResult::changed().with_msg(format!("Group {} managed", name)))
     }
 
     async fn execute_lineinfile(
@@ -1565,16 +1673,45 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let path = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
-            ExecutorError::RuntimeError("lineinfile requires 'path' argument".into())
+        // Convert args to ModuleParams
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        // Create module context from execution context
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        // Get the lineinfile module from registry and execute
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("lineinfile").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("lineinfile module not found in registry".into())
         })?;
 
-        if ctx.check_mode {
-            return Ok(TaskResult::ok().with_msg(format!("Check mode - would modify {}", path)));
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("lineinfile module failed: {}", e))),
         }
-
-        debug!("Would modify line in: {}", path);
-        Ok(TaskResult::changed().with_msg(format!("Modified {}", path)))
     }
 
     async fn execute_blockinfile(
@@ -1582,45 +1719,81 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let path = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
-            ExecutorError::RuntimeError("blockinfile requires 'path' argument".into())
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
+
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("blockinfile").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("blockinfile module not found in registry".into())
         })?;
 
-        if ctx.check_mode {
-            return Ok(
-                TaskResult::ok().with_msg(format!("Check mode - would modify block in {}", path))
-            );
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("blockinfile module failed: {}", e))),
         }
-
-        debug!("Would modify block in: {}", path);
-        Ok(TaskResult::changed().with_msg(format!("Modified block in {}", path)))
     }
 
     async fn execute_stat(
         &self,
         args: &IndexMap<String, JsonValue>,
-        _ctx: &ExecutionContext,
+        ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
-        let path = args
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| ExecutorError::RuntimeError("stat requires 'path' argument".into()))?;
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-        debug!("Would stat: {}", path);
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: ctx.connection.clone(),
+        };
 
-        // Return simulated stat result
-        let stat_result = serde_json::json!({
-            "exists": true,
-            "path": path,
-            "isdir": false,
-            "isreg": true,
-            "mode": "0644",
-            "uid": 1000,
-            "gid": 1000,
-            "size": 1024,
-        });
+        let registry = crate::modules::ModuleRegistry::with_builtins();
+        let module = registry.get("stat").ok_or_else(|| {
+            ExecutorError::ModuleNotFound("stat module not found in registry".into())
+        })?;
 
-        Ok(TaskResult::ok().with_result(serde_json::json!({ "stat": stat_result })))
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = TaskResult::ok();
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("stat module failed: {}", e))),
+        }
     }
 
     async fn execute_fail(&self, args: &IndexMap<String, JsonValue>) -> ExecutorResult<TaskResult> {
