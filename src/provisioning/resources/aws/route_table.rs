@@ -74,26 +74,63 @@ impl RouteConfig {
     /// Parse route from JSON value
     pub fn from_value(value: &Value) -> ProvisioningResult<Self> {
         Ok(Self {
-            cidr_block: value.get("cidr_block").and_then(|v| v.as_str()).map(String::from),
-            ipv6_cidr_block: value.get("ipv6_cidr_block").and_then(|v| v.as_str()).map(String::from),
-            destination_prefix_list_id: value.get("destination_prefix_list_id").and_then(|v| v.as_str()).map(String::from),
-            gateway_id: value.get("gateway_id").and_then(|v| v.as_str()).map(String::from),
-            nat_gateway_id: value.get("nat_gateway_id").and_then(|v| v.as_str()).map(String::from),
-            vpc_peering_connection_id: value.get("vpc_peering_connection_id").and_then(|v| v.as_str()).map(String::from),
-            transit_gateway_id: value.get("transit_gateway_id").and_then(|v| v.as_str()).map(String::from),
-            network_interface_id: value.get("network_interface_id").and_then(|v| v.as_str()).map(String::from),
-            instance_id: value.get("instance_id").and_then(|v| v.as_str()).map(String::from),
-            vpc_endpoint_id: value.get("vpc_endpoint_id").and_then(|v| v.as_str()).map(String::from),
-            egress_only_gateway_id: value.get("egress_only_gateway_id").and_then(|v| v.as_str()).map(String::from),
+            cidr_block: value
+                .get("cidr_block")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            ipv6_cidr_block: value
+                .get("ipv6_cidr_block")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            destination_prefix_list_id: value
+                .get("destination_prefix_list_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            gateway_id: value
+                .get("gateway_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            nat_gateway_id: value
+                .get("nat_gateway_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            vpc_peering_connection_id: value
+                .get("vpc_peering_connection_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            transit_gateway_id: value
+                .get("transit_gateway_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            network_interface_id: value
+                .get("network_interface_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            instance_id: value
+                .get("instance_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            vpc_endpoint_id: value
+                .get("vpc_endpoint_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            egress_only_gateway_id: value
+                .get("egress_only_gateway_id")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         })
     }
 
     /// Validate route configuration
     pub fn validate(&self) -> ProvisioningResult<()> {
         // Must have at least one destination
-        if self.cidr_block.is_none() && self.ipv6_cidr_block.is_none() && self.destination_prefix_list_id.is_none() {
+        if self.cidr_block.is_none()
+            && self.ipv6_cidr_block.is_none()
+            && self.destination_prefix_list_id.is_none()
+        {
             return Err(ProvisioningError::ValidationError(
-                "Route must have cidr_block, ipv6_cidr_block, or destination_prefix_list_id".to_string(),
+                "Route must have cidr_block, ipv6_cidr_block, or destination_prefix_list_id"
+                    .to_string(),
             ));
         }
 
@@ -194,7 +231,9 @@ impl AwsRouteTableResource {
                 field_type: FieldType::String,
                 description: "The VPC ID to create the route table in".to_string(),
                 default: None,
-                constraints: vec![FieldConstraint::Pattern { regex: r"^vpc-[a-f0-9]+$".to_string() }],
+                constraints: vec![FieldConstraint::Pattern {
+                    regex: r"^vpc-[a-f0-9]+$".to_string(),
+                }],
                 sensitive: false,
             }],
             optional_args: vec![
@@ -291,7 +330,11 @@ impl AwsRouteTableResource {
             HashMap::new()
         };
 
-        Ok(RouteTableConfig { vpc_id, routes, tags })
+        Ok(RouteTableConfig {
+            vpc_id,
+            routes,
+            tags,
+        })
     }
 
     /// Create AWS EC2 client
@@ -345,7 +388,10 @@ impl AwsRouteTableResource {
                     transit_gateway_id: r.transit_gateway_id().map(String::from),
                     network_interface_id: r.network_interface_id().map(String::from),
                     instance_id: r.instance_id().map(String::from),
-                    vpc_endpoint_id: r.gateway_id().filter(|g| g.starts_with("vpce-")).map(String::from),
+                    vpc_endpoint_id: r
+                        .gateway_id()
+                        .filter(|g| g.starts_with("vpce-"))
+                        .map(String::from),
                     egress_only_gateway_id: r.egress_only_internet_gateway_id().map(String::from),
                 })
                 .collect();
@@ -355,7 +401,10 @@ impl AwsRouteTableResource {
                 .associations()
                 .iter()
                 .map(|a| RouteTableAssociation {
-                    id: a.route_table_association_id().unwrap_or_default().to_string(),
+                    id: a
+                        .route_table_association_id()
+                        .unwrap_or_default()
+                        .to_string(),
                     subnet_id: a.subnet_id().map(String::from),
                     gateway_id: a.gateway_id().map(String::from),
                     main: a.main().unwrap_or(false),
@@ -374,10 +423,7 @@ impl AwsRouteTableResource {
 
             // Build ARN
             let region = ctx.region.as_deref().unwrap_or("us-east-1");
-            let arn = format!(
-                "arn:aws:ec2:{}:{}:route-table/{}",
-                region, owner_id, rt_id
-            );
+            let arn = format!("arn:aws:ec2:{}:{}:route-table/{}", region, owner_id, rt_id);
 
             Ok(Some(RouteTableAttributes {
                 id: rt_id,
@@ -635,7 +681,8 @@ impl AwsRouteTableResource {
 
                 if let Some(current_val) = current_obj.get(key) {
                     if desired_val != current_val {
-                        modifications.insert(key.clone(), (current_val.clone(), desired_val.clone()));
+                        modifications
+                            .insert(key.clone(), (current_val.clone(), desired_val.clone()));
 
                         if force_new_fields.contains(key) {
                             replacement_fields.push(key.clone());
@@ -658,7 +705,8 @@ impl AwsRouteTableResource {
         }
 
         let requires_replacement = !replacement_fields.is_empty();
-        let has_changes = !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
+        let has_changes =
+            !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
 
         let change_type = if requires_replacement {
             ChangeType::Replace
@@ -811,8 +859,12 @@ impl Resource for AwsRouteTableResource {
                     .map_err(|e| ProvisioningError::SerializationError(e.to_string()))?;
 
                 let mut result = ResourceResult::success(&attrs.id, attributes);
-                result.outputs.insert("id".to_string(), Value::String(attrs.id.clone()));
-                result.outputs.insert("arn".to_string(), Value::String(attrs.arn));
+                result
+                    .outputs
+                    .insert("id".to_string(), Value::String(attrs.id.clone()));
+                result
+                    .outputs
+                    .insert("arn".to_string(), Value::String(attrs.arn));
                 Ok(result)
             }
             Err(e) => Ok(ResourceResult::failure(e.to_string())),
@@ -1028,8 +1080,12 @@ mod tests {
 
         let deps = AwsRouteTableResource::extract_dependencies(&config);
         assert_eq!(deps.len(), 2);
-        assert!(deps.iter().any(|d| d.resource_type == "aws_vpc" && d.resource_name == "main"));
-        assert!(deps.iter().any(|d| d.resource_type == "aws_internet_gateway" && d.resource_name == "main"));
+        assert!(deps
+            .iter()
+            .any(|d| d.resource_type == "aws_vpc" && d.resource_name == "main"));
+        assert!(deps
+            .iter()
+            .any(|d| d.resource_type == "aws_internet_gateway" && d.resource_name == "main"));
     }
 
     #[test]
@@ -1098,7 +1154,8 @@ mod tests {
         });
 
         let force_new = vec!["vpc_id".to_string()];
-        let diff = AwsRouteTableResource::compute_diff(&desired, Some(&current), &force_new).unwrap();
+        let diff =
+            AwsRouteTableResource::compute_diff(&desired, Some(&current), &force_new).unwrap();
         assert_eq!(diff.change_type, ChangeType::Replace);
         assert!(diff.requires_replacement);
     }

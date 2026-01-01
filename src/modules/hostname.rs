@@ -419,7 +419,6 @@ impl Module for HostnameModule {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

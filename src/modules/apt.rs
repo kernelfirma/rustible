@@ -1560,5 +1560,4 @@ mod tests {
 
     // Integration tests would require actual apt access
     // These are unit tests for the parsing/configuration logic
-
 }

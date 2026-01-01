@@ -112,14 +112,17 @@ impl AwsNatGatewayResource {
                 field_type: FieldType::String,
                 description: "The subnet ID to create the NAT Gateway in".to_string(),
                 default: None,
-                constraints: vec![FieldConstraint::Pattern { regex: r"^subnet-[a-f0-9]+$".to_string() }],
+                constraints: vec![FieldConstraint::Pattern {
+                    regex: r"^subnet-[a-f0-9]+$".to_string(),
+                }],
                 sensitive: false,
             }],
             optional_args: vec![
                 SchemaField {
                     name: "allocation_id".to_string(),
                     field_type: FieldType::String,
-                    description: "Elastic IP allocation ID (required for public NAT Gateway)".to_string(),
+                    description: "Elastic IP allocation ID (required for public NAT Gateway)"
+                        .to_string(),
                     default: None,
                     constraints: vec![],
                     sensitive: false,
@@ -127,7 +130,8 @@ impl AwsNatGatewayResource {
                 SchemaField {
                     name: "connectivity_type".to_string(),
                     field_type: FieldType::String,
-                    description: "Connectivity type: public or private (default: public)".to_string(),
+                    description: "Connectivity type: public or private (default: public)"
+                        .to_string(),
                     default: Some(Value::String("public".to_string())),
                     constraints: vec![FieldConstraint::Enum {
                         values: vec!["public".to_string(), "private".to_string()],
@@ -679,7 +683,8 @@ impl AwsNatGatewayResource {
 
                 if let Some(current_val) = current_obj.get(key) {
                     if desired_val != current_val {
-                        modifications.insert(key.clone(), (current_val.clone(), desired_val.clone()));
+                        modifications
+                            .insert(key.clone(), (current_val.clone(), desired_val.clone()));
 
                         if force_new_fields.contains(key) {
                             replacement_fields.push(key.clone());
@@ -702,7 +707,8 @@ impl AwsNatGatewayResource {
         }
 
         let requires_replacement = !replacement_fields.is_empty();
-        let has_changes = !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
+        let has_changes =
+            !additions.is_empty() || !modifications.is_empty() || !deletions.is_empty();
 
         let change_type = if requires_replacement {
             ChangeType::Replace
@@ -833,12 +839,18 @@ impl Resource for AwsNatGatewayResource {
                     .map_err(|e| ProvisioningError::SerializationError(e.to_string()))?;
 
                 let mut result = ResourceResult::success(&attrs.id, attributes);
-                result.outputs.insert("id".to_string(), Value::String(attrs.id.clone()));
+                result
+                    .outputs
+                    .insert("id".to_string(), Value::String(attrs.id.clone()));
                 if let Some(ref public_ip) = attrs.public_ip {
-                    result.outputs.insert("public_ip".to_string(), Value::String(public_ip.clone()));
+                    result
+                        .outputs
+                        .insert("public_ip".to_string(), Value::String(public_ip.clone()));
                 }
                 if let Some(ref private_ip) = attrs.private_ip {
-                    result.outputs.insert("private_ip".to_string(), Value::String(private_ip.clone()));
+                    result
+                        .outputs
+                        .insert("private_ip".to_string(), Value::String(private_ip.clone()));
                 }
                 Ok(result)
             }
@@ -964,7 +976,9 @@ impl Resource for AwsNatGatewayResource {
         config
             .get("subnet_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ProvisioningError::ValidationError("subnet_id is required".to_string()))?;
+            .ok_or_else(|| {
+                ProvisioningError::ValidationError("subnet_id is required".to_string())
+            })?;
 
         // Validate connectivity_type if provided
         if let Some(conn_type) = config.get("connectivity_type").and_then(|v| v.as_str()) {
@@ -1069,8 +1083,12 @@ mod tests {
 
         let deps = AwsNatGatewayResource::extract_dependencies(&config);
         assert_eq!(deps.len(), 2);
-        assert!(deps.iter().any(|d| d.resource_type == "aws_subnet" && d.resource_name == "public"));
-        assert!(deps.iter().any(|d| d.resource_type == "aws_eip" && d.resource_name == "nat"));
+        assert!(deps
+            .iter()
+            .any(|d| d.resource_type == "aws_subnet" && d.resource_name == "public"));
+        assert!(deps
+            .iter()
+            .any(|d| d.resource_type == "aws_eip" && d.resource_name == "nat"));
     }
 
     #[test]
@@ -1134,7 +1152,8 @@ mod tests {
         });
 
         let force_new = vec!["subnet_id".to_string()];
-        let diff = AwsNatGatewayResource::compute_diff(&desired, Some(&current), &force_new).unwrap();
+        let diff =
+            AwsNatGatewayResource::compute_diff(&desired, Some(&current), &force_new).unwrap();
         assert_eq!(diff.change_type, ChangeType::Replace);
         assert!(diff.requires_replacement);
     }

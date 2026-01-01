@@ -575,7 +575,6 @@ impl Module for CronModule {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

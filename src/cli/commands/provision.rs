@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use super::CommandContext;
 
 #[cfg(feature = "provisioning")]
-use rustible::provisioning::{InfrastructureConfig, ProvisioningExecutor, ResourceId};
-#[cfg(feature = "provisioning")]
 use rustible::provisioning::executor::ExecutorConfig;
+#[cfg(feature = "provisioning")]
+use rustible::provisioning::{InfrastructureConfig, ProvisioningExecutor, ResourceId};
 
 /// Arguments for the provision command
 #[derive(Parser, Debug, Clone)]
@@ -731,8 +731,7 @@ mod tests {
 
     #[test]
     fn test_plan_args_with_config_file() {
-        let cli =
-            TestPlanCli::try_parse_from(["test", "--config-file", "custom.yml"]).unwrap();
+        let cli = TestPlanCli::try_parse_from(["test", "--config-file", "custom.yml"]).unwrap();
         assert_eq!(cli.args.config_file, PathBuf::from("custom.yml"));
     }
 
@@ -747,14 +746,9 @@ mod tests {
 
     #[test]
     fn test_plan_args_with_targets() {
-        let cli = TestPlanCli::try_parse_from([
-            "test",
-            "-t",
-            "aws_vpc.main",
-            "-t",
-            "aws_subnet.public",
-        ])
-        .unwrap();
+        let cli =
+            TestPlanCli::try_parse_from(["test", "-t", "aws_vpc.main", "-t", "aws_subnet.public"])
+                .unwrap();
         assert_eq!(cli.args.target.len(), 2);
         assert_eq!(cli.args.target[0], "aws_vpc.main");
         assert_eq!(cli.args.target[1], "aws_subnet.public");
@@ -849,14 +843,9 @@ mod tests {
 
     #[test]
     fn test_apply_args_with_targets() {
-        let cli = TestApplyCli::try_parse_from([
-            "test",
-            "-t",
-            "aws_vpc.main",
-            "-t",
-            "aws_subnet.public",
-        ])
-        .unwrap();
+        let cli =
+            TestApplyCli::try_parse_from(["test", "-t", "aws_vpc.main", "-t", "aws_subnet.public"])
+                .unwrap();
         assert_eq!(cli.args.target.len(), 2);
         assert_eq!(cli.args.target[0], "aws_vpc.main");
         assert_eq!(cli.args.target[1], "aws_subnet.public");
@@ -981,8 +970,7 @@ mod tests {
 
     #[test]
     fn test_import_args_required_positional() {
-        let cli =
-            TestImportCli::try_parse_from(["test", "aws_vpc.main", "vpc-12345"]).unwrap();
+        let cli = TestImportCli::try_parse_from(["test", "aws_vpc.main", "vpc-12345"]).unwrap();
         assert_eq!(cli.args.address, "aws_vpc.main");
         assert_eq!(cli.args.id, "vpc-12345");
     }
@@ -1012,10 +1000,7 @@ mod tests {
             "vpc-12345",
         ])
         .unwrap();
-        assert_eq!(
-            cli.args.state,
-            Some(PathBuf::from("custom-state.json"))
-        );
+        assert_eq!(cli.args.state, Some(PathBuf::from("custom-state.json")));
     }
 
     #[test]
@@ -1042,8 +1027,7 @@ mod tests {
         ];
 
         for (address, id) in resources {
-            let cli =
-                TestImportCli::try_parse_from(["test", address, id]).unwrap();
+            let cli = TestImportCli::try_parse_from(["test", address, id]).unwrap();
             assert_eq!(cli.args.address, address);
             assert_eq!(cli.args.id, id);
         }
@@ -1114,8 +1098,7 @@ mod tests {
 
     #[test]
     fn test_refresh_args_with_config() {
-        let cli =
-            TestRefreshCli::try_parse_from(["test", "--config-file", "custom.yml"]).unwrap();
+        let cli = TestRefreshCli::try_parse_from(["test", "--config-file", "custom.yml"]).unwrap();
         assert_eq!(cli.args.config_file, PathBuf::from("custom.yml"));
     }
 
@@ -1134,12 +1117,8 @@ mod tests {
 
     #[test]
     fn test_refresh_args_with_state() {
-        let cli =
-            TestRefreshCli::try_parse_from(["test", "--state", "custom-state.json"]).unwrap();
-        assert_eq!(
-            cli.args.state,
-            Some(PathBuf::from("custom-state.json"))
-        );
+        let cli = TestRefreshCli::try_parse_from(["test", "--state", "custom-state.json"]).unwrap();
+        assert_eq!(cli.args.state, Some(PathBuf::from("custom-state.json")));
     }
 
     #[test]
@@ -1185,8 +1164,7 @@ mod tests {
     fn test_init_args_various_backends() {
         let backends = ["local", "s3", "gcs", "azurerm", "http"];
         for backend in backends {
-            let cli =
-                TestInitCli::try_parse_from(["test", "--backend", backend]).unwrap();
+            let cli = TestInitCli::try_parse_from(["test", "--backend", backend]).unwrap();
             assert_eq!(cli.args.backend, backend);
         }
     }
@@ -1241,13 +1219,9 @@ mod tests {
 
     #[test]
     fn test_provision_commands_import() {
-        let cli = TestProvisionCli::try_parse_from([
-            "rustible",
-            "import",
-            "aws_vpc.main",
-            "vpc-12345",
-        ])
-        .unwrap();
+        let cli =
+            TestProvisionCli::try_parse_from(["rustible", "import", "aws_vpc.main", "vpc-12345"])
+                .unwrap();
         assert!(matches!(cli.command, ProvisionCommands::Import(_)));
     }
 
@@ -1361,23 +1335,14 @@ mod tests {
     #[test]
     fn test_init_args_path_with_spaces() {
         let cli = TestInitCli::try_parse_from(["test", "/path/with spaces/project"]).unwrap();
-        assert_eq!(
-            cli.args.path,
-            PathBuf::from("/path/with spaces/project")
-        );
+        assert_eq!(cli.args.path, PathBuf::from("/path/with spaces/project"));
     }
 
     #[test]
     fn test_plan_args_multiple_targets_same() {
         // Duplicate targets are allowed by CLI
-        let cli = TestPlanCli::try_parse_from([
-            "test",
-            "-t",
-            "aws_vpc.main",
-            "-t",
-            "aws_vpc.main",
-        ])
-        .unwrap();
+        let cli = TestPlanCli::try_parse_from(["test", "-t", "aws_vpc.main", "-t", "aws_vpc.main"])
+            .unwrap();
         assert_eq!(cli.args.target.len(), 2);
     }
 
@@ -1385,8 +1350,8 @@ mod tests {
 
     #[test]
     fn test_plan_args_relative_path() {
-        let cli = TestPlanCli::try_parse_from(["test", "--config-file", "./config/prod.yml"])
-            .unwrap();
+        let cli =
+            TestPlanCli::try_parse_from(["test", "--config-file", "./config/prod.yml"]).unwrap();
         assert_eq!(cli.args.config_file, PathBuf::from("./config/prod.yml"));
     }
 
