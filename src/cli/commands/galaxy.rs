@@ -63,7 +63,7 @@ pub struct CollectionInstallArgs {
     pub name: String,
 
     /// Version constraint (e.g., ">=1.0.0,<2.0.0")
-    #[arg(short, long)]
+    #[arg(id = "version_constraint", long = "ver")]
     pub version: Option<String>,
 
     /// Path to install collections to
@@ -71,7 +71,7 @@ pub struct CollectionInstallArgs {
     pub collections_path: Option<PathBuf>,
 
     /// Force reinstall even if already installed
-    #[arg(short, long)]
+    #[arg(long)]
     pub force: bool,
 
     /// Install offline from cache only
@@ -131,7 +131,7 @@ pub struct RoleInstallArgs {
     pub name: String,
 
     /// Version constraint
-    #[arg(short, long)]
+    #[arg(id = "version_constraint", long = "ver")]
     pub version: Option<String>,
 
     /// Path to install roles to
@@ -139,7 +139,7 @@ pub struct RoleInstallArgs {
     pub roles_path: Option<PathBuf>,
 
     /// Force reinstall even if already installed
-    #[arg(short, long)]
+    #[arg(long)]
     pub force: bool,
 
     /// Install offline from cache only
@@ -203,7 +203,7 @@ pub struct InstallArgs {
     pub requirements: PathBuf,
 
     /// Force reinstall
-    #[arg(short, long)]
+    #[arg(long)]
     pub force: bool,
 
     /// Install offline from cache only

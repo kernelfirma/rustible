@@ -26,8 +26,8 @@ pub struct LockArgs {
     #[arg(long, short = 'u')]
     pub update: bool,
 
-    /// Only check if lockfile is up to date (exit with error if not)
-    #[arg(long)]
+    /// Only verify if lockfile is up to date (exit with error if not)
+    #[arg(long = "verify-only")]
     pub check: bool,
 }
 
