@@ -481,6 +481,13 @@ impl Executor {
                 for (key, value) in &self.config.extra_vars {
                     runtime.set_global_var(key.clone(), value.clone());
                 }
+                // Set playbook_dir magic variable for include/import path resolution
+                if let Some(playbook_dir) = playbook.get_playbook_dir() {
+                    runtime.set_magic_var(
+                        "playbook_dir".to_string(),
+                        serde_json::json!(playbook_dir.to_string_lossy()),
+                    );
+                }
             }
 
             // Execute each play in sequence
