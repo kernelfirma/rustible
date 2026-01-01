@@ -1833,8 +1833,12 @@ impl Task {
             ));
         }
 
-        // Determine base path for path validation
-        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        // Determine base path from playbook directory, falling back to current directory
+        let base_path = {
+            let rt = runtime.read().await;
+            rt.get_playbook_dir()
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+        };
 
         let mut all_vars: IndexMap<String, JsonValue> = IndexMap::new();
         let source: String;
@@ -2030,8 +2034,12 @@ impl Task {
 
         info!("Including tasks from: {}", file);
 
-        // Determine base path from the runtime context or use current directory
-        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        // Determine base path from the playbook directory, falling back to current directory
+        let base_path = {
+            let rt = runtime.read().await;
+            rt.get_playbook_dir()
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+        };
         let handler = crate::executor::include_handler::IncludeTasksHandler::new(base_path);
 
         // Build the include spec with any variables passed

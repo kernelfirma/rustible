@@ -119,7 +119,7 @@ impl RunArgs {
 
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
-        let runtime = if let Some(inv_path) = &inventory_path {
+        let mut runtime = if let Some(inv_path) = &inventory_path {
             if inv_path.exists() {
                 match Inventory::load(inv_path) {
                     Ok(inventory) => {
@@ -143,6 +143,12 @@ impl RunArgs {
             runtime.add_host("localhost".to_string(), Some("all"));
             runtime
         };
+
+        // Set playbook directory for resolving relative includes
+        if let Some(playbook_dir) = self.playbook.parent() {
+            runtime.set_playbook_dir(playbook_dir);
+            ctx.output.debug(&format!("Playbook directory: {}", playbook_dir.display()));
+        }
 
         // Validate limit pattern if specified
         if let Some(ref limit) = ctx.limit {
