@@ -193,6 +193,10 @@ impl RunArgs {
             task_timeout: 300,
             gather_facts: true,
             extra_vars,
+            r#become: self.r#become,
+            become_method: self.become_method.clone(),
+            become_user: self.become_user.clone(),
+            become_password: None, // TODO: Implement --ask-become-pass
         };
 
         // Create executor with runtime context
@@ -1352,9 +1356,18 @@ impl RunArgs {
             )
             .await?;
 
+        // Build execution options with become settings
+        let options = if self.r#become {
+            Some(rustible::connection::ExecuteOptions::new()
+                .with_escalation(Some(self.become_user.clone()))
+                .with_escalate_method(self.become_method.clone()))
+        } else {
+            None
+        };
+
         // Execute command on the pooled connection
         let result = conn
-            .execute(cmd, None)
+            .execute(cmd, options)
             .await
             .map_err(|e| anyhow::anyhow!("Command execution failed: {}", e))?;
 

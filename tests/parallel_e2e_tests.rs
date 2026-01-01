@@ -205,6 +205,7 @@ all:
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(exec_config, runtime);
@@ -266,6 +267,7 @@ async fn test_parallel_execution_multiple_hosts() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(exec_config, runtime);
@@ -361,6 +363,7 @@ async fn test_linear_vs_free_strategy_performance() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(linear_config, runtime);
@@ -385,6 +388,7 @@ async fn test_linear_vs_free_strategy_performance() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(free_config, runtime);
@@ -476,6 +480,7 @@ async fn test_connection_reuse_in_parallel_execution() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(exec_config, runtime);
@@ -554,6 +559,7 @@ async fn test_fork_limiting_with_many_hosts() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(exec_config, runtime);
@@ -631,6 +637,7 @@ async fn test_parallel_performance_improvement() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(serial_config, runtime);
@@ -655,6 +662,7 @@ async fn test_parallel_performance_improvement() {
         task_timeout: 300,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::with_runtime(parallel_config, runtime);

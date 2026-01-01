@@ -772,6 +772,7 @@ async fn test_rescue_block_reliability() {
         task_timeout: 30,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
@@ -836,6 +837,7 @@ async fn test_always_block_guaranteed_execution() {
         task_timeout: 30,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let _ = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;

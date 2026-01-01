@@ -223,6 +223,7 @@ fn test_task_timeout_in_executor_config() {
         task_timeout: 120,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     assert_eq!(config.task_timeout, 120);
@@ -359,6 +360,7 @@ async fn test_playbook_with_timeout_config() {
         task_timeout: 10,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let executor = Executor::new(config);
@@ -1441,6 +1443,7 @@ fn test_executor_task_timeout_setting() {
         task_timeout: 600, // 10 minutes
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     assert_eq!(config.task_timeout, 600);

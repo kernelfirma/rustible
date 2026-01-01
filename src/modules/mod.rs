@@ -591,6 +591,24 @@ impl ModuleContext {
         self.connection = Some(connection);
         self
     }
+
+    /// Enable privilege escalation
+    pub fn with_become(mut self, value: bool) -> Self {
+        self.r#become = value;
+        self
+    }
+
+    /// Set the privilege escalation method
+    pub fn with_become_method(mut self, method: impl Into<String>) -> Self {
+        self.become_method = Some(method.into());
+        self
+    }
+
+    /// Set the user to become
+    pub fn with_become_user(mut self, user: impl Into<String>) -> Self {
+        self.become_user = Some(user.into());
+        self
+    }
 }
 
 /// Trait that all modules must implement
