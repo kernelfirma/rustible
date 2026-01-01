@@ -1306,7 +1306,7 @@ impl Task {
                     r#become: false,
                     become_method: None,
                     become_user: None,
-                    connection: None,
+                    connection: ctx.connection.clone(),
                 };
 
                 let registry = crate::modules::ModuleRegistry::with_builtins();
@@ -1347,7 +1347,7 @@ impl Task {
             r#become: false,
             become_method: None,
             become_user: None,
-            connection: None, // Local execution for integration tests
+            connection: ctx.connection.clone(),
         };
 
         // Get the copy module from registry and execute
@@ -1393,7 +1393,7 @@ impl Task {
             r#become: false,
             become_method: None,
             become_user: None,
-            connection: None, // Local execution for integration tests
+            connection: ctx.connection.clone(),
         };
 
         // Get the file module from registry and execute
@@ -1446,7 +1446,7 @@ impl Task {
             r#become: false,
             become_method: None,
             become_user: None,
-            connection: None, // Local execution for integration tests
+            connection: ctx.connection.clone(),
         };
 
         // Get the template module from registry and execute
