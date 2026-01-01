@@ -44,16 +44,25 @@ impl ShellModule {
             .get_string("executable")?
             .unwrap_or_else(|| "/bin/sh".to_string());
 
+        // Handle Windows cmd.exe separately
+        // cmd.exe /c "command" expects the command to be wrapped in double quotes
+        // if it contains special characters like &, |, etc.
+        // Importantly, we do NOT escape internal quotes because cmd.exe's parsing
+        // logic is unique: if the first character is a quote, it strips the first
+        // and last quote, preserving internal quotes.
+        if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
+            return Ok(format!("{} /c \"{}\"", executable, cmd));
+        }
+
         // Different shells have different syntax for running commands
         let flag = if executable.ends_with("fish") {
             "-c"
-        } else if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
-            "/c"
         } else {
             "-c"
         };
 
         // Escape the command for shell execution
+        // This is safe for POSIX shells (sh, bash, zsh, etc.)
         let escaped_cmd = cmd.replace('\'', "'\\''");
         Ok(format!("{} {} '{}'", executable, flag, escaped_cmd))
     }
@@ -508,5 +517,31 @@ mod tests {
 
         assert!(result.changed);
         assert!(result.stdout.as_ref().unwrap().contains("hello from stdin"));
+    }
+
+    #[test]
+    fn test_build_shell_command_windows() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("executable".to_string(), serde_json::json!("cmd.exe"));
+
+        let cmd = "echo hello & calc.exe";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+
+        // Should be: cmd.exe /c "echo hello & calc.exe"
+        assert_eq!(result, "cmd.exe /c \"echo hello & calc.exe\"");
+    }
+
+    #[test]
+    fn test_build_shell_command_posix() {
+        let module = ShellModule;
+        let params: ModuleParams = HashMap::new();
+        // default executable is /bin/sh
+
+        let cmd = "echo 'hello'";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+
+        // Should be: /bin/sh -c 'echo '\''hello'\'''
+        assert_eq!(result, "/bin/sh -c 'echo '\\''hello'\\'''");
     }
 }
