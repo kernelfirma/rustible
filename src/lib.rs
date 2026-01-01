@@ -220,6 +220,20 @@ pub mod handlers;
 /// handlers, variables, and conditionals.
 pub mod playbook;
 
+// Parser module (not fully public due to API compatibility issues)
+mod parser;
+
+/// Schema validation for playbooks.
+///
+/// This module provides comprehensive playbook validation with JSON Schema-style
+/// checks for module arguments. It catches configuration errors early
+/// before execution begins.
+///
+/// Re-exported from the internal parser module.
+pub mod schema {
+    pub use crate::parser::schema::*;
+}
+
 /// Role management for reusable task collections.
 ///
 /// Roles are a way to organize playbooks into reusable components.

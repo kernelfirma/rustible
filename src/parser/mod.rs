@@ -19,6 +19,7 @@ pub use schema::{
 
 use crate::utils::get_regex;
 use indexmap::IndexMap;
+use minijinja::value::ValueKind;
 use minijinja::{Environment, Value};
 use once_cell::sync::Lazy;
 use std::path::Path;
@@ -213,19 +214,15 @@ impl Parser {
         env.add_filter("length", |value: Value| -> usize {
             if let Some(s) = value.as_str() {
                 s.len()
-            } else if let Some(seq) = value.as_seq() {
-                seq.len()
-            } else if let Some(obj) = value.as_object() {
-                obj.len()
             } else {
-                0
+                value.len().unwrap_or(0)
             }
         });
 
         // First/last filters
         env.add_filter("first", |value: Value| -> Value {
-            if let Some(seq) = value.as_seq() {
-                seq.get_item(&Value::from(0)).unwrap_or(Value::UNDEFINED)
+            if matches!(value.kind(), ValueKind::Seq) {
+                value.get_item(&Value::from(0_i64)).unwrap_or(Value::UNDEFINED)
             } else if let Some(s) = value.as_str() {
                 s.chars()
                     .next()
@@ -237,10 +234,10 @@ impl Parser {
         });
 
         env.add_filter("last", |value: Value| -> Value {
-            if let Some(seq) = value.as_seq() {
-                let len = seq.len();
+            if matches!(value.kind(), ValueKind::Seq) {
+                let len = value.len().unwrap_or(0);
                 if len > 0 {
-                    seq.get_item(&Value::from(len - 1))
+                    value.get_item(&Value::from((len - 1) as i64))
                         .unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
@@ -257,13 +254,15 @@ impl Parser {
 
         // Unique filter
         env.add_filter("unique", |value: Value| -> Vec<Value> {
-            if let Some(seq) = value.as_seq() {
+            if matches!(value.kind(), ValueKind::Seq) {
                 let mut seen = std::collections::HashSet::new();
                 let mut result = Vec::new();
-                for item in seq.iter() {
-                    let key = item.to_string();
-                    if seen.insert(key) {
-                        result.push(item);
+                if let Ok(iter) = value.try_iter() {
+                    for item in iter {
+                        let key = item.to_string();
+                        if seen.insert(key) {
+                            result.push(item);
+                        }
                     }
                 }
                 result
@@ -274,10 +273,14 @@ impl Parser {
 
         // Sort filter
         env.add_filter("sort", |value: Value| -> Vec<Value> {
-            if let Some(seq) = value.as_seq() {
-                let mut items: Vec<Value> = seq.iter().collect();
-                items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
-                items
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    let mut items: Vec<Value> = iter.collect();
+                    items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+                    items
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
@@ -285,9 +288,13 @@ impl Parser {
 
         // Reverse filter
         env.add_filter("reverse", |value: Value| -> Value {
-            if let Some(seq) = value.as_seq() {
-                let items: Vec<Value> = seq.iter().rev().collect();
-                Value::from(items)
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    let items: Vec<Value> = iter.collect::<Vec<_>>().into_iter().rev().collect();
+                    Value::from(items)
+                } else {
+                    value
+                }
             } else if let Some(s) = value.as_str() {
                 Value::from(s.chars().rev().collect::<String>())
             } else {
@@ -298,9 +305,11 @@ impl Parser {
         // Flatten filter
         env.add_filter("flatten", |value: Value| -> Vec<Value> {
             fn flatten_recursive(value: &Value, result: &mut Vec<Value>) {
-                if let Some(seq) = value.as_seq() {
-                    for item in seq.iter() {
-                        flatten_recursive(&item, result);
+                if matches!(value.kind(), ValueKind::Seq) {
+                    if let Ok(iter) = value.try_iter() {
+                        for item in iter {
+                            flatten_recursive(&item, result);
+                        }
                     }
                 } else {
                     result.push(value.clone());
@@ -314,19 +323,22 @@ impl Parser {
 
         // Map filter (select attribute)
         env.add_filter("map", |value: Value, attr: Option<String>| -> Vec<Value> {
-            if let Some(seq) = value.as_seq() {
-                if let Some(attr) = attr {
-                    seq.iter()
-                        .filter_map(|item| {
-                            if let Some(obj) = item.as_object() {
-                                obj.get(&Value::from(attr.clone()))
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    if let Some(attr) = attr {
+                        iter.filter_map(|item| {
+                            if matches!(item.kind(), ValueKind::Map) {
+                                item.get_attr(&attr).ok()
                             } else {
                                 None
                             }
                         })
                         .collect()
+                    } else {
+                        iter.collect()
+                    }
                 } else {
-                    seq.iter().collect()
+                    Vec::new()
                 }
             } else {
                 Vec::new()
@@ -337,12 +349,12 @@ impl Parser {
         env.add_filter(
             "select",
             |value: Value, attr: Option<String>| -> Vec<Value> {
-                if let Some(seq) = value.as_seq() {
-                    seq.iter()
-                        .filter(|item| {
+                if matches!(value.kind(), ValueKind::Seq) {
+                    if let Ok(iter) = value.try_iter() {
+                        iter.filter(|item| {
                             if let Some(ref attr) = attr {
-                                if let Some(obj) = item.as_object() {
-                                    obj.get(&Value::from(attr.clone()))
+                                if matches!(item.kind(), ValueKind::Map) {
+                                    item.get_attr(attr)
                                         .map(|v| v.is_true())
                                         .unwrap_or(false)
                                 } else {
@@ -353,6 +365,9 @@ impl Parser {
                             }
                         })
                         .collect()
+                    } else {
+                        Vec::new()
+                    }
                 } else {
                     Vec::new()
                 }
@@ -363,12 +378,12 @@ impl Parser {
         env.add_filter(
             "reject",
             |value: Value, attr: Option<String>| -> Vec<Value> {
-                if let Some(seq) = value.as_seq() {
-                    seq.iter()
-                        .filter(|item| {
+                if matches!(value.kind(), ValueKind::Seq) {
+                    if let Ok(iter) = value.try_iter() {
+                        iter.filter(|item| {
                             if let Some(ref attr) = attr {
-                                if let Some(obj) = item.as_object() {
-                                    !obj.get(&Value::from(attr.clone()))
+                                if matches!(item.kind(), ValueKind::Map) {
+                                    !item.get_attr(attr)
                                         .map(|v| v.is_true())
                                         .unwrap_or(false)
                                 } else {
@@ -379,6 +394,9 @@ impl Parser {
                             }
                         })
                         .collect()
+                    } else {
+                        Vec::new()
+                    }
                 } else {
                     Vec::new()
                 }
@@ -511,16 +529,26 @@ impl Parser {
 
         // Combine filter for dicts
         env.add_filter("combine", |base: Value, other: Value| -> Value {
-            if let (Some(base_obj), Some(other_obj)) = (base.as_object(), other.as_object()) {
+            let is_base_map = matches!(base.kind(), ValueKind::Map);
+            let is_other_map = matches!(other.kind(), ValueKind::Map);
+            if is_base_map && is_other_map {
                 let mut result = std::collections::BTreeMap::new();
-                for key in base_obj.keys() {
-                    if let Some(val) = base_obj.get(&key) {
-                        result.insert(key.to_string(), val);
+                // Iterate over base map entries
+                if let Ok(iter) = base.try_iter() {
+                    for key in iter {
+                        let key_str = key.to_string();
+                        if let Ok(val) = base.get_attr(&key_str) {
+                            result.insert(key_str, val);
+                        }
                     }
                 }
-                for key in other_obj.keys() {
-                    if let Some(val) = other_obj.get(&key) {
-                        result.insert(key.to_string(), val);
+                // Iterate over other map entries (overwrites base)
+                if let Ok(iter) = other.try_iter() {
+                    for key in iter {
+                        let key_str = key.to_string();
+                        if let Ok(val) = other.get_attr(&key_str) {
+                            result.insert(key_str, val);
+                        }
                     }
                 }
                 Value::from_iter(result)
@@ -531,12 +559,21 @@ impl Parser {
 
         // Dict2items / items2dict
         env.add_filter("dict2items", |value: Value| -> Vec<Value> {
-            if let Some(obj) = value.as_object() {
-                obj.iter()
-                    .map(|(k, v)| {
-                        Value::from_iter([("key".to_string(), k), ("value".to_string(), v)])
+            if matches!(value.kind(), ValueKind::Map) {
+                if let Ok(iter) = value.try_iter() {
+                    iter.filter_map(|k| {
+                        let key_str = k.to_string();
+                        value.get_attr(&key_str).ok().map(|v| {
+                            Value::from_iter([
+                                ("key".to_string(), Value::from(key_str)),
+                                ("value".to_string(), v),
+                            ])
+                        })
                     })
                     .collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
@@ -550,9 +587,9 @@ impl Parser {
                 "null".to_string()
             } else if value.as_str().is_some() {
                 "string".to_string()
-            } else if value.as_seq().is_some() {
+            } else if matches!(value.kind(), ValueKind::Seq) {
                 "list".to_string()
-            } else if value.as_object().is_some() {
+            } else if matches!(value.kind(), ValueKind::Map) {
                 "dict".to_string()
             } else if TryInto::<bool>::try_into(value.clone()).is_ok() {
                 "bool".to_string()
@@ -585,11 +622,11 @@ impl Parser {
         // Random filter - select random element or generate random number
         env.add_filter("random", |value: Value| -> Value {
             use rand::Rng;
-            if let Some(seq) = value.as_seq() {
-                let len = seq.len();
+            if matches!(value.kind(), ValueKind::Seq) {
+                let len = value.len().unwrap_or(0);
                 if len > 0 {
                     let idx = rand::rngs::OsRng.gen_range(0..len);
-                    seq.get_item(&Value::from(idx)).unwrap_or(Value::UNDEFINED)
+                    value.get_item(&Value::from(idx)).unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
                 }
@@ -604,10 +641,14 @@ impl Parser {
         // Shuffle filter
         env.add_filter("shuffle", |value: Value| -> Vec<Value> {
             use rand::seq::SliceRandom;
-            if let Some(seq) = value.as_seq() {
-                let mut items: Vec<Value> = seq.iter().collect();
-                items.shuffle(&mut rand::rngs::OsRng);
-                items
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    let mut items: Vec<Value> = iter.collect();
+                    items.shuffle(&mut rand::rngs::OsRng);
+                    items
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
@@ -631,11 +672,11 @@ impl Parser {
              test: Option<String>,
              test_val: Option<Value>|
              -> Vec<Value> {
-                if let Some(seq) = value.as_seq() {
-                    seq.iter()
-                        .filter(|item| {
-                            if let Some(obj) = item.as_object() {
-                                if let Some(attr_val) = obj.get(&Value::from(attr.clone())) {
+                if matches!(value.kind(), ValueKind::Seq) {
+                    if let Ok(iter) = value.try_iter() {
+                        iter.filter(|item| {
+                            if matches!(item.kind(), ValueKind::Map) {
+                                if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
                                         Some("equalto") | Some("==") | Some("eq") => {
                                             if let Some(ref tv) = test_val {
@@ -659,6 +700,9 @@ impl Parser {
                             }
                         })
                         .collect()
+                    } else {
+                        Vec::new()
+                    }
                 } else {
                     Vec::new()
                 }
@@ -673,11 +717,11 @@ impl Parser {
              test: Option<String>,
              test_val: Option<Value>|
              -> Vec<Value> {
-                if let Some(seq) = value.as_seq() {
-                    seq.iter()
-                        .filter(|item| {
-                            if let Some(obj) = item.as_object() {
-                                if let Some(attr_val) = obj.get(&Value::from(attr.clone())) {
+                if matches!(value.kind(), ValueKind::Seq) {
+                    if let Ok(iter) = value.try_iter() {
+                        iter.filter(|item| {
+                            if matches!(item.kind(), ValueKind::Map) {
+                                if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
                                         Some("equalto") | Some("==") | Some("eq") => {
                                             if let Some(ref tv) = test_val {
@@ -701,6 +745,9 @@ impl Parser {
                             }
                         })
                         .collect()
+                    } else {
+                        Vec::new()
+                    }
                 } else {
                     Vec::new()
                 }
@@ -725,11 +772,14 @@ impl Parser {
         // Join filter with custom separator
         env.add_filter("join", |value: Value, sep: Option<String>| -> String {
             let separator = sep.unwrap_or_else(|| "".to_string());
-            if let Some(seq) = value.as_seq() {
-                seq.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<_>>()
-                    .join(&separator)
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    iter.map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(&separator)
+                } else {
+                    value.to_string()
+                }
             } else {
                 value.to_string()
             }
@@ -737,40 +787,54 @@ impl Parser {
 
         // Set operations
         env.add_filter("difference", |value: Value, other: Value| -> Vec<Value> {
-            if let (Some(seq1), Some(seq2)) = (value.as_seq(), other.as_seq()) {
-                let set2: std::collections::HashSet<String> =
-                    seq2.iter().map(|v| v.to_string()).collect();
-                seq1.iter()
-                    .filter(|v| !set2.contains(&v.to_string()))
-                    .collect()
+            let is_seq1 = matches!(value.kind(), ValueKind::Seq);
+            let is_seq2 = matches!(other.kind(), ValueKind::Seq);
+            if is_seq1 && is_seq2 {
+                if let (Ok(iter1), Ok(iter2)) = (value.try_iter(), other.try_iter()) {
+                    let set2: std::collections::HashSet<String> =
+                        iter2.map(|v| v.to_string()).collect();
+                    iter1.filter(|v| !set2.contains(&v.to_string())).collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
         });
 
         env.add_filter("intersect", |value: Value, other: Value| -> Vec<Value> {
-            if let (Some(seq1), Some(seq2)) = (value.as_seq(), other.as_seq()) {
-                let set2: std::collections::HashSet<String> =
-                    seq2.iter().map(|v| v.to_string()).collect();
-                seq1.iter()
-                    .filter(|v| set2.contains(&v.to_string()))
-                    .collect()
+            let is_seq1 = matches!(value.kind(), ValueKind::Seq);
+            let is_seq2 = matches!(other.kind(), ValueKind::Seq);
+            if is_seq1 && is_seq2 {
+                if let (Ok(iter1), Ok(iter2)) = (value.try_iter(), other.try_iter()) {
+                    let set2: std::collections::HashSet<String> =
+                        iter2.map(|v| v.to_string()).collect();
+                    iter1.filter(|v| set2.contains(&v.to_string())).collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
         });
 
         env.add_filter("union", |value: Value, other: Value| -> Vec<Value> {
-            if let (Some(seq1), Some(seq2)) = (value.as_seq(), other.as_seq()) {
-                let mut seen = std::collections::HashSet::new();
-                let mut result = Vec::new();
-                for item in seq1.iter().chain(seq2.iter()) {
-                    let key = item.to_string();
-                    if seen.insert(key) {
-                        result.push(item);
+            let is_seq1 = matches!(value.kind(), ValueKind::Seq);
+            let is_seq2 = matches!(other.kind(), ValueKind::Seq);
+            if is_seq1 && is_seq2 {
+                if let (Ok(iter1), Ok(iter2)) = (value.try_iter(), other.try_iter()) {
+                    let mut seen = std::collections::HashSet::new();
+                    let mut result = Vec::new();
+                    for item in iter1.chain(iter2) {
+                        let key = item.to_string();
+                        if seen.insert(key) {
+                            result.push(item);
+                        }
                     }
+                    result
+                } else {
+                    Vec::new()
                 }
-                result
             } else {
                 Vec::new()
             }
@@ -779,20 +843,25 @@ impl Parser {
         env.add_filter(
             "symmetric_difference",
             |value: Value, other: Value| -> Vec<Value> {
-                if let (Some(seq1), Some(seq2)) = (value.as_seq(), other.as_seq()) {
+                let is_seq1 = matches!(value.kind(), ValueKind::Seq);
+                let is_seq2 = matches!(other.kind(), ValueKind::Seq);
+                if is_seq1 && is_seq2 {
+                    // Collect iterators into Vecs since we need to iterate multiple times
+                    let items1: Vec<Value> = value.try_iter().map(|i| i.collect()).unwrap_or_default();
+                    let items2: Vec<Value> = other.try_iter().map(|i| i.collect()).unwrap_or_default();
                     let set1: std::collections::HashSet<String> =
-                        seq1.iter().map(|v| v.to_string()).collect();
+                        items1.iter().map(|v| v.to_string()).collect();
                     let set2: std::collections::HashSet<String> =
-                        seq2.iter().map(|v| v.to_string()).collect();
+                        items2.iter().map(|v| v.to_string()).collect();
                     let mut result = Vec::new();
-                    for item in seq1.iter() {
+                    for item in &items1 {
                         if !set2.contains(&item.to_string()) {
-                            result.push(item);
+                            result.push(item.clone());
                         }
                     }
-                    for item in seq2.iter() {
+                    for item in &items2 {
                         if !set1.contains(&item.to_string()) {
-                            result.push(item);
+                            result.push(item.clone());
                         }
                     }
                     result
@@ -804,11 +873,17 @@ impl Parser {
 
         // Zip filter - combine lists
         env.add_filter("zip", |value: Value, other: Value| -> Vec<Value> {
-            if let (Some(seq1), Some(seq2)) = (value.as_seq(), other.as_seq()) {
-                seq1.iter()
-                    .zip(seq2.iter())
-                    .map(|(a, b)| Value::from(vec![a, b]))
-                    .collect()
+            let is_seq1 = matches!(value.kind(), ValueKind::Seq);
+            let is_seq2 = matches!(other.kind(), ValueKind::Seq);
+            if is_seq1 && is_seq2 {
+                if let (Ok(iter1), Ok(iter2)) = (value.try_iter(), other.try_iter()) {
+                    iter1
+                        .zip(iter2)
+                        .map(|(a, b)| Value::from(vec![a, b]))
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
             }
@@ -816,20 +891,26 @@ impl Parser {
 
         // Min/Max filters
         env.add_filter("min", |value: Value| -> Value {
-            if let Some(seq) = value.as_seq() {
-                seq.iter()
-                    .min_by(|a, b| a.to_string().cmp(&b.to_string()))
-                    .unwrap_or(Value::UNDEFINED)
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    iter.min_by(|a, b| a.to_string().cmp(&b.to_string()))
+                        .unwrap_or(Value::UNDEFINED)
+                } else {
+                    Value::UNDEFINED
+                }
             } else {
                 Value::UNDEFINED
             }
         });
 
         env.add_filter("max", |value: Value| -> Value {
-            if let Some(seq) = value.as_seq() {
-                seq.iter()
-                    .max_by(|a, b| a.to_string().cmp(&b.to_string()))
-                    .unwrap_or(Value::UNDEFINED)
+            if matches!(value.kind(), ValueKind::Seq) {
+                if let Ok(iter) = value.try_iter() {
+                    iter.max_by(|a, b| a.to_string().cmp(&b.to_string()))
+                        .unwrap_or(Value::UNDEFINED)
+                } else {
+                    Value::UNDEFINED
+                }
             } else {
                 Value::UNDEFINED
             }
@@ -837,14 +918,18 @@ impl Parser {
 
         // Subelements filter
         env.add_filter("subelements", |value: Value, key: String| -> Vec<Value> {
-            if let Some(seq) = value.as_seq() {
+            if matches!(value.kind(), ValueKind::Seq) {
                 let mut result = Vec::new();
-                for item in seq.iter() {
-                    if let Some(obj) = item.as_object() {
-                        if let Some(sub) = obj.get(&Value::from(key.clone())) {
-                            if let Some(sub_seq) = sub.as_seq() {
-                                for sub_item in sub_seq.iter() {
-                                    result.push(Value::from(vec![item.clone(), sub_item]));
+                if let Ok(iter) = value.try_iter() {
+                    for item in iter {
+                        if matches!(item.kind(), ValueKind::Map) {
+                            if let Ok(sub) = item.get_attr(&key) {
+                                if matches!(sub.kind(), ValueKind::Seq) {
+                                    if let Ok(sub_iter) = sub.try_iter() {
+                                        for sub_item in sub_iter {
+                                            result.push(Value::from(vec![item.clone(), sub_item]));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -858,17 +943,19 @@ impl Parser {
 
         // Groupby filter
         env.add_filter("groupby", |value: Value, attr: String| -> Vec<Value> {
-            if let Some(seq) = value.as_seq() {
+            if matches!(value.kind(), ValueKind::Seq) {
                 let mut groups: indexmap::IndexMap<String, Vec<Value>> = indexmap::IndexMap::new();
-                for item in seq.iter() {
-                    let key = if let Some(obj) = item.as_object() {
-                        obj.get(&Value::from(attr.clone()))
-                            .map(|v| v.to_string())
-                            .unwrap_or_default()
-                    } else {
-                        String::new()
-                    };
-                    groups.entry(key).or_default().push(item);
+                if let Ok(iter) = value.try_iter() {
+                    for item in iter {
+                        let key = if matches!(item.kind(), ValueKind::Map) {
+                            item.get_attr(&attr)
+                                .map(|v| v.to_string())
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+                        groups.entry(key).or_default().push(item);
+                    }
                 }
                 groups
                     .into_iter()
@@ -941,16 +1028,21 @@ impl Parser {
             // Simplified lookup - would need full plugin system
             match plugin.as_str() {
                 "env" => {
-                    if let Some(Value::String(var)) = args.as_ref().and_then(|a| {
-                        if let Some(seq) = a.as_seq() {
-                            seq.get_item(&Value::from(0)).ok()
+                    let var_value = args.as_ref().and_then(|a| {
+                        if matches!(a.kind(), ValueKind::Seq) {
+                            a.get_item(&Value::from(0)).ok()
                         } else {
                             Some(a.clone())
                         }
-                    }) {
-                        std::env::var(&var)
-                            .map(Value::from)
-                            .unwrap_or(Value::UNDEFINED)
+                    });
+                    if let Some(v) = var_value {
+                        if let Some(var) = v.as_str() {
+                            std::env::var(var)
+                                .map(Value::from)
+                                .unwrap_or(Value::UNDEFINED)
+                        } else {
+                            Value::UNDEFINED
+                        }
                     } else {
                         Value::UNDEFINED
                     }
