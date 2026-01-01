@@ -1073,7 +1073,6 @@ fn validate_interface(name: &str) -> ModuleResult<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

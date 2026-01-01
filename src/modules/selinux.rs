@@ -1383,7 +1383,6 @@ impl Module for SELinuxModule {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

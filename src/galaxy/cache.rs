@@ -2,8 +2,8 @@
 //!
 //! Provides local caching of downloaded Galaxy artifacts with integrity verification.
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use super::error::{GalaxyError, GalaxyResult};
 use crate::config::GalaxyConfig;
@@ -119,14 +119,23 @@ impl GalaxyCache {
 
     /// Get the latest cached version of a collection
     pub async fn get_latest_collection(&self, name: &str) -> GalaxyResult<Option<CachedArtifact>> {
-        let collection_dir = self.config.cache_dir.join("collections").join(name.replace('.', "/"));
+        let collection_dir = self
+            .config
+            .cache_dir
+            .join("collections")
+            .join(name.replace('.', "/"));
         if !collection_dir.exists() {
             return Ok(None);
         }
 
         let mut versions: Vec<_> = std::fs::read_dir(&collection_dir)?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map(|ext| ext == "tar" || ext == "gz").unwrap_or(false))
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map(|ext| ext == "tar" || ext == "gz")
+                    .unwrap_or(false)
+            })
             .collect();
 
         if versions.is_empty() {
@@ -135,12 +144,16 @@ impl GalaxyCache {
 
         // Sort by modification time, newest first
         versions.sort_by(|a, b| {
-            b.metadata().and_then(|m| m.modified()).ok()
+            b.metadata()
+                .and_then(|m| m.modified())
+                .ok()
                 .cmp(&a.metadata().and_then(|m| m.modified()).ok())
         });
 
         if let Some(latest) = versions.first() {
-            let version = latest.file_name().to_string_lossy()
+            let version = latest
+                .file_name()
+                .to_string_lossy()
                 .trim_end_matches(".tar.gz")
                 .to_string();
             Ok(Some(CachedArtifact {
@@ -202,14 +215,23 @@ impl GalaxyCache {
 
     /// Get the latest cached version of a role
     pub async fn get_latest_role(&self, name: &str) -> GalaxyResult<Option<CachedArtifact>> {
-        let role_dir = self.config.cache_dir.join("roles").join(name.replace('.', "/"));
+        let role_dir = self
+            .config
+            .cache_dir
+            .join("roles")
+            .join(name.replace('.', "/"));
         if !role_dir.exists() {
             return Ok(None);
         }
 
         let mut versions: Vec<_> = std::fs::read_dir(&role_dir)?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map(|ext| ext == "tar" || ext == "gz").unwrap_or(false))
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map(|ext| ext == "tar" || ext == "gz")
+                    .unwrap_or(false)
+            })
             .collect();
 
         if versions.is_empty() {
@@ -217,12 +239,16 @@ impl GalaxyCache {
         }
 
         versions.sort_by(|a, b| {
-            b.metadata().and_then(|m| m.modified()).ok()
+            b.metadata()
+                .and_then(|m| m.modified())
+                .ok()
                 .cmp(&a.metadata().and_then(|m| m.modified()).ok())
         });
 
         if let Some(latest) = versions.first() {
-            let version = latest.file_name().to_string_lossy()
+            let version = latest
+                .file_name()
+                .to_string_lossy()
                 .trim_end_matches(".tar.gz")
                 .to_string();
             Ok(Some(CachedArtifact {
@@ -274,7 +300,8 @@ impl GalaxyCache {
 
     /// Get the cache path for a collection
     fn collection_path(&self, name: &str, version: &str) -> PathBuf {
-        self.config.cache_dir
+        self.config
+            .cache_dir
             .join("collections")
             .join(name.replace('.', "/"))
             .join(format!("{}.tar.gz", version))
@@ -282,7 +309,8 @@ impl GalaxyCache {
 
     /// Get the cache path for a role
     fn role_path(&self, name: &str, version: &str) -> PathBuf {
-        self.config.cache_dir
+        self.config
+            .cache_dir
             .join("roles")
             .join(name.replace('.', "/"))
             .join(format!("{}.tar.gz", version))

@@ -62,9 +62,16 @@ impl ShellModule {
         };
 
         // Escape the command for shell execution
-        // This is safe for POSIX shells (sh, bash, zsh, etc.)
-        let escaped_cmd = cmd.replace('\'', "'\\''");
-        Ok(format!("{} {} '{}'", executable, flag, escaped_cmd))
+        if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
+            // Windows cmd.exe does not respect single quotes.
+            // We use double quotes and escape internal double quotes with "".
+            let escaped_cmd = cmd.replace('"', "\"\"");
+            Ok(format!("{} {} \"{}\"", executable, flag, escaped_cmd))
+        } else {
+            // Unix-like shells (sh, bash, zsh, fish)
+            let escaped_cmd = cmd.replace('\'', "'\\''");
+            Ok(format!("{} {} '{}'", executable, flag, escaped_cmd))
+        }
     }
 
     /// Build ExecuteOptions from params for remote execution
@@ -520,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_shell_command_windows() {
+    fn test_shell_cmd_exe_escaping() {
         let module = ShellModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("executable".to_string(), serde_json::json!("cmd.exe"));
@@ -543,5 +550,24 @@ mod tests {
 
         // Should be: /bin/sh -c 'echo '\''hello'\'''
         assert_eq!(result, "/bin/sh -c 'echo '\\''hello'\\'''");
+        let cmd = "echo hello & whoami";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+
+        // Should use double quotes for cmd.exe to prevent command injection
+        // Single quotes would allow & to be interpreted as a command separator by cmd.exe
+        assert_eq!(result, "cmd.exe /c \"echo hello & whoami\"");
+    }
+
+    #[test]
+    fn test_shell_cmd_exe_escaping_quotes() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("executable".to_string(), serde_json::json!("cmd.exe"));
+
+        let cmd = "echo \"hello\"";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+
+        // Should escape quotes with ""
+        assert_eq!(result, "cmd.exe /c \"echo \"\"hello\"\"\"");
     }
 }

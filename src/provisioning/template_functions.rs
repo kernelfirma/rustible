@@ -806,8 +806,6 @@ fn gcp_labels_filter(value: Value) -> Result<Value, MiniJinjaError> {
 
 /// Convert a value to HCL format (HashiCorp Configuration Language).
 fn to_hcl_filter(value: Value) -> Result<String, MiniJinjaError> {
-    
-
     fn value_to_hcl(v: &Value, indent: usize) -> String {
         use minijinja::value::ValueKind;
 

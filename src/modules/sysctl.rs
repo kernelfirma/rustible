@@ -468,7 +468,6 @@ impl Module for SysctlModule {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

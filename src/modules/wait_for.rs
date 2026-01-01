@@ -65,6 +65,7 @@ use super::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::utils::get_regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
@@ -173,7 +174,7 @@ impl WaitForConfig {
 
         // Compile regex if provided
         let compiled_regex = if let Some(ref pattern) = search_regex {
-            Some(Regex::new(pattern).map_err(|e| {
+            Some(get_regex(pattern).map_err(|e| {
                 ModuleError::InvalidParameter(format!("Invalid search_regex pattern: {}", e))
             })?)
         } else {

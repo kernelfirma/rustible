@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 use super::cache::GalaxyCache;
 use super::client::GalaxyClient;
 use super::error::{GalaxyError, GalaxyResult};
-use super::integrity::{IntegrityVerifier, ChecksumAlgorithm};
+use super::integrity::{ChecksumAlgorithm, IntegrityVerifier};
 
 /// Information about a role from Galaxy
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +77,11 @@ impl RoleInfo {
     pub fn download_url(&self) -> Option<String> {
         let user = self.github_user.as_ref()?;
         let repo = self.github_repo.as_ref()?;
-        let branch = self.github_branch.as_ref().map(|s| s.as_str()).unwrap_or("master");
+        let branch = self
+            .github_branch
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("master");
 
         Some(format!(
             "https://github.com/{}/{}/archive/{}.tar.gz",
@@ -298,11 +302,7 @@ impl RoleInstaller {
         if role_path.exists() && !self.force {
             if let Ok(installed) = GalaxyRole::from_path(&role_path).await {
                 if version.is_none() || version == installed.version.as_deref() {
-                    info!(
-                        "Role {} already installed at {}",
-                        name,
-                        role_path.display()
-                    );
+                    info!("Role {} already installed at {}", name, role_path.display());
                     return Ok(role_path);
                 }
             }
@@ -312,31 +312,32 @@ impl RoleInstaller {
         let role_info = self.client.get_role_info(name).await?;
 
         // Determine version to install
-        let target_version = version
-            .map(|v| v.to_string())
-            .or_else(|| {
-                role_info
-                    .summary_fields
-                    .as_ref()
-                    .and_then(|sf| sf.versions.first())
-                    .map(|v| v.name.clone())
-            });
+        let target_version = version.map(|v| v.to_string()).or_else(|| {
+            role_info
+                .summary_fields
+                .as_ref()
+                .and_then(|sf| sf.versions.first())
+                .map(|v| v.name.clone())
+        });
 
         let version_str = target_version.as_deref().unwrap_or("latest");
 
         // Try cache first
         if let Some(cached) = self.cache.get_role(name, version_str).await? {
             info!("Using cached role {}-{}", name, version_str);
-            return self.extract_and_install(&cached.path, &dest, owner, role_name).await;
+            return self
+                .extract_and_install(&cached.path, &dest, owner, role_name)
+                .await;
         }
 
         // Get download URL
-        let download_url = role_info.download_url().ok_or_else(|| {
-            GalaxyError::RoleInstallFailed {
-                name: name.to_string(),
-                message: "No download URL available for role".to_string(),
-            }
-        })?;
+        let download_url =
+            role_info
+                .download_url()
+                .ok_or_else(|| GalaxyError::RoleInstallFailed {
+                    name: name.to_string(),
+                    message: "No download URL available for role".to_string(),
+                })?;
 
         // Download role
         info!("Downloading role {}-{}", name, version_str);
@@ -352,14 +353,15 @@ impl RoleInstaller {
             .await?;
 
         // Extract and install
-        self.extract_and_install(&cache_path, &dest, owner, role_name).await
+        self.extract_and_install(&cache_path, &dest, owner, role_name)
+            .await
     }
 
     /// Download a role from URL
     async fn download_role(&self, url: &str) -> GalaxyResult<bytes::Bytes> {
-        let response = reqwest::get(url).await.map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to download role", e)
-        })?;
+        let response = reqwest::get(url)
+            .await
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to download role", e))?;
 
         if !response.status().is_success() {
             return Err(GalaxyError::http_error(format!(
@@ -368,9 +370,10 @@ impl RoleInstaller {
             )));
         }
 
-        let bytes = response.bytes().await.map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to read role data", e)
-        })?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to read role data", e))?;
 
         Ok(bytes)
     }
@@ -399,18 +402,14 @@ impl RoleInstaller {
             self.cache.get_latest_role(name).await?
         };
 
-        let cached = cached.ok_or_else(|| {
-            GalaxyError::NoCachedVersion {
-                name: name.to_string(),
-            }
+        let cached = cached.ok_or_else(|| GalaxyError::NoCachedVersion {
+            name: name.to_string(),
         })?;
 
-        info!(
-            "Installing cached role {}-{}",
-            name, cached.version
-        );
+        info!("Installing cached role {}-{}", name, cached.version);
 
-        self.extract_and_install(&cached.path, &dest, owner, role_name).await
+        self.extract_and_install(&cached.path, &dest, owner, role_name)
+            .await
     }
 
     /// Extract a role tarball and install it
@@ -441,12 +440,12 @@ impl RoleInstaller {
 
         // Extract to temp directory first
         let temp_dir = tempfile::tempdir()?;
-        archive.unpack(temp_dir.path()).map_err(|e| {
-            GalaxyError::ExtractionFailed {
+        archive
+            .unpack(temp_dir.path())
+            .map_err(|e| GalaxyError::ExtractionFailed {
                 path: tarball.to_path_buf(),
                 message: e.to_string(),
-            }
-        })?;
+            })?;
 
         // Find the extracted directory (usually repo-branch or similar)
         let mut entries = std::fs::read_dir(temp_dir.path())?;

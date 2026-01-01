@@ -9,15 +9,15 @@
 //! - Multi-server support
 //! - Authentication token management
 
-use std::time::Duration;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::config::{GalaxyConfig, GalaxyServer};
-use super::error::{GalaxyError, GalaxyResult};
 use super::collection::{CollectionInfo, CollectionVersion};
+use super::error::{GalaxyError, GalaxyResult};
 use super::role::RoleInfo;
+use crate::config::{GalaxyConfig, GalaxyServer};
 
 /// Default Galaxy API server URL
 pub const DEFAULT_GALAXY_SERVER: &str = "https://galaxy.ansible.com";
@@ -174,9 +174,9 @@ impl GalaxyClient {
             builder = builder.danger_accept_invalid_certs(true);
         }
 
-        let client = builder.build().map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to create HTTP client", e)
-        })?;
+        let client = builder
+            .build()
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to create HTTP client", e))?;
 
         Ok(Self { client, config })
     }
@@ -197,16 +197,16 @@ impl GalaxyClient {
     }
 
     /// Make a request with retry logic and optional server fallback
-    async fn request_with_retry(
-        &self,
-        path: &str,
-        server: Option<&str>,
-    ) -> GalaxyResult<Response> {
+    async fn request_with_retry(&self, path: &str, server: Option<&str>) -> GalaxyResult<Response> {
         let base_url = server.unwrap_or(&self.config.server_url);
         let url = if path.starts_with("http://") || path.starts_with("https://") {
             path.to_string()
         } else {
-            format!("{}/{}", base_url.trim_end_matches('/'), path.trim_start_matches('/'))
+            format!(
+                "{}/{}",
+                base_url.trim_end_matches('/'),
+                path.trim_start_matches('/')
+            )
         };
 
         let mut last_error = None;
@@ -270,10 +270,8 @@ impl GalaxyClient {
 
                     // Handle server errors (5xx) - these should be retried
                     if status.is_server_error() {
-                        last_error = Some(GalaxyError::http_error(format!(
-                            "Server error: {}",
-                            status
-                        )));
+                        last_error =
+                            Some(GalaxyError::http_error(format!("Server error: {}", status)));
                         retry_count += 1;
                         continue;
                     }
@@ -300,7 +298,10 @@ impl GalaxyClient {
         // All retries exhausted, try fallback servers
         for server in &self.config.servers {
             info!("Trying fallback server: {}", server.url);
-            match self.request_with_retry_single(&url, &server.url, server.token.as_deref()).await {
+            match self
+                .request_with_retry_single(&url, &server.url, server.token.as_deref())
+                .await
+            {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     warn!("Fallback server {} failed: {}", server.url, e);
@@ -309,7 +310,8 @@ impl GalaxyClient {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| GalaxyError::http_error("Request failed after all retries")))
+        Err(last_error
+            .unwrap_or_else(|| GalaxyError::http_error("Request failed after all retries")))
     }
 
     /// Make a single request to a specific server without retry
@@ -319,7 +321,11 @@ impl GalaxyClient {
         server_url: &str,
         token: Option<&str>,
     ) -> GalaxyResult<Response> {
-        let url = format!("{}/{}", server_url.trim_end_matches('/'), path.trim_start_matches('/'));
+        let url = format!(
+            "{}/{}",
+            server_url.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
 
         let mut request = self.client.get(&url);
 
@@ -370,7 +376,10 @@ impl GalaxyClient {
     }
 
     /// List available versions for a collection
-    pub async fn list_collection_versions(&self, name: &str) -> GalaxyResult<Vec<CollectionVersion>> {
+    pub async fn list_collection_versions(
+        &self,
+        name: &str,
+    ) -> GalaxyResult<Vec<CollectionVersion>> {
         let parts: Vec<&str> = name.split('.').collect();
         if parts.len() != 2 {
             return Err(GalaxyError::InvalidCollectionName {
@@ -398,9 +407,10 @@ impl GalaxyClient {
             )));
         }
 
-        let response_body: CollectionVersionsResponse = response.json().await.map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to parse version list", e)
-        })?;
+        let response_body: CollectionVersionsResponse = response
+            .json()
+            .await
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to parse version list", e))?;
 
         Ok(response_body.data)
     }
@@ -441,18 +451,16 @@ impl GalaxyClient {
             )));
         }
 
-        let version_info: CollectionVersion = response.json().await.map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to parse version info", e)
-        })?;
+        let version_info: CollectionVersion = response
+            .json()
+            .await
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to parse version info", e))?;
 
         Ok(version_info)
     }
 
     /// Download a collection artifact
-    pub async fn download_collection(
-        &self,
-        download_url: &str,
-    ) -> GalaxyResult<bytes::Bytes> {
+    pub async fn download_collection(&self, download_url: &str) -> GalaxyResult<bytes::Bytes> {
         let response = self.get(download_url).await?;
 
         if !response.status().is_success() {
@@ -495,9 +503,10 @@ impl GalaxyClient {
             )));
         }
 
-        let response_body: RoleSearchResponse = response.json().await.map_err(|e| {
-            GalaxyError::http_error_with_source("Failed to parse role info", e)
-        })?;
+        let response_body: RoleSearchResponse = response
+            .json()
+            .await
+            .map_err(|e| GalaxyError::http_error_with_source("Failed to parse role info", e))?;
 
         response_body
             .results
@@ -531,10 +540,7 @@ impl GalaxyClient {
 
     /// Search for roles
     pub async fn search_roles(&self, query: &str) -> GalaxyResult<Vec<RoleInfo>> {
-        let url = format!(
-            "api/v1/search/roles/?search={}",
-            urlencoding::encode(query)
-        );
+        let url = format!("api/v1/search/roles/?search={}", urlencoding::encode(query));
 
         let response = self.get(&url).await?;
 
