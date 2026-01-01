@@ -117,6 +117,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::connection::ConnectionFactory;
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::playbook::{Play, Playbook};
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
@@ -381,6 +382,8 @@ pub struct Executor {
     semaphore: Arc<Semaphore>,
     parallelization_manager: Arc<ParallelizationManager>,
     recovery_manager: Option<Arc<RecoveryManager>>,
+    /// Connection factory for remote execution
+    connection_factory: Option<Arc<ConnectionFactory>>,
 }
 
 impl Executor {
@@ -395,6 +398,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
+            connection_factory: None,
         }
     }
 
@@ -409,6 +413,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
+            connection_factory: None,
         }
     }
 
@@ -416,6 +421,30 @@ impl Executor {
     pub fn with_recovery_manager(mut self, recovery_manager: Arc<RecoveryManager>) -> Self {
         self.recovery_manager = Some(recovery_manager);
         self
+    }
+
+    /// Set the connection factory for remote execution
+    pub fn with_connection_factory(mut self, factory: ConnectionFactory) -> Self {
+        self.connection_factory = Some(Arc::new(factory));
+        self
+    }
+
+    /// Get a connection for a host from the connection factory
+    async fn get_connection_for_host(
+        &self,
+        host: &str,
+    ) -> Option<Arc<dyn crate::connection::Connection + Send + Sync>> {
+        if let Some(factory) = &self.connection_factory {
+            match factory.get_connection(host).await {
+                Ok(conn) => Some(conn),
+                Err(e) => {
+                    warn!("Failed to get connection for host {}: {}", host, e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
     }
 
     /// Run a complete playbook
@@ -869,15 +898,23 @@ impl Executor {
                 unreachable: false,
             };
 
+            // Get connection for host once before running tasks
+            let host_connection = self.get_connection_for_host(&host).await;
+
             for task in tasks {
                 if host_result.failed || host_result.unreachable {
                     break;
                 }
 
-                let ctx = ExecutionContext::new(host.clone())
+                let mut ctx = ExecutionContext::new(host.clone())
                     .with_check_mode(self.config.check_mode)
                     .with_diff_mode(self.config.diff_mode)
                     .with_verbosity(self.config.verbosity);
+
+                // Set connection if available
+                if let Some(ref conn) = host_connection {
+                    ctx = ctx.with_connection(conn.clone());
+                }
 
                 let task_result = task
                     .execute(
@@ -968,6 +1005,7 @@ impl Executor {
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
                 let recovery_manager = self.recovery_manager.clone();
+                let connection_factory = self.connection_factory.clone();
                 let tx_id = tx_id.clone();
 
                 tokio::spawn(async move {
@@ -980,15 +1018,33 @@ impl Executor {
                         unreachable: false,
                     };
 
+                    // Get connection for host
+                    let host_connection = if let Some(ref factory) = connection_factory {
+                        match factory.get_connection(&host).await {
+                            Ok(conn) => Some(conn),
+                            Err(e) => {
+                                warn!("Failed to get connection for host {}: {}", host, e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
                     for task in tasks.iter() {
                         if host_result.failed || host_result.unreachable {
                             break;
                         }
 
-                        let ctx = ExecutionContext::new(host.clone())
+                        let mut ctx = ExecutionContext::new(host.clone())
                             .with_check_mode(check_mode)
                             .with_diff_mode(diff_mode)
                             .with_verbosity(verbosity);
+
+                        // Set connection if available
+                        if let Some(ref conn) = host_connection {
+                            ctx = ctx.with_connection(conn.clone());
+                        }
 
                         let task_result = task
                             .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
@@ -1200,10 +1256,18 @@ impl Executor {
             let host = &hosts[0];
             let _permit = self.semaphore.acquire().await.unwrap();
 
-            let ctx = ExecutionContext::new(host.clone())
+            // Get connection for host
+            let host_connection = self.get_connection_for_host(host).await;
+
+            let mut ctx = ExecutionContext::new(host.clone())
                 .with_check_mode(self.config.check_mode)
                 .with_diff_mode(self.config.diff_mode)
                 .with_verbosity(self.config.verbosity);
+
+            // Set connection if available
+            if let Some(conn) = host_connection {
+                ctx = ctx.with_connection(conn);
+            }
 
             let result = task
                 .execute(
@@ -1287,14 +1351,33 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization = Arc::clone(&self.parallelization_manager);
+                let connection_factory = self.connection_factory.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
 
-                    let ctx = ExecutionContext::new(host.clone())
+                    // Get connection for host
+                    let host_connection = if let Some(ref factory) = connection_factory {
+                        match factory.get_connection(&host).await {
+                            Ok(conn) => Some(conn),
+                            Err(e) => {
+                                warn!("Failed to get connection for host {}: {}", host, e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let mut ctx = ExecutionContext::new(host.clone())
                         .with_check_mode(check_mode)
                         .with_diff_mode(diff_mode)
                         .with_verbosity(verbosity);
+
+                    // Set connection if available
+                    if let Some(conn) = host_connection {
+                        ctx = ctx.with_connection(conn);
+                    }
 
                     let result = task
                         .execute(&ctx, &runtime, &handlers, &notified, &parallelization)

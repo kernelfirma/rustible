@@ -610,8 +610,10 @@ impl ConnectionFactory {
         let conn_type = self.resolve_connection_type(host)?;
         let pool_key = conn_type.pool_key();
 
-        // Try to get from pool first
-        if let Some(conn) = self.pool.write().get(&pool_key) {
+        // Try to get from pool first - release lock before await
+        let pooled_conn = { self.pool.write().get(&pool_key) };
+
+        if let Some(conn) = pooled_conn {
             if conn.is_alive().await {
                 return Ok(conn);
             }
