@@ -1165,7 +1165,7 @@ impl Task {
     async fn execute_gather_facts(
         &self,
         args: &IndexMap<String, JsonValue>,
-        _ctx: &ExecutionContext,
+        ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
         use crate::modules::{Module, ModuleContext};
 
@@ -1179,6 +1179,43 @@ impl Task {
                     .collect::<Vec<_>>()
             });
 
+        // Check if we have a remote connection - if so, gather facts remotely
+        if let Some(ref connection) = ctx.connection {
+            debug!(
+                host = %ctx.host,
+                "Gathering facts remotely via connection"
+            );
+
+            // Gather facts via the connection
+            let facts = crate::modules::facts::gather_facts_via_connection(
+                connection,
+                gather_subset.as_deref(),
+            )
+            .await;
+
+            let mut result = TaskResult::ok();
+            result.msg = Some("Facts gathered successfully (remote)".to_string());
+
+            // Wrap facts in ansible_facts key for compatibility
+            let mut data = std::collections::HashMap::new();
+            let facts_json: serde_json::Map<String, serde_json::Value> =
+                facts.into_iter().collect();
+            data.insert(
+                "ansible_facts".to_string(),
+                serde_json::Value::Object(facts_json),
+            );
+
+            result.result = Some(serde_json::to_value(&data).unwrap_or_default());
+
+            return Ok(result);
+        }
+
+        // No connection or local connection - use local facts gathering
+        debug!(
+            host = %ctx.host,
+            "Gathering facts locally"
+        );
+
         // Convert args to ModuleParams
         let mut params: std::collections::HashMap<String, serde_json::Value> =
             std::collections::HashMap::new();
@@ -1187,9 +1224,9 @@ impl Task {
         }
 
         // Create module context
-        let module_ctx = ModuleContext::default().with_verbosity(_ctx.verbosity);
+        let module_ctx = ModuleContext::default().with_verbosity(ctx.verbosity);
 
-        // Execute the facts module
+        // Execute the facts module locally
         let facts_module = crate::modules::facts::FactsModule;
         match facts_module.execute(&params, &module_ctx) {
             Ok(output) => {
