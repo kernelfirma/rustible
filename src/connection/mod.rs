@@ -393,6 +393,18 @@ impl ExecuteOptions {
         self.escalate_user = user;
         self
     }
+
+    /// Set the privilege escalation method
+    pub fn with_escalate_method(mut self, method: impl Into<String>) -> Self {
+        self.escalate_method = Some(method.into());
+        self
+    }
+
+    /// Set the privilege escalation password
+    pub fn with_escalate_password(mut self, password: impl Into<String>) -> Self {
+        self.escalate_password = Some(password.into());
+        self
+    }
 }
 
 /// Options for file transfer

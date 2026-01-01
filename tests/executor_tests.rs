@@ -48,6 +48,7 @@ fn test_executor_config_custom() {
         task_timeout: 600,
         gather_facts: false,
         extra_vars,
+        ..Default::default()
     };
 
     assert_eq!(config.forks, 10);

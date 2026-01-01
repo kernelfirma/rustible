@@ -1137,6 +1137,10 @@ pub fn test_executor_config() -> ExecutorConfig {
         task_timeout: 30,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        r#become: false,
+        become_method: "sudo".to_string(),
+        become_user: "root".to_string(),
+        become_password: None,
     }
 }
 
@@ -1151,6 +1155,10 @@ pub fn test_check_mode_config() -> ExecutorConfig {
         task_timeout: 30,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        r#become: false,
+        become_method: "sudo".to_string(),
+        become_user: "root".to_string(),
+        become_password: None,
     }
 }
 

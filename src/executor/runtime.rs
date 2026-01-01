@@ -215,6 +215,14 @@ pub struct ExecutionContext {
     pub connection: Option<Arc<dyn Connection + Send + Sync>>,
     /// Python interpreter path on remote host
     pub python_interpreter: String,
+    /// Whether to run with privilege escalation
+    pub r#become: bool,
+    /// Method for privilege escalation (sudo, su, etc.)
+    pub become_method: String,
+    /// User to become when escalating privileges
+    pub become_user: String,
+    /// Password for privilege escalation
+    pub become_password: Option<String>,
 }
 
 impl std::fmt::Debug for ExecutionContext {
@@ -229,6 +237,10 @@ impl std::fmt::Debug for ExecutionContext {
                 &self.connection.as_ref().map(|c| c.identifier()),
             )
             .field("python_interpreter", &self.python_interpreter)
+            .field("become", &self.r#become)
+            .field("become_method", &self.become_method)
+            .field("become_user", &self.become_user)
+            .field("become_password", &"<hidden>")
             .finish()
     }
 }
@@ -242,6 +254,10 @@ impl ExecutionContext {
             verbosity: 0,
             connection: None,
             python_interpreter: "/usr/bin/python3".to_string(),
+            r#become: false,
+            become_method: "sudo".to_string(),
+            become_user: "root".to_string(),
+            become_password: None,
         }
     }
 
@@ -269,6 +285,30 @@ impl ExecutionContext {
     /// Set the Python interpreter path
     pub fn with_python_interpreter(mut self, path: impl Into<String>) -> Self {
         self.python_interpreter = path.into();
+        self
+    }
+
+    /// Enable privilege escalation
+    pub fn with_become(mut self, value: bool) -> Self {
+        self.r#become = value;
+        self
+    }
+
+    /// Set the privilege escalation method
+    pub fn with_become_method(mut self, method: impl Into<String>) -> Self {
+        self.become_method = method.into();
+        self
+    }
+
+    /// Set the user to become
+    pub fn with_become_user(mut self, user: impl Into<String>) -> Self {
+        self.become_user = user.into();
+        self
+    }
+
+    /// Set the privilege escalation password
+    pub fn with_become_password(mut self, password: Option<String>) -> Self {
+        self.become_password = password;
         self
     }
 }

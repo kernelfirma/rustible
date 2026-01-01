@@ -581,6 +581,7 @@ fn test_executor_creation_performance() {
             task_timeout: 300,
             gather_facts: false,
             extra_vars: HashMap::new(),
+        ..Default::default()
         };
         let _ = Executor::new(config);
     }

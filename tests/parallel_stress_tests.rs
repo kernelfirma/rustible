@@ -142,6 +142,7 @@ async fn test_linear_strategy_task_ordering() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let start = Instant::now();
@@ -205,6 +206,7 @@ async fn test_free_strategy_independent_execution() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let start = Instant::now();
@@ -275,6 +277,7 @@ async fn test_host_pinned_strategy_affinity() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
@@ -336,6 +339,7 @@ async fn test_fork_limit_enforcement() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let start = Instant::now();
@@ -409,6 +413,7 @@ async fn test_fork_limit_with_different_values() {
             task_timeout: 60,
             gather_facts: false,
             extra_vars: HashMap::new(),
+        ..Default::default()
         };
 
         let start = Instant::now();
@@ -477,6 +482,7 @@ async fn test_serial_execution_batching() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
@@ -556,6 +562,7 @@ async fn test_handler_deduplication_parallel() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
@@ -619,6 +626,7 @@ async fn test_high_host_count_stress() {
         task_timeout: 60,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let start = Instant::now();
@@ -681,6 +689,7 @@ async fn test_many_tasks_stress() {
         task_timeout: 120,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let start = Instant::now();
@@ -815,6 +824,7 @@ async fn test_partial_host_failure() {
         task_timeout: 10, // Short timeout for unreachable host
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
@@ -879,6 +889,7 @@ async fn test_max_fail_percentage() {
         task_timeout: 5,
         gather_facts: false,
         extra_vars: HashMap::new(),
+        ..Default::default()
     };
 
     // With 5 hosts and 2 unreachable (40%), we exceed 30% threshold
