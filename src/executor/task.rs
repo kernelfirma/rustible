@@ -40,6 +40,7 @@ static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
+use crate::modules::ModuleRegistry;
 
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -479,7 +480,7 @@ impl Task {
     }
 
     /// Execute the task
-    #[instrument(skip(self, ctx, runtime, handlers, notified, parallelization_manager), fields(task_name = %self.name, host = %ctx.host))]
+    #[instrument(skip(self, ctx, runtime, handlers, notified, parallelization_manager, module_registry), fields(task_name = %self.name, host = %ctx.host))]
     pub async fn execute(
         &self,
         ctx: &ExecutionContext,
@@ -487,6 +488,7 @@ impl Task {
         handlers: &Arc<RwLock<HashMap<String, Handler>>>,
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         info!("Executing task: {}", self.name);
 
@@ -543,6 +545,7 @@ impl Task {
                     handlers,
                     notified,
                     parallelization_manager,
+                    module_registry,
                 )
                 .await;
         }
@@ -562,6 +565,7 @@ impl Task {
                 handlers,
                 notified,
                 parallelization_manager,
+                module_registry,
             )
             .await?
         } else {
@@ -571,6 +575,7 @@ impl Task {
                 handlers,
                 notified,
                 parallelization_manager,
+                module_registry,
             )
             .await?
         };
@@ -642,6 +647,7 @@ impl Task {
         handlers: &Arc<RwLock<HashMap<String, Handler>>>,
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         let total_items = items.len();
         debug!("Executing loop with {} items", total_items);
@@ -722,7 +728,7 @@ impl Task {
 
             // Execute for this item with parallelization enforcement
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager)
+                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
                 .await?;
 
             // Extract and store ansible_facts from module results in loops
@@ -812,6 +818,7 @@ impl Task {
         handlers: &Arc<RwLock<HashMap<String, Handler>>>,
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         let max_retries = self.retries.unwrap_or(3);
         let delay_seconds = self.delay.unwrap_or(5);
@@ -831,7 +838,7 @@ impl Task {
 
             // Execute the module
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager)
+                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
                 .await?;
 
             // Extract and store ansible_facts from module results during retries
@@ -906,6 +913,7 @@ impl Task {
         handlers: &Arc<RwLock<HashMap<String, Handler>>>,
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         // Template the arguments
         let args = self.template_args(ctx, runtime).await?;
@@ -913,10 +921,9 @@ impl Task {
         debug!("Module: {}, Args: {:?}", self.module, args);
 
         // Enforce parallelization constraints based on module hint
-        // Get the module's parallelization hint from the registry
+        // Get the module's parallelization hint from the shared registry (avoids rebuilding)
         let hint = {
-            let registry = crate::modules::ModuleRegistry::with_builtins();
-            if let Some(module) = registry.get(&self.module) {
+            if let Some(module) = module_registry.get(&self.module) {
                 module.parallelization_hint()
             } else {
                 // For unknown modules (Python fallback), use FullyParallel as default
@@ -935,9 +942,9 @@ impl Task {
             "debug" => self.execute_debug(&args, ctx).await,
             "set_fact" => self.execute_set_fact(&args, ctx, runtime).await,
             "command" | "shell" => self.execute_command(&args, ctx, runtime).await,
-            "copy" => self.execute_copy(&args, ctx, runtime).await,
-            "file" => self.execute_file(&args, ctx).await,
-            "template" => self.execute_template(&args, ctx, runtime).await,
+            "copy" => self.execute_copy(&args, ctx, runtime, module_registry).await,
+            "file" => self.execute_file(&args, ctx, module_registry).await,
+            "template" => self.execute_template(&args, ctx, runtime, module_registry).await,
             "package" | "apt" | "yum" | "dnf" => self.execute_package(&args, ctx).await,
             "service" | "systemd" => self.execute_service(&args, ctx).await,
             "user" => self.execute_user(&args, ctx).await,
@@ -958,6 +965,7 @@ impl Task {
                     handlers,
                     notified,
                     parallelization_manager,
+                    module_registry,
                 )
                 .await
             }
@@ -1280,6 +1288,7 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
         runtime: &Arc<RwLock<RuntimeContext>>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         // Convert args to ModuleParams
         let params: std::collections::HashMap<String, serde_json::Value> =
@@ -1309,8 +1318,7 @@ impl Task {
                     connection: ctx.connection.clone(),
                 };
 
-                let registry = crate::modules::ModuleRegistry::with_builtins();
-                let module = registry.get("template").ok_or_else(|| {
+                let module = module_registry.get("template").ok_or_else(|| {
                     ExecutorError::ModuleNotFound("template module not found in registry".into())
                 })?;
 
@@ -1350,9 +1358,8 @@ impl Task {
             connection: ctx.connection.clone(),
         };
 
-        // Get the copy module from registry and execute
-        let registry = crate::modules::ModuleRegistry::with_builtins();
-        let module = registry.get("copy").ok_or_else(|| {
+        // Get the copy module from shared registry and execute
+        let module = module_registry.get("copy").ok_or_else(|| {
             ExecutorError::ModuleNotFound("copy module not found in registry".into())
         })?;
 
@@ -1377,6 +1384,7 @@ impl Task {
         &self,
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         // Convert args to ModuleParams
         let params: std::collections::HashMap<String, serde_json::Value> =
@@ -1396,9 +1404,8 @@ impl Task {
             connection: ctx.connection.clone(),
         };
 
-        // Get the file module from registry and execute
-        let registry = crate::modules::ModuleRegistry::with_builtins();
-        let module = registry.get("file").ok_or_else(|| {
+        // Get the file module from shared registry and execute
+        let module = module_registry.get("file").ok_or_else(|| {
             ExecutorError::ModuleNotFound("file module not found in registry".into())
         })?;
 
@@ -1424,6 +1431,7 @@ impl Task {
         args: &IndexMap<String, JsonValue>,
         ctx: &ExecutionContext,
         runtime: &Arc<RwLock<RuntimeContext>>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         // Convert args to ModuleParams
         let params: std::collections::HashMap<String, serde_json::Value> =
@@ -1449,9 +1457,8 @@ impl Task {
             connection: ctx.connection.clone(),
         };
 
-        // Get the template module from registry and execute
-        let registry = crate::modules::ModuleRegistry::with_builtins();
-        let module = registry.get("template").ok_or_else(|| {
+        // Get the template module from shared registry and execute
+        let module = module_registry.get("template").ok_or_else(|| {
             ExecutorError::ModuleNotFound("template module not found in registry".into())
         })?;
 
@@ -2011,6 +2018,7 @@ impl Task {
         handlers: &Arc<RwLock<HashMap<String, Handler>>>,
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
     ) -> ExecutorResult<TaskResult> {
         let file = args
             .get("file")
@@ -2061,6 +2069,7 @@ impl Task {
                 handlers,
                 notified,
                 parallelization_manager,
+                module_registry,
             ))
             .await?;
 
