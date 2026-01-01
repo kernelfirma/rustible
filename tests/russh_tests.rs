@@ -1491,7 +1491,8 @@ mod integration_tests {
         for i in 0..5 {
             let c = conn.clone();
             handles.push(tokio::spawn(async move {
-                c.execute(&format!("sleep 1 && echo done_{}", i), None).await
+                c.execute(&format!("sleep 1 && echo done_{}", i), None)
+                    .await
             }));
         }
 
