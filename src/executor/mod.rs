@@ -122,6 +122,7 @@ use crate::executor::parallelization::ParallelizationManager;
 // Play and Playbook are pub use'd above
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
 use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 /// Errors that can occur during playbook and task execution.
@@ -408,6 +409,8 @@ pub struct Executor {
     semaphore: Arc<Semaphore>,
     parallelization_manager: Arc<ParallelizationManager>,
     recovery_manager: Option<Arc<RecoveryManager>>,
+    /// Shared module registry - created once per executor to avoid hot path overhead
+    module_registry: Arc<ModuleRegistry>,
 }
 
 impl Executor {
@@ -422,6 +425,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
+            module_registry: Arc::new(ModuleRegistry::with_builtins()),
         }
     }
 
@@ -436,6 +440,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
+            module_registry: Arc::new(ModuleRegistry::with_builtins()),
         }
     }
 
@@ -922,6 +927,7 @@ impl Executor {
                         &self.handlers,
                         &self.notified_handlers,
                         &self.parallelization_manager,
+                        &self.module_registry,
                     )
                     .await;
 
@@ -1007,6 +1013,7 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
+                let module_registry = Arc::clone(&self.module_registry);
                 let recovery_manager = self.recovery_manager.clone();
                 let tx_id = tx_id.clone();
                 let config_become = config_become;
@@ -1044,7 +1051,7 @@ impl Executor {
                             .with_become_password(config_become_password.clone());
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
+                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry)
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1274,6 +1281,7 @@ impl Executor {
                     &self.handlers,
                     &self.notified_handlers,
                     &self.parallelization_manager,
+                    &self.module_registry,
                 )
                 .await;
 
@@ -1358,6 +1366,7 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization = Arc::clone(&self.parallelization_manager);
+                let module_registry = Arc::clone(&self.module_registry);
                 let effective_become = effective_become;
                 let config_become_method = config_become_method.clone();
                 let effective_become_user = effective_become_user.clone();
@@ -1376,7 +1385,7 @@ impl Executor {
                         .with_become_password(config_become_password);
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
                         .await;
 
                     match result {
