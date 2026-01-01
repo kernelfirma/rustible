@@ -107,6 +107,7 @@ pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
 pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
+pub use playbook::{Play, Playbook};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -119,7 +120,6 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::connection::ConnectionFactory;
 use crate::executor::parallelization::ParallelizationManager;
-use crate::executor::playbook::{Play, Playbook};
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
 use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
