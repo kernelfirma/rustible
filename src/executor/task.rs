@@ -148,23 +148,67 @@ impl TaskResult {
     }
 
     /// Convert to RegisteredResult
+    ///
+    /// Extracts data from `self.result` if available, falling back to the
+    /// explicit stdout/stderr parameters. This ensures module output data
+    /// (rc, stdout, stderr, module-specific fields) is preserved for register.
     pub fn to_registered(
         &self,
         stdout: Option<String>,
         stderr: Option<String>,
     ) -> RegisteredResult {
+        // Try to extract fields from self.result if it contains module output data
+        let (rc, result_stdout, result_stderr, data) = if let Some(ref result) = self.result {
+            if let Some(obj) = result.as_object() {
+                let rc = obj.get("rc").and_then(|v| v.as_i64()).map(|v| v as i32);
+                let result_stdout = obj.get("stdout").and_then(|v| v.as_str()).map(String::from);
+                let result_stderr = obj.get("stderr").and_then(|v| v.as_str()).map(String::from);
+
+                // Collect module-specific data (excluding standard fields)
+                let mut data = IndexMap::new();
+                for (key, value) in obj {
+                    // Skip standard RegisteredResult fields
+                    if !matches!(
+                        key.as_str(),
+                        "changed"
+                            | "failed"
+                            | "skipped"
+                            | "rc"
+                            | "stdout"
+                            | "stdout_lines"
+                            | "stderr"
+                            | "stderr_lines"
+                            | "msg"
+                            | "results"
+                    ) {
+                        data.insert(key.clone(), value.clone());
+                    }
+                }
+
+                (rc, result_stdout, result_stderr, data)
+            } else {
+                (None, None, None, IndexMap::new())
+            }
+        } else {
+            (None, None, None, IndexMap::new())
+        };
+
+        // Use result data if available, otherwise fall back to explicit parameters
+        let final_stdout = result_stdout.or(stdout);
+        let final_stderr = result_stderr.or(stderr);
+
         RegisteredResult {
             changed: self.changed,
             failed: self.status == TaskStatus::Failed,
             skipped: self.status == TaskStatus::Skipped,
-            rc: None,
-            stdout: stdout.clone(),
-            stdout_lines: stdout.map(|s| s.lines().map(String::from).collect()),
-            stderr: stderr.clone(),
-            stderr_lines: stderr.map(|s| s.lines().map(String::from).collect()),
+            rc,
+            stdout: final_stdout.clone(),
+            stdout_lines: final_stdout.map(|s| s.lines().map(String::from).collect()),
+            stderr: final_stderr.clone(),
+            stderr_lines: final_stderr.map(|s| s.lines().map(String::from).collect()),
             msg: self.msg.clone(),
             results: None,
-            data: IndexMap::new(),
+            data,
         }
     }
 }
@@ -1015,11 +1059,8 @@ impl Task {
                                     TaskResult::ok()
                                 };
                                 result.msg = Some(msg);
-                                if !output.data.is_empty() {
-                                    result.result = Some(
-                                        serde_json::to_value(&output.data).unwrap_or_default(),
-                                    );
-                                }
+                                // Store full module output for register access
+                                result.result = Some(output.to_result_json());
                                 Ok(result)
                             }
                             Err(e) => Err(ExecutorError::RuntimeError(format!(
@@ -1234,10 +1275,8 @@ impl Task {
                 let mut result = TaskResult::ok();
                 result.msg = Some(output.msg.clone());
 
-                // Include ansible_facts in the result so they can be stored
-                if !output.data.is_empty() {
-                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
-                }
+                // Store full module output for register access (includes ansible_facts)
+                result.result = Some(output.to_result_json());
 
                 Ok(result)
             }
@@ -1367,11 +1406,9 @@ impl Task {
                         } else {
                             TaskResult::ok()
                         };
-                        result.msg = Some(output.msg);
-                        if !output.data.is_empty() {
-                            result.result =
-                                Some(serde_json::to_value(&output.data).unwrap_or_default());
-                        }
+                        result.msg = Some(output.msg.clone());
+                        // Store full module output for register access
+                        result.result = Some(output.to_result_json());
                         Ok(result)
                     }
                     Err(e) => Ok(TaskResult::failed(format!(
@@ -1408,10 +1445,9 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg);
-                if !output.data.is_empty() {
-                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
-                }
+                result.msg = Some(output.msg.clone());
+                // Store full module output for register access
+                result.result = Some(output.to_result_json());
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("copy module failed: {}", e))),
@@ -1454,10 +1490,9 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg);
-                if !output.data.is_empty() {
-                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
-                }
+                result.msg = Some(output.msg.clone());
+                // Store full module output for register access
+                result.result = Some(output.to_result_json());
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("file module failed: {}", e))),
@@ -1507,10 +1542,9 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg);
-                if !output.data.is_empty() {
-                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
-                }
+                result.msg = Some(output.msg.clone());
+                // Store full module output for register access
+                result.result = Some(output.to_result_json());
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("template module failed: {}", e))),
@@ -2691,5 +2725,152 @@ mod tests {
         assert!(is_truthy(&JsonValue::String("hello".to_string())));
         assert!(!is_truthy(&JsonValue::Array(vec![])));
         assert!(is_truthy(&JsonValue::Array(vec![JsonValue::Null])));
+    }
+
+    #[test]
+    fn test_to_registered_extracts_rc_stdout_stderr_from_result() {
+        // Simulate a command module result stored in TaskResult.result
+        let mut result = TaskResult::changed();
+        result.result = Some(serde_json::json!({
+            "rc": 0,
+            "stdout": "Hello, World!",
+            "stderr": "warning: deprecated",
+            "changed": true,
+            "custom_field": "custom_value"
+        }));
+
+        let registered = result.to_registered(None, None);
+
+        // Verify standard fields are extracted
+        assert_eq!(registered.rc, Some(0));
+        assert_eq!(registered.stdout, Some("Hello, World!".to_string()));
+        assert_eq!(registered.stderr, Some("warning: deprecated".to_string()));
+        assert_eq!(
+            registered.stdout_lines,
+            Some(vec!["Hello, World!".to_string()])
+        );
+        assert_eq!(
+            registered.stderr_lines,
+            Some(vec!["warning: deprecated".to_string()])
+        );
+        assert!(registered.changed);
+
+        // Verify custom data is preserved
+        assert_eq!(
+            registered.data.get("custom_field"),
+            Some(&JsonValue::String("custom_value".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_to_registered_multiline_stdout() {
+        let mut result = TaskResult::ok();
+        result.result = Some(serde_json::json!({
+            "stdout": "line1\nline2\nline3",
+            "rc": 0
+        }));
+
+        let registered = result.to_registered(None, None);
+
+        assert_eq!(
+            registered.stdout_lines,
+            Some(vec![
+                "line1".to_string(),
+                "line2".to_string(),
+                "line3".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn test_to_registered_fallback_to_explicit_params() {
+        // When self.result is None, use explicit stdout/stderr params
+        let result = TaskResult::ok();
+
+        let registered = result.to_registered(
+            Some("explicit stdout".to_string()),
+            Some("explicit stderr".to_string()),
+        );
+
+        assert_eq!(registered.stdout, Some("explicit stdout".to_string()));
+        assert_eq!(registered.stderr, Some("explicit stderr".to_string()));
+        assert_eq!(registered.rc, None); // No result, no rc
+    }
+
+    #[test]
+    fn test_to_registered_result_takes_precedence() {
+        // When self.result has stdout/stderr, it takes precedence
+        let mut result = TaskResult::ok();
+        result.result = Some(serde_json::json!({
+            "stdout": "from result",
+            "stderr": "from result error"
+        }));
+
+        let registered = result.to_registered(
+            Some("explicit stdout".to_string()),
+            Some("explicit stderr".to_string()),
+        );
+
+        // Result data takes precedence over explicit params
+        assert_eq!(registered.stdout, Some("from result".to_string()));
+        assert_eq!(registered.stderr, Some("from result error".to_string()));
+    }
+
+    #[test]
+    fn test_to_registered_failed_status() {
+        let result = TaskResult::failed("Command failed");
+
+        let registered = result.to_registered(None, None);
+
+        assert!(registered.failed);
+        assert!(!registered.changed);
+        assert_eq!(registered.msg, Some("Command failed".to_string()));
+    }
+
+    #[test]
+    fn test_to_registered_skipped_status() {
+        let result = TaskResult::skipped("Skipped in check mode");
+
+        let registered = result.to_registered(None, None);
+
+        assert!(registered.skipped);
+        assert!(!registered.failed);
+        assert!(!registered.changed);
+    }
+
+    #[test]
+    fn test_to_registered_excludes_standard_fields_from_data() {
+        // Standard RegisteredResult fields should not be duplicated in data
+        let mut result = TaskResult::changed();
+        result.result = Some(serde_json::json!({
+            "changed": true,
+            "failed": false,
+            "skipped": false,
+            "rc": 0,
+            "stdout": "output",
+            "stdout_lines": ["output"],
+            "stderr": "",
+            "stderr_lines": [],
+            "msg": "Success",
+            "results": null,
+            "custom_data": "should_be_in_data"
+        }));
+
+        let registered = result.to_registered(None, None);
+
+        // Standard fields should not be in data
+        assert!(!registered.data.contains_key("changed"));
+        assert!(!registered.data.contains_key("failed"));
+        assert!(!registered.data.contains_key("skipped"));
+        assert!(!registered.data.contains_key("rc"));
+        assert!(!registered.data.contains_key("stdout"));
+        assert!(!registered.data.contains_key("stdout_lines"));
+        assert!(!registered.data.contains_key("stderr"));
+        assert!(!registered.data.contains_key("stderr_lines"));
+        assert!(!registered.data.contains_key("msg"));
+        assert!(!registered.data.contains_key("results"));
+
+        // Custom field should be in data
+        assert!(registered.data.contains_key("custom_data"));
     }
 }

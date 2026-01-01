@@ -491,6 +491,42 @@ impl ModuleOutput {
         self.rc = rc;
         self
     }
+
+    /// Convert to a JSON value suitable for storing in TaskResult.result
+    ///
+    /// This creates a canonical representation that includes all fields
+    /// necessary for proper `register` variable access.
+    pub fn to_result_json(&self) -> serde_json::Value {
+        let mut result = serde_json::json!({
+            "changed": self.changed,
+            "failed": self.status == ModuleStatus::Failed,
+            "skipped": self.status == ModuleStatus::Skipped,
+            "msg": self.msg,
+        });
+
+        if let Some(rc) = self.rc {
+            result["rc"] = serde_json::json!(rc);
+        }
+        if let Some(ref stdout) = self.stdout {
+            result["stdout"] = serde_json::json!(stdout);
+            result["stdout_lines"] = serde_json::json!(
+                stdout.lines().map(String::from).collect::<Vec<_>>()
+            );
+        }
+        if let Some(ref stderr) = self.stderr {
+            result["stderr"] = serde_json::json!(stderr);
+            result["stderr_lines"] = serde_json::json!(
+                stderr.lines().map(String::from).collect::<Vec<_>>()
+            );
+        }
+
+        // Add module-specific data
+        for (key, value) in &self.data {
+            result[key] = value.clone();
+        }
+
+        result
+    }
 }
 
 /// Parameters passed to a module
@@ -1087,5 +1123,83 @@ mod tests {
         assert!(validate_package_name("pkg\"name").is_err()); // double quote
         assert!(validate_package_name("pkg>file").is_err()); // redirect
         assert!(validate_package_name("pkg<file").is_err()); // redirect
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_basic() {
+        let output = ModuleOutput::changed("Task completed");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], true);
+        assert_eq!(json["failed"], false);
+        assert_eq!(json["skipped"], false);
+        assert_eq!(json["msg"], "Task completed");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_with_command_output() {
+        let mut output = ModuleOutput::ok("Command executed");
+        output.rc = Some(0);
+        output.stdout = Some("Hello, World!".to_string());
+        output.stderr = Some("warning message".to_string());
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["rc"], 0);
+        assert_eq!(json["stdout"], "Hello, World!");
+        assert_eq!(json["stderr"], "warning message");
+        assert_eq!(json["stdout_lines"], serde_json::json!(["Hello, World!"]));
+        assert_eq!(json["stderr_lines"], serde_json::json!(["warning message"]));
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_multiline() {
+        let mut output = ModuleOutput::ok("Command executed");
+        output.stdout = Some("line1\nline2\nline3".to_string());
+
+        let json = output.to_result_json();
+
+        assert_eq!(
+            json["stdout_lines"],
+            serde_json::json!(["line1", "line2", "line3"])
+        );
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_with_custom_data() {
+        let output = ModuleOutput::changed("File created")
+            .with_data("path", serde_json::json!("/tmp/file.txt"))
+            .with_data("size", serde_json::json!(1024))
+            .with_data("owner", serde_json::json!("root"));
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["path"], "/tmp/file.txt");
+        assert_eq!(json["size"], 1024);
+        assert_eq!(json["owner"], "root");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_failed() {
+        let output = ModuleOutput::failed("Command not found");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], false);
+        assert_eq!(json["failed"], true);
+        assert_eq!(json["skipped"], false);
+        assert_eq!(json["msg"], "Command not found");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_skipped() {
+        let output = ModuleOutput::skipped("Skipped in check mode");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], false);
+        assert_eq!(json["failed"], false);
+        assert_eq!(json["skipped"], true);
     }
 }
