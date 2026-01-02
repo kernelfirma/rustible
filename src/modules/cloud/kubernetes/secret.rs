@@ -172,10 +172,6 @@ impl Module for K8sSecretModule {
         &["name"]
     }
 
-    fn supported_platforms(&self) -> &[&'static str] {
-        &["any"]
-    }
-
     fn execute(
         &self,
         params: &ModuleParams,
@@ -196,9 +192,8 @@ impl Module for K8sSecretModule {
         let mut output = self.execute(params, context)?;
         if output.changed {
             output.diff = Some(Diff::new(
-                format!("Secret {} in namespace {}", config.name, config.namespace),
-                "current state".to_string(),
-                "desired state".to_string(),
+                "current state",
+                format!("Secret {} in namespace {} - desired state", config.name, config.namespace),
             ));
         }
         Ok(output)

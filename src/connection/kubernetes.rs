@@ -73,7 +73,6 @@ impl Default for KubernetesAuth {
 }
 
 /// Kubernetes connection for executing commands inside pods
-#[derive(Debug)]
 pub struct KubernetesConnection {
     /// Kubernetes API client
     client: Client,
@@ -87,6 +86,17 @@ pub struct KubernetesConnection {
     pods_api: Api<Pod>,
     /// Connection identifier for pooling
     identifier: String,
+}
+
+impl std::fmt::Debug for KubernetesConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KubernetesConnection")
+            .field("namespace", &self.namespace)
+            .field("pod", &self.pod)
+            .field("container", &self.container)
+            .field("identifier", &self.identifier)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Clone for KubernetesConnection {
@@ -172,7 +182,7 @@ impl KubernetesConnection {
                     ConnectionError::InvalidConfig(format!("Failed to infer config: {}", e))
                 })?;
                 // Override with bearer token auth header
-                config.auth_info.token = Some(secrecy::SecretString::new(token));
+                config.auth_info.token = Some(token.into());
                 config
             }
         };

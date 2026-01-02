@@ -466,7 +466,7 @@ pub enum SecretType {
 
 impl SecretType {
     pub fn from_str(s: &str) -> ModuleResult<Self> {
-        match s.to_lowercase().replace(['-', '_', '/'], "").as_str() {
+        match s.to_lowercase().replace(['-', '_', '/', '.'], "").as_str() {
             "opaque" => Ok(SecretType::Opaque),
             "dockerconfigjson" | "kubernetesiodockerconfigjson" => Ok(SecretType::DockerConfigJson),
             "basicauth" | "kubernetesiobasicauth" => Ok(SecretType::BasicAuth),

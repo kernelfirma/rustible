@@ -737,6 +737,7 @@ impl ConnectionFactory {
                         namespace.clone(),
                         pod.clone(),
                         container.clone(),
+                        kubernetes::KubernetesAuth::default(),
                     )
                     .await?;
                     Ok(Arc::new(conn))
@@ -982,7 +983,7 @@ impl ConnectionBuilder {
                 #[cfg(feature = "kubernetes")]
                 {
                     let conn =
-                        kubernetes::KubernetesConnection::new(namespace, pod, container).await?;
+                        kubernetes::KubernetesConnection::new(namespace, pod, container, kubernetes::KubernetesAuth::default()).await?;
                     Ok(Arc::new(conn))
                 }
                 #[cfg(not(feature = "kubernetes"))]

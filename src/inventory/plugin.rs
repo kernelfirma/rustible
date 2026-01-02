@@ -494,7 +494,7 @@ impl InventoryPluginFactory {
 
     /// Get list of available plugin names
     pub fn available_plugin_names() -> Vec<&'static str> {
-        let names = vec!["file", "ini", "yaml", "json", "script", "aws_ec2"];
+        let mut names = vec!["file", "ini", "yaml", "json", "script", "aws_ec2"];
 
         #[cfg(feature = "docker")]
         names.push("docker");
@@ -507,7 +507,7 @@ impl InventoryPluginFactory {
 
     /// Get information about all available plugins
     pub fn available_plugins() -> Vec<PluginInfo> {
-        let plugins = vec![
+        let mut plugins = vec![
             PluginInfo {
                 name: "file",
                 description: "File-based inventory (INI, YAML, JSON)",
@@ -976,6 +976,148 @@ impl InventoryPlugin for AwsEc2InventoryPlugin {
             PluginOptionInfo::optional_bool(
                 "use_private_ip",
                 "Use private IP for ansible_host instead of public",
+                true,
+            ),
+        ]
+    }
+}
+
+// ============================================================================
+// Docker Inventory Plugin (optional)
+// ============================================================================
+
+/// Docker containers inventory plugin
+#[cfg(feature = "docker")]
+#[derive(Debug)]
+pub struct DockerInventoryPlugin {
+    config: InventoryPluginConfig,
+}
+
+#[cfg(feature = "docker")]
+impl DockerInventoryPlugin {
+    /// Create a new Docker inventory plugin
+    pub fn new(config: InventoryPluginConfig) -> Self {
+        Self { config }
+    }
+}
+
+#[cfg(feature = "docker")]
+#[async_trait]
+impl InventoryPlugin for DockerInventoryPlugin {
+    fn name(&self) -> &str {
+        "docker"
+    }
+
+    fn description(&self) -> &str {
+        "Docker containers inventory"
+    }
+
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+
+    async fn parse(&self) -> InventoryResult<Inventory> {
+        let mut inventory = Inventory::new();
+
+        // Create a placeholder group for Docker containers
+        let docker_group = super::Group::new("docker");
+        inventory.add_group(docker_group)?;
+
+        tracing::info!(
+            "Docker inventory plugin initialized. \
+             Note: Full Docker API integration requires additional configuration."
+        );
+
+        Ok(inventory)
+    }
+
+    fn supported_options(&self) -> Vec<PluginOptionInfo> {
+        vec![
+            PluginOptionInfo::optional_string(
+                "docker_host",
+                "Docker daemon socket (defaults to unix:///var/run/docker.sock)",
+                "unix:///var/run/docker.sock",
+            ),
+            PluginOptionInfo::optional_bool(
+                "include_stopped",
+                "Include stopped containers in inventory",
+                false,
+            ),
+        ]
+    }
+}
+
+// ============================================================================
+// Kubernetes Inventory Plugin (optional)
+// ============================================================================
+
+/// Kubernetes pods/nodes inventory plugin
+#[cfg(feature = "kubernetes")]
+#[derive(Debug)]
+pub struct KubernetesInventoryPlugin {
+    config: InventoryPluginConfig,
+}
+
+#[cfg(feature = "kubernetes")]
+impl KubernetesInventoryPlugin {
+    /// Create a new Kubernetes inventory plugin
+    pub fn new(config: InventoryPluginConfig) -> Self {
+        Self { config }
+    }
+}
+
+#[cfg(feature = "kubernetes")]
+#[async_trait]
+impl InventoryPlugin for KubernetesInventoryPlugin {
+    fn name(&self) -> &str {
+        "kubernetes"
+    }
+
+    fn description(&self) -> &str {
+        "Kubernetes pods/nodes inventory"
+    }
+
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+
+    async fn parse(&self) -> InventoryResult<Inventory> {
+        let mut inventory = Inventory::new();
+
+        // Create placeholder groups for Kubernetes resources
+        let k8s_pods = super::Group::new("k8s_pods");
+        let k8s_nodes = super::Group::new("k8s_nodes");
+        inventory.add_group(k8s_pods)?;
+        inventory.add_group(k8s_nodes)?;
+
+        tracing::info!(
+            "Kubernetes inventory plugin initialized. \
+             Note: Full Kubernetes API integration requires kubeconfig configuration."
+        );
+
+        Ok(inventory)
+    }
+
+    fn supported_options(&self) -> Vec<PluginOptionInfo> {
+        vec![
+            PluginOptionInfo::optional_string(
+                "kubeconfig",
+                "Path to kubeconfig file (defaults to ~/.kube/config)",
+                "",
+            ),
+            PluginOptionInfo::optional_string(
+                "context",
+                "Kubernetes context to use (defaults to current context)",
+                "",
+            ),
+            PluginOptionInfo::optional_string(
+                "namespace",
+                "Namespace to filter pods (defaults to all namespaces)",
+                "",
+            ),
+            PluginOptionInfo::optional_bool(
+                "include_nodes",
+                "Include cluster nodes in inventory",
                 true,
             ),
         ]

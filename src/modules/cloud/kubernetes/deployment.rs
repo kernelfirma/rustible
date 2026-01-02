@@ -681,12 +681,12 @@ impl K8sDeploymentModule {
                     )
                     .await?
                 } else {
-                    dep
+                    dep.clone()
                 };
 
                 return Ok(ModuleOutput::changed(format!(
                     "Scaled deployment '{}' from {} to {} replicas",
-                    config.name, dep.replicas, config.replicas
+                    config.name, final_dep.replicas, config.replicas
                 ))
                 .with_data("deployment", serde_json::to_value(&final_dep).unwrap()));
             }
