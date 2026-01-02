@@ -81,10 +81,10 @@ impl Inventory {
         // Determine format based on extension
         if path
             .extension()
-            .map_or(false, |ext| ext == "yml" || ext == "yaml")
+            .is_some_and(|ext| ext == "yml" || ext == "yaml")
         {
             Self::parse_yaml(&content)
-        } else if path.extension().map_or(false, |ext| ext == "json") {
+        } else if path.extension().is_some_and(|ext| ext == "json") {
             Self::parse_json(&content)
         } else {
             // Try YAML first, then INI format
@@ -485,15 +485,9 @@ impl ListTasksArgs {
                             .and_then(|t| {
                                 if let Some(s) = t.as_str() {
                                     Some(vec![s.to_string()])
-                                } else if let Some(seq) = t.as_sequence() {
-                                    Some(
-                                        seq.iter()
+                                } else { t.as_sequence().map(|seq| seq.iter()
                                             .filter_map(|v| v.as_str().map(String::from))
-                                            .collect(),
-                                    )
-                                } else {
-                                    None
-                                }
+                                            .collect()) }
                             })
                             .unwrap_or_default();
 

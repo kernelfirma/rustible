@@ -104,9 +104,9 @@ impl CommandContext {
         host_config.user = Some(ansible_user.to_string());
         if let Some(key_path) = ansible_key {
             // Expand ~ to home directory
-            let expanded_path = if key_path.starts_with("~/") {
+            let expanded_path = if let Some(stripped) = key_path.strip_prefix("~/") {
                 if let Some(home) = dirs::home_dir() {
-                    home.join(&key_path[2..]).to_string_lossy().to_string()
+                    home.join(stripped).to_string_lossy().to_string()
                 } else {
                     key_path.to_string()
                 }

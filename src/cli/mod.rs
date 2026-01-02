@@ -75,8 +75,10 @@ pub struct Cli {
 
 /// Output format for CLI
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Default)]
 pub enum OutputFormat {
     /// Human-readable output with colors
+    #[default]
     Human,
     /// JSON output for scripting
     Json,
@@ -86,11 +88,6 @@ pub enum OutputFormat {
     Minimal,
 }
 
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Human
-    }
-}
 
 /// Available subcommands
 #[derive(Subcommand, Debug, Clone)]

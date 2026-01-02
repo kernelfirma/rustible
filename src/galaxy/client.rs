@@ -10,7 +10,7 @@
 //! - Authentication token management
 
 use reqwest::{Client, Response, StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 

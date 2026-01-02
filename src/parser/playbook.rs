@@ -5,7 +5,6 @@
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value as JsonValue;
 use std::path::PathBuf;
 
 /// Helper function to deserialize flexible booleans (yes/no/true/false/1/0)

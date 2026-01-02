@@ -400,14 +400,12 @@ async fn execute_collection_verify(
                     if args.name.is_none() || args.name.as_deref() == Some(&report.artifact) {
                         ctx.output.info(&format!("✓ {} - valid", report.artifact));
                     }
-                } else {
-                    if args.name.is_none() || args.name.as_deref() == Some(&report.artifact) {
-                        ctx.output.error(&format!(
-                            "✗ {} - invalid: {:?}",
-                            report.artifact, report.error
-                        ));
-                        failed += 1;
-                    }
+                } else if args.name.is_none() || args.name.as_deref() == Some(&report.artifact) {
+                    ctx.output.error(&format!(
+                        "✗ {} - invalid: {:?}",
+                        report.artifact, report.error
+                    ));
+                    failed += 1;
                 }
             }
             if failed > 0 {

@@ -28,8 +28,10 @@ fn hunk_ranges(ops: &[DiffOp]) -> (usize, usize, usize, usize) {
 
 /// Diff output format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum DiffFormat {
     /// Unified diff format (default)
+    #[default]
     Unified,
     /// Side-by-side format
     SideBySide,
@@ -39,11 +41,6 @@ pub enum DiffFormat {
     Inline,
 }
 
-impl Default for DiffFormat {
-    fn default() -> Self {
-        Self::Unified
-    }
-}
 
 /// Diff display options
 #[derive(Debug, Clone)]

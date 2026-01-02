@@ -424,11 +424,10 @@ pub fn find_inventories() -> Vec<PathBuf> {
             let path = entry.path();
             if path.is_file() {
                 if let Some(ext) = path.extension() {
-                    if ext == "yml" || ext == "yaml" || ext == "ini" {
-                        if !inventories.contains(&path) {
+                    if (ext == "yml" || ext == "yaml" || ext == "ini")
+                        && !inventories.contains(&path) {
                             inventories.push(path);
                         }
-                    }
                 }
             }
         }

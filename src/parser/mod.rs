@@ -8,14 +8,7 @@
 pub mod playbook;
 pub mod schema;
 
-pub use playbook::{
-    Handler, IncludeType, LoopControl, LoopSpec, ModuleCall, Play, PlayOrder, Playbook,
-    RoleInclusion, RoleSpec, SerialSpec, Task, TaskBuilder, VarsPrompt,
-};
-pub use schema::{
-    ArgumentSpec, ArgumentType, ErrorSeverity, ModuleSchema, SchemaError, SchemaResult,
-    SchemaValidator, ValidationError, ValidationResult, ValidatorConfig,
-};
+pub use playbook::{Handler, Play, Playbook, Task};
 
 use crate::utils::get_regex;
 use indexmap::IndexMap;

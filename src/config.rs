@@ -16,6 +16,7 @@ use std::path::PathBuf;
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct Config {
     /// Default settings
     pub defaults: Defaults,
@@ -54,23 +55,6 @@ pub struct Config {
     pub environment: HashMap<String, String>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            defaults: Defaults::default(),
-            connection: ConnectionConfig::default(),
-            privilege_escalation: PrivilegeEscalation::default(),
-            ssh: SshConfig::default(),
-            colors: ColorsConfig::default(),
-            logging: LoggingConfig::default(),
-            vault: VaultConfig::default(),
-            galaxy: GalaxyConfig::default(),
-            module_paths: vec![],
-            role_paths: vec![],
-            environment: HashMap::new(),
-        }
-    }
-}
 
 /// Default configuration values
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -372,6 +356,7 @@ impl Default for LoggingConfig {
 /// Vault settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct VaultConfig {
     /// Vault password file
     pub password_file: Option<PathBuf>,
@@ -383,15 +368,6 @@ pub struct VaultConfig {
     pub encrypt_vault_id: Option<String>,
 }
 
-impl Default for VaultConfig {
-    fn default() -> Self {
-        Self {
-            password_file: None,
-            identity_list: vec![],
-            encrypt_vault_id: None,
-        }
-    }
-}
 
 /// Galaxy settings
 #[derive(Debug, Clone, Serialize, Deserialize)]

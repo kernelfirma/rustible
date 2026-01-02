@@ -488,7 +488,7 @@ impl RecoveryManager {
             RecoveryError::Unrecoverable("Transactions are not enabled".to_string())
         })?;
 
-        let mut manager = manager.write().await;
+        let manager = manager.write().await;
         let id = manager.begin(name).await?;
 
         info!("Started transaction '{}' with id {}", name, id);
@@ -501,7 +501,7 @@ impl RecoveryManager {
             RecoveryError::Unrecoverable("Transactions are not enabled".to_string())
         })?;
 
-        let mut manager = manager.write().await;
+        let manager = manager.write().await;
         manager.commit(transaction_id).await?;
 
         info!("Committed transaction {}", transaction_id);
@@ -514,7 +514,7 @@ impl RecoveryManager {
             RecoveryError::Unrecoverable("Transactions are not enabled".to_string())
         })?;
 
-        let mut manager = manager.write().await;
+        let manager = manager.write().await;
         manager.rollback(transaction_id).await?;
 
         info!("Rolled back transaction {}", transaction_id);

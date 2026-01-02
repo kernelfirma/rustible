@@ -291,7 +291,7 @@ impl RunArgs {
                 if play_idx > 0 { "\n" } else { "" },
                 play_idx + 1,
                 plays.len(),
-                "*".to_string(),
+                "*",
                 play_name
             ));
             ctx.output.plan(&format!(
@@ -407,7 +407,7 @@ impl RunArgs {
 
                 ctx.output.plan(&format!(
                     "\n  {} Task {}/{}: {}",
-                    ">".to_string(),
+                    ">",
                     task_num,
                     total,
                     task_name
@@ -1215,15 +1215,9 @@ impl RunArgs {
             .and_then(|t| {
                 if let Some(s) = t.as_str() {
                     Some(vec![s.to_string()])
-                } else if let Some(seq) = t.as_sequence() {
-                    Some(
-                        seq.iter()
+                } else { t.as_sequence().map(|seq| seq.iter()
                             .filter_map(|v| v.as_str().map(String::from))
-                            .collect(),
-                    )
-                } else {
-                    None
-                }
+                            .collect()) }
             })
             .unwrap_or_default();
 

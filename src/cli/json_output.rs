@@ -8,8 +8,10 @@ use std::io::{self, Write};
 
 /// JSON output mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum JsonOutputMode {
     /// Pretty-printed JSON (default)
+    #[default]
     Pretty,
     /// Compact single-line JSON
     Compact,
@@ -17,11 +19,6 @@ pub enum JsonOutputMode {
     Lines,
 }
 
-impl Default for JsonOutputMode {
-    fn default() -> Self {
-        Self::Pretty
-    }
-}
 
 /// JSON output writer
 pub struct JsonOutput {

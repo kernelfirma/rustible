@@ -493,6 +493,7 @@ impl InventoryPluginFactory {
     }
 
     /// Get list of available plugin names
+    #[allow(unused_mut)] // mut needed for conditional cfg feature compilation
     pub fn available_plugin_names() -> Vec<&'static str> {
         let mut names = vec!["file", "ini", "yaml", "json", "script", "aws_ec2"];
 
@@ -506,6 +507,7 @@ impl InventoryPluginFactory {
     }
 
     /// Get information about all available plugins
+    #[allow(unused_mut)] // mut needed for conditional cfg feature compilation
     pub fn available_plugins() -> Vec<PluginInfo> {
         let mut plugins = vec![
             PluginInfo {
