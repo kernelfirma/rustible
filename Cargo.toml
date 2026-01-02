@@ -101,8 +101,8 @@ tera = "1.19"
 # Colored output and terminal UI
 colored = "2.1"
 indicatif = { version = "0.18", features = ["tokio"] }
-console = "0.15"
-dialoguer = "0.11"
+console = "0.16"
+dialoguer = "0.12"
 
 # Configuration
 config = "0.14"
