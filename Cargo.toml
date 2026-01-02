@@ -193,7 +193,7 @@ tar = "0.4"
 is-terminal = "0.4"
 
 # Unix/POSIX functionality
-nix = { version = "0.29", features = ["user", "fs", "process", "signal", "term"] }
+nix = { version = "0.30", features = ["user", "fs", "process", "signal", "term"] }
 
 # Temporary file handling
 tempfile = "3.9"
