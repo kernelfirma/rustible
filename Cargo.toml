@@ -171,7 +171,7 @@ aws-sdk-s3 = { version = "1.15", optional = true }
 aws-sdk-iam = { version = "1.15", optional = true }
 
 # Hostname resolution
-hostname = "0.3"
+hostname = "0.4"
 
 # Unix syslog support
 libc = "0.2"
