@@ -120,8 +120,8 @@ chrono = { version = "0.4", features = ["serde"] }
 humantime-serde = "1.1"
 
 # SSH connectivity - pure Rust (russh)
-# Updated to 0.54.1+ to fix CVE (overflow checks in channel windows adjust)
-russh = { version = "0.54.1", optional = true }
+# Updated to 0.55+ to fix CVE and future incompatibility warnings
+russh = { version = "0.55", optional = true }
 russh-sftp = { version = "2.0", optional = true }
 russh-keys = { version = "0.45", optional = true }
 # SSH connectivity - C wrapper (ssh2/libssh2) - optional, legacy
