@@ -48,8 +48,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use russh::keys::key::PublicKey;
 use russh_keys::agent::client::AgentClient;
+use russh_keys::key::PublicKey;
 use thiserror::Error;
 use tokio::net::UnixStream;
 use tokio::sync::{Mutex, RwLock};

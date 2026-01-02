@@ -37,11 +37,10 @@ use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
 use russh::client::{self, Handle, Handler, KeyboardInteractiveAuthResponse, Session};
-use russh::keys::key::PublicKey;
 use russh::ChannelId;
 use russh_keys::agent::client::AgentClient;
 use russh_keys::check_known_hosts_path;
-use russh_keys::key::KeyPair;
+use russh_keys::key::{KeyPair, PublicKey};
 
 use super::config::{expand_path, HostConfig};
 use super::ConnectionError;

@@ -120,7 +120,8 @@ chrono = { version = "0.4", features = ["serde"] }
 humantime-serde = "1.1"
 
 # SSH connectivity - pure Rust (russh)
-russh = { version = "0.45", optional = true }
+# Updated to 0.54.1+ to fix CVE (overflow checks in channel windows adjust)
+russh = { version = "0.54.1", optional = true }
 russh-sftp = { version = "2.0", optional = true }
 russh-keys = { version = "0.45", optional = true }
 # SSH connectivity - C wrapper (ssh2/libssh2) - optional, legacy
@@ -215,7 +216,7 @@ pretty_assertions = "1.4"
 criterion = { version = "0.5", features = ["async_tokio"] }
 wiremock = "=0.6.2"  # Pin to avoid edition 2024 features in 0.6.3+ (requires Rust 1.85+)
 proptest = "1.4"
-async-ssh2-tokio = "=0.8.15"  # Pin to avoid edition 2024 features in 0.9+ (let_chains requires Rust 1.76+)
+# async-ssh2-tokio removed - conflicts with russh 0.54.x, only used in benchmarks
 serial_test = "3.1"
 ed25519-dalek = "2.0"
 

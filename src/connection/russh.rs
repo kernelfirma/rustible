@@ -5,12 +5,13 @@
 //! performance and integration with Tokio compared to ssh2.
 
 use async_trait::async_trait;
-use russh::client::{Handle, Handler};
-use russh::keys::key::PublicKey;
+use russh::client::{AuthResult, Handle, Handler};
+use russh::keys::agent::client::AgentClient;
 use russh::keys::load_secret_key;
+use russh::keys::PublicKeyBase64;
+use russh::keys::PrivateKeyWithHashAlg;
+use russh::keys::{Algorithm, HashAlg, PublicKey};
 use russh::ChannelMsg;
-use russh_keys::agent::client::AgentClient;
-use russh_keys::PublicKeyBase64;
 use russh_sftp::client::SftpSession;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -415,7 +416,7 @@ impl ClientHandler {
 
         // Parse the public key
         // The key format is: 4-byte length + key type string + key data
-        let key = match russh::keys::key::parse_public_key(&key_bytes, None) {
+        let key = match russh::keys::key::parse_public_key(&key_bytes) {
             Ok(k) => k,
             Err(_) => {
                 // Try alternative parsing based on key type
@@ -518,8 +519,8 @@ impl ClientHandler {
 
     /// Compare two public keys for equality
     fn keys_equal(a: &PublicKey, b: &PublicKey) -> bool {
-        // Compare the key fingerprints
-        a.fingerprint() == b.fingerprint()
+        // Compare the key fingerprints using SHA-256
+        a.fingerprint(HashAlg::Sha256) == b.fingerprint(HashAlg::Sha256)
     }
 
     /// Add a new host key to known_hosts file
@@ -547,7 +548,7 @@ impl ClientHandler {
         };
 
         // Format the key
-        let key_type = server_key.name();
+        let key_type = server_key.algorithm().to_string();
         let key_base64 = server_key.public_key_base64();
 
         let entry_line = format!("{} {} {}\n", host_str, key_type, key_base64);
@@ -573,7 +574,6 @@ impl ClientHandler {
     }
 }
 
-#[async_trait]
 impl Handler for ClientHandler {
     type Error = RusshError;
 
@@ -974,9 +974,13 @@ impl RusshConnection {
             ]),
             // Prefer fast key types
             key: std::borrow::Cow::Borrowed(&[
-                russh::keys::key::ED25519,
-                russh::keys::key::RSA_SHA2_256,
-                russh::keys::key::RSA_SHA2_512,
+                Algorithm::Ed25519,
+                Algorithm::Rsa {
+                    hash: Some(HashAlg::Sha256),
+                },
+                Algorithm::Rsa {
+                    hash: Some(HashAlg::Sha512),
+                },
             ]),
             // Prefer fast MACs (not used with AEAD ciphers but needed for fallback)
             mac: std::borrow::Cow::Borrowed(&[russh::mac::HMAC_SHA256, russh::mac::HMAC_SHA512]),
@@ -1081,7 +1085,7 @@ impl RusshConnection {
 
         // Try password authentication
         if let Some(password) = &host_config.password {
-            let authenticated = session
+            let result = session
                 .authenticate_password(user, password)
                 .await
                 .map_err(|e| {
@@ -1091,7 +1095,7 @@ impl RusshConnection {
                     ))
                 })?;
 
-            if authenticated {
+            if matches!(result, AuthResult::Success) {
                 debug!("Authenticated using password");
                 return Ok(());
             }
@@ -1132,19 +1136,18 @@ impl RusshConnection {
         for identity in identities {
             trace!("Trying SSH agent identity");
 
-            // Use authenticate_future which accepts a Signer trait (russh 0.45 API)
+            // Use authenticate_publickey_with which accepts a Signer trait (russh 0.54+ API)
             // AgentClient implements Signer
-            let (returned_agent, result) = session
-                .authenticate_future(user, identity.clone(), agent)
+            let result = session
+                .authenticate_publickey_with(user, identity.clone(), None, &mut agent)
                 .await;
-            agent = returned_agent;
 
             match result {
-                Ok(true) => {
+                Ok(AuthResult::Success) => {
                     debug!("SSH agent authentication successful");
                     return Ok(());
                 }
-                Ok(false) => {
+                Ok(AuthResult::Failure { .. }) => {
                     // Key was rejected, try the next one
                     trace!("Identity rejected, trying next");
                 }
@@ -1163,7 +1166,7 @@ impl RusshConnection {
     /// Try key-based authentication
     ///
     /// Supports Ed25519 and RSA keys, with or without passphrases.
-    /// The key is loaded using russh_keys::load_secret_key which automatically
+    /// The key is loaded using russh::keys::load_secret_key which automatically
     /// detects the key type (Ed25519, RSA, etc.) based on the file format.
     async fn try_key_auth(
         session: &mut Handle<ClientHandler>,
@@ -1199,9 +1202,13 @@ impl RusshConnection {
             })?
         };
 
+        // Wrap key with hash algorithm for authentication (russh 0.54+ API)
+        // For RSA keys, use SHA-256; for other keys, hash_alg is ignored
+        let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key_pair), Some(HashAlg::Sha256));
+
         // Authenticate with the key
-        let authenticated = session
-            .authenticate_publickey(user, Arc::new(key_pair))
+        let result = session
+            .authenticate_publickey(user, key_with_alg)
             .await
             .map_err(|e| {
                 ConnectionError::AuthenticationFailed(format!(
@@ -1211,7 +1218,7 @@ impl RusshConnection {
                 ))
             })?;
 
-        if authenticated {
+        if matches!(result, AuthResult::Success) {
             Ok(())
         } else {
             Err(ConnectionError::AuthenticationFailed(
@@ -3769,31 +3776,29 @@ mod tests {
 #[cfg(test)]
 mod verification_tests {
     use super::*;
-    use russh::keys::key::KeyPair;
+    use russh::keys::PrivateKey;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    // Helper to generate a dummy key
-    fn generate_key() -> KeyPair {
-        let mut rng = rand::thread_rng();
-        // Just use Ed25519 for test as it is standard and supported by russh
-        KeyPair::generate_ed25519().unwrap()
+    // Helper to generate a dummy Ed25519 key (russh 0.54+ API)
+    fn generate_key() -> PrivateKey {
+        use rand::SeedableRng;
+        // Use a seeded RNG for reproducibility in tests
+        let mut rng = rand::rngs::StdRng::from_entropy();
+        PrivateKey::random(&mut rng, Algorithm::Ed25519).expect("Failed to generate key")
     }
 
     #[tokio::test]
     async fn test_verify_host_key_verified() {
-        let key_pair = generate_key();
-        // Depending on russh version, we might get PublicKey directly from KeyPair
-        // russh 0.45 KeyPair usually has clone_public_key()
-        let public_key = key_pair
-            .clone_public_key()
-            .expect("Failed to get public key");
+        let private_key = generate_key();
+        // In russh 0.54+, public_key() returns a reference
+        let public_key = private_key.public_key().clone();
 
         // Setup known_hosts file
         let mut temp_file = NamedTempFile::new().unwrap();
 
         // Format entry
-        let key_type = public_key.name();
+        let key_type = public_key.algorithm().to_string();
         let key_base64 = public_key.public_key_base64();
         let entry = format!("example.com {} {}\n", key_type, key_base64);
 
@@ -3809,19 +3814,15 @@ mod verification_tests {
 
     #[tokio::test]
     async fn test_verify_host_key_mismatch() {
-        let key_pair1 = generate_key();
-        let key_pair2 = generate_key();
+        let private_key1 = generate_key();
+        let private_key2 = generate_key();
 
-        let public_key1 = key_pair1
-            .clone_public_key()
-            .expect("Failed to get public key");
-        let public_key2 = key_pair2
-            .clone_public_key()
-            .expect("Failed to get public key");
+        let public_key1 = private_key1.public_key().clone();
+        let public_key2 = private_key2.public_key().clone();
 
         // Write key1 to known_hosts
         let mut temp_file = NamedTempFile::new().unwrap();
-        let key_type = public_key1.name();
+        let key_type = public_key1.algorithm().to_string();
         let key_base64 = public_key1.public_key_base64();
         let entry = format!("example.com {} {}\n", key_type, key_base64);
         temp_file.write_all(entry.as_bytes()).unwrap();
@@ -3839,10 +3840,8 @@ mod verification_tests {
 
     #[tokio::test]
     async fn test_unknown_host_accept() {
-        let key_pair = generate_key();
-        let public_key = key_pair
-            .clone_public_key()
-            .expect("Failed to get public key");
+        let private_key = generate_key();
+        let public_key = private_key.public_key().clone();
 
         // Empty known_hosts
         let temp_file = NamedTempFile::new().unwrap();
@@ -3858,15 +3857,13 @@ mod verification_tests {
         // Verify it was written to file
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("example.com"));
-        assert!(content.contains(public_key.name()));
+        assert!(content.contains(&public_key.algorithm().to_string()));
     }
 
     #[tokio::test]
     async fn test_unknown_host_reject() {
-        let key_pair = generate_key();
-        let public_key = key_pair
-            .clone_public_key()
-            .expect("Failed to get public key");
+        let private_key = generate_key();
+        let public_key = private_key.public_key().clone();
 
         // Empty known_hosts
         let temp_file = NamedTempFile::new().unwrap();
