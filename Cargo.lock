@@ -4907,7 +4907,7 @@ dependencies = [
  "aws-sdk-iam",
  "aws-sdk-s3",
  "axum",
- "base64 0.21.7",
+ "base64 0.22.1",
  "blake3",
  "bollard",
  "bytes",

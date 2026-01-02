@@ -113,7 +113,7 @@ home = "=0.5.9"  # Pin to avoid MSRV bump in 0.5.11+ (requires Rust 1.81+)
 aes-gcm = "0.10"
 argon2 = "0.5"
 rand = "0.8"
-base64 = "0.21"
+base64 = "0.22"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
