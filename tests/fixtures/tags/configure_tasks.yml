@@ -1,0 +1,8 @@
+---
+- name: Configure task 1
+  debug:
+    msg: "Configure step 1"
+
+- name: Configure task 2
+  debug:
+    msg: "Configure step 2"

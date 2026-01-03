@@ -360,10 +360,41 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
 
     // Phase 1: Try typed parsing with Playbook::from_yaml for better error messages
     ctx.output.section("Syntax Check");
-    if let Err(e) = Playbook::from_yaml(&content, Some(playbook_path.to_path_buf())) {
-        ctx.output.error(&format!("Playbook parse error: {}", e));
-        return Ok(1);
+    let playbook = match Playbook::from_yaml(&content, Some(playbook_path.to_path_buf())) {
+        Ok(pb) => pb,
+        Err(e) => {
+            let err = e.to_string();
+
+            // Provide a friendlier, stable error message for common structural mistakes.
+            if err.contains("missing field `hosts`") {
+                ctx.output.error(&format!("missing required 'hosts' field ({})", e));
+            } else {
+                ctx.output.error(&format!("Playbook parse error: {}", e));
+            }
+            return Ok(1);
+        }
+    };
+
+    // Structural warnings (non-fatal)
+    for play in &playbook.plays {
+        // Warn on plays that have no tasks *and* no roles.
+        if play.task_count() == 0 && play.roles.is_empty() {
+            let play_name = if play.name.is_empty() { "<unnamed>" } else { &play.name };
+            ctx.output
+                .warning(&format!("Play '{}' has no tasks (nothing to execute)", play_name));
+        }
+
+        // Warn on handlers that rely only on `listen` without a `name`.
+        for handler in &play.handlers {
+            if handler.name.is_empty() && !handler.listen.is_empty() {
+                ctx.output.warning(&format!(
+                    "Handler with listen [{}] has no name",
+                    handler.listen.join(", ")
+                ));
+            }
+        }
     }
+
     ctx.output.debug("Playbook syntax is valid");
 
     // Phase 2: Schema validation for module arguments

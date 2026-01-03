@@ -416,7 +416,13 @@ pub struct Executor {
 impl Executor {
     /// Create a new executor with the given configuration
     pub fn new(config: ExecutorConfig) -> Self {
+        let mut config = config;
+        if config.forks == 0 {
+            warn!("forks=0 is invalid; clamping to 1 to avoid deadlock");
+            config.forks = 1;
+        }
         let forks = config.forks;
+
         Self {
             config,
             runtime: Arc::new(RwLock::new(RuntimeContext::new())),
@@ -431,7 +437,13 @@ impl Executor {
 
     /// Create executor with a pre-existing runtime context
     pub fn with_runtime(config: ExecutorConfig, runtime: RuntimeContext) -> Self {
+        let mut config = config;
+        if config.forks == 0 {
+            warn!("forks=0 is invalid; clamping to 1 to avoid deadlock");
+            config.forks = 1;
+        }
         let forks = config.forks;
+
         Self {
             config,
             runtime: Arc::new(RwLock::new(runtime)),

@@ -118,6 +118,32 @@ impl RunArgs {
             }
         };
 
+        // Best-effort progress output: show plays and tasks (no-op in JSON mode).
+        // NOTE: The executor currently doesn't stream per-task events to the CLI, so this
+        // provides minimal Ansible-like headers without needing deep wiring.
+        for play in &playbook.plays {
+            let play_name = if play.name.is_empty() {
+                "Unnamed play"
+            } else {
+                play.name.as_str()
+            };
+            ctx.output.play_header(play_name);
+
+            for task in play
+                .pre_tasks
+                .iter()
+                .chain(play.tasks.iter())
+                .chain(play.post_tasks.iter())
+            {
+                let task_name = if task.name.is_empty() {
+                    task.module.as_str()
+                } else {
+                    task.name.as_str()
+                };
+                ctx.output.task_header(task_name);
+            }
+        }
+
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
         let runtime = if let Some(inv_path) = &inventory_path {

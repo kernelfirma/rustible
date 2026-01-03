@@ -55,6 +55,13 @@ impl CommandContext {
     pub fn new(cli: &crate::cli::Cli, config: Config) -> Self {
         let output = OutputFormatter::new(!cli.no_color, cli.is_json(), cli.verbosity());
 
+        let forks = if cli.forks == 0 {
+            // Treat 0 as "use defaults" to avoid deadlocks (and match Ansible-like behavior).
+            config.defaults.forks.max(1)
+        } else {
+            cli.forks
+        };
+
         Self {
             config,
             output,
@@ -64,7 +71,7 @@ impl CommandContext {
             check_mode: cli.check_mode,
             diff_mode: cli.diff_mode,
             limit: cli.limit.clone(),
-            forks: cli.forks,
+            forks,
             timeout: cli.timeout,
             connections: Arc::new(RwLock::new(HashMap::new())),
         }

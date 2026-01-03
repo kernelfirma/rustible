@@ -1,0 +1,8 @@
+---
+- name: Install task 1
+  debug:
+    msg: "Install step 1"
+
+- name: Install task 2
+  debug:
+    msg: "Install step 2"

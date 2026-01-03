@@ -74,6 +74,15 @@ where
     }
 }
 
+/// Deserialize a YAML/JSON sequence, treating `null`/`~` as an empty list.
+fn deserialize_seq_or_null<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 use crate::executor::task::{Handler, Task};
 use crate::executor::{ExecutorError, ExecutorResult};
 
@@ -114,6 +123,12 @@ impl Playbook {
         // Ansible playbooks are arrays of plays at the top level
         let plays: Vec<PlayDefinition> = serde_yaml::from_str(content)
             .map_err(|e| ExecutorError::ParseError(format!("YAML parse error: {}", e)))?;
+
+        if plays.is_empty() {
+            return Err(ExecutorError::ParseError(
+                "Playbook must contain at least one play".to_string(),
+            ));
+        }
 
         let mut playbook = Playbook::default();
         playbook.path = path.clone();
@@ -189,25 +204,25 @@ pub struct PlayDefinition {
     #[serde(default)]
     pub vars_files: Vec<String>,
     /// Roles to include
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub roles: Vec<RoleDefinition>,
     /// Pre-tasks (run before roles)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub pre_tasks: Vec<TaskDefinition>,
     /// Main tasks
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub tasks: Vec<TaskDefinition>,
     /// Post-tasks (run after roles)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub post_tasks: Vec<TaskDefinition>,
     /// Handlers
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub handlers: Vec<HandlerDefinition>,
     /// Environment variables
     #[serde(default)]
     pub environment: IndexMap<String, JsonValue>,
     /// Tags for this play
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub tags: Vec<String>,
     /// Serial execution (number of hosts at a time)
     #[serde(default)]
@@ -225,7 +240,7 @@ pub struct PlayDefinition {
     #[serde(default, deserialize_with = "deserialize_flexible_bool")]
     pub force_handlers: bool,
     /// Fact gathering subset
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub gather_subset: Vec<String>,
     /// Order of host execution
     #[serde(default)]

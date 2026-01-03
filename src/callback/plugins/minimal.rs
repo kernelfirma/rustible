@@ -436,10 +436,12 @@ mod tests {
         };
 
         let output = MinimalCallback::format_recap_line("webserver1", &stats);
-        assert!(output.contains("webserver1"));
-        assert!(output.contains("ok=5"));
-        assert!(output.contains("changed=2"));
-        assert!(output.contains("failed=1"));
+        let output_plain = console::strip_ansi_codes(&output);
+
+        assert!(output_plain.contains("webserver1"));
+        assert!(output_plain.contains("ok=5"));
+        assert!(output_plain.contains("changed=2"));
+        assert!(output_plain.contains("failed=1"));
     }
 
     #[test]

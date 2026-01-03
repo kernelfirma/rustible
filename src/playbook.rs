@@ -425,10 +425,12 @@ impl Play {
         }
 
         // Validate handlers
+        // Ansible allows handler tasks without an explicit `name` as long as they can be
+        // referenced via `listen`. We only error if *both* are missing.
         for handler in &self.handlers {
-            if handler.name.is_empty() {
+            if handler.name.is_empty() && handler.listen.is_empty() {
                 return Err(Error::PlaybookValidation(
-                    "Handler must have a name".to_string(),
+                    "Handler must have a name or listen".to_string(),
                 ));
             }
         }
@@ -1066,13 +1068,6 @@ impl<'de> Deserialize<'de> for Handler {
             .as_object()
             .ok_or_else(|| D::Error::custom("handler must be an object"))?;
 
-        // Get the handler name
-        let name = obj
-            .get("name")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .ok_or_else(|| D::Error::custom("handler must have a name"))?;
-
         // Parse listen as string or vec
         let listen = match obj.get("listen") {
             Some(serde_json::Value::String(s)) => vec![s.clone()],
@@ -1082,6 +1077,17 @@ impl<'de> Deserialize<'de> for Handler {
                 .collect(),
             _ => Vec::new(),
         };
+
+        // Get the handler name (optional if `listen` is provided)
+        let name = obj
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_default();
+
+        if name.is_empty() && listen.is_empty() {
+            return Err(D::Error::custom("handler must have a name or listen"));
+        }
 
         // Deserialize the task from the same object
         let task: Task = serde_json::from_value(value.clone())
@@ -1103,7 +1109,10 @@ impl Handler {
 
     /// Returns all names this handler responds to.
     pub fn trigger_names(&self) -> Vec<&str> {
-        let mut names = vec![self.name.as_str()];
+        let mut names = Vec::new();
+        if !self.name.is_empty() {
+            names.push(self.name.as_str());
+        }
         names.extend(self.listen.iter().map(String::as_str));
         names
     }
