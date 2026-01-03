@@ -59,6 +59,7 @@ impl TemplateEngine {
         env.add_filter("trim", filter_trim);
         env.add_filter("replace", filter_replace);
         env.add_filter("regex_replace", filter_regex_replace);
+        env.add_filter("regex_search", filter_regex_search);
         env.add_filter("split", filter_split);
         env.add_filter("join", filter_join);
 
@@ -381,6 +382,31 @@ fn filter_regex_replace(value: &str, pattern: &str, replacement: &str) -> std::r
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid regex: {}", e))
     })?;
     Ok(re.replace_all(value, replacement).to_string())
+}
+
+/// Search for a pattern in a string.
+///
+/// Returns the matched string if found, or an empty string if not found.
+/// This is compatible with Ansible's regex_search filter.
+fn filter_regex_search(value: &str, pattern: &str) -> MiniJinjaValue {
+    match regex::Regex::new(pattern) {
+        Ok(re) => {
+            if let Some(caps) = re.captures(value) {
+                // If there are capture groups, return the first one
+                if caps.len() > 1 {
+                    if let Some(m) = caps.get(1) {
+                        return MiniJinjaValue::from(m.as_str().to_string());
+                    }
+                }
+                // Otherwise return the full match
+                if let Some(m) = caps.get(0) {
+                    return MiniJinjaValue::from(m.as_str().to_string());
+                }
+            }
+            MiniJinjaValue::from("")
+        }
+        Err(_) => MiniJinjaValue::from(""),
+    }
 }
 
 fn filter_split(value: &str, sep: Option<&str>) -> Vec<String> {

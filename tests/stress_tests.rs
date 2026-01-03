@@ -795,8 +795,8 @@ async fn chaos_slow_host_responses() {
     println!("Slow host chaos completed in {:?}", duration);
 
     // With free strategy, slow hosts shouldn't block fast ones
-    for result in results.values() {
-        assert!(!result.failed);
+    for (host, result) in &results {
+        assert!(!result.failed, "Host {} should not fail", host);
     }
 }
 
