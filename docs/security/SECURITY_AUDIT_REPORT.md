@@ -1,3 +1,8 @@
+---
+summary: Comprehensive security audit covering OWASP Top 10, unsafe Rust patterns, memory safety, dependency vulnerabilities, and remediation recommendations.
+read_when: You need to understand the security posture of Rustible or plan security improvements.
+---
+
 # Rustible Security Audit Report
 
 **Audit Date:** 2025-12-26

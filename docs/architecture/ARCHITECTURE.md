@@ -1,3 +1,8 @@
+---
+summary: Internal architecture overview covering async-first design, module tiers, execution pipeline, connection management, and extension points.
+read_when: You want to understand Rustible's internal design or contribute to core components.
+---
+
 # Rustible Architecture
 
 This document describes the internal architecture of Rustible, a modern configuration management tool written in Rust.

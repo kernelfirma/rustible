@@ -1,3 +1,8 @@
+---
+summary: Using --plan flag for Terraform-like dry-run execution previews showing what tasks would run without making changes.
+read_when: Previewing changes before execution, reviewing playbook impact, or integrating plan reviews into change management.
+---
+
 # Plan Mode - Dry-Run Execution Planning
 
 ## Overview

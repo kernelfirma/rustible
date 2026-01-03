@@ -1,3 +1,8 @@
+---
+summary: Guide to implementing custom connection plugins for SSH, local, Docker, or other transport backends.
+read_when: You need to add support for new connection types or customize existing transport behavior.
+---
+
 # Creating Connection Plugins
 
 This guide explains how to create custom connection plugins for Rustible. Connection plugins handle the transport layer for executing commands and transferring files to target systems.

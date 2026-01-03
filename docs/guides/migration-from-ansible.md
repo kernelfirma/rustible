@@ -1,3 +1,8 @@
+---
+summary: Complete migration guide covering compatible features, supported modules, key differences, step-by-step migration process, and performance comparisons.
+read_when: You're migrating from Ansible and need to understand compatibility, differences, and migration steps.
+---
+
 # Migration Guide: From Ansible to Rustible
 
 **Last Updated:** 2025-12-25

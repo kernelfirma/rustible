@@ -1,3 +1,8 @@
+---
+summary: Guide to running Rustible in containers using Docker and Kubernetes, including image building, compose setups, and CI/CD integration.
+read_when: You want to run Rustible in Docker containers or deploy to Kubernetes.
+---
+
 # Rustible Container Guide
 
 This guide covers running Rustible in containers using Docker and Kubernetes.

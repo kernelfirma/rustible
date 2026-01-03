@@ -1,3 +1,8 @@
+---
+summary: Architecture Decision Record for the module system covering the Module trait, execution tiers, check mode, diff support, and idempotency.
+read_when: You want to understand module design patterns or implement custom modules correctly.
+---
+
 # ADR-0002: Module System Design
 
 ## Status

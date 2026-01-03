@@ -1,3 +1,8 @@
+---
+summary: Reference for the service module that manages systemd, sysvinit, OpenRC, and Upstart services.
+read_when: You need to start, stop, restart, reload, or enable/disable services on remote hosts.
+---
+
 # service - Manage System Services
 
 ## Synopsis

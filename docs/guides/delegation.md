@@ -1,3 +1,8 @@
+---
+summary: Using delegate_to and delegate_facts to execute tasks on different hosts while controlling where facts are stored.
+read_when: Running tasks on localhost or different targets, gathering facts from remote hosts, or implementing jump-host patterns.
+---
+
 # Delegation Implementation for Rustible
 
 ## Overview

@@ -1,3 +1,8 @@
+---
+summary: Using include_tasks, import_tasks, and include_vars for modular playbooks with proper variable scoping and task organization.
+read_when: Breaking playbooks into reusable components, managing variable files, or understanding include vs import semantics.
+---
+
 # Task and Variable Inclusion
 
 Rustible supports Ansible-compatible task and variable inclusion with three main directives:

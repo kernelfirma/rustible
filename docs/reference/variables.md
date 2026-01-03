@@ -1,3 +1,8 @@
+---
+summary: Complete variable system reference including 20-level precedence order, special variables, scoping rules, and cross-host access patterns.
+read_when: You need to understand variable precedence, access other hosts' variables, or debug unexpected variable values.
+---
+
 # Variables in Rustible
 
 This document describes the variable system in Rustible, including precedence rules, special variables, and scoping behavior.

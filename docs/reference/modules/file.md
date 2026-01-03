@@ -1,3 +1,8 @@
+---
+summary: Reference for the file module that manages file/directory properties including state, permissions, ownership, and symbolic links.
+read_when: You need to create directories, set permissions, manage symlinks, or delete files on remote hosts.
+---
+
 # file - Manage File and Directory Properties
 
 ## Synopsis

@@ -1,3 +1,8 @@
+---
+summary: Comprehensive performance optimization guide covering connection tuning, execution strategies, playbook optimization, and benchmarking.
+read_when: You need to optimize execution speed, reduce memory usage, or tune for specific network conditions.
+---
+
 # Performance Tuning Guide
 
 This guide provides comprehensive recommendations for optimizing Rustible performance across different deployment scenarios.

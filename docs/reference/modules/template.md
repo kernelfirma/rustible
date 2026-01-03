@@ -1,3 +1,8 @@
+---
+summary: Reference for the template module that renders Jinja2 templates with variables and deploys them to remote hosts.
+read_when: You need to deploy configuration files with dynamic content based on variables and facts.
+---
+
 # template - Template Files with Jinja2
 
 ## Synopsis

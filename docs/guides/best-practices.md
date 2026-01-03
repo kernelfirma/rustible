@@ -1,3 +1,8 @@
+---
+summary: Recommendations for writing maintainable, efficient, and secure playbooks covering project organization, variable management, and security.
+read_when: You want to improve playbook quality, organization, and security practices.
+---
+
 # Best Practices Guide
 
 This guide provides recommendations for writing maintainable, efficient, and secure Rustible playbooks.

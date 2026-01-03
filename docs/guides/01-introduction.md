@@ -1,3 +1,8 @@
+---
+summary: Overview of Rustible, a high-performance Ansible alternative written in Rust, covering architecture, key features, and performance benefits.
+read_when: You're new to Rustible and want to understand what it is and why to use it.
+---
+
 # Chapter 1: Introduction to Rustible
 
 ## What is Rustible?

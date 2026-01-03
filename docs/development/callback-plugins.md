@@ -1,3 +1,8 @@
+---
+summary: Guide to implementing custom callback plugins for logging, metrics, notifications, or custom output formatting.
+read_when: You need to customize execution output, integrate with external systems, or collect execution metrics.
+---
+
 # Creating Callback Plugins
 
 This guide explains how to create custom callback plugins for Rustible. Callback plugins receive notifications about execution events and can be used for logging, metrics, notifications, or custom output formatting.

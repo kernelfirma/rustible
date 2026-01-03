@@ -1,3 +1,8 @@
+---
+summary: Reference for the package module that auto-detects and uses apt, yum, or dnf based on the target system.
+read_when: You need to install, remove, or update packages across different Linux distributions.
+---
+
 # package - Generic Package Manager
 
 ## Synopsis

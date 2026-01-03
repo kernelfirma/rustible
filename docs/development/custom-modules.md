@@ -1,3 +1,8 @@
+---
+summary: Guide to implementing custom modules using the Module trait, including parameter handling, check mode, diff output, and registration.
+read_when: You need to extend Rustible with new modules for custom automation tasks.
+---
+
 # Creating Custom Modules
 
 This guide explains how to create custom modules for Rustible. Modules are the workhorses of Rustible, performing actual work on target systems like package management, file operations, and command execution.

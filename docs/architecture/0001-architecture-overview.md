@@ -1,3 +1,8 @@
+---
+summary: Architecture Decision Record documenting the core design layers, async execution model, and Ansible compatibility strategy.
+read_when: You want to understand the rationale behind Rustible's architectural decisions.
+---
+
 # ADR-0001: Architecture Overview
 
 ## Status

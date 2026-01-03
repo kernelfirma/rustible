@@ -1,3 +1,8 @@
+---
+summary: Complete guide to playbook structure including plays, tasks, handlers, blocks, variables, conditionals, loops, and tags.
+read_when: You need to understand how to write and structure playbooks for automation tasks.
+---
+
 # Chapter 2: Playbooks
 
 Playbooks are the core of Rustible automation. They define what tasks to execute on which hosts and in what order.

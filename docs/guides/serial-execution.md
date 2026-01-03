@@ -1,3 +1,8 @@
+---
+summary: Rolling updates with serial execution using fixed batches, percentages, and progressive deployment with failure thresholds.
+read_when: Implementing rolling updates, canary deployments, or controlling batch sizes for safe production changes.
+---
+
 # Serial Execution Parameter Implementation
 
 ## Overview

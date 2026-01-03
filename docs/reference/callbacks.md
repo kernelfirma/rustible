@@ -1,3 +1,8 @@
+---
+summary: Callback plugin reference covering 20+ built-in callbacks for output formatting, timing, filtering, logging, and external integrations like JUnit and email.
+read_when: You want to customize execution output, integrate with CI/CD, send notifications, or develop custom callback plugins.
+---
+
 # Rustible Callback Plugin Reference
 
 Callbacks receive notifications about execution events and can be used for logging, metrics collection, custom output formatting, or external integrations.

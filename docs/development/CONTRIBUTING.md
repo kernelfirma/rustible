@@ -1,3 +1,8 @@
+---
+summary: Contributor guide covering development setup, coding standards, testing guidelines, PR process, and documentation practices.
+read_when: You want to contribute code, documentation, or bug fixes to the Rustible project.
+---
+
 # Contributing to Rustible
 
 Thank you for your interest in contributing to Rustible! This document provides guidelines and information for contributors.

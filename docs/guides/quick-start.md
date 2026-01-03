@@ -1,3 +1,8 @@
+---
+summary: Get up and running with Rustible in minutes, covering installation, first playbook, inventory setup, and common patterns.
+read_when: You want to quickly install Rustible and run your first playbook.
+---
+
 # Rustible Quick Start Guide
 
 Get up and running with Rustible in minutes. This guide covers installation, your first playbook, inventory setup, and common patterns.

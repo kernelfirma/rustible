@@ -1,3 +1,8 @@
+---
+summary: Navigation index for user guides covering playbooks, inventory, variables, modules, roles, execution strategies, security, and templating.
+read_when: You're looking for the main documentation entry point or need to find a specific user guide topic.
+---
+
 # User Guide
 
 ## Chapters

@@ -1,3 +1,8 @@
+---
+summary: Inventory system reference covering INI/YAML/JSON formats, dynamic scripts, pattern matching, AWS EC2 plugin, caching, and custom plugin development.
+read_when: You need to configure inventory, use dynamic sources, write inventory plugins, or understand pattern matching syntax.
+---
+
 # Rustible Inventory System
 
 The Rustible inventory system provides comprehensive host and group management with support for multiple formats, dynamic inventory sources, and a plugin architecture for cloud providers.

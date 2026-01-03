@@ -1,3 +1,8 @@
+---
+summary: Reference for the copy module that copies files or inline content to remote hosts with ownership and permission control.
+read_when: You need to copy files to remote hosts or write content directly to remote files.
+---
+
 # copy - Copy Files to Remote Locations
 
 ## Synopsis

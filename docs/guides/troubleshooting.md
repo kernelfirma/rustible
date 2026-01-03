@@ -1,3 +1,8 @@
+---
+summary: Solutions for common issues including connection problems, playbook errors, module failures, variable issues, and vault problems.
+read_when: You encounter errors or unexpected behavior and need to diagnose and fix issues.
+---
+
 # Troubleshooting Guide
 
 This guide covers common issues you may encounter when using Rustible and how to resolve them.

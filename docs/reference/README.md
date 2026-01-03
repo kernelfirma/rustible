@@ -1,3 +1,8 @@
+---
+summary: API reference for using Rustible as a Rust library, including executor, inventory, and playbook interfaces.
+read_when: You want to embed Rustible in your own Rust application or extend its functionality programmatically.
+---
+
 # API Reference
 
 ## Library Usage

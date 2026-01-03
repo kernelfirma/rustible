@@ -1,3 +1,8 @@
+---
+summary: Documentation home page with quick links to guides, reference, architecture, and development resources.
+read_when: You're entering the documentation and need to find the right resource for your task.
+---
+
 # Rustible Documentation
 
 ## Quick Links

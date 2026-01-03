@@ -1,3 +1,8 @@
+---
+summary: Comprehensive CLI documentation covering all commands (run, check, vault, list-hosts, validate, init), options, and environment variables.
+read_when: You need to look up CLI commands, options, or configuration settings.
+---
+
 # Rustible CLI Reference
 
 This document provides comprehensive documentation for all Rustible CLI commands, options, and usage patterns.

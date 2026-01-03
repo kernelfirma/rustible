@@ -1,3 +1,8 @@
+---
+summary: Complete reference for all 21+ built-in modules covering package management, file operations, commands, services, users, groups, and git.
+read_when: You need module parameters, examples, or return values for any built-in module.
+---
+
 # Rustible Module Reference
 
 This document provides detailed documentation for all built-in modules in Rustible.

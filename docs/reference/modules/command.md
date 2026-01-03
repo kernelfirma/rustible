@@ -1,3 +1,8 @@
+---
+summary: Reference for the command module that executes commands on remote hosts without shell processing.
+read_when: You need to run simple commands on remote hosts without shell features like pipes or redirects.
+---
+
 # command - Execute Commands
 
 ## Synopsis
