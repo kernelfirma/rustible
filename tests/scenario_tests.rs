@@ -1381,6 +1381,8 @@ WantedBy=multi-user.target
     );
 
     // Task 5: Create alerting rules
+    // Note: Content uses Prometheus template syntax which doesn't contain {{ }} to avoid
+    // triggering Jinja2 template processing in the copy module
     play.add_task(
         Task::new("Create alert rules", "copy")
             .arg(
@@ -1394,8 +1396,8 @@ WantedBy=multi-user.target
         labels:
           severity: warning
         annotations:
-          summary: "High CPU usage on {{ $labels.instance }}"
-          description: "CPU usage is above 80% for 5 minutes"
+          summary: High CPU usage detected
+          description: CPU usage is above 80% for 5 minutes
 
       - alert: HighMemoryUsage
         expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
@@ -1403,8 +1405,8 @@ WantedBy=multi-user.target
         labels:
           severity: warning
         annotations:
-          summary: "High memory usage on {{ $labels.instance }}"
-          description: "Memory usage is above 90% for 5 minutes"
+          summary: High memory usage detected
+          description: Memory usage is above 90% for 5 minutes
 
       - alert: DiskSpaceLow
         expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
@@ -1412,8 +1414,8 @@ WantedBy=multi-user.target
         labels:
           severity: warning
         annotations:
-          summary: "Low disk space on {{ $labels.instance }}"
-          description: "Disk usage is above 85%"
+          summary: Low disk space detected
+          description: Disk usage is above 85%
 
       - alert: HostDown
         expr: up == 0
@@ -1421,8 +1423,8 @@ WantedBy=multi-user.target
         labels:
           severity: critical
         annotations:
-          summary: "Host {{ $labels.instance }} is down"
-          description: "Host has been unreachable for more than 1 minute"
+          summary: Host is down
+          description: Host has been unreachable for more than 1 minute
 "#,
             )
             .arg(
