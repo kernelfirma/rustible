@@ -309,7 +309,24 @@ impl TemplateEngine {
     #[must_use]
     #[inline]
     pub fn is_template(s: &str) -> bool {
-        s.contains("{{") || s.contains("{%")
+        // Optimization: Single-pass scan using memchr (via str::find) to avoid traversing
+        // the string twice (once for "{{", once for "{%").
+        let mut rest = s;
+        while let Some(i) = rest.find('{') {
+            if i + 1 < rest.len() {
+                let next = rest.as_bytes()[i + 1];
+                if next == b'{' || next == b'%' {
+                    return true;
+                }
+            }
+            // Advance past the found '{'
+            if i + 1 < rest.len() {
+                rest = &rest[i + 1..];
+            } else {
+                break;
+            }
+        }
+        false
     }
 }
 
