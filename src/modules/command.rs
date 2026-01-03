@@ -11,7 +11,7 @@ use super::{
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
-use crate::utils::shell_escape;
+use crate::utils::{cmd_escape, powershell_escape, shell_escape};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -24,6 +24,9 @@ impl CommandModule {
     fn get_command_string(&self, params: &ModuleParams) -> ModuleResult<String> {
         let cmd = params.get_string("cmd")?;
         let argv = params.get_vec_string("argv")?;
+        let shell_type = params
+            .get_string("shell_type")?
+            .unwrap_or_else(|| "posix".to_string());
 
         if let Some(argv) = argv {
             if argv.is_empty() {
@@ -31,12 +34,19 @@ impl CommandModule {
                     "argv cannot be empty".to_string(),
                 ));
             }
+
             // Join argv with proper escaping for shell
-            Ok(argv
+            let escaped_args: Vec<String> = argv
                 .iter()
-                .map(|arg| shell_escape(arg))
-                .collect::<Vec<_>>()
-                .join(" "))
+                .map(|arg| match shell_type.as_str() {
+                    "cmd" => cmd_escape(arg),
+                    "powershell" => powershell_escape(arg),
+                    "posix" | "sh" | "bash" => shell_escape(arg),
+                    _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility
+                })
+                .collect();
+
+            Ok(escaped_args.join(" "))
         } else if let Some(cmd) = cmd {
             if cmd.trim().is_empty() {
                 return Err(ModuleError::InvalidParameter(
@@ -498,5 +508,35 @@ mod tests {
         } else {
             panic!("Expected CommandFailed error");
         }
+    }
+
+    #[test]
+    fn test_command_windows_cmd_escaping() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["echo", "hello & calc.exe"]),
+        );
+        params.insert("shell_type".to_string(), serde_json::json!("cmd"));
+
+        let cmd = module.get_command_string(&params).unwrap();
+        // Should use double quotes for cmd.exe
+        assert_eq!(cmd, "\"echo\" \"hello & calc.exe\"");
+    }
+
+    #[test]
+    fn test_command_windows_powershell_escaping() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["echo", "hello'world"]),
+        );
+        params.insert("shell_type".to_string(), serde_json::json!("powershell"));
+
+        let cmd = module.get_command_string(&params).unwrap();
+        // Should use single quotes with doubled single quotes for PowerShell
+        assert_eq!(cmd, "'echo' 'hello''world'");
     }
 }
