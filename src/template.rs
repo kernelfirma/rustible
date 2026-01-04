@@ -309,7 +309,7 @@ impl TemplateEngine {
     #[must_use]
     #[inline]
     pub fn is_template(s: &str) -> bool {
-        s.contains("{{") || s.contains("{%")
+        s.contains("{{") || s.contains("{%") || s.contains("{#")
     }
 }
 
@@ -425,6 +425,9 @@ fn filter_join(value: Vec<MiniJinjaValue>, sep: Option<&str>) -> String {
 fn filter_int(value: MiniJinjaValue) -> i64 {
     if let Some(n) = value.as_i64() {
         n
+    } else if value.is_number() && !value.is_integer() {
+        // Handle float values by converting via string and truncating to int
+        value.to_string().parse::<f64>().map(|f| f as i64).unwrap_or(0)
     } else if let Some(s) = value.as_str() {
         // Try parsing as float first, then truncate to int
         s.parse::<f64>().map(|f| f as i64).unwrap_or_else(|_| s.parse().unwrap_or(0))
