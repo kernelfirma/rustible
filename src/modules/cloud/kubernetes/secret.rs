@@ -193,7 +193,10 @@ impl Module for K8sSecretModule {
         if output.changed {
             output.diff = Some(Diff::new(
                 "current state",
-                format!("Secret {} in namespace {} - desired state", config.name, config.namespace),
+                format!(
+                    "Secret {} in namespace {} - desired state",
+                    config.name, config.namespace
+                ),
             ));
         }
         Ok(output)

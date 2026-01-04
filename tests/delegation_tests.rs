@@ -35,7 +35,14 @@ async fn test_delegate_to_basic() {
     let ctx = ExecutionContext::new("web1");
 
     let result = delegated_task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -66,7 +73,14 @@ async fn test_delegate_facts_false() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -105,7 +119,14 @@ async fn test_delegate_facts_true() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -145,7 +166,14 @@ async fn test_delegate_facts_default_false() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -182,7 +210,14 @@ async fn test_delegate_with_register() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -215,7 +250,14 @@ async fn test_no_delegation() {
     let ctx = ExecutionContext::new("web1");
 
     let result = task
-        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+        .execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization,
+            &module_registry,
+        )
         .await;
 
     assert!(result.is_ok());

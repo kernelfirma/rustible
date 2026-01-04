@@ -33,9 +33,9 @@ pub fn shell_escape(s: &str) -> String {
     // Safe characters: alphanumeric, underscore, hyphen, dot, slash, colon, plus
     // Colon is needed for SELinux contexts (user:role:type:level)
     // Plus is needed for timezone offsets (GMT+5)
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+')
-    {
+    if s.chars().all(|c| {
+        c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+'
+    }) {
         return s.to_string();
     }
     // Otherwise, wrap in single quotes and escape any single quotes within

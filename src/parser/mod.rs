@@ -215,7 +215,9 @@ impl Parser {
         // First/last filters
         env.add_filter("first", |value: Value| -> Value {
             if matches!(value.kind(), ValueKind::Seq) {
-                value.get_item(&Value::from(0_i64)).unwrap_or(Value::UNDEFINED)
+                value
+                    .get_item(&Value::from(0_i64))
+                    .unwrap_or(Value::UNDEFINED)
             } else if let Some(s) = value.as_str() {
                 s.chars()
                     .next()
@@ -230,7 +232,8 @@ impl Parser {
             if matches!(value.kind(), ValueKind::Seq) {
                 let len = value.len().unwrap_or(0);
                 if len > 0 {
-                    value.get_item(&Value::from((len - 1) as i64))
+                    value
+                        .get_item(&Value::from((len - 1) as i64))
                         .unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
@@ -347,9 +350,7 @@ impl Parser {
                         iter.filter(|item| {
                             if let Some(ref attr) = attr {
                                 if matches!(item.kind(), ValueKind::Map) {
-                                    item.get_attr(attr)
-                                        .map(|v| v.is_true())
-                                        .unwrap_or(false)
+                                    item.get_attr(attr).map(|v| v.is_true()).unwrap_or(false)
                                 } else {
                                     false
                                 }
@@ -376,9 +377,7 @@ impl Parser {
                         iter.filter(|item| {
                             if let Some(ref attr) = attr {
                                 if matches!(item.kind(), ValueKind::Map) {
-                                    !item.get_attr(attr)
-                                        .map(|v| v.is_true())
-                                        .unwrap_or(false)
+                                    !item.get_attr(attr).map(|v| v.is_true()).unwrap_or(false)
                                 } else {
                                     true
                                 }
@@ -619,7 +618,9 @@ impl Parser {
                 let len = value.len().unwrap_or(0);
                 if len > 0 {
                     let idx = rand::rngs::OsRng.gen_range(0..len);
-                    value.get_item(&Value::from(idx)).unwrap_or(Value::UNDEFINED)
+                    value
+                        .get_item(&Value::from(idx))
+                        .unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
                 }
@@ -840,8 +841,10 @@ impl Parser {
                 let is_seq2 = matches!(other.kind(), ValueKind::Seq);
                 if is_seq1 && is_seq2 {
                     // Collect iterators into Vecs since we need to iterate multiple times
-                    let items1: Vec<Value> = value.try_iter().map(|i| i.collect()).unwrap_or_default();
-                    let items2: Vec<Value> = other.try_iter().map(|i| i.collect()).unwrap_or_default();
+                    let items1: Vec<Value> =
+                        value.try_iter().map(|i| i.collect()).unwrap_or_default();
+                    let items2: Vec<Value> =
+                        other.try_iter().map(|i| i.collect()).unwrap_or_default();
                     let set1: std::collections::HashSet<String> =
                         items1.iter().map(|v| v.to_string()).collect();
                     let set2: std::collections::HashSet<String> =

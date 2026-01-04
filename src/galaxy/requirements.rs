@@ -368,9 +368,9 @@ impl From<RequirementRaw> for Requirement {
                 };
 
                 // Use explicit name if provided, otherwise fall back to src URL
-                let name = full.name.unwrap_or_else(|| {
-                    full.src.unwrap_or_else(|| "unknown".to_string())
-                });
+                let name = full
+                    .name
+                    .unwrap_or_else(|| full.src.unwrap_or_else(|| "unknown".to_string()));
 
                 Requirement {
                     name,

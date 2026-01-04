@@ -485,9 +485,13 @@ impl ListTasksArgs {
                             .and_then(|t| {
                                 if let Some(s) = t.as_str() {
                                     Some(vec![s.to_string()])
-                                } else { t.as_sequence().map(|seq| seq.iter()
+                                } else {
+                                    t.as_sequence().map(|seq| {
+                                        seq.iter()
                                             .filter_map(|v| v.as_str().map(String::from))
-                                            .collect()) }
+                                            .collect()
+                                    })
+                                }
                             })
                             .unwrap_or_default();
 

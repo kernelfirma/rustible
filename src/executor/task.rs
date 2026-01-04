@@ -773,7 +773,14 @@ impl Task {
 
             // Execute for this item with parallelization enforcement
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
+                .execute_module(
+                    ctx,
+                    runtime,
+                    handlers,
+                    notified,
+                    parallelization_manager,
+                    module_registry,
+                )
                 .await?;
 
             // Extract and store ansible_facts from module results in loops
@@ -883,7 +890,14 @@ impl Task {
 
             // Execute the module
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
+                .execute_module(
+                    ctx,
+                    runtime,
+                    handlers,
+                    notified,
+                    parallelization_manager,
+                    module_registry,
+                )
                 .await?;
 
             // Extract and store ansible_facts from module results during retries
@@ -987,9 +1001,15 @@ impl Task {
             "debug" => self.execute_debug(&args, ctx).await,
             "set_fact" => self.execute_set_fact(&args, ctx, runtime).await,
             "command" | "shell" => self.execute_command(&args, ctx, runtime).await,
-            "copy" => self.execute_copy(&args, ctx, runtime, module_registry).await,
+            "copy" => {
+                self.execute_copy(&args, ctx, runtime, module_registry)
+                    .await
+            }
             "file" => self.execute_file(&args, ctx, module_registry).await,
-            "template" => self.execute_template(&args, ctx, runtime, module_registry).await,
+            "template" => {
+                self.execute_template(&args, ctx, runtime, module_registry)
+                    .await
+            }
             "package" | "apt" | "yum" | "dnf" => self.execute_package(&args, ctx).await,
             "service" | "systemd" => self.execute_service(&args, ctx).await,
             "user" => self.execute_user(&args, ctx).await,
@@ -1390,8 +1410,16 @@ impl Task {
                     facts: std::collections::HashMap::new(),
                     work_dir: None,
                     r#become: ctx.r#become,
-                    become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-                    become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+                    become_method: if ctx.r#become {
+                        Some(ctx.r#become_method.clone())
+                    } else {
+                        None
+                    },
+                    become_user: if ctx.r#become {
+                        Some(ctx.r#become_user.clone())
+                    } else {
+                        None
+                    },
                     connection: ctx.connection.clone(),
                 };
 
@@ -1428,8 +1456,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             connection: ctx.connection.clone(),
         };
 
@@ -1473,8 +1509,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             connection: ctx.connection.clone(),
         };
 
@@ -1525,8 +1569,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             connection: ctx.connection.clone(),
         };
 

@@ -104,10 +104,10 @@ pub use dependency::{
 pub use fact_pipeline::{FactPipeline, FactPipelineConfig, FactResult};
 pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
 pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
+pub use playbook::{Play, Playbook};
 pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
-pub use playbook::{Play, Playbook};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -927,7 +927,9 @@ impl Executor {
 
                 // Apply become precedence: task > config (play-level handled separately)
                 let effective_become = task.r#become || self.config.r#become;
-                let effective_become_user = task.become_user.clone()
+                let effective_become_user = task
+                    .become_user
+                    .clone()
                     .unwrap_or_else(|| self.config.r#become_user.clone());
 
                 let ctx = ExecutionContext::new(host.clone())
@@ -1057,7 +1059,9 @@ impl Executor {
 
                         // Apply become precedence: task > config
                         let effective_become = task.r#become || config_become;
-                        let effective_become_user = task.become_user.clone()
+                        let effective_become_user = task
+                            .become_user
+                            .clone()
                             .unwrap_or_else(|| config_become_user.clone());
 
                         let ctx = ExecutionContext::new(host.clone())
@@ -1070,7 +1074,14 @@ impl Executor {
                             .with_become_password(config_become_password.clone());
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry)
+                            .execute(
+                                &ctx,
+                                &runtime,
+                                &handlers,
+                                &notified,
+                                &parallelization_local,
+                                &module_registry,
+                            )
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1281,7 +1292,9 @@ impl Executor {
 
             // Apply become precedence: task > config
             let effective_become = task.r#become || self.config.r#become;
-            let effective_become_user = task.become_user.clone()
+            let effective_become_user = task
+                .become_user
+                .clone()
                 .unwrap_or_else(|| self.config.r#become_user.clone());
 
             let ctx = ExecutionContext::new(host.clone())
@@ -1367,7 +1380,9 @@ impl Executor {
 
         // Apply become precedence: task > config
         let effective_become = task.r#become || config_become;
-        let effective_become_user = task.become_user.clone()
+        let effective_become_user = task
+            .become_user
+            .clone()
             .unwrap_or_else(|| config_become_user.clone());
 
         // OPTIMIZATION: For small host counts, share task via Arc instead of cloning per host
@@ -1404,7 +1419,14 @@ impl Executor {
                         .with_become_password(config_become_password);
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+                        .execute(
+                            &ctx,
+                            &runtime,
+                            &handlers,
+                            &notified,
+                            &parallelization,
+                            &module_registry,
+                        )
                         .await;
 
                     match result {

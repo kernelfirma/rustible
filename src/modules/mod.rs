@@ -509,15 +509,13 @@ impl ModuleOutput {
         }
         if let Some(ref stdout) = self.stdout {
             result["stdout"] = serde_json::json!(stdout);
-            result["stdout_lines"] = serde_json::json!(
-                stdout.lines().map(String::from).collect::<Vec<_>>()
-            );
+            result["stdout_lines"] =
+                serde_json::json!(stdout.lines().map(String::from).collect::<Vec<_>>());
         }
         if let Some(ref stderr) = self.stderr {
             result["stderr"] = serde_json::json!(stderr);
-            result["stderr_lines"] = serde_json::json!(
-                stderr.lines().map(String::from).collect::<Vec<_>>()
-            );
+            result["stderr_lines"] =
+                serde_json::json!(stderr.lines().map(String::from).collect::<Vec<_>>());
         }
 
         // Add module-specific data
