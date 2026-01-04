@@ -641,7 +641,9 @@ impl RuntimeContext {
             merged.insert(k.clone(), v.clone());
         }
 
-        // Host facts (under 'ansible_facts' namespace and as top-level ansible_* variables)
+        // Host facts (under 'ansible_facts' namespace and as top-level variables)
+        // Facts set via set_fact should be accessible directly (e.g., {{ my_fact }})
+        // as well as under ansible_facts namespace for compatibility
         if let Some(host_data) = self.host_data.get(host) {
             if !host_data.facts.is_empty() {
                 // Store facts under ansible_facts for backwards compatibility
@@ -650,15 +652,18 @@ impl RuntimeContext {
                     serde_json::to_value(host_data.get_all_facts()).unwrap_or(JsonValue::Null),
                 );
 
-                // Also expose each fact as a top-level ansible_* variable
-                // Facts like {"hostname": "server1"} become {"ansible_hostname": "server1"}
+                // Expose each fact directly and with ansible_* prefix
+                // This allows set_fact variables to be accessed as {{ my_var }}
+                // and gathered facts as {{ ansible_hostname }}
                 for (fact_name, fact_value) in host_data.get_all_facts() {
-                    let prefixed_name = if fact_name.starts_with("ansible_") {
-                        fact_name.clone()
-                    } else {
-                        format!("ansible_{}", fact_name)
-                    };
-                    merged.insert(prefixed_name, fact_value.clone());
+                    // Always add the fact directly (for set_fact compatibility)
+                    merged.insert(fact_name.clone(), fact_value.clone());
+
+                    // Also add with ansible_ prefix if not already prefixed
+                    // This maintains backward compatibility for gathered facts
+                    if !fact_name.starts_with("ansible_") {
+                        merged.insert(format!("ansible_{}", fact_name), fact_value.clone());
+                    }
                 }
             }
 
