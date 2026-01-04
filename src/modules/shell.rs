@@ -11,6 +11,7 @@ use super::{
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
+use crate::utils::cmd_escape;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -48,8 +49,11 @@ impl ShellModule {
         if executable.ends_with("cmd.exe") || executable.ends_with("cmd") {
             // Windows cmd.exe does not respect single quotes.
             // We use double quotes and escape internal double quotes with "".
-            let escaped_cmd = cmd.replace('"', "\"\"");
-            Ok(format!("{} /c \"{}\"", executable, escaped_cmd))
+            // Logic extracted to crate::utils::cmd_escape, but here we need to escape the whole command line
+            // for the /c argument.
+            // The previous logic was: cmd.replace('"', "\"\"") wrapped in quotes.
+            // cmd_escape does exactly that.
+            Ok(format!("{} /c {}", executable, cmd_escape(cmd)))
         } else {
             // Unix-like shells (sh, bash, zsh, fish)
             let escaped_cmd = cmd.replace('\'', "'\\''");
