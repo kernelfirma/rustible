@@ -4,6 +4,7 @@
 //! escalation to prevent command injection and other security vulnerabilities.
 
 use super::{EscalationMethod, SecurityError, SecurityResult};
+use crate::utils::shell_escape;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -333,17 +334,7 @@ impl BecomeValidator {
 
     /// Escape a string for safe shell usage
     pub fn shell_escape(&self, s: &str) -> String {
-        // Check if escaping is needed
-        let needs_escape = s
-            .chars()
-            .any(|c| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.' && c != '/');
-
-        if !needs_escape {
-            return s.to_string();
-        }
-
-        // Use single quotes and escape internal single quotes
-        format!("'{}'", s.replace('\'', "'\\''"))
+        shell_escape(s)
     }
 
     /// Validate become flags
