@@ -33,7 +33,7 @@ use rustible::connection::{
 };
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Task, TaskResult, TaskStatus};
+use rustible::executor::task::{LoopSource, Task, TaskResult, TaskStatus};
 use rustible::executor::{ExecutionStats, ExecutorConfig, HostResult};
 use rustible::inventory::{Group, Host, Inventory};
 use rustible::modules::{
@@ -772,7 +772,7 @@ pub struct TaskBuilder {
     notify: Vec<String>,
     register: Option<String>,
     ignore_errors: bool,
-    loop_items: Option<Vec<serde_json::Value>>,
+    loop_items: Option<LoopSource>,
 }
 
 impl TaskBuilder {
@@ -822,7 +822,7 @@ impl TaskBuilder {
 
     /// Add loop items.
     pub fn loop_over(mut self, items: Vec<serde_json::Value>) -> Self {
-        self.loop_items = Some(items);
+        self.loop_items = Some(LoopSource::Items(items));
         self
     }
 

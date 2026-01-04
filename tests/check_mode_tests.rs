@@ -19,7 +19,7 @@ use tempfile::TempDir;
 
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::{ExecutionContext, RuntimeContext};
-use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use rustible::executor::task::{Handler, LoopSource, Task, TaskResult, TaskStatus};
 use rustible::executor::{ExecutionStats, ExecutionStrategy, Executor, ExecutorConfig};
 use rustible::modules::command::CommandModule;
 use rustible::modules::copy::CopyModule;
@@ -590,7 +590,10 @@ fn test_task_loop_definition() {
         ]);
 
     assert!(task.loop_items.is_some());
-    assert_eq!(task.loop_items.as_ref().unwrap().len(), 3);
+    match task.loop_items.as_ref().unwrap() {
+        LoopSource::Items(items) => assert_eq!(items.len(), 3),
+        LoopSource::Template(_) => panic!("Expected Items, got Template"),
+    }
 }
 
 #[tokio::test]

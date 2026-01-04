@@ -1154,8 +1154,12 @@ fn parse_task_definition(
         notify: def.notify.to_vec(),
         register: def.register,
         loop_items: match def.loop_items {
-            Some(LoopValue::Items(items)) => Some(items),
-            Some(LoopValue::Variable(_)) => None, // Would need runtime resolution
+            Some(LoopValue::Items(items)) => {
+                Some(crate::executor::task::LoopSource::Items(items))
+            }
+            Some(LoopValue::Variable(template)) => {
+                Some(crate::executor::task::LoopSource::Template(template))
+            }
             None => None,
         },
         loop_var: def

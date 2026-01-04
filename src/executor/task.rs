@@ -278,9 +278,9 @@ pub struct Task {
     /// Variable name to register result
     #[serde(default)]
     pub register: Option<String>,
-    /// Items to loop over
+    /// Items to loop over (can be literal items or template expression)
     #[serde(default)]
-    pub loop_items: Option<Vec<JsonValue>>,
+    pub loop_items: Option<LoopSource>,
     /// Loop variable name (default: "item")
     #[serde(default = "default_loop_var")]
     pub loop_var: String,
@@ -348,6 +348,15 @@ fn default_loop_var() -> String {
     "item".to_string()
 }
 
+/// Source of loop items - can be literal items or a template expression
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LoopSource {
+    /// Literal array of items
+    Items(Vec<JsonValue>),
+    /// Template expression that evaluates to an array (e.g., "{{ result.results }}")
+    Template(String),
+}
+
 impl Default for Task {
     fn default() -> Self {
         Self {
@@ -397,9 +406,12 @@ impl From<crate::playbook::Task> for Task {
         // Convert loop items from various sources
         // Priority: loop > with_items > with_dict > with_fileglob
         let loop_items = if let Some(v) = pt.loop_.or(pt.with_items) {
-            // Standard loop or with_items - expect array
+            // Standard loop or with_items - can be array or template expression
             if let Some(arr) = v.as_array() {
-                Some(arr.clone())
+                Some(LoopSource::Items(arr.clone()))
+            } else if let Some(s) = v.as_str() {
+                // Template expression like "{{ result.results }}"
+                Some(LoopSource::Template(s.to_string()))
             } else {
                 None
             }
@@ -410,7 +422,7 @@ impl From<crate::playbook::Task> for Task {
                     .iter()
                     .map(|(k, val)| serde_json::json!({"key": k, "value": val}))
                     .collect();
-                Some(items)
+                Some(LoopSource::Items(items))
             } else {
                 None
             }
@@ -418,9 +430,9 @@ impl From<crate::playbook::Task> for Task {
             // with_fileglob - for now just pass patterns as strings
             // (actual glob expansion happens at runtime)
             if let Some(arr) = v.as_array() {
-                Some(arr.clone())
+                Some(LoopSource::Items(arr.clone()))
             } else if v.is_string() {
-                Some(vec![v])
+                Some(LoopSource::Items(vec![v]))
             } else {
                 None
             }
@@ -508,7 +520,13 @@ impl Task {
 
     /// Set loop items
     pub fn loop_over(mut self, items: Vec<JsonValue>) -> Self {
-        self.loop_items = Some(items);
+        self.loop_items = Some(LoopSource::Items(items));
+        self
+    }
+
+    /// Set loop from template expression
+    pub fn loop_template(mut self, template: impl Into<String>) -> Self {
+        self.loop_items = Some(LoopSource::Template(template.into()));
         self
     }
 
@@ -576,15 +594,91 @@ impl Task {
         };
 
         // Handle loops - for set_fact, use fact_storage_ctx; for others, use execution_ctx
-        if let Some(ref items) = self.loop_items {
+        if let Some(ref loop_source) = self.loop_items {
             let loop_ctx = if self.module == "set_fact" {
                 &fact_storage_ctx
             } else {
                 &execution_ctx
             };
+
+            // Resolve loop items from the source
+            let items = match loop_source {
+                LoopSource::Items(items) => items.clone(),
+                LoopSource::Template(template) => {
+                    // Render the template to get the items
+                    let rt = runtime.read().await;
+                    let vars = rt.get_merged_vars(&loop_ctx.host);
+                    drop(rt);
+
+                    let rendered = TEMPLATE_ENGINE
+                        .render_value(
+                            &serde_json::Value::String(template.clone()),
+                            &vars,
+                        )
+                        .map_err(|e| ExecutorError::RuntimeError(format!(
+                            "Failed to render loop template '{}': {}",
+                            template, e
+                        )))?;
+
+                    // The rendered value should be an array
+                    match rendered {
+                        serde_json::Value::Array(arr) => arr,
+                        serde_json::Value::String(ref s) if s.is_empty() => {
+                            // Empty string means no items, skip loop
+                            debug!("Loop template rendered to empty string, skipping loop");
+                            Vec::new()
+                        }
+                        other => {
+                            // Try to interpret as JSON array string
+                            if let serde_json::Value::String(ref s) = other {
+                                // MiniJinja outputs Python-style values, convert to JSON:
+                                // none -> null, True -> true, False -> false
+                                let json_str = s
+                                    .replace(": none", ": null")
+                                    .replace(":none", ":null")
+                                    .replace(", none,", ", null,")
+                                    .replace("[none,", "[null,")
+                                    .replace(", none]", ", null]")
+                                    .replace(": True", ": true")
+                                    .replace(":True", ":true")
+                                    .replace(": False", ": false")
+                                    .replace(":False", ":false");
+
+                                if let Ok(arr) = serde_json::from_str::<Vec<JsonValue>>(&json_str) {
+                                    arr
+                                } else {
+                                    warn!(
+                                        "Loop template '{}' did not render to an array: {:?}",
+                                        template, other
+                                    );
+                                    Vec::new()
+                                }
+                            } else {
+                                warn!(
+                                    "Loop template '{}' did not render to an array: {:?}",
+                                    template, other
+                                );
+                                Vec::new()
+                            }
+                        }
+                    }
+                }
+            };
+
+            if items.is_empty() {
+                // No items to iterate, return success
+                return Ok(TaskResult {
+                    status: TaskStatus::Ok,
+                    changed: false,
+                    msg: Some("Loop has no items".to_string()),
+                    result: None,
+                    diff: None,
+                });
+            }
+
             return self
                 .execute_loop(
-                    items,
+                    &items,
                     loop_ctx,
                     runtime,
                     handlers,
@@ -806,12 +900,20 @@ impl Task {
                 any_failed = true;
                 if !self.ignore_errors {
                     // Stop on first failure unless ignore_errors
-                    loop_results.push(result.to_registered(None, None));
+                    let mut registered = result.to_registered(None, None);
+                    // Store the loop item in the result data for access in subsequent loops
+                    // This enables patterns like: loop: "{{ result.results }}" with item.stat.exists
+                    registered.data.insert("item".to_string(), item.clone());
+                    loop_results.push(registered);
                     break;
                 }
             }
 
-            loop_results.push(result.to_registered(None, None));
+            // Create registered result with loop item included in data
+            // This enables patterns like: loop: "{{ result.results }}" with item.stat.exists
+            let mut registered = result.to_registered(None, None);
+            registered.data.insert("item".to_string(), item.clone());
+            loop_results.push(registered);
         }
 
         // Clear only the loop-specific variables, preserving other task vars
