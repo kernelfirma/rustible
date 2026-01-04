@@ -159,8 +159,8 @@ impl Parser {
         // Boolean filter
         env.add_filter("bool", |value: Value| -> bool {
             match value.as_str() {
-                Some("true") | Some("yes") | Some("on") | Some("1") => true,
-                Some("false") | Some("no") | Some("off") | Some("0") | Some("") => false,
+                Some("true" | "yes" | "on" | "1") => true,
+                Some("false" | "no" | "off" | "0" | "") => false,
                 None => {
                     if let Ok(b) = value.clone().try_into() {
                         b
@@ -671,7 +671,7 @@ impl Parser {
                             if matches!(item.kind(), ValueKind::Map) {
                                 if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
-                                        Some("equalto") | Some("==") | Some("eq") => {
+                                        Some("equalto" | "==" | "eq") => {
                                             if let Some(ref tv) = test_val {
                                                 attr_val.to_string() == tv.to_string()
                                             } else {
@@ -681,8 +681,8 @@ impl Parser {
                                         Some("defined") => !attr_val.is_undefined(),
                                         Some("undefined") => attr_val.is_undefined(),
                                         Some("none") => attr_val.is_none(),
-                                        Some("true") | Some("truthy") => attr_val.is_true(),
-                                        Some("false") | Some("falsy") => !attr_val.is_true(),
+                                        Some("true" | "truthy") => attr_val.is_true(),
+                                        Some("false" | "falsy") => !attr_val.is_true(),
                                         None | Some(_) => attr_val.is_true(),
                                     }
                                 } else {
@@ -716,7 +716,7 @@ impl Parser {
                             if matches!(item.kind(), ValueKind::Map) {
                                 if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
-                                        Some("equalto") | Some("==") | Some("eq") => {
+                                        Some("equalto" | "==" | "eq") => {
                                             if let Some(ref tv) = test_val {
                                                 attr_val.to_string() != tv.to_string()
                                             } else {
@@ -726,8 +726,8 @@ impl Parser {
                                         Some("defined") => attr_val.is_undefined(),
                                         Some("undefined") => !attr_val.is_undefined(),
                                         Some("none") => !attr_val.is_none(),
-                                        Some("true") | Some("truthy") => !attr_val.is_true(),
-                                        Some("false") | Some("falsy") => attr_val.is_true(),
+                                        Some("true" | "truthy") => !attr_val.is_true(),
+                                        Some("false" | "falsy") => attr_val.is_true(),
                                         None | Some(_) => !attr_val.is_true(),
                                     }
                                 } else {

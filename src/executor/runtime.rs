@@ -1615,14 +1615,14 @@ mod tests {
         );
 
         // Remove extra_var, include_param should win
-        ctx.extra_vars.remove("test_var");
+        ctx.extra_vars.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("include_param"))
         );
 
         // Remove include_param, role_param should win
-        ctx.include_params.remove("test_var");
+        ctx.include_params.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("role_param"))
