@@ -450,6 +450,32 @@ impl RuntimeContext {
                     serde_json::json!(key_file),
                 );
             }
+            if let Some(password) = &host.connection.ssh.password {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_ssh_pass".to_string(),
+                    serde_json::json!(password),
+                );
+            }
+            if host.connection.ssh.timeout > 0 {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_ssh_timeout".to_string(),
+                    serde_json::json!(host.connection.ssh.timeout),
+                );
+            }
+            ctx.set_host_var(
+                &host_name,
+                "ansible_connection".to_string(),
+                serde_json::json!(host.connection.connection.to_string()),
+            );
+            if let Some(python) = &host.connection.python_interpreter {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_python_interpreter".to_string(),
+                    serde_json::json!(python),
+                );
+            }
         }
 
         ctx

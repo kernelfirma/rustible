@@ -10,19 +10,14 @@
 
 mod common;
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
-
-use tokio::sync::Mutex;
 
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Task, TaskStatus};
-use rustible::executor::{ExecutionStats, ExecutionStrategy, Executor, ExecutorConfig};
+use rustible::executor::task::Task;
+use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig};
 
-use common::{assert_stats, MockConnection, MockModule, PlayBuilder, PlaybookBuilder, TaskBuilder};
+use common::PlaybookBuilder;
 
 // ============================================================================
 // Helper Functions

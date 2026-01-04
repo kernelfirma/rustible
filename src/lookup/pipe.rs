@@ -28,8 +28,9 @@
 //! - `executable` (string): Shell to use (default: /bin/sh on Unix)
 
 use super::{Lookup, LookupContext, LookupError, LookupResult};
+use std::io::Read;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Default command timeout in seconds
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -95,14 +96,77 @@ impl PipeLookup {
             command.current_dir(dir);
         }
 
-        // Execute the command
-        let output = command.output().map_err(|e| {
+        // Execute the command with timeout enforcement
+        let mut child = command.spawn().map_err(|e| {
             LookupError::CommandFailed(format!("Failed to execute command: {}", e))
         })?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        let stdout_handle = std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            if let Some(mut out) = stdout {
+                let _ = out.read_to_end(&mut buffer);
+            }
+            buffer
+        });
+
+        let stderr_handle = std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            if let Some(mut err) = stderr {
+                let _ = err.read_to_end(&mut buffer);
+            }
+            buffer
+        });
+
+        let mut timed_out = false;
+        let status = if timeout.is_zero() {
+            child.wait().map_err(|e| {
+                LookupError::CommandFailed(format!("Failed to wait for command: {}", e))
+            })?
+        } else {
+            let start = Instant::now();
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break status,
+                    Ok(None) => {
+                        if start.elapsed() >= timeout {
+                            timed_out = true;
+                            let _ = child.kill();
+                            break child.wait().map_err(|e| {
+                                LookupError::CommandFailed(format!(
+                                    "Failed to wait for killed command: {}",
+                                    e
+                                ))
+                            })?;
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        return Err(LookupError::CommandFailed(format!(
+                            "Failed to wait for command: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+        };
+
+        let stdout = stdout_handle
+            .join()
+            .map_err(|_| LookupError::CommandFailed("Failed to capture stdout".to_string()))?;
+        let stderr = stderr_handle
+            .join()
+            .map_err(|_| LookupError::CommandFailed("Failed to capture stderr".to_string()))?;
+
+        if timed_out {
+            return Err(LookupError::Timeout(timeout.as_secs()));
+        }
+
+        if !status.success() {
+            let stderr = String::from_utf8_lossy(&stderr);
+            let exit_code = status.code().unwrap_or(-1);
             return Err(LookupError::CommandFailed(format!(
                 "Command failed with exit code {}: {}",
                 exit_code,
@@ -110,7 +174,7 @@ impl PipeLookup {
             )));
         }
 
-        let stdout = String::from_utf8(output.stdout).map_err(|e| {
+        let stdout = String::from_utf8(stdout).map_err(|e| {
             LookupError::ParseError(format!("Failed to parse command output as UTF-8: {}", e))
         })?;
 

@@ -12,12 +12,8 @@
 //! - Concurrent access safety
 //! - Edge cases and error handling
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-
-use async_trait::async_trait;
-use parking_lot::RwLock;
 
 use rustible::callback::plugins::{
     DefaultCallback, DefaultCallbackBuilder, DefaultCallbackConfig, MinimalCallback, NullCallback,
@@ -200,14 +196,14 @@ mod default_callback_tests {
 
     #[test]
     fn test_default_callback_with_verbosity() {
-        let callback = DefaultCallback::new().with_verbosity(2);
+        let _callback = DefaultCallback::new().with_verbosity(2);
         // Verbosity is stored internally
         assert!(true); // Construction should not panic
     }
 
     #[test]
     fn test_default_callback_with_no_color() {
-        let callback = DefaultCallback::new().with_no_color(true);
+        let _callback = DefaultCallback::new().with_no_color(true);
         assert!(true); // Construction should not panic
     }
 
@@ -253,8 +249,8 @@ mod default_callback_tests {
 
     #[test]
     fn test_default_callback_clone() {
-        let callback1 = DefaultCallback::new().with_verbosity(3);
-        let callback2 = callback1.clone();
+        let _callback1 = DefaultCallback::new().with_verbosity(3);
+        let _callback2 = _callback1.clone();
 
         // Clone should have same configuration
         assert!(true); // Clone should not panic
@@ -262,7 +258,7 @@ mod default_callback_tests {
 
     #[test]
     fn test_default_callback_default_trait() {
-        let callback = DefaultCallback::default();
+        let _callback = DefaultCallback::default();
         assert!(true); // Default should work
     }
 
@@ -700,20 +696,20 @@ mod minimal_callback_tests {
 
     #[test]
     fn test_minimal_callback_construction() {
-        let callback = MinimalCallback::new();
+        let _callback = MinimalCallback::new();
         assert!(true); // Construction should not panic
     }
 
     #[test]
     fn test_minimal_callback_default() {
-        let callback = MinimalCallback::default();
+        let _callback = MinimalCallback::default();
         assert!(true); // Default should work
     }
 
     #[test]
     fn test_minimal_callback_clone_shares_state() {
         let callback1 = MinimalCallback::new();
-        let callback2 = callback1.clone();
+        let _callback2 = callback1.clone();
 
         // Clone should share state (Arc pointers should be the same)
         // This is verified in the inline tests of minimal.rs

@@ -516,7 +516,6 @@ async fn stress_test_burst_traffic() {
 struct RaceDetector {
     value: AtomicU64,
     in_progress: AtomicU32,
-    race_detected: AtomicBool,
 }
 
 impl RaceDetector {
@@ -524,7 +523,6 @@ impl RaceDetector {
         Self {
             value: AtomicU64::new(0),
             in_progress: AtomicU32::new(0),
-            race_detected: AtomicBool::new(false),
         }
     }
 

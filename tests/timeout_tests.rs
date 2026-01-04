@@ -10,6 +10,8 @@
 //! - Module-specific timeouts
 //! - Edge cases for timeout behavior
 
+#![allow(unused_variables)]
+
 mod common;
 
 use std::collections::HashMap;
@@ -31,12 +33,10 @@ use rustible::connection::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
     TransferOptions,
 };
-use rustible::executor::playbook::{Play, Playbook};
-use rustible::executor::runtime::{ExecutionContext, RuntimeContext};
-use rustible::executor::task::{Task, TaskResult, TaskStatus};
+use rustible::executor::task::{TaskResult, TaskStatus};
 use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig};
 
-use common::{test_executor_config, MockConnection, PlayBuilder, PlaybookBuilder, TaskBuilder};
+use common::{MockConnection, PlayBuilder, TaskBuilder};
 
 // ============================================================================
 // SECTION 1: CONNECTION TIMEOUT TESTS
@@ -1277,7 +1277,7 @@ async fn test_timeout_during_file_transfer() {
 /// Test timeout during privilege escalation
 #[tokio::test]
 async fn test_timeout_during_become() {
-    let conn = LocalConnection::new();
+    let conn = SlowConnection::new("slow-become", Duration::from_secs(5));
 
     let options = ExecuteOptions::new()
         .with_timeout(1)
@@ -1575,7 +1575,7 @@ impl Connection for SlowConnection {
         Ok(false)
     }
 
-    async fn stat(&self, path: &Path) -> ConnectionResult<FileStat> {
+    async fn stat(&self, _path: &Path) -> ConnectionResult<FileStat> {
         tokio::time::sleep(self.delay).await;
         Ok(FileStat {
             size: 100,

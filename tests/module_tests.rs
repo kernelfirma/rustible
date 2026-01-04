@@ -11,6 +11,8 @@
 //! - Check mode behavior for all modules
 //! - Diff generation for file-based modules
 
+#![allow(unused_variables)]
+
 mod common;
 
 use common::MockConnection;

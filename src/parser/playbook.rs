@@ -753,7 +753,7 @@ impl Task {
             return self.module.get(module_name);
         }
 
-        self.args.as_ref().map(|a| {
+        self.args.as_ref().map(|_args| {
             // Convert IndexMap to Value - this is a workaround
             // In real code, we'd handle this differently
             static EMPTY: serde_yaml::Value = serde_yaml::Value::Null;

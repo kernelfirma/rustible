@@ -7,14 +7,11 @@
 //! - Password security
 //! - Shell metacharacter handling
 
-use std::path::Path;
-
 // ============================================================================
 // COMMAND INJECTION TESTS
 // ============================================================================
 
 mod command_injection {
-    use super::*;
 
     /// Test that malicious usernames with shell metacharacters are detected
     /// This documents expected behavior - validation should reject these
@@ -173,7 +170,6 @@ mod command_injection {
 // ============================================================================
 
 mod method_validation {
-    use super::*;
 
     /// Supported escalation methods that should be accepted
     #[test]
@@ -230,7 +226,6 @@ mod method_validation {
 // ============================================================================
 
 mod path_injection {
-    use super::*;
 
     /// Test that malicious paths are properly escaped
     #[test]
@@ -318,7 +313,6 @@ mod path_injection {
 // ============================================================================
 
 mod password_security {
-    use super::*;
 
     /// Test that passwords are not included in command strings
     #[test]
@@ -430,7 +424,6 @@ mod password_security {
 // ============================================================================
 
 mod env_injection {
-    use super::*;
 
     /// Test that environment variable names are validated
     #[test]
@@ -500,7 +493,6 @@ mod env_injection {
 // ============================================================================
 
 mod cwd_injection {
-    use super::*;
 
     /// Test that malicious working directories are escaped
     #[test]
@@ -551,7 +543,6 @@ mod cwd_injection {
 // ============================================================================
 
 mod integration_security {
-    use super::*;
 
     /// Test complete escalation command construction safety
     #[test]
@@ -565,7 +556,7 @@ mod integration_security {
             ("invalid", "root", None, "echo hello", false),                // method injection
         ];
 
-        for (method, user, cwd, cmd, expected_safe) in test_cases {
+        for (method, user, cwd, _cmd, expected_safe) in test_cases {
             let is_safe = is_safe_escalation(method, user, cwd);
             assert_eq!(
                 is_safe, expected_safe,
@@ -613,7 +604,6 @@ mod integration_security {
 // ============================================================================
 
 mod timing_security {
-    use super::*;
     use std::time::{Duration, Instant};
 
     /// Test that password comparison uses constant-time comparison

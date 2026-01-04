@@ -9,13 +9,8 @@
 //! The MinimalCallback is designed for CI/CD environments where verbosity
 //! should be minimized but failures must be clearly visible.
 
-use std::io::{self, Write as IoWrite};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-
-use async_trait::async_trait;
-use parking_lot::Mutex;
 
 use rustible::callback::plugins::ExecutionCallback;
 use rustible::callback::plugins::{MinimalCallback, UnreachableCallback};

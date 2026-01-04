@@ -156,10 +156,6 @@ impl CallbackAggregator {
         }
     }
 
-    fn add(&mut self, callback: Arc<dyn ExecutionCallback>) {
-        self.callbacks.push(callback);
-    }
-
     fn count(&self) -> usize {
         self.callbacks.len()
     }
@@ -791,7 +787,12 @@ async fn test_callback_error_handling() {
     // Second call fails
     callback.set_should_fail(true);
     let outcome = callback.on_task_complete_fallible(&result).await;
-    assert!(outcome.is_err());
+    match outcome {
+        Err(CallbackError::PluginFailed(message)) => {
+            assert_eq!(message, "Simulated failure");
+        }
+        _ => panic!("Expected PluginFailed error"),
+    }
     assert_eq!(callback.failure_count.load(Ordering::SeqCst), 1);
 
     // Third call succeeds again

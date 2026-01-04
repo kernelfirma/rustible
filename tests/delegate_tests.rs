@@ -13,16 +13,15 @@
 //! 10. Handler delegation
 //! 11. Edge cases and error handling
 
+#![allow(unused_mut)]
+
 mod common;
 
 use indexmap::IndexMap;
 use rustible::executor::playbook::{Play, Playbook};
-use rustible::executor::runtime::{ExecutionContext, RuntimeContext};
-use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use rustible::executor::runtime::RuntimeContext;
+use rustible::executor::task::{Handler, Task};
 use rustible::executor::{Executor, ExecutorConfig};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 // ============================================================================
 // Test 1: Basic delegate_to Functionality

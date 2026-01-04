@@ -8,12 +8,11 @@
 //!
 //! Tests verify correctness, concurrency behavior, and performance characteristics.
 
-use std::collections::HashMap;
+#![allow(unused_imports)]
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-use tokio::sync::Mutex;
 
 // ============================================================================
 // Async Task Execution Tests
@@ -361,10 +360,7 @@ mod async_task_tests {
 
 mod throttle_tests {
     use super::*;
-    use rustible::executor::throttle::{
-        RateLimiterState, TaskThrottleManager, ThrottleConfig, ThrottleGuard, ThrottleManager,
-        ThrottleStats,
-    };
+    use rustible::executor::throttle::{TaskThrottleManager, ThrottleConfig, ThrottleManager};
 
     #[test]
     fn test_throttle_config_defaults() {

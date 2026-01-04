@@ -201,7 +201,7 @@ async fn test_nested_includes() {
     // Load level 1
     let spec1 = IncludeTasksSpec::new("level1.yml");
     let parent_vars = VarStore::new();
-    let (tasks1, mut scope1) = includer
+    let (tasks1, scope1) = includer
         .load_include_tasks(&spec1, &parent_vars)
         .await
         .unwrap();

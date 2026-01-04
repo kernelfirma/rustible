@@ -13,50 +13,14 @@
 //! 10. Error handling for includes
 
 use indexmap::IndexMap;
-use rustible::executor::playbook::{
-    IncludeRoleDefinition, Play, Playbook, TaskDefinition, WhenCondition,
-};
+use rustible::executor::playbook::{Play, Playbook, TaskDefinition};
 use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Handler, Task, TaskStatus};
+use rustible::executor::task::{Handler, Task};
 use rustible::executor::{Executor, ExecutorConfig};
-use std::path::PathBuf;
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
-
-fn get_fixtures_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("includes")
-}
-
-fn create_test_executor() -> (Executor, RuntimeContext) {
-    let mut runtime = RuntimeContext::new();
-    runtime.add_host("localhost".to_string(), None);
-    let config = ExecutorConfig::default();
-    let executor = Executor::with_runtime(config, runtime);
-    // Create a new RuntimeContext for the caller since we can't clone
-    let mut caller_runtime = RuntimeContext::new();
-    caller_runtime.add_host("localhost".to_string(), None);
-    (executor, caller_runtime)
-}
-
-fn create_multi_host_executor() -> (Executor, RuntimeContext) {
-    let mut runtime = RuntimeContext::new();
-    runtime.add_host("host1".to_string(), Some("testgroup"));
-    runtime.add_host("host2".to_string(), Some("testgroup"));
-    runtime.add_host("host3".to_string(), Some("testgroup"));
-    let config = ExecutorConfig::default();
-    let executor = Executor::with_runtime(config, runtime);
-    // Create a new RuntimeContext for the caller since we can't clone
-    let mut caller_runtime = RuntimeContext::new();
-    caller_runtime.add_host("host1".to_string(), Some("testgroup"));
-    caller_runtime.add_host("host2".to_string(), Some("testgroup"));
-    caller_runtime.add_host("host3".to_string(), Some("testgroup"));
-    (executor, caller_runtime)
-}
 
 // ============================================================================
 // 1. INCLUDE_TASKS Tests

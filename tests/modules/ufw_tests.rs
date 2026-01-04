@@ -13,6 +13,9 @@
 //! - Rule command building
 //! - Edge cases
 
+#![allow(unused_comparisons)]
+#![allow(unused_variables)]
+
 use rustible::modules::ufw::{
     UfwDefault, UfwDirection, UfwLogLevel, UfwModule, UfwProto, UfwRule, UfwState,
 };

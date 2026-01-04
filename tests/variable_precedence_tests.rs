@@ -41,6 +41,8 @@
 //! - Registered variables
 //! - set_fact behavior
 
+#![allow(unused_mut)]
+
 use indexmap::IndexMap;
 use rustible::vars::{deep_merge, resolve, HashBehaviour, VarPrecedence, VarStore, Variable};
 use serde_yaml::Value;

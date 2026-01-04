@@ -15,7 +15,7 @@ use anyhow::Result;
 use cli::commands::CommandContext;
 use cli::{Cli, Commands};
 use config::Config;
-use rustible::playbook::Playbook;
+use rustible::executor::Playbook;
 use rustible::schema::{SchemaValidator, ValidatorConfig};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -358,23 +358,12 @@ async fn validate_playbook(
         return Ok(1);
     }
 
-    // Read the playbook content
-    let content = std::fs::read_to_string(playbook_path)?;
-
-    // Phase 1: Try typed parsing with Playbook::from_yaml for better error messages
+    // Phase 1: Parse using executor playbook parser for runtime parity
     ctx.output.section("Syntax Check");
-    let playbook = match Playbook::from_yaml(&content, Some(playbook_path.to_path_buf())) {
+    let playbook = match Playbook::load(playbook_path) {
         Ok(pb) => pb,
         Err(e) => {
-            let err = e.to_string();
-
-            // Provide a friendlier, stable error message for common structural mistakes.
-            if err.contains("missing field `hosts`") {
-                ctx.output
-                    .error(&format!("missing required 'hosts' field ({})", e));
-            } else {
-                ctx.output.error(&format!("Playbook parse error: {}", e));
-            }
+            ctx.output.error(&format!("Playbook parse error: {}", e));
             return Ok(1);
         }
     };
@@ -382,7 +371,8 @@ async fn validate_playbook(
     // Structural warnings (non-fatal)
     for play in &playbook.plays {
         // Warn on plays that have no tasks *and* no roles.
-        if play.task_count() == 0 && play.roles.is_empty() {
+        let task_count = play.pre_tasks.len() + play.tasks.len() + play.post_tasks.len();
+        if task_count == 0 && play.roles.is_empty() {
             let play_name = if play.name.is_empty() {
                 "<unnamed>"
             } else {

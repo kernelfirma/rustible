@@ -11,10 +11,7 @@
 //! - Error handling
 //! - Edge cases
 
-use rustible::modules::{
-    copy::CopyModule, Diff, Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ParamExt,
-};
+use rustible::modules::{copy::CopyModule, Module, ModuleContext, ModuleError, ModuleParams};
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

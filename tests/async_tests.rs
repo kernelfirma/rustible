@@ -15,18 +15,17 @@
 mod common;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use indexmap::IndexMap;
 use parking_lot::RwLock;
-use serde_json::{json, Value as JsonValue};
+use serde_json::json;
 
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
-use rustible::executor::{ExecutionStats, Executor, ExecutorConfig, HostResult};
+use rustible::executor::task::Task;
+use rustible::executor::{Executor, ExecutorConfig};
 
 // ============================================================================
 // Helper Structures for Async Testing
@@ -322,7 +321,6 @@ fn test_async_status_started_finished_fields() {
     let job = job_registry.get_job(&jid).unwrap();
 
     // Check started timestamp exists
-    assert!(job.started.elapsed().as_secs() >= 0);
 
     // Check if job completed (0 duration = immediate)
     assert!(job.is_complete());

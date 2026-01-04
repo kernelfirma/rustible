@@ -18,8 +18,6 @@
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::time::Instant;
 
 use rustible::executor::playbook::Playbook;
@@ -87,6 +85,7 @@ impl E2EConfig {
         self.fixtures_dir.join("playbook.yml")
     }
 
+    #[allow(dead_code)]
     fn inventory_path(&self) -> PathBuf {
         self.fixtures_dir.join("inventory.yml")
     }

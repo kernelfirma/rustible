@@ -11,13 +11,15 @@
 //! the architecture of rustible's callback system, allowing comprehensive testing
 //! without depending on modules that may have compilation issues.
 
+#![allow(unused_mut)]
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

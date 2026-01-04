@@ -10,13 +10,12 @@
 //! 3. Recap format matching Ansible's exact layout
 //! 4. Error output format compatibility
 
-use std::collections::HashMap;
+#[macro_use]
+extern crate serde_json;
+
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 
 // ============================================================================
 // Test Utilities - Mock Writer for Capturing Output
@@ -88,7 +87,6 @@ impl Write for MockWriter {
 // ============================================================================
 
 mod default_callback_format {
-    use super::*;
 
     /// Ansible's play header format: "PLAY [name] ****..."
     /// Total width is 80 characters with asterisks padding
@@ -283,7 +281,7 @@ mod default_callback_format {
 // ============================================================================
 
 mod json_callback_format {
-    use super::*;
+    use serde_json::Value;
 
     /// JSON Lines (JSONL) format - one JSON object per line
     #[test]
@@ -495,7 +493,6 @@ mod json_callback_format {
 // ============================================================================
 
 mod recap_format {
-    use super::*;
 
     /// Ansible recap header: "PLAY RECAP ****..." padded to 80 chars
     #[test]
@@ -602,7 +599,7 @@ mod recap_format {
     fn test_recap_failed_host_format() {
         // When a host has failures, the recap should indicate this
         // Ansible shows failed hosts in red (color code) or bold
-        let host = "failed_host";
+        let _host = "failed_host";
         let failed_count = 1;
 
         assert!(failed_count > 0, "Failed host must have failures > 0");
@@ -612,7 +609,7 @@ mod recap_format {
     /// Ansible recap with unreachable hosts
     #[test]
     fn test_recap_unreachable_host_format() {
-        let host = "unreachable_host";
+        let _host = "unreachable_host";
         let unreachable_count = 1;
 
         assert!(unreachable_count > 0);
@@ -663,7 +660,6 @@ mod recap_format {
 // ============================================================================
 
 mod error_format {
-    use super::*;
 
     /// Ansible error message format with curly braces
     #[test]
@@ -817,7 +813,6 @@ mod error_format {
 // ============================================================================
 
 mod complete_run_format {
-    use super::*;
 
     /// Test complete playbook output structure
     #[test]
@@ -911,8 +906,8 @@ mod complete_run_format {
     /// Test diff mode output
     #[test]
     fn test_diff_mode_output() {
-        let old_content = "line1\nline2\nold_line";
-        let new_content = "line1\nline2\nnew_line";
+        let _old_content = "line1\nline2\nold_line";
+        let _new_content = "line1\nline2\nnew_line";
 
         // Ansible diff format
         let diff_header_old = "--- before: /path/to/file";
@@ -935,7 +930,6 @@ mod complete_run_format {
 // ============================================================================
 
 mod color_compatibility {
-    use super::*;
 
     /// Test Ansible color codes for each status
     #[test]
@@ -953,8 +947,8 @@ mod color_compatibility {
 
         for (status, color_name, ansi_code) in colors {
             // ANSI escape sequence format: \x1b[XXm
-            let expected_escape = format!("\x1b[{}m", ansi_code);
-            let expected_bright = format!("\x1b[9{}m", &ansi_code[..1]); // Bright variant
+            let _expected_escape = format!("\x1b[{}m", ansi_code);
+            let _expected_bright = format!("\x1b[9{}m", &ansi_code[..1]); // Bright variant
 
             // Verify the color code is valid
             assert!(
@@ -1040,7 +1034,6 @@ mod color_compatibility {
 // ============================================================================
 
 mod verbosity_output {
-    use super::*;
 
     /// Test -v output (verbose)
     #[test]
@@ -1115,7 +1108,7 @@ mod verbosity_output {
 // ============================================================================
 
 mod parsing_compatibility {
-    use super::*;
+    use serde_json::Value;
 
     /// Test that output can be parsed by common Ansible log parsers
     #[test]
@@ -1217,7 +1210,6 @@ mod parsing_compatibility {
 // ============================================================================
 
 mod edge_cases {
-    use super::*;
 
     /// Test very long host names
     #[test]
@@ -1287,7 +1279,6 @@ mod edge_cases {
 // ============================================================================
 
 mod tool_integration {
-    use super::*;
 
     /// Test output compatible with ansible-runner
     #[test]

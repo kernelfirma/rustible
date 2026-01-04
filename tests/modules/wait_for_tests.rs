@@ -343,7 +343,11 @@ fn test_wait_port_check_open() {
     use std::time::Duration;
 
     // Bind to a port to make it open
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Bind to port");
+    let listener = match TcpListener::bind("127.0.0.1:0") {
+        Ok(listener) => listener,
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => return,
+        Err(err) => panic!("Bind to port: {}", err),
+    };
     let addr = listener.local_addr().expect("Get local address");
 
     // Try to connect

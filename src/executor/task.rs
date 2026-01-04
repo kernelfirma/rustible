@@ -1102,7 +1102,10 @@ impl Task {
         let result = match self.module.as_str() {
             "debug" => self.execute_debug(&args, ctx).await,
             "set_fact" => self.execute_set_fact(&args, ctx, runtime).await,
-            "command" | "shell" => self.execute_command(&args, ctx, runtime).await,
+            "command" | "shell" => {
+                self.execute_registry_module(&self.module, &args, ctx, module_registry)
+                    .await
+            }
             "copy" => {
                 self.execute_copy(&args, ctx, runtime, module_registry)
                     .await
@@ -1220,6 +1223,56 @@ impl Task {
         };
 
         result
+    }
+
+    async fn execute_registry_module(
+        &self,
+        module_name: &str,
+        args: &IndexMap<String, JsonValue>,
+        ctx: &ExecutionContext,
+        module_registry: &Arc<ModuleRegistry>,
+    ) -> ExecutorResult<TaskResult> {
+        let params: std::collections::HashMap<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        let module_ctx = crate::modules::ModuleContext {
+            check_mode: ctx.check_mode,
+            diff_mode: ctx.diff_mode,
+            verbosity: ctx.verbosity,
+            vars: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
+            work_dir: None,
+            r#become: ctx.r#become,
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
+            connection: ctx.connection.clone(),
+        };
+
+        let module = module_registry.get(module_name).ok_or_else(|| {
+            ExecutorError::ModuleNotFound(format!("{} module not found in registry", module_name))
+        })?;
+
+        match module.execute(&params, &module_ctx) {
+            Ok(output) => {
+                let mut result = if output.changed {
+                    TaskResult::changed()
+                } else {
+                    TaskResult::ok()
+                };
+                result.msg = Some(output.msg.clone());
+                result.result = Some(output.to_result_json());
+                Ok(result)
+            }
+            Err(e) => Ok(TaskResult::failed(format!("{} module failed: {}", module_name, e))),
+        }
     }
 
     /// Template arguments using variables

@@ -39,14 +39,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use tempfile::TempDir;
-
 mod common;
 
 use rustible::executor::playbook::Playbook;
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::{Executor, ExecutorConfig};
-use rustible::inventory::Inventory;
 
 // ============================================================================
 // Test Configuration
@@ -58,6 +55,7 @@ struct DockerE2EConfig {
     /// Whether Docker E2E tests are enabled
     enabled: bool,
     /// Path to docker-compose.yml
+    #[allow(dead_code)]
     compose_file: PathBuf,
     /// SSH user for containers
     ssh_user: String,

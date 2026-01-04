@@ -118,6 +118,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::connection::{Connection, ConnectionBuilder};
 use crate::executor::parallelization::ParallelizationManager;
 // Play and Playbook are pub use'd above
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
@@ -411,6 +412,7 @@ pub struct Executor {
     recovery_manager: Option<Arc<RecoveryManager>>,
     /// Shared module registry - created once per executor to avoid hot path overhead
     module_registry: Arc<ModuleRegistry>,
+    connection_cache: Arc<RwLock<HashMap<String, Arc<dyn Connection + Send + Sync>>>>,
 }
 
 impl Executor {
@@ -432,6 +434,7 @@ impl Executor {
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
             module_registry: Arc::new(ModuleRegistry::with_builtins()),
+            connection_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -453,6 +456,7 @@ impl Executor {
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
             module_registry: Arc::new(ModuleRegistry::with_builtins()),
+            connection_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -523,6 +527,7 @@ impl Executor {
             self.flush_handlers(tx_id.clone()).await?;
 
             info!("Playbook completed: {}", playbook.name);
+            self.close_connections().await;
             Ok(all_results)
         }
         .await;
@@ -549,6 +554,133 @@ impl Executor {
         }
 
         result
+    }
+
+    async fn close_connections(&self) {
+        let connections: Vec<_> = {
+            let mut cache = self.connection_cache.write().await;
+            cache.drain().map(|(_, v)| v).collect()
+        };
+
+        for conn in connections {
+            let _ = conn.close().await;
+        }
+    }
+
+    async fn get_connection_for_host(
+        &self,
+        host: &str,
+    ) -> ExecutorResult<Arc<dyn Connection + Send + Sync>> {
+        let (cache_key, builder) = {
+            let runtime = self.runtime.read().await;
+
+            let ansible_host = runtime
+                .get_var("ansible_host", Some(host))
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_else(|| host.to_string());
+
+            let ansible_connection = runtime
+                .get_var("ansible_connection", Some(host))
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_else(|| {
+                    if ansible_host == "localhost" || ansible_host == "127.0.0.1" {
+                        "local".to_string()
+                    } else {
+                        "ssh".to_string()
+                    }
+                });
+
+            let ansible_user = runtime
+                .get_var("ansible_user", Some(host))
+                .and_then(|v| v.as_str().map(str::to_string));
+
+            let ansible_port = runtime
+                .get_var("ansible_port", Some(host))
+                .and_then(|v| v.as_u64())
+                .and_then(|p| u16::try_from(p).ok());
+
+            let private_key = runtime
+                .get_var("ansible_ssh_private_key_file", Some(host))
+                .and_then(|v| v.as_str().map(str::to_string))
+                .map(|p| shellexpand::tilde(&p).to_string());
+
+            let password = runtime
+                .get_var("ansible_ssh_pass", Some(host))
+                .and_then(|v| v.as_str().map(str::to_string));
+
+            let timeout = runtime
+                .get_var("ansible_ssh_timeout", Some(host))
+                .and_then(|v| v.as_u64());
+
+            let conn_type = match ansible_connection.as_str() {
+                "local" => "local",
+                "docker" | "podman" => "docker",
+                "ssh" => "ssh",
+                other => {
+                    return Err(ExecutorError::RuntimeError(format!(
+                        "Unsupported connection type '{}' for host '{}'",
+                        other, host
+                    )));
+                }
+            };
+
+            let cache_key = format!(
+                "{}:{}:{}:{}:{}:{}",
+                conn_type,
+                ansible_host,
+                ansible_port.unwrap_or(22),
+                ansible_user.clone().unwrap_or_else(|| "root".to_string()),
+                private_key.clone().unwrap_or_default(),
+                password.is_some()
+            );
+
+            let mut builder = ConnectionBuilder::new(ansible_host);
+            builder = builder.connection_type(conn_type);
+            if let Some(port) = ansible_port {
+                builder = builder.port(port);
+            }
+            if let Some(user) = ansible_user {
+                builder = builder.user(user);
+            }
+            if let Some(key) = private_key {
+                builder = builder.private_key(key);
+            }
+            if let Some(pass) = password {
+                builder = builder.password(pass);
+            }
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
+
+            (cache_key, builder)
+        };
+
+        {
+            let cache = self.connection_cache.read().await;
+            if let Some(conn) = cache.get(&cache_key) {
+                if conn.is_alive().await {
+                    return Ok(Arc::clone(conn));
+                }
+            }
+        }
+
+        {
+            let mut cache = self.connection_cache.write().await;
+            cache.remove(&cache_key);
+        }
+
+        builder
+            .connect()
+            .await
+            .map_err(|e| ExecutorError::HostUnreachable(format!("{}: {}", host, e)))
+    }
+
+    async fn get_python_interpreter(&self, host: &str) -> String {
+        let runtime = self.runtime.read().await;
+        runtime
+            .get_var("ansible_python_interpreter", Some(host))
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| "/usr/bin/python3".to_string())
     }
 
     /// Run a single play
@@ -1289,6 +1421,24 @@ impl Executor {
         if hosts.len() == 1 {
             let host = &hosts[0];
             let _permit = self.semaphore.acquire().await.unwrap();
+            let connection = match self.get_connection_for_host(host).await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    let mut results = HashMap::with_capacity(1);
+                    results.insert(
+                        host.clone(),
+                        TaskResult {
+                            status: TaskStatus::Unreachable,
+                            changed: false,
+                            msg: Some(e.to_string()),
+                            result: None,
+                            diff: None,
+                        },
+                    );
+                    return Ok(results);
+                }
+            };
+            let python_interpreter = self.get_python_interpreter(host).await;
 
             // Apply become precedence: task > config
             let effective_become = task.r#become || self.config.r#become;
@@ -1301,6 +1451,8 @@ impl Executor {
                 .with_check_mode(self.config.check_mode)
                 .with_diff_mode(self.config.diff_mode)
                 .with_verbosity(self.config.verbosity)
+                .with_connection(connection)
+                .with_python_interpreter(python_interpreter)
                 .with_become(effective_become)
                 .with_become_method(self.config.r#become_method.clone())
                 .with_become_user(effective_become_user)
@@ -1378,6 +1530,32 @@ impl Executor {
         let config_become_user = self.config.r#become_user.clone();
         let config_become_password = self.config.r#become_password.clone();
 
+        let mut results = HashMap::with_capacity(hosts.len());
+        let mut connections = HashMap::with_capacity(hosts.len());
+        let mut python_interpreters = HashMap::with_capacity(hosts.len());
+
+        for host in hosts {
+            match self.get_connection_for_host(host).await {
+                Ok(conn) => {
+                    connections.insert(host.clone(), conn);
+                    python_interpreters
+                        .insert(host.clone(), self.get_python_interpreter(host).await);
+                }
+                Err(e) => {
+                    results.insert(
+                        host.clone(),
+                        TaskResult {
+                            status: TaskStatus::Unreachable,
+                            changed: false,
+                            msg: Some(e.to_string()),
+                            result: None,
+                            diff: None,
+                        },
+                    );
+                }
+            }
+        }
+
         // Apply become precedence: task > config
         let effective_become = task.r#become || config_become;
         let effective_become_user = task
@@ -1387,7 +1565,7 @@ impl Executor {
 
         // OPTIMIZATION: For small host counts, share task via Arc instead of cloning per host
         let task_arc = Arc::new(task.clone());
-        let results = Arc::new(Mutex::new(HashMap::with_capacity(hosts.len())));
+        let results = Arc::new(Mutex::new(results));
 
         let handles: Vec<_> = hosts
             .iter()
@@ -1405,11 +1583,16 @@ impl Executor {
                 let config_become_method = config_become_method.clone();
                 let effective_become_user = effective_become_user.clone();
                 let config_become_password = config_become_password.clone();
+                let connection = connections.get(&host).cloned();
+                let python_interpreter = python_interpreters
+                    .get(&host)
+                    .cloned()
+                    .unwrap_or_else(|| "/usr/bin/python3".to_string());
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
 
-                    let ctx = ExecutionContext::new(host.clone())
+                    let mut ctx = ExecutionContext::new(host.clone())
                         .with_check_mode(check_mode)
                         .with_diff_mode(diff_mode)
                         .with_verbosity(verbosity)
@@ -1417,6 +1600,11 @@ impl Executor {
                         .with_become_method(config_become_method)
                         .with_become_user(effective_become_user)
                         .with_become_password(config_become_password);
+
+                    if let Some(conn) = connection {
+                        ctx = ctx.with_connection(conn);
+                    }
+                    ctx = ctx.with_python_interpreter(python_interpreter);
 
                     let result = task
                         .execute(

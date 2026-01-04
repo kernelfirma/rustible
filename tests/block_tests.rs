@@ -13,15 +13,15 @@
 
 mod common;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
-use rustible::executor::playbook::{Play, Playbook};
+use rustible::executor::playbook::Playbook;
 use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Task, TaskResult, TaskStatus};
-use rustible::executor::{ExecutionStats, Executor, ExecutorConfig};
+use rustible::executor::task::{TaskResult, TaskStatus};
+use rustible::executor::{Executor, ExecutorConfig};
 
 // Import parser types for block structure
+#[allow(dead_code)]
 #[path = "../src/parser/playbook.rs"]
 mod parser_playbook;
 use parser_playbook::Task as ParserTask;
