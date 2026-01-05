@@ -527,7 +527,6 @@ impl Executor {
             self.flush_handlers(tx_id.clone()).await?;
 
             info!("Playbook completed: {}", playbook.name);
-            self.close_connections().await;
             Ok(all_results)
         }
         .await;
@@ -553,6 +552,7 @@ impl Executor {
             }
         }
 
+        self.close_connections().await;
         result
     }
 
@@ -596,8 +596,11 @@ impl Executor {
 
             let ansible_port = runtime
                 .get_var("ansible_port", Some(host))
-                .and_then(|v| v.as_u64())
-                .and_then(|p| u16::try_from(p).ok());
+                .and_then(|v| {
+                    v.as_u64()
+                        .and_then(|p| u16::try_from(p).ok())
+                        .or_else(|| v.as_str().and_then(|s| s.parse::<u16>().ok()))
+                });
 
             let private_key = runtime
                 .get_var("ansible_ssh_private_key_file", Some(host))
@@ -1151,12 +1154,42 @@ impl Executor {
         let config_become_user = self.config.r#become_user.clone();
         let config_become_password = self.config.r#become_password.clone();
 
+        let mut base_results = HashMap::with_capacity(hosts.len());
+        let mut connections = HashMap::with_capacity(hosts.len());
+        let mut python_interpreters = HashMap::with_capacity(hosts.len());
+
+        for host in hosts {
+            match self.get_connection_for_host(host).await {
+                Ok(conn) => {
+                    connections.insert(host.clone(), conn);
+                    python_interpreters
+                        .insert(host.clone(), self.get_python_interpreter(host).await);
+                }
+                Err(e) => {
+                    base_results.insert(
+                        host.clone(),
+                        HostResult {
+                            host: host.clone(),
+                            stats: ExecutionStats {
+                                unreachable: 1,
+                                ..Default::default()
+                            },
+                            failed: false,
+                            unreachable: true,
+                        },
+                    );
+                    warn!("Host unreachable: {} ({})", host, e);
+                }
+            }
+        }
+
         // Avoid cloning entire task list - use Arc slice instead
         let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
-        let results = Arc::new(Mutex::new(HashMap::with_capacity(hosts.len())));
+        let results = Arc::new(Mutex::new(base_results));
 
         let handles: Vec<_> = hosts
             .iter()
+            .filter(|host| connections.contains_key(*host))
             .map(|host| {
                 let host = host.clone();
                 let tasks = Arc::clone(&tasks);
@@ -1173,6 +1206,11 @@ impl Executor {
                 let config_become_method = config_become_method.clone();
                 let config_become_user = config_become_user.clone();
                 let config_become_password = config_become_password.clone();
+                let connection = connections.get(&host).cloned();
+                let python_interpreter = python_interpreters
+                    .get(&host)
+                    .cloned()
+                    .unwrap_or_else(|| "/usr/bin/python3".to_string());
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1196,7 +1234,7 @@ impl Executor {
                             .clone()
                             .unwrap_or_else(|| config_become_user.clone());
 
-                        let ctx = ExecutionContext::new(host.clone())
+                        let mut ctx = ExecutionContext::new(host.clone())
                             .with_check_mode(check_mode)
                             .with_diff_mode(diff_mode)
                             .with_verbosity(verbosity)
@@ -1204,6 +1242,11 @@ impl Executor {
                             .with_become_method(config_become_method.clone())
                             .with_become_user(effective_become_user)
                             .with_become_password(config_become_password.clone());
+
+                        if let Some(conn) = connection.clone() {
+                            ctx = ctx.with_connection(conn);
+                        }
+                        ctx = ctx.with_python_interpreter(python_interpreter.clone());
 
                         let task_result = task
                             .execute(
