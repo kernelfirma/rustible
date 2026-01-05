@@ -19,6 +19,7 @@ pub mod debug;
 pub mod dnf;
 pub mod docker;
 pub mod facts;
+pub mod fail;
 pub mod file;
 pub mod firewalld;
 pub mod git;
@@ -28,17 +29,21 @@ pub mod include_vars;
 pub mod k8s;
 pub mod known_hosts;
 pub mod lineinfile;
+pub mod meta;
 pub mod mount;
 pub mod network;
 pub mod package;
 pub mod pause;
 pub mod pip;
 pub mod python;
+pub mod raw;
+pub mod script;
 pub mod selinux;
 pub mod service;
 pub mod set_fact;
 pub mod shell;
 pub mod stat;
+pub mod synchronize;
 pub mod sysctl;
 pub mod systemd_unit;
 pub mod template;
@@ -913,11 +918,18 @@ impl ModuleRegistry {
         // Logic/utility modules
         registry.register(Arc::new(assert::AssertModule));
         registry.register(Arc::new(debug::DebugModule));
+        registry.register(Arc::new(fail::FailModule));
         registry.register(Arc::new(include_vars::IncludeVarsModule));
+        registry.register(Arc::new(meta::MetaModule));
         registry.register(Arc::new(set_fact::SetFactModule));
         registry.register(Arc::new(stat::StatModule));
 
         registry.register(Arc::new(facts::FactsModule));
+
+        // Raw command and script modules
+        registry.register(Arc::new(raw::RawModule));
+        registry.register(Arc::new(script::ScriptModule));
+        registry.register(Arc::new(synchronize::SynchronizeModule));
 
         // Network device configuration modules
         network::register_network_modules(&mut registry);
