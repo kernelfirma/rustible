@@ -173,21 +173,27 @@ impl Module for RawModule {
         let cmd = command.clone();
         let exec = executable.clone();
 
-        // Block on the async execution
-        let result = rt.block_on(async move {
-            let connection = connection.ok_or_else(|| {
-                ModuleError::ExecutionFailed("No connection available for raw command".to_string())
-            })?;
+        // Block on the async execution, using std::thread::scope to avoid runtime nesting
+        let result = std::thread::scope(|s| {
+            s.spawn(|| {
+                rt.block_on(async move {
+                    let connection = connection.ok_or_else(|| {
+                        ModuleError::ExecutionFailed("No connection available for raw command".to_string())
+                    })?;
 
-            let actual_command = if let Some(ref exec) = exec {
-                format!("{} -c '{}'", exec, cmd.replace('\'', "'\\''"))
-            } else {
-                cmd.clone()
-            };
+                    let actual_command = if let Some(ref exec) = exec {
+                        format!("{} -c '{}'", exec, cmd.replace('\'', "'\\''"))
+                    } else {
+                        cmd.clone()
+                    };
 
-            connection.execute(&actual_command, None).await.map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Raw command execution failed: {}", e))
+                    connection.execute(&actual_command, None).await.map_err(|e| {
+                        ModuleError::ExecutionFailed(format!("Raw command execution failed: {}", e))
+                    })
+                })
             })
+            .join()
+            .unwrap()
         })?;
 
         // Build output

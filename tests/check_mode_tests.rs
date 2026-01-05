@@ -1039,6 +1039,11 @@ async fn test_complex_playbook_in_check_mode() {
     runtime.add_host("web2".to_string(), Some("webservers"));
     runtime.add_host("db1".to_string(), Some("databases"));
 
+    // Set local connection for test hosts to avoid SSH connection attempts
+    runtime.set_host_var("web1", "ansible_connection".to_string(), serde_json::json!("local"));
+    runtime.set_host_var("web2", "ansible_connection".to_string(), serde_json::json!("local"));
+    runtime.set_host_var("db1", "ansible_connection".to_string(), serde_json::json!("local"));
+
     runtime.set_global_var("environment".to_string(), serde_json::json!("testing"));
 
     let config = ExecutorConfig {

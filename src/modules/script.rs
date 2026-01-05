@@ -100,7 +100,11 @@ impl ScriptModule {
 
             let conn = connection.clone();
             let path = PathBuf::from(&creates_path);
-            let exists = rt.block_on(async move { conn.path_exists(&path).await });
+            let exists = std::thread::scope(|s| {
+                s.spawn(|| rt.block_on(async move { conn.path_exists(&path).await }))
+                    .join()
+                    .unwrap()
+            });
 
             if exists.unwrap_or(false) {
                 return Ok(false);
@@ -117,7 +121,11 @@ impl ScriptModule {
 
             let conn = connection.clone();
             let path = PathBuf::from(&removes_path);
-            let exists = rt.block_on(async move { conn.path_exists(&path).await });
+            let exists = std::thread::scope(|s| {
+                s.spawn(|| rt.block_on(async move { conn.path_exists(&path).await }))
+                    .join()
+                    .unwrap()
+            });
 
             if !exists.unwrap_or(true) {
                 return Ok(false);
@@ -234,18 +242,26 @@ impl Module for ScriptModule {
         let conn = connection.clone();
         let content = local_script.clone();
         let path = remote_path_buf.clone();
-        rt.block_on(async move { conn.upload_content(&content, &path, None).await })
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to upload script: {}", e))
-            })?;
+        std::thread::scope(|s| {
+            s.spawn(|| rt.block_on(async move { conn.upload_content(&content, &path, None).await }))
+                .join()
+                .unwrap()
+        })
+        .map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to upload script: {}", e))
+        })?;
 
         // Make the script executable
         let conn = connection.clone();
         let chmod_cmd = format!("chmod +x '{}'", remote_path);
-        rt.block_on(async move { conn.execute(&chmod_cmd, None).await })
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to make script executable: {}", e))
-            })?;
+        std::thread::scope(|s| {
+            s.spawn(|| rt.block_on(async move { conn.execute(&chmod_cmd, None).await }))
+                .join()
+                .unwrap()
+        })
+        .map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to make script executable: {}", e))
+        })?;
 
         // Build the execution command
         let exec_cmd = if let Some(ref exec) = executable {
@@ -294,14 +310,21 @@ impl Module for ScriptModule {
 
         // Execute the script
         let conn = connection.clone();
-        let result = rt
-            .block_on(async move { conn.execute(&exec_cmd, None).await })
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Script execution failed: {}", e)))?;
+        let result = std::thread::scope(|s| {
+            s.spawn(|| rt.block_on(async move { conn.execute(&exec_cmd, None).await }))
+                .join()
+                .unwrap()
+        })
+        .map_err(|e| ModuleError::ExecutionFailed(format!("Script execution failed: {}", e)))?;
 
         // Clean up the temporary script
         let conn = connection.clone();
         let rm_cmd = format!("rm -f '{}'", remote_path);
-        let _ = rt.block_on(async move { conn.execute(&rm_cmd, None).await });
+        let _ = std::thread::scope(|s| {
+            s.spawn(|| rt.block_on(async move { conn.execute(&rm_cmd, None).await }))
+                .join()
+                .unwrap()
+        });
 
         // Build output
         let mut output = if result.success {
