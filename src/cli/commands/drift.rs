@@ -494,14 +494,14 @@ impl DriftArgs {
         println!();
         if report.summary.drifted == 0 && report.summary.missing == 0 {
             ctx.output
-                .info("No drift detected. System is in sync with desired state.");
+                .success("No drift detected. System is in sync with desired state.");
         } else {
             ctx.output.warning(&format!(
                 "Drift detected: {} drifted, {} missing resources",
                 report.summary.drifted, report.summary.missing
             ));
             ctx.output
-                .info("Run with --remediate to generate a fix playbook");
+                .hint("Run with --remediate to generate a fix playbook");
         }
     }
 

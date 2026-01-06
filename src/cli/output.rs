@@ -389,6 +389,24 @@ impl OutputFormatter {
         }
     }
 
+    /// Print a success message
+    pub fn success(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "success",
+                "message": message
+            });
+            println!("{}", serde_json::to_string(&success).expect("Failed to serialize output"));
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "SUCCESS:".green().bold(), message);
+        } else {
+            println!("SUCCESS: {}", message);
+        }
+    }
+
     /// Print an error message
     pub fn error(&self, message: &str) {
         if self.json_mode {
