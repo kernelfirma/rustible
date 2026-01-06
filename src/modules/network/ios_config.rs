@@ -67,6 +67,7 @@ use crate::modules::{
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::template::TemplateEngine;
+use crate::utils::get_regex;
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -645,9 +646,11 @@ pub struct ConfigMatcher {
 impl ConfigMatcher {
     /// Create a new config matcher
     pub fn new(ignore_patterns: &[String]) -> Self {
+        // Optimization: Use global regex cache to prevent expensive recompilation
+        // when processing multiple lines or repeated calls
         let patterns = ignore_patterns
             .iter()
-            .filter_map(|p| regex::Regex::new(p).ok())
+            .filter_map(|p| get_regex(p).ok())
             .collect();
         Self {
             ignore_patterns: patterns,
