@@ -279,9 +279,7 @@ impl ArchiveModule {
                     })?;
 
                 let mut file = File::open(file_path)?;
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer)?;
-                zip.write_all(&buffer)?;
+                std::io::copy(&mut file, &mut zip)?;
             } else if file_path.is_dir() && file_path != source {
                 // Add directory entries with trailing slash
                 let dir_name = format!("{}/", relative_str);
