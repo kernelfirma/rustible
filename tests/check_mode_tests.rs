@@ -23,9 +23,7 @@ use rustible::modules::command::CommandModule;
 use rustible::modules::copy::CopyModule;
 use rustible::modules::file::FileModule;
 use rustible::modules::shell::ShellModule;
-use rustible::modules::{
-    Diff, Module, ModuleContext, ModuleOutput, ModuleParams, ModuleStatus,
-};
+use rustible::modules::{Diff, Module, ModuleContext, ModuleOutput, ModuleParams, ModuleStatus};
 
 use common::{
     check_mode_context, make_params, test_check_mode_config, test_module_context, MockModule,
@@ -1040,9 +1038,21 @@ async fn test_complex_playbook_in_check_mode() {
     runtime.add_host("db1".to_string(), Some("databases"));
 
     // Set local connection for test hosts to avoid SSH connection attempts
-    runtime.set_host_var("web1", "ansible_connection".to_string(), serde_json::json!("local"));
-    runtime.set_host_var("web2", "ansible_connection".to_string(), serde_json::json!("local"));
-    runtime.set_host_var("db1", "ansible_connection".to_string(), serde_json::json!("local"));
+    runtime.set_host_var(
+        "web1",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
+    runtime.set_host_var(
+        "web2",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
+    runtime.set_host_var(
+        "db1",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
 
     runtime.set_global_var("environment".to_string(), serde_json::json!("testing"));
 

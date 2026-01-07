@@ -18,7 +18,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, instrument, warn};
@@ -222,6 +222,33 @@ pub struct TaskDiff {
     pub after_header: Option<String>,
 }
 
+/// Helper function to deserialize string or sequence into Vec<String>
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = JsonValue::deserialize(deserializer)?;
+    match value {
+        JsonValue::Null => Ok(Vec::new()),
+        JsonValue::String(s) => Ok(vec![s]),
+        JsonValue::Bool(b) => Ok(vec![b.to_string()]),
+        JsonValue::Number(n) => Ok(vec![n.to_string()]),
+        JsonValue::Array(seq) => {
+            let mut result = Vec::new();
+            for item in seq {
+                match item {
+                    JsonValue::String(s) => result.push(s),
+                    JsonValue::Bool(b) => result.push(b.to_string()),
+                    JsonValue::Number(n) => result.push(n.to_string()),
+                    other => result.push(format!("{:?}", other)),
+                }
+            }
+            Ok(result)
+        }
+        other => Ok(vec![format!("{:?}", other)]),
+    }
+}
+
 /// A handler that can be notified by tasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Handler {
@@ -235,7 +262,7 @@ pub struct Handler {
     /// Optional when condition
     pub when: Option<String>,
     /// Listen for multiple notification names
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub listen: Vec<String>,
 }
 
@@ -611,14 +638,13 @@ impl Task {
                     drop(rt);
 
                     let rendered = TEMPLATE_ENGINE
-                        .render_value(
-                            &serde_json::Value::String(template.clone()),
-                            &vars,
-                        )
-                        .map_err(|e| ExecutorError::RuntimeError(format!(
-                            "Failed to render loop template '{}': {}",
-                            template, e
-                        )))?;
+                        .render_value(&serde_json::Value::String(template.clone()), &vars)
+                        .map_err(|e| {
+                            ExecutorError::RuntimeError(format!(
+                                "Failed to render loop template '{}': {}",
+                                template, e
+                            ))
+                        })?;
 
                     // The rendered value should be an array
                     match rendered {
@@ -1271,7 +1297,10 @@ impl Task {
                 result.result = Some(output.to_result_json());
                 Ok(result)
             }
-            Err(e) => Ok(TaskResult::failed(format!("{} module failed: {}", module_name, e))),
+            Err(e) => Ok(TaskResult::failed(format!(
+                "{} module failed: {}",
+                module_name, e
+            ))),
         }
     }
 

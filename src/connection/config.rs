@@ -11,8 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::utils::get_regex;
 use super::ConnectionError;
+use crate::utils::get_regex;
 
 /// Default connection timeout in seconds
 pub const DEFAULT_TIMEOUT: u64 = 30;
@@ -24,8 +24,10 @@ pub const DEFAULT_RETRIES: u32 = 3;
 pub const DEFAULT_RETRY_DELAY: u64 = 1;
 
 // Compile regexes once
-static HOST_DIRECTIVE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").expect("Invalid Host regex"));
-static KV_PAIR_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").expect("Invalid KV regex"));
+static HOST_DIRECTIVE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").expect("Invalid Host regex"));
+static KV_PAIR_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").expect("Invalid KV regex"));
 
 /// Main connection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -204,7 +204,12 @@ impl SynchronizeModule {
             context
                 .become_user
                 .clone()
-                .or_else(|| context.vars.get("ansible_user").and_then(|v| v.as_str().map(String::from)))
+                .or_else(|| {
+                    context
+                        .vars
+                        .get("ansible_user")
+                        .and_then(|v| v.as_str().map(String::from))
+                })
                 .unwrap_or_else(|| "".to_string())
         } else {
             String::new()
@@ -233,18 +238,15 @@ impl SynchronizeModule {
 
     /// Execute rsync command
     fn run_rsync(&self, args: &[String]) -> ModuleResult<(String, String, i32)> {
-        let output = Command::new("rsync")
-            .args(args)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    ModuleError::ExecutionFailed(
-                        "rsync not found. Please install rsync on the control machine.".to_string(),
-                    )
-                } else {
-                    ModuleError::ExecutionFailed(format!("Failed to execute rsync: {}", e))
-                }
-            })?;
+        let output = Command::new("rsync").args(args).output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                ModuleError::ExecutionFailed(
+                    "rsync not found. Please install rsync on the control machine.".to_string(),
+                )
+            } else {
+                ModuleError::ExecutionFailed(format!("Failed to execute rsync: {}", e))
+            }
+        })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -364,17 +366,14 @@ impl Module for SynchronizeModule {
                 "pull"
             }),
         );
-        output = output.with_data(
-            "rsync_args",
-            serde_json::json!(args.join(" ")),
-        );
+        output = output.with_data("rsync_args", serde_json::json!(args.join(" ")));
 
         // If diff mode, include itemized changes
         if context.diff_mode && !stdout.is_empty() {
-            output = output.with_diff(super::Diff::new(
-                "Current state",
-                "Synchronized state",
-            ).with_details(stdout.clone()));
+            output = output.with_diff(
+                super::Diff::new("Current state", "Synchronized state")
+                    .with_details(stdout.clone()),
+            );
         }
 
         Ok(output)
@@ -433,7 +432,10 @@ mod tests {
         let module = SynchronizeModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("src".to_string(), Value::String("/local/path/".to_string()));
-        params.insert("dest".to_string(), Value::String("/remote/path/".to_string()));
+        params.insert(
+            "dest".to_string(),
+            Value::String("/remote/path/".to_string()),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }
@@ -442,7 +444,10 @@ mod tests {
     fn test_synchronize_validate_params_missing_src() {
         let module = SynchronizeModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("dest".to_string(), Value::String("/remote/path/".to_string()));
+        params.insert(
+            "dest".to_string(),
+            Value::String("/remote/path/".to_string()),
+        );
 
         assert!(module.validate_params(&params).is_err());
     }
@@ -461,7 +466,10 @@ mod tests {
         let module = SynchronizeModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("src".to_string(), Value::String("/local/path/".to_string()));
-        params.insert("dest".to_string(), Value::String("/remote/path/".to_string()));
+        params.insert(
+            "dest".to_string(),
+            Value::String("/remote/path/".to_string()),
+        );
         params.insert("mode".to_string(), Value::String("invalid".to_string()));
 
         assert!(module.validate_params(&params).is_err());
@@ -470,7 +478,10 @@ mod tests {
     #[test]
     fn test_synchronize_classification() {
         let module = SynchronizeModule;
-        assert_eq!(module.classification(), ModuleClassification::NativeTransport);
+        assert_eq!(
+            module.classification(),
+            ModuleClassification::NativeTransport
+        );
     }
 
     #[test]
@@ -505,7 +516,10 @@ mod tests {
             "src".to_string(),
             Value::String("/path/with\0null".to_string()),
         );
-        params.insert("dest".to_string(), Value::String("/remote/path/".to_string()));
+        params.insert(
+            "dest".to_string(),
+            Value::String("/remote/path/".to_string()),
+        );
 
         assert!(module.validate_params(&params).is_err());
     }

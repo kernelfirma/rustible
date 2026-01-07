@@ -279,157 +279,184 @@ impl LineinfileModule {
             ModuleError::ExecutionFailed("No connection available for remote execution".to_string())
         })?;
 
-        // Use tokio runtime to execute async operations
-        let rt = tokio::runtime::Runtime::new().map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
-        })?;
-
         let conn = connection.clone();
         let check_mode = context.check_mode;
         let diff_mode = context.diff_mode;
 
-        rt.block_on(async move {
-            let remote_path = Path::new(path);
+        // Use scoped thread with a NEW runtime to avoid blocking the parent tokio runtime
+        // This prevents deadlock when called from within an async context
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    // Create a new runtime in this thread - this avoids nesting
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
+                        })?;
 
-            // Check if file exists on remote
-            let file_exists = conn.path_exists(remote_path).await.unwrap_or(false);
+                    rt.block_on(async move {
+                        let remote_path = Path::new(path);
 
-            if !file_exists && !create {
-                return Err(ModuleError::ExecutionFailed(format!(
-                    "File '{}' does not exist and create=false",
-                    path
-                )));
-            }
+                        // Check if file exists on remote
+                        let file_exists = conn.path_exists(remote_path).await.unwrap_or(false);
 
-            // Download file content (empty if doesn't exist)
-            let content = if file_exists {
-                conn.download_content(remote_path).await.map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to download file: {}", e))
-                })?
-            } else {
-                Vec::new()
-            };
-
-            // Parse lines from content
-            let content_str = String::from_utf8_lossy(&content);
-            let mut lines: Vec<String> = content_str.lines().map(|s| s.to_string()).collect();
-            let original_lines = lines.clone();
-
-            // Apply changes based on state
-            let changed = match state {
-                LineState::Present => {
-                    let line_str = line.as_ref().ok_or_else(|| {
-                        ModuleError::MissingParameter(
-                            "line is required for state=present".to_string(),
-                        )
-                    })?;
-
-                    // Handle backrefs
-                    let final_line = if backrefs {
-                        if let Some(ref re) = regexp {
-                            // Find the matching line and apply backrefs
-                            let matching_line = lines.iter().find(|l| re.is_match(l));
-                            if let Some(orig) = matching_line {
-                                Self::apply_backrefs(line_str, re, orig)
-                            } else {
-                                // No match - line won't be added when using backrefs
-                                return Ok(ModuleOutput::ok(format!(
-                                    "No match for regexp in '{}'",
-                                    path
-                                )));
-                            }
-                        } else {
-                            line_str.clone()
+                        if !file_exists && !create {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "File '{}' does not exist and create=false",
+                                path
+                            )));
                         }
-                    } else {
-                        line_str.clone()
-                    };
 
-                    Self::ensure_line_present(
-                        &mut lines,
-                        &final_line,
-                        regexp.as_ref(),
-                        insertafter.as_deref(),
-                        insertbefore.as_deref(),
-                        firstmatch,
-                    )?
-                }
-                LineState::Absent => {
-                    Self::ensure_line_absent(&mut lines, line.as_deref(), regexp.as_ref())?
-                }
-            };
+                        // Download file content (empty if doesn't exist)
+                        let content = if file_exists {
+                            conn.download_content(remote_path).await.map_err(|e| {
+                                ModuleError::ExecutionFailed(format!(
+                                    "Failed to download file: {}",
+                                    e
+                                ))
+                            })?
+                        } else {
+                            Vec::new()
+                        };
 
-            if !changed {
-                return Ok(ModuleOutput::ok(format!(
-                    "File '{}' already has desired content",
-                    path
-                )));
-            }
+                        // Parse lines from content
+                        let content_str = String::from_utf8_lossy(&content);
+                        let mut lines: Vec<String> =
+                            content_str.lines().map(|s| s.to_string()).collect();
+                        let original_lines = lines.clone();
 
-            // In check mode, don't actually write
-            if check_mode {
-                let diff = if diff_mode {
-                    Some(Diff::new(original_lines.join("\n"), lines.join("\n")))
-                } else {
-                    None
-                };
+                        // Apply changes based on state
+                        let changed = match state {
+                            LineState::Present => {
+                                let line_str = line.as_ref().ok_or_else(|| {
+                                    ModuleError::MissingParameter(
+                                        "line is required for state=present".to_string(),
+                                    )
+                                })?;
 
-                let mut output = ModuleOutput::changed(format!("Would modify '{}'", path));
+                                // Handle backrefs
+                                let final_line = if backrefs {
+                                    if let Some(ref re) = regexp {
+                                        // Find the matching line and apply backrefs
+                                        let matching_line = lines.iter().find(|l| re.is_match(l));
+                                        if let Some(orig) = matching_line {
+                                            Self::apply_backrefs(line_str, re, orig)
+                                        } else {
+                                            // No match - line won't be added when using backrefs
+                                            return Ok(ModuleOutput::ok(format!(
+                                                "No match for regexp in '{}'",
+                                                path
+                                            )));
+                                        }
+                                    } else {
+                                        line_str.clone()
+                                    }
+                                } else {
+                                    line_str.clone()
+                                };
 
-                if let Some(d) = diff {
-                    output = output.with_diff(d);
-                }
+                                Self::ensure_line_present(
+                                    &mut lines,
+                                    &final_line,
+                                    regexp.as_ref(),
+                                    insertafter.as_deref(),
+                                    insertbefore.as_deref(),
+                                    firstmatch,
+                                )?
+                            }
+                            LineState::Absent => Self::ensure_line_absent(
+                                &mut lines,
+                                line.as_deref(),
+                                regexp.as_ref(),
+                            )?,
+                        };
 
-                return Ok(output);
-            }
+                        if !changed {
+                            return Ok(ModuleOutput::ok(format!(
+                                "File '{}' already has desired content",
+                                path
+                            )));
+                        }
 
-            // Create backup if requested
-            if backup && file_exists {
-                let backup_path_str = format!("{}{}", path, backup_suffix);
-                let backup_dest = Path::new(&backup_path_str);
+                        // In check mode, don't actually write
+                        if check_mode {
+                            let diff = if diff_mode {
+                                Some(Diff::new(original_lines.join("\n"), lines.join("\n")))
+                            } else {
+                                None
+                            };
 
-                conn.upload_content(&content, backup_dest, None)
-                    .await
-                    .map_err(|e| {
-                        ModuleError::ExecutionFailed(format!("Failed to create backup: {}", e))
-                    })?;
-            }
+                            let mut output =
+                                ModuleOutput::changed(format!("Would modify '{}'", path));
 
-            // Prepare new content
-            let new_content = if lines.is_empty() {
-                String::new()
-            } else {
-                format!("{}\n", lines.join("\n"))
-            };
+                            if let Some(d) = diff {
+                                output = output.with_diff(d);
+                            }
 
-            // Build transfer options
-            let mut transfer_opts = TransferOptions::new();
-            if let Some(m) = mode {
-                transfer_opts = transfer_opts.with_mode(m);
-            }
-            transfer_opts = transfer_opts.with_create_dirs();
+                            return Ok(output);
+                        }
 
-            // Upload modified content
-            conn.upload_content(new_content.as_bytes(), remote_path, Some(transfer_opts))
-                .await
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
-                })?;
+                        // Create backup if requested
+                        if backup && file_exists {
+                            let backup_path_str = format!("{}{}", path, backup_suffix);
+                            let backup_dest = Path::new(&backup_path_str);
 
-            let mut output = ModuleOutput::changed(format!("Modified '{}'", path));
+                            conn.upload_content(&content, backup_dest, None)
+                                .await
+                                .map_err(|e| {
+                                    ModuleError::ExecutionFailed(format!(
+                                        "Failed to create backup: {}",
+                                        e
+                                    ))
+                                })?;
+                        }
 
-            if diff_mode {
-                output = output.with_diff(Diff::new(original_lines.join("\n"), lines.join("\n")));
-            }
+                        // Prepare new content
+                        let new_content = if lines.is_empty() {
+                            String::new()
+                        } else {
+                            format!("{}\n", lines.join("\n"))
+                        };
 
-            if backup && file_exists {
-                output = output.with_data(
-                    "backup_file",
-                    serde_json::json!(format!("{}{}", path, backup_suffix)),
-                );
-            }
+                        // Build transfer options
+                        let mut transfer_opts = TransferOptions::new();
+                        if let Some(m) = mode {
+                            transfer_opts = transfer_opts.with_mode(m);
+                        }
+                        transfer_opts = transfer_opts.with_create_dirs();
 
-            Ok(output)
+                        // Upload modified content
+                        conn.upload_content(
+                            new_content.as_bytes(),
+                            remote_path,
+                            Some(transfer_opts),
+                        )
+                        .await
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
+                        })?;
+
+                        let mut output = ModuleOutput::changed(format!("Modified '{}'", path));
+
+                        if diff_mode {
+                            output = output
+                                .with_diff(Diff::new(original_lines.join("\n"), lines.join("\n")));
+                        }
+
+                        if backup && file_exists {
+                            output = output.with_data(
+                                "backup_file",
+                                serde_json::json!(format!("{}{}", path, backup_suffix)),
+                            );
+                        }
+
+                        Ok(output)
+                    })
+                })
+                .join()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
         })
     }
 
