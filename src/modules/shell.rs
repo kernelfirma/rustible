@@ -11,7 +11,7 @@ use super::{
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
-use crate::utils::cmd_escape;
+use crate::utils::{cmd_escape, shell_escape};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -56,8 +56,9 @@ impl ShellModule {
             Ok(format!("{} /c {}", executable, cmd_escape(cmd)))
         } else {
             // Unix-like shells (sh, bash, zsh, fish)
-            let escaped_cmd = cmd.replace('\'', "'\\''");
-            Ok(format!("{} -c '{}'", executable, escaped_cmd))
+            // Use shell_escape to correctly quote/escape the command string
+            // shell_escape guarantees a single safe token (quoted if necessary)
+            Ok(format!("{} -c {}", executable, shell_escape(cmd)))
         }
     }
 
@@ -535,14 +536,21 @@ mod tests {
         let cmd = "echo 'hello'";
         let result = module.build_shell_command(cmd, &params).unwrap();
 
+        // shell_escape will wrap it in single quotes and escape the internal quotes
         // Should be: /bin/sh -c 'echo '\''hello'\'''
         assert_eq!(result, "/bin/sh -c 'echo '\\''hello'\\'''");
 
         let cmd = "echo hello & whoami";
         let result = module.build_shell_command(cmd, &params).unwrap();
 
-        // With default /bin/sh, should use single quotes for POSIX shell
+        // shell_escape will wrap in single quotes because of spaces and &
         assert_eq!(result, "/bin/sh -c 'echo hello & whoami'");
+
+        // Test safe string (might not be quoted by shell_escape)
+        let cmd = "ls";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+        // shell_escape("ls") -> "ls" (no quotes needed)
+        assert_eq!(result, "/bin/sh -c ls");
     }
 
     #[test]
