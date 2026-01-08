@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::logging::{should_sample, RustibleEvent};
 
     #[test]
     fn test_sampling_decision_errors() {
@@ -237,7 +237,7 @@ mod tests {
         .with_module("package".to_string())
         .with_duration(1_000_000_000);
 
-        let json = serde_json::to_value(&event);
+        let json = serde_json::to_value(&event).expect("Failed to serialize event");
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();

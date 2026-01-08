@@ -177,14 +177,64 @@ pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult
     ];
 
     if value.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+        let found_chars: Vec<String> = value
+            .chars()
+            .filter(|c| SHELL_METACHARACTERS.contains(c))
+            .map(|c| format!("'{}'", c.escape_default()))
+            .collect();
         return Err(ModuleError::InvalidParameter(format!(
             "{} contains shell metacharacter(s): {}",
             param_name,
-        value
-            .chars()
-                .filter(|c| SHELL_METACHARACTERS.contains(c))
-                .collect::<String>()
-                .join(", ")
+            found_chars.join(", ")
+        )));
+    }
+
+    // Validate against safe pattern (alphanumeric, dots, underscores, plus, hyphens)
+    if !PACKAGE_NAME_REGEX.is_match(value) {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} contains invalid characters. Only alphanumeric, dots, underscores, plus signs, and hyphens are allowed.",
+            param_name
+        )));
+    }
+
+    Ok(())
+}
+
+/// Validates an environment variable name.
+///
+/// Environment variable names must:
+/// - Not be empty
+/// - Not start with a digit
+/// - Contain only alphanumeric characters and underscores
+/// - Not contain null bytes
+///
+/// # Arguments
+///
+/// * `name` - The environment variable name to validate
+///
+/// # Returns
+///
+/// * `Ok(())` if environment variable name is valid
+/// * `Err(ModuleError::InvalidParameter)` if name is invalid
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_env_var_name;
+///
+/// assert!(validate_env_var_name("MY_VAR").is_ok());
+/// assert!(validate_env_var_name("PATH").is_ok());
+/// assert!(validate_env_var_name("var123").is_ok());
+///
+/// // Invalid names
+/// assert!(validate_env_var_name("").is_err());
+/// assert!(validate_env_var_name("123VAR").is_err());
+/// assert!(validate_env_var_name("MY-VAR").is_err());
+/// ```
+pub fn validate_env_var_name(name: &str) -> ModuleResult<()> {
+    if name.is_empty() {
+        return Err(ModuleError::InvalidParameter(
+            "Environment variable name cannot be empty".to_string(),
         ));
     }
 
@@ -215,6 +265,246 @@ pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult
     }
 
     Ok(())
+}
+
+/// Validates a path parameter to prevent path traversal attacks.
+///
+/// This function ensures paths are safe for use in `creates` and `removes` parameters
+/// by rejecting:
+/// - Empty paths
+/// - Paths containing null bytes
+/// - Paths containing newlines (log injection)
+/// - Paths containing path traversal sequences (`..`)
+///
+/// # Arguments
+///
+/// * `path` - The path string to validate
+/// * `param_name` - The parameter name for error messages (e.g., "creates", "removes")
+///
+/// # Returns
+///
+/// * `Ok(())` if path is valid
+/// * `Err(ModuleError::InvalidParameter)` if path is invalid
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_path_param;
+///
+/// // Valid paths
+/// assert!(validate_path_param("/tmp/marker.txt", "creates").is_ok());
+/// assert!(validate_path_param("./subdir/file", "removes").is_ok());
+/// assert!(validate_path_param("marker.txt", "creates").is_ok());
+///
+/// // Invalid - path traversal
+/// assert!(validate_path_param("../../../etc/passwd", "creates").is_err());
+/// assert!(validate_path_param("/var/log/../root", "creates").is_err());
+///
+/// // Invalid - null bytes / newlines
+/// assert!(validate_path_param("/path\0null", "creates").is_err());
+/// assert!(validate_path_param("/path\ninjection", "creates").is_err());
+/// ```
+pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
+    // Reject empty paths
+    if path.is_empty() {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path cannot be empty",
+            param_name
+        )));
+    }
+
+    // Reject paths with null bytes (injection attack vector)
+    if path.contains('\0') {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path contains invalid null byte",
+            param_name
+        )));
+    }
+
+    // Reject paths with newlines (could be used for log injection)
+    if path.contains('\n') || path.contains('\r') {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path contains invalid newline characters",
+            param_name
+        )));
+    }
+
+    // Check for path traversal using PathBuf normalization
+    let path_buf = PathBuf::from(path);
+    for component in path_buf.components() {
+        if component == std::path::Component::ParentDir {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} path contains path traversal components (../). \
+                 Path traversal is not allowed for security reasons.",
+                param_name
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates command arguments for dangerous patterns.
+///
+/// This function is more permissive than `validate_shell_safe_string` as command
+/// arguments may legitimately contain spaces, quotes, and some special characters.
+/// However, it blocks specific injection patterns that could lead to command execution.
+///
+/// # Arguments
+///
+/// * `args` - The command arguments string to validate
+///
+/// # Returns
+///
+/// * `Ok(())` if arguments are safe
+/// * `Err(ModuleError::InvalidParameter)` if dangerous patterns are detected
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_command_args;
+///
+/// // Valid arguments
+/// assert!(validate_command_args("nginx -c /etc/nginx.conf").is_ok());
+/// assert!(validate_command_args("--force").is_ok());
+/// assert!(validate_command_args("").is_ok());
+///
+/// // Dangerous patterns
+/// assert!(validate_command_args("$(cat /etc/passwd)").is_err());
+/// assert!(validate_command_args("nginx; reboot").is_err());
+/// ```
+pub fn validate_command_args(args: &str) -> ModuleResult<()> {
+    if args.is_empty() {
+        return Ok(()); // Empty args are fine
+    }
+
+    // Reject null bytes
+    if args.contains('\0') {
+        return Err(ModuleError::InvalidParameter(
+            "Command arguments contain null byte".to_string(),
+        ));
+    }
+
+    // Dangerous patterns that indicate command injection
+    let dangerous_patterns = [
+        ("$(", "command substitution $()"),
+        ("${", "variable expansion ${}"),
+        ("`", "backtick command substitution"),
+        ("&&", "command chaining &&"),
+        ("||", "command chaining ||"),
+        ("; ", "command separator ;"),
+        ("|", "pipe operator"),
+        (">", "output redirection"),
+        ("<", "input redirection"),
+        ("\n", "newline (multi-line command)"),
+        ("\r", "carriage return"),
+    ];
+
+    for (pattern, description) in dangerous_patterns {
+        if args.contains(pattern) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Command arguments contain potentially dangerous pattern: {} ({})",
+                pattern.escape_default(),
+                description
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Normalizes a path and optionally validates it against a base directory.
+///
+/// This function resolves the path and checks if it stays within the specified
+/// base directory (if provided). This helps prevent path traversal attacks.
+///
+/// # Arguments
+///
+/// * `path` - The path to normalize
+/// * `base_dir` - Optional base directory that the path must stay within
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The normalized path
+/// * `Err(ModuleError::InvalidParameter)` - If the path is invalid or escapes the base directory
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::normalize_path;
+/// use std::path::PathBuf;
+///
+/// // Simple path normalization
+/// assert!(normalize_path("./file.txt", None).is_ok());
+///
+/// // With base directory enforcement
+/// let base = PathBuf::from("/safe/dir");
+/// assert!(normalize_path("/safe/dir/file.txt", Some(&base)).is_ok());
+/// assert!(normalize_path("/etc/passwd", Some(&base)).is_err());
+/// ```
+pub fn normalize_path(path: &str, base_dir: Option<&Path>) -> ModuleResult<PathBuf> {
+    if path.is_empty() {
+        return Err(ModuleError::InvalidParameter(
+            "Path cannot be empty".to_string(),
+        ));
+    }
+
+    // Reject paths with null bytes
+    if path.contains('\0') {
+        return Err(ModuleError::InvalidParameter(
+            "Path contains null byte".to_string(),
+        ));
+    }
+
+    let path_buf = PathBuf::from(path);
+
+    // If base_dir is specified, ensure path doesn't escape it
+    if let Some(base) = base_dir {
+        // For relative paths, join with base first
+        let full_path = if path_buf.is_relative() {
+            base.join(&path_buf)
+        } else {
+            path_buf.clone()
+        };
+
+        // Normalize the path by resolving . and ..
+        let mut normalized = PathBuf::new();
+        for component in full_path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    // Check if we would escape the base directory
+                    if !normalized.starts_with(base) || normalized == *base {
+                        return Err(ModuleError::InvalidParameter(format!(
+                            "Path '{}' escapes intended base directory '{}'",
+                            path,
+                            base.display()
+                        )));
+                    }
+                    normalized.pop();
+                }
+                std::path::Component::CurDir => {
+                    // Skip current directory markers
+                }
+                _ => {
+                    normalized.push(component);
+                }
+            }
+        }
+
+        // Final check: ensure normalized path is within base
+        if !normalized.starts_with(base) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Path '{}' escapes intended base directory '{}'",
+                path,
+                base.display()
+            )));
+        }
+
+        Ok(normalized)
+    } else {
+        // Without base_dir, just return the path as-is (no enforcement)
+        Ok(path_buf)
+    }
 }
 
 /// Errors that can occur during module execution

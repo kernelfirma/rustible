@@ -27,24 +27,26 @@ pub fn init_logging_with_file(log_file: Option<&str>) {
         .parse::<EnvFilter>()
         .unwrap_or_else(|_| EnvFilter::new("rustible=info"));
 
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .json()
-        .with_span_events(FmtSpan::CLOSE)
-        .with_current_span(false)
-        .with_span_list(true);
+    if let Some(file_path) = log_file {
+        // Log to file with JSON format, no ANSI colors
+        let file = std::fs::File::create(file_path).expect("Failed to create log file");
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_events(FmtSpan::CLOSE)
+            .with_current_span(false)
+            .with_span_list(true)
+            .with_ansi(false)
+            .with_writer(file);
 
-        let subscriber = if let Some(file_path) = log_file {
-            Registry::default()
-                .with(filter)
-                .with_writer(std::fs::File::create(file_path).unwrap())
-                .with_ansi(false),
-        } else {
-            Registry::default()
-                .with(filter)
-                .with_writer(std::fs::File::create(file_path).unwrap())
-                .with_ansi(false),
-                .with(fmt_layer)
-        };
+        Registry::default().with(filter).with(fmt_layer).init();
+    } else {
+        // Log to stdout with JSON format
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_events(FmtSpan::CLOSE)
+            .with_current_span(false)
+            .with_span_list(true);
 
-    subscriber.init();
+        Registry::default().with(filter).with(fmt_layer).init();
+    }
 }
