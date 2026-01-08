@@ -9,77 +9,13 @@ use super::{
 };
 use crate::connection::TransferOptions;
 use crate::utils::shell_escape;
-use minijinja::value::Kwargs;
-use minijinja::{Environment, Error, Value};
-use once_cell::sync::Lazy;
+use crate::template::TEMPLATE_ENGINE;
 use std::fs;
 use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use tokio::runtime::Handle;
-
-/// Global Minijinja environment with pre-registered filters
-static TEMPLATE_ENV: Lazy<Environment<'static>> = Lazy::new(|| {
-    let mut env = Environment::new();
-
-    // Add custom filters similar to Ansible/Jinja2 (Tera compatibility)
-
-    // Default filter compatibility: handle empty strings
-    env.add_filter(
-        "default",
-        |value: Value, kwargs: Kwargs| -> Result<Value, Error> {
-            let is_empty = value.is_undefined()
-                || value.is_none()
-                || (value.as_str().map(|s| s.is_empty()).unwrap_or(false));
-            if is_empty {
-                if let Ok(default) = kwargs.get::<Value>("value") {
-                    return Ok(default);
-                }
-            }
-            Ok(value)
-        },
-    );
-
-    // Upper/Lower/Trim are built-in in minijinja
-
-    // Replace filter with 'from'/'to' compatibility
-    env.add_filter(
-        "replace",
-        |value: String, kwargs: Kwargs| -> Result<Value, Error> {
-            // Minijinja replace uses old, new, count.
-            // Tera uses from, to.
-            let from = kwargs
-                .get::<&str>("from")
-                .or_else(|_| kwargs.get::<&str>("old"))
-                .unwrap_or("");
-
-            let to = kwargs
-                .get::<&str>("to")
-                .or_else(|_| kwargs.get::<&str>("new"))
-                .unwrap_or("");
-
-            Ok(Value::from(value.replace(from, to)))
-        },
-    );
-
-    // Join filter with 'sep' compatibility
-    env.add_filter(
-        "join",
-        |value: Value, kwargs: Kwargs| -> Result<Value, Error> {
-            let sep = kwargs.get::<&str>("sep").unwrap_or(",");
-
-            if let Ok(iter) = value.try_iter() {
-                let items: Vec<String> = iter.map(|v| v.to_string()).collect();
-                Ok(Value::from(items.join(sep)))
-            } else {
-                Ok(value)
-            }
-        },
-    );
-
-    env
-});
 
 /// Module for rendering templates
 pub struct TemplateModule;
@@ -119,10 +55,9 @@ impl TemplateModule {
         template_content: &str,
         context: &serde_json::Value,
     ) -> ModuleResult<String> {
-        // Use the shared environment without cloning it
-        // minijinja::Environment is thread-safe and designed to be shared
-        TEMPLATE_ENV
-            .render_str(template_content, context)
+        // Use the shared global TemplateEngine
+        TEMPLATE_ENGINE
+            .render_with_json(template_content, context)
             .map_err(|e| ModuleError::TemplateError(format!("Failed to render template: {}", e)))
     }
 

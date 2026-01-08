@@ -184,6 +184,22 @@ impl TemplateEngine {
         Ok(result)
     }
 
+    /// Render a template string with a JSON Value context
+    ///
+    /// This allows rendering directly with a serde_json::Value (e.g. Object) without
+    /// converting it to HashMap/IndexMap first.
+    pub fn render_with_json(&self, template: &str, context: &JsonValue) -> Result<String> {
+        // Fast path: no template syntax
+        if !Self::is_template(template) {
+            return Ok(template.to_string());
+        }
+
+        trace!("Rendering template: {}", template);
+        let tmpl = self.env.template_from_str(template)?;
+        let result = tmpl.render(context)?;
+        Ok(result)
+    }
+
     /// Render a JSON value, templating any strings within it
     ///
     /// Recursively templates all string values in the JSON structure.
