@@ -286,12 +286,6 @@ fn html_escape(input: &str) -> String {
         .replace('\'', "&#x27;")
 }
 
-/// Escape a string for use in shell commands within templates
-pub fn template_shell_escape(input: &str) -> String {
-    // Use single quotes and escape embedded single quotes
-    format!("'{}'", input.replace('\'', "'\\''"))
-}
-
 /// Check if a string could be a template injection attempt
 pub fn is_potential_injection(input: &str) -> bool {
     // Check for Jinja2-style template syntax
@@ -391,13 +385,6 @@ mod tests {
         assert_eq!(html_escape("<script>"), "&lt;script&gt;");
         assert_eq!(html_escape("a & b"), "a &amp; b");
         assert_eq!(html_escape("\"test\""), "&quot;test&quot;");
-    }
-
-    #[test]
-    fn test_template_shell_escape() {
-        assert_eq!(template_shell_escape("hello"), "'hello'");
-        assert_eq!(template_shell_escape("it's"), "'it'\\''s'");
-        assert_eq!(template_shell_escape("$(whoami)"), "'$(whoami)'");
     }
 
     #[test]
