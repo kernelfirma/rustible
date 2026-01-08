@@ -11,7 +11,7 @@ use super::{
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
-use crate::utils::cmd_escape;
+use crate::utils::{cmd_escape, shell_escape};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -56,8 +56,9 @@ impl ShellModule {
             Ok(format!("{} /c {}", executable, cmd_escape(cmd)))
         } else {
             // Unix-like shells (sh, bash, zsh, fish)
-            let escaped_cmd = cmd.replace('\'', "'\\''");
-            Ok(format!("{} -c '{}'", executable, escaped_cmd))
+            // Use shell_escape to correctly quote/escape the command string
+            // shell_escape guarantees a single safe token (quoted if necessary)
+            Ok(format!("{} -c {}", executable, shell_escape(cmd)))
         }
     }
 
@@ -299,11 +300,6 @@ impl ShellModule {
         context: &ModuleContext,
         connection: Arc<dyn Connection + Send + Sync>,
     ) -> ModuleResult<ModuleOutput> {
-        // Use tokio runtime to execute async operations
-        let rt = tokio::runtime::Runtime::new().map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
-        })?;
-
         let params_clone = params.clone();
         let check_mode = context.check_mode;
         let cmd = params.get_string_required("cmd")?;
@@ -311,63 +307,82 @@ impl ShellModule {
         let options = self.build_execute_options(params, context)?;
         let warn_on_stderr = params.get_bool_or("warn", true);
 
-        rt.block_on(async {
-            // Check creates/removes conditions on remote
-            if let Some(output) = self
-                .check_creates_removes_remote(&params_clone, &connection)
-                .await?
-            {
-                return Ok(output);
-            }
+        // Use scoped thread with a NEW runtime to avoid blocking the parent tokio runtime
+        // This prevents deadlock when called from within an async context
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    // Create a new runtime in this thread - this avoids nesting
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
+                        })?;
 
-            // In check mode, return what would happen
-            if check_mode {
-                return Ok(ModuleOutput::changed(format!(
-                    "Would execute shell command: {}",
-                    cmd
-                )));
-            }
+                    rt.block_on(async {
+                        // Check creates/removes conditions on remote
+                        if let Some(output) = self
+                            .check_creates_removes_remote(&params_clone, &connection)
+                            .await?
+                        {
+                            return Ok(output);
+                        }
 
-            // Execute via connection
-            // Note: The connection.execute() runs through a shell anyway,
-            // but we wrap with explicit shell call for consistency and to
-            // support custom shell executables
-            let result = connection
-                .execute(&shell_cmd, Some(options))
-                .await
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!(
-                        "Failed to execute shell command '{}': {}",
-                        cmd, e
-                    ))
-                })?;
+                        // In check mode, return what would happen
+                        if check_mode {
+                            return Ok(ModuleOutput::changed(format!(
+                                "Would execute shell command: {}",
+                                cmd
+                            )));
+                        }
 
-            if result.success {
-                let mut output =
-                    ModuleOutput::changed("Shell command executed successfully".to_string())
-                        .with_command_output(
-                            Some(result.stdout.clone()),
-                            Some(result.stderr.clone()),
-                            Some(result.exit_code),
-                        );
+                        // Execute via connection
+                        // Note: The connection.execute() runs through a shell anyway,
+                        // but we wrap with explicit shell call for consistency and to
+                        // support custom shell executables
+                        let result = connection
+                            .execute(&shell_cmd, Some(options))
+                            .await
+                            .map_err(|e| {
+                                ModuleError::ExecutionFailed(format!(
+                                    "Failed to execute shell command '{}': {}",
+                                    cmd, e
+                                ))
+                            })?;
 
-                if warn_on_stderr && !result.stderr.is_empty() {
-                    output
-                        .data
-                        .insert("warnings".to_string(), serde_json::json!([result.stderr]));
-                }
+                        if result.success {
+                            let mut output = ModuleOutput::changed(
+                                "Shell command executed successfully".to_string(),
+                            )
+                            .with_command_output(
+                                Some(result.stdout.clone()),
+                                Some(result.stderr.clone()),
+                                Some(result.exit_code),
+                            );
 
-                Ok(output)
-            } else {
-                Err(ModuleError::CommandFailed {
-                    code: result.exit_code,
-                    message: if result.stderr.is_empty() {
-                        result.stdout
-                    } else {
-                        result.stderr
-                    },
+                            if warn_on_stderr && !result.stderr.is_empty() {
+                                output.data.insert(
+                                    "warnings".to_string(),
+                                    serde_json::json!([result.stderr]),
+                                );
+                            }
+
+                            Ok(output)
+                        } else {
+                            Err(ModuleError::CommandFailed {
+                                code: result.exit_code,
+                                message: if result.stderr.is_empty() {
+                                    result.stdout
+                                } else {
+                                    result.stderr
+                                },
+                            })
+                        }
+                    })
                 })
-            }
+                .join()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
         })
     }
 }
@@ -535,14 +550,21 @@ mod tests {
         let cmd = "echo 'hello'";
         let result = module.build_shell_command(cmd, &params).unwrap();
 
+        // shell_escape will wrap it in single quotes and escape the internal quotes
         // Should be: /bin/sh -c 'echo '\''hello'\'''
         assert_eq!(result, "/bin/sh -c 'echo '\\''hello'\\'''");
 
         let cmd = "echo hello & whoami";
         let result = module.build_shell_command(cmd, &params).unwrap();
 
-        // With default /bin/sh, should use single quotes for POSIX shell
+        // shell_escape will wrap in single quotes because of spaces and &
         assert_eq!(result, "/bin/sh -c 'echo hello & whoami'");
+
+        // Test safe string (might not be quoted by shell_escape)
+        let cmd = "ls";
+        let result = module.build_shell_command(cmd, &params).unwrap();
+        // shell_escape("ls") -> "ls" (no quotes needed)
+        assert_eq!(result, "/bin/sh -c ls");
     }
 
     #[test]

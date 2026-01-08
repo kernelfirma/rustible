@@ -25,14 +25,18 @@ impl SshConfig {
         let mut parts = vec!["ssh".to_string()];
 
         if let Some(key) = &self.key_file {
-            parts.push(format!("-i {}", shell_escape(key)));
+            parts.push("-i".to_string());
+            parts.push(shell_escape(key));
             // Disable other key sources when using specific key
-            parts.push("-o IdentitiesOnly=yes".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("IdentitiesOnly=yes"));
         }
 
         if self.accept_hostkey {
-            parts.push("-o StrictHostKeyChecking=no".to_string());
-            parts.push("-o UserKnownHostsFile=/dev/null".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("StrictHostKeyChecking=no"));
+            parts.push("-o".to_string());
+            parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
         }
 
         if let Some(opts) = &self.ssh_opts {
@@ -1012,8 +1016,29 @@ mod tests {
             accept_hostkey: false,
         };
         let cmd = config.build_ssh_command().unwrap();
+        // /path/to/key is safe, so it is NOT quoted by shell_escape
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o IdentitiesOnly=yes"));
+        // IdentitiesOnly=yes contains =, so it IS quoted
+        assert!(cmd.contains("-o 'IdentitiesOnly=yes'"));
+
+        // With key file containing spaces (security check)
+        let config = SshConfig {
+            key_file: Some("/path/to/my key".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        // Contains space, so it IS quoted
+        assert!(cmd.contains("-i '/path/to/my key'"));
+
+        // With key file containing injection attempt (security check)
+        let config = SshConfig {
+            key_file: Some("id_rsa; rm -rf /".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        assert!(cmd.contains("-i 'id_rsa; rm -rf /'"));
 
         // With accept_hostkey
         let config = SshConfig {
@@ -1022,8 +1047,8 @@ mod tests {
             accept_hostkey: true,
         };
         let cmd = config.build_ssh_command().unwrap();
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
-        assert!(cmd.contains("-o UserKnownHostsFile=/dev/null"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
+        assert!(cmd.contains("-o 'UserKnownHostsFile=/dev/null'"));
 
         // With custom ssh_opts
         let config = SshConfig {
@@ -1043,7 +1068,7 @@ mod tests {
         };
         let cmd = config.build_ssh_command().unwrap();
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
         assert!(cmd.contains("-v"));
     }
 

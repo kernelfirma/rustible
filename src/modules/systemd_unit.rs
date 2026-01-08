@@ -387,10 +387,19 @@ static UNIT_TERA: Lazy<Tera> = Lazy::new(|| {
     tera.register_filter(
         "quote",
         |value: &tera::Value, _args: &HashMap<String, tera::Value>| match value {
-            tera::Value::String(s) => Ok(tera::Value::String(format!(
-                "\"{}\"",
-                s.replace('\\', "\\\\").replace('"', "\\\"")
-            ))),
+            tera::Value::String(s) => {
+                let mut escaped = String::with_capacity(s.len() + 2 + s.len() / 2);
+                escaped.push('"');
+                for c in s.chars() {
+                    match c {
+                        '\\' => escaped.push_str("\\\\"),
+                        '"' => escaped.push_str("\\\""),
+                        _ => escaped.push(c),
+                    }
+                }
+                escaped.push('"');
+                Ok(tera::Value::String(escaped))
+            }
             _ => Ok(value.clone()),
         },
     );
@@ -400,11 +409,16 @@ static UNIT_TERA: Lazy<Tera> = Lazy::new(|| {
         |value: &tera::Value, _args: &HashMap<String, tera::Value>| match value {
             tera::Value::String(s) => {
                 // Escape special characters for systemd unit files
-                let escaped = s
-                    .replace('\\', "\\\\")
-                    .replace('\n', "\\n")
-                    .replace('\t', "\\t")
-                    .replace('%', "%%");
+                let mut escaped = String::with_capacity(s.len() * 2);
+                for c in s.chars() {
+                    match c {
+                        '\\' => escaped.push_str("\\\\"),
+                        '\n' => escaped.push_str("\\n"),
+                        '\t' => escaped.push_str("\\t"),
+                        '%' => escaped.push_str("%%"),
+                        _ => escaped.push(c),
+                    }
+                }
                 Ok(tera::Value::String(escaped))
             }
             _ => Ok(value.clone()),

@@ -19,7 +19,6 @@
 //! - Block/rescue/always execution
 #![allow(unused_variables)]
 
-
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;

@@ -32,7 +32,6 @@
 //! - test_failure_handling_any_errors_fatal
 #![allow(unused_variables)]
 
-
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
@@ -880,11 +879,21 @@ async fn test_executor_with_diff_mode_playbook() {
 
 #[tokio::test]
 async fn test_host_pinned_strategy() {
-    let runtime = create_runtime_with_hosts(vec!["host1", "host2"]);
+    // Use hosts with local connection to test HostPinned strategy without SSH
+    let mut runtime = RuntimeContext::new();
+    for host in ["host1", "host2"] {
+        runtime.add_host(host.to_string(), None);
+        runtime.set_host_var(
+            host,
+            "ansible_connection".to_string(),
+            serde_json::json!("local"),
+        );
+    }
+
     let executor = Executor::with_runtime(
         ExecutorConfig {
             strategy: ExecutionStrategy::HostPinned,
-            forks: 1, // One host at a time
+            forks: 1, // One host at a time for host_pinned strategy
             ..Default::default()
         },
         runtime,
@@ -902,10 +911,21 @@ async fn test_host_pinned_strategy() {
 
     // All hosts should complete all tasks
     assert_eq!(results.len(), 2);
-    for result in results.values() {
-        assert!(!result.failed);
+    for (host, result) in &results {
+        assert!(!result.failed, "Host {} should not be failed", host);
+        assert!(
+            !result.unreachable,
+            "Host {} should not be unreachable",
+            host
+        );
         // Each host should have run 3 tasks
-        assert!(result.stats.ok >= 3 || result.stats.changed >= 3);
+        assert!(
+            result.stats.ok >= 3 || result.stats.changed >= 3,
+            "Host {} stats: ok={}, changed={}",
+            host,
+            result.stats.ok,
+            result.stats.changed
+        );
     }
 }
 

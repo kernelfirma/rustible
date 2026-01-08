@@ -58,7 +58,7 @@ RUN strip /app/target/release/rustible
 # ============================================================================
 # Stage 4: Minimal runtime image
 # ============================================================================
-FROM debian:bookworm-slim AS runtime
+FROM debian:13.2-slim AS runtime
 
 # Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
