@@ -159,8 +159,8 @@ impl Parser {
         // Boolean filter
         env.add_filter("bool", |value: Value| -> bool {
             match value.as_str() {
-                Some("true") | Some("yes") | Some("on") | Some("1") => true,
-                Some("false") | Some("no") | Some("off") | Some("0") | Some("") => false,
+                Some("true" | "yes" | "on" | "1") => true,
+                Some("false" | "no" | "off" | "0" | "") => false,
                 None => {
                     if let Ok(b) = value.clone().try_into() {
                         b
@@ -215,7 +215,9 @@ impl Parser {
         // First/last filters
         env.add_filter("first", |value: Value| -> Value {
             if matches!(value.kind(), ValueKind::Seq) {
-                value.get_item(&Value::from(0_i64)).unwrap_or(Value::UNDEFINED)
+                value
+                    .get_item(&Value::from(0_i64))
+                    .unwrap_or(Value::UNDEFINED)
             } else if let Some(s) = value.as_str() {
                 s.chars()
                     .next()
@@ -230,7 +232,8 @@ impl Parser {
             if matches!(value.kind(), ValueKind::Seq) {
                 let len = value.len().unwrap_or(0);
                 if len > 0 {
-                    value.get_item(&Value::from((len - 1) as i64))
+                    value
+                        .get_item(&Value::from((len - 1) as i64))
                         .unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
@@ -347,9 +350,7 @@ impl Parser {
                         iter.filter(|item| {
                             if let Some(ref attr) = attr {
                                 if matches!(item.kind(), ValueKind::Map) {
-                                    item.get_attr(attr)
-                                        .map(|v| v.is_true())
-                                        .unwrap_or(false)
+                                    item.get_attr(attr).map(|v| v.is_true()).unwrap_or(false)
                                 } else {
                                     false
                                 }
@@ -376,9 +377,7 @@ impl Parser {
                         iter.filter(|item| {
                             if let Some(ref attr) = attr {
                                 if matches!(item.kind(), ValueKind::Map) {
-                                    !item.get_attr(attr)
-                                        .map(|v| v.is_true())
-                                        .unwrap_or(false)
+                                    !item.get_attr(attr).map(|v| v.is_true()).unwrap_or(false)
                                 } else {
                                     true
                                 }
@@ -619,7 +618,9 @@ impl Parser {
                 let len = value.len().unwrap_or(0);
                 if len > 0 {
                     let idx = rand::rngs::OsRng.gen_range(0..len);
-                    value.get_item(&Value::from(idx)).unwrap_or(Value::UNDEFINED)
+                    value
+                        .get_item(&Value::from(idx))
+                        .unwrap_or(Value::UNDEFINED)
                 } else {
                     Value::UNDEFINED
                 }
@@ -671,7 +672,7 @@ impl Parser {
                             if matches!(item.kind(), ValueKind::Map) {
                                 if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
-                                        Some("equalto") | Some("==") | Some("eq") => {
+                                        Some("equalto" | "==" | "eq") => {
                                             if let Some(ref tv) = test_val {
                                                 attr_val.to_string() == tv.to_string()
                                             } else {
@@ -681,8 +682,8 @@ impl Parser {
                                         Some("defined") => !attr_val.is_undefined(),
                                         Some("undefined") => attr_val.is_undefined(),
                                         Some("none") => attr_val.is_none(),
-                                        Some("true") | Some("truthy") => attr_val.is_true(),
-                                        Some("false") | Some("falsy") => !attr_val.is_true(),
+                                        Some("true" | "truthy") => attr_val.is_true(),
+                                        Some("false" | "falsy") => !attr_val.is_true(),
                                         None | Some(_) => attr_val.is_true(),
                                     }
                                 } else {
@@ -716,7 +717,7 @@ impl Parser {
                             if matches!(item.kind(), ValueKind::Map) {
                                 if let Ok(attr_val) = item.get_attr(&attr) {
                                     match test.as_deref() {
-                                        Some("equalto") | Some("==") | Some("eq") => {
+                                        Some("equalto" | "==" | "eq") => {
                                             if let Some(ref tv) = test_val {
                                                 attr_val.to_string() != tv.to_string()
                                             } else {
@@ -726,8 +727,8 @@ impl Parser {
                                         Some("defined") => attr_val.is_undefined(),
                                         Some("undefined") => !attr_val.is_undefined(),
                                         Some("none") => !attr_val.is_none(),
-                                        Some("true") | Some("truthy") => !attr_val.is_true(),
-                                        Some("false") | Some("falsy") => attr_val.is_true(),
+                                        Some("true" | "truthy") => !attr_val.is_true(),
+                                        Some("false" | "falsy") => attr_val.is_true(),
                                         None | Some(_) => !attr_val.is_true(),
                                     }
                                 } else {
@@ -840,8 +841,10 @@ impl Parser {
                 let is_seq2 = matches!(other.kind(), ValueKind::Seq);
                 if is_seq1 && is_seq2 {
                     // Collect iterators into Vecs since we need to iterate multiple times
-                    let items1: Vec<Value> = value.try_iter().map(|i| i.collect()).unwrap_or_default();
-                    let items2: Vec<Value> = other.try_iter().map(|i| i.collect()).unwrap_or_default();
+                    let items1: Vec<Value> =
+                        value.try_iter().map(|i| i.collect()).unwrap_or_default();
+                    let items2: Vec<Value> =
+                        other.try_iter().map(|i| i.collect()).unwrap_or_default();
                     let set1: std::collections::HashSet<String> =
                         items1.iter().map(|v| v.to_string()).collect();
                     let set2: std::collections::HashSet<String> =

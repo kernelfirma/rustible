@@ -925,7 +925,6 @@ impl Module for AuthorizedKeyModule {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use tempfile::TempDir;
 
     const TEST_RSA_KEY: &str = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7 test@example.com";
     const TEST_ED25519_KEY: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI test@example.com";

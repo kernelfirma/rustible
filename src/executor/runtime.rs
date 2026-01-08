@@ -450,6 +450,32 @@ impl RuntimeContext {
                     serde_json::json!(key_file),
                 );
             }
+            if let Some(password) = &host.connection.ssh.password {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_ssh_pass".to_string(),
+                    serde_json::json!(password),
+                );
+            }
+            if host.connection.ssh.timeout > 0 {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_ssh_timeout".to_string(),
+                    serde_json::json!(host.connection.ssh.timeout),
+                );
+            }
+            ctx.set_host_var(
+                &host_name,
+                "ansible_connection".to_string(),
+                serde_json::json!(host.connection.connection.to_string()),
+            );
+            if let Some(python) = &host.connection.python_interpreter {
+                ctx.set_host_var(
+                    &host_name,
+                    "ansible_python_interpreter".to_string(),
+                    serde_json::json!(python),
+                );
+            }
         }
 
         ctx
@@ -641,7 +667,9 @@ impl RuntimeContext {
             merged.insert(k.clone(), v.clone());
         }
 
-        // Host facts (under 'ansible_facts' namespace and as top-level ansible_* variables)
+        // Host facts (under 'ansible_facts' namespace and as top-level variables)
+        // Facts set via set_fact should be accessible directly (e.g., {{ my_fact }})
+        // as well as under ansible_facts namespace for compatibility
         if let Some(host_data) = self.host_data.get(host) {
             if !host_data.facts.is_empty() {
                 // Store facts under ansible_facts for backwards compatibility
@@ -650,15 +678,18 @@ impl RuntimeContext {
                     serde_json::to_value(host_data.get_all_facts()).unwrap_or(JsonValue::Null),
                 );
 
-                // Also expose each fact as a top-level ansible_* variable
-                // Facts like {"hostname": "server1"} become {"ansible_hostname": "server1"}
+                // Expose each fact directly and with ansible_* prefix
+                // This allows set_fact variables to be accessed as {{ my_var }}
+                // and gathered facts as {{ ansible_hostname }}
                 for (fact_name, fact_value) in host_data.get_all_facts() {
-                    let prefixed_name = if fact_name.starts_with("ansible_") {
-                        fact_name.clone()
-                    } else {
-                        format!("ansible_{}", fact_name)
-                    };
-                    merged.insert(prefixed_name, fact_value.clone());
+                    // Always add the fact directly (for set_fact compatibility)
+                    merged.insert(fact_name.clone(), fact_value.clone());
+
+                    // Also add with ansible_ prefix if not already prefixed
+                    // This maintains backward compatibility for gathered facts
+                    if !fact_name.starts_with("ansible_") {
+                        merged.insert(format!("ansible_{}", fact_name), fact_value.clone());
+                    }
                 }
             }
 
@@ -1615,14 +1646,14 @@ mod tests {
         );
 
         // Remove extra_var, include_param should win
-        ctx.extra_vars.remove("test_var");
+        ctx.extra_vars.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("include_param"))
         );
 
         // Remove include_param, role_param should win
-        ctx.include_params.remove("test_var");
+        ctx.include_params.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("role_param"))

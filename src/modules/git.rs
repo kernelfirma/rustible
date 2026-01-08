@@ -7,6 +7,7 @@ use super::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::utils::shell_escape;
 use std::path::Path;
 use std::process::Command;
 
@@ -24,18 +25,24 @@ impl SshConfig {
         let mut parts = vec!["ssh".to_string()];
 
         if let Some(key) = &self.key_file {
-            parts.push(format!("-i {}", key));
+            parts.push("-i".to_string());
+            parts.push(shell_escape(key));
             // Disable other key sources when using specific key
-            parts.push("-o IdentitiesOnly=yes".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("IdentitiesOnly=yes"));
         }
 
         if self.accept_hostkey {
-            parts.push("-o StrictHostKeyChecking=no".to_string());
-            parts.push("-o UserKnownHostsFile=/dev/null".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("StrictHostKeyChecking=no"));
+            parts.push("-o".to_string());
+            parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
         }
 
         if let Some(opts) = &self.ssh_opts {
-            parts.push(opts.clone());
+            // Options might contain spaces, so we should escape them to be safe
+            // when git passes them to the shell
+            parts.push(shell_escape(opts));
         }
 
         if parts.len() > 1 {
@@ -1009,8 +1016,29 @@ mod tests {
             accept_hostkey: false,
         };
         let cmd = config.build_ssh_command().unwrap();
+        // /path/to/key is safe, so it is NOT quoted by shell_escape
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o IdentitiesOnly=yes"));
+        // IdentitiesOnly=yes contains =, so it IS quoted
+        assert!(cmd.contains("-o 'IdentitiesOnly=yes'"));
+
+        // With key file containing spaces (security check)
+        let config = SshConfig {
+            key_file: Some("/path/to/my key".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        // Contains space, so it IS quoted
+        assert!(cmd.contains("-i '/path/to/my key'"));
+
+        // With key file containing injection attempt (security check)
+        let config = SshConfig {
+            key_file: Some("id_rsa; rm -rf /".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        assert!(cmd.contains("-i 'id_rsa; rm -rf /'"));
 
         // With accept_hostkey
         let config = SshConfig {
@@ -1019,8 +1047,8 @@ mod tests {
             accept_hostkey: true,
         };
         let cmd = config.build_ssh_command().unwrap();
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
-        assert!(cmd.contains("-o UserKnownHostsFile=/dev/null"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
+        assert!(cmd.contains("-o 'UserKnownHostsFile=/dev/null'"));
 
         // With custom ssh_opts
         let config = SshConfig {
@@ -1029,7 +1057,8 @@ mod tests {
             accept_hostkey: false,
         };
         let cmd = config.build_ssh_command().unwrap();
-        assert!(cmd.contains("ProxyCommand"));
+        // It should be quoted now because it contains spaces
+        assert!(cmd.contains("'-o ProxyCommand=ssh -W %h:%p proxy'"));
 
         // Combined options
         let config = SshConfig {
@@ -1039,8 +1068,33 @@ mod tests {
         };
         let cmd = config.build_ssh_command().unwrap();
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
         assert!(cmd.contains("-v"));
+    }
+
+    #[test]
+    fn test_ssh_command_injection_mitigation() {
+        // Attempt injection via key_file
+        let config = SshConfig {
+            key_file: Some("id_rsa; touch /tmp/pwned".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+
+        // Should be escaped: -i 'id_rsa; touch /tmp/pwned'
+        assert!(cmd.contains("-i 'id_rsa; touch /tmp/pwned'"));
+
+        // Attempt injection via ssh_opts
+        let config = SshConfig {
+            key_file: None,
+            ssh_opts: Some("-o ProxyCommand=nc 127.0.0.1 22; echo injection".to_string()),
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+
+        // Should be escaped
+        assert!(cmd.contains("'-o ProxyCommand=nc 127.0.0.1 22; echo injection'"));
     }
 
     #[test]

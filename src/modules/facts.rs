@@ -792,7 +792,8 @@ async fn gather_network_facts_remote(
     facts.insert("interfaces".to_string(), serde_json::json!(interfaces));
 
     // Get default IPv4 address
-    if let Some(stdout) = execute_and_get_output(connection, "ip route get 1.1.1.1 2>/dev/null").await
+    if let Some(stdout) =
+        execute_and_get_output(connection, "ip route get 1.1.1.1 2>/dev/null").await
     {
         if let Some(ip) = stdout.split("src ").nth(1) {
             if let Some(ip) = ip.split_whitespace().next() {
@@ -816,8 +817,7 @@ async fn gather_date_facts_remote(
     let mut facts = HashMap::new();
 
     // Get current date/time info
-    if let Some(datetime) =
-        execute_and_get_output(connection, "date '+%Y-%m-%d %H:%M:%S %Z'").await
+    if let Some(datetime) = execute_and_get_output(connection, "date '+%Y-%m-%d %H:%M:%S %Z'").await
     {
         facts.insert("date_time".to_string(), serde_json::json!(datetime));
     }

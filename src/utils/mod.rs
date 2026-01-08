@@ -33,15 +33,51 @@ pub fn shell_escape(s: &str) -> String {
     // Safe characters: alphanumeric, underscore, hyphen, dot, slash, colon, plus
     // Colon is needed for SELinux contexts (user:role:type:level)
     // Plus is needed for timezone offsets (GMT+5)
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+')
-    {
+    if s.chars().all(|c| {
+        c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+'
+    }) {
         return s.to_string();
     }
     // Otherwise, wrap in single quotes and escape any single quotes within
     // 'string' -> 'string'
     // 'can't' -> 'can'\''t'
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Escape a string for safe use in Windows cmd.exe.
+///
+/// Windows cmd.exe has very specific and complex escaping rules.
+/// This function wraps the string in double quotes and escapes any internal double quotes
+/// using the CSV-style `""` escaping, which is generally accepted by `cmd /c "command"`.
+///
+/// # Arguments
+///
+/// * `s` - The string to escape
+///
+/// # Returns
+///
+/// * The escaped string safe for cmd.exe execution
+pub fn cmd_escape(s: &str) -> String {
+    // Windows cmd.exe generally uses double quotes for arguments.
+    // To escape a double quote inside a double-quoted string, you often use two double quotes.
+    format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+/// Escapes a string for safe use in PowerShell commands.
+///
+/// This function handles special characters that could cause issues
+/// in PowerShell string literals.
+pub fn powershell_escape(s: &str) -> String {
+    // Use single quotes and escape embedded single quotes by doubling them
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// Escapes a string for use in PowerShell double-quoted strings.
+///
+/// This handles backticks, dollar signs, and double quotes.
+pub fn powershell_escape_double_quoted(s: &str) -> String {
+    let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
+    format!("\"{}\"", escaped)
 }
 
 #[cfg(test)]
@@ -67,5 +103,31 @@ mod tests {
         assert_eq!(shell_escape("foo|bar"), "'foo|bar'");
         assert_eq!(shell_escape("foo>bar"), "'foo>bar'");
         assert_eq!(shell_escape("foo&bar"), "'foo&bar'");
+    }
+
+    #[test]
+    fn test_cmd_escape() {
+        assert_eq!(cmd_escape("simple"), "\"simple\"");
+        assert_eq!(cmd_escape("with space"), "\"with space\"");
+        assert_eq!(cmd_escape("with\"quote"), "\"with\"\"quote\"");
+        assert_eq!(cmd_escape("foo&bar"), "\"foo&bar\"");
+        assert_eq!(cmd_escape("foo|bar"), "\"foo|bar\"");
+    }
+
+    #[test]
+    fn test_powershell_escape() {
+        assert_eq!(powershell_escape("simple"), "'simple'");
+        assert_eq!(powershell_escape("with'quote"), "'with''quote'");
+        assert_eq!(powershell_escape(""), "''");
+    }
+
+    #[test]
+    fn test_powershell_escape_double_quoted() {
+        assert_eq!(powershell_escape_double_quoted("simple"), "\"simple\"");
+        assert_eq!(powershell_escape_double_quoted("with$var"), "\"with`$var\"");
+        assert_eq!(
+            powershell_escape_double_quoted("with`backtick"),
+            "\"with``backtick\""
+        );
     }
 }

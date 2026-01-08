@@ -7,8 +7,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 /// JSON output mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonOutputMode {
     /// Pretty-printed JSON (default)
     #[default]
@@ -18,7 +17,6 @@ pub enum JsonOutputMode {
     /// JSON Lines format (one object per line)
     Lines,
 }
-
 
 /// JSON output writer
 pub struct JsonOutput {

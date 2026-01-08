@@ -13,7 +13,6 @@ use rustible::modules::authorized_key::{
 };
 use rustible::modules::{Module, ModuleClassification, ModuleContext};
 use std::collections::HashMap;
-use tempfile::TempDir;
 
 // ============================================================================
 // Test Constants - Sample SSH Keys

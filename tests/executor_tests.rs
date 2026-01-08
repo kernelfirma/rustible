@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
-use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use rustible::executor::task::{Handler, LoopSource, Task, TaskResult, TaskStatus};
 use rustible::executor::{
     DependencyGraph, ExecutionStats, ExecutionStrategy, Executor, ExecutorConfig, HostResult,
 };
@@ -301,7 +301,10 @@ fn test_task_loop() {
         .loop_var("item");
 
     assert!(task.loop_items.is_some());
-    assert_eq!(task.loop_items.as_ref().unwrap().len(), 3);
+    match task.loop_items.as_ref().unwrap() {
+        LoopSource::Items(items) => assert_eq!(items.len(), 3),
+        LoopSource::Template(_) => panic!("Expected Items, got Template"),
+    }
     assert_eq!(task.loop_var, "item");
 }
 

@@ -50,22 +50,8 @@ pub use win_user::WinUserModule;
 use crate::connection::Connection;
 use crate::modules::{ModuleError, ModuleResult};
 
-/// Escapes a string for safe use in PowerShell commands.
-///
-/// This function handles special characters that could cause issues
-/// in PowerShell string literals.
-pub fn powershell_escape(s: &str) -> String {
-    // Use single quotes and escape embedded single quotes by doubling them
-    format!("'{}'", s.replace('\'', "''"))
-}
-
-/// Escapes a string for use in PowerShell double-quoted strings.
-///
-/// This handles backticks, dollar signs, and double quotes.
-pub fn powershell_escape_double_quoted(s: &str) -> String {
-    let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
-    format!("\"{}\"", escaped)
-}
+// Re-export escaping functions from utils
+pub use crate::utils::{powershell_escape, powershell_escape_double_quoted};
 
 /// Validates a Windows path for safety.
 ///
@@ -250,23 +236,6 @@ pub fn execute_powershell_sync(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_powershell_escape() {
-        assert_eq!(powershell_escape("simple"), "'simple'");
-        assert_eq!(powershell_escape("with'quote"), "'with''quote'");
-        assert_eq!(powershell_escape(""), "''");
-    }
-
-    #[test]
-    fn test_powershell_escape_double_quoted() {
-        assert_eq!(powershell_escape_double_quoted("simple"), "\"simple\"");
-        assert_eq!(powershell_escape_double_quoted("with$var"), "\"with`$var\"");
-        assert_eq!(
-            powershell_escape_double_quoted("with`backtick"),
-            "\"with``backtick\""
-        );
-    }
 
     #[test]
     fn test_validate_windows_path() {

@@ -15,8 +15,8 @@ use anyhow::Result;
 use cli::commands::CommandContext;
 use cli::{Cli, Commands};
 use config::Config;
+use rustible::executor::Playbook;
 use rustible::schema::{SchemaValidator, ValidatorConfig};
-use rustible::playbook::Playbook;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Application version information
@@ -344,7 +344,10 @@ async fn execute_provision(
 }
 
 /// Validate a playbook using SchemaValidator and typed parsing
-async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandContext) -> Result<i32> {
+async fn validate_playbook(
+    playbook_path: &std::path::Path,
+    ctx: &mut CommandContext,
+) -> Result<i32> {
     ctx.output.banner("PLAYBOOK VALIDATION");
     ctx.output
         .info(&format!("Validating: {}", playbook_path.display()));
@@ -355,22 +358,12 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
         return Ok(1);
     }
 
-    // Read the playbook content
-    let content = std::fs::read_to_string(playbook_path)?;
-
-    // Phase 1: Try typed parsing with Playbook::from_yaml for better error messages
+    // Phase 1: Parse using executor playbook parser for runtime parity
     ctx.output.section("Syntax Check");
-    let playbook = match Playbook::from_yaml(&content, Some(playbook_path.to_path_buf())) {
+    let playbook = match Playbook::load(playbook_path) {
         Ok(pb) => pb,
         Err(e) => {
-            let err = e.to_string();
-
-            // Provide a friendlier, stable error message for common structural mistakes.
-            if err.contains("missing field `hosts`") {
-                ctx.output.error(&format!("missing required 'hosts' field ({})", e));
-            } else {
-                ctx.output.error(&format!("Playbook parse error: {}", e));
-            }
+            ctx.output.error(&format!("Playbook parse error: {}", e));
             return Ok(1);
         }
     };
@@ -378,10 +371,17 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
     // Structural warnings (non-fatal)
     for play in &playbook.plays {
         // Warn on plays that have no tasks *and* no roles.
-        if play.task_count() == 0 && play.roles.is_empty() {
-            let play_name = if play.name.is_empty() { "<unnamed>" } else { &play.name };
-            ctx.output
-                .warning(&format!("Play '{}' has no tasks (nothing to execute)", play_name));
+        let task_count = play.pre_tasks.len() + play.tasks.len() + play.post_tasks.len();
+        if task_count == 0 && play.roles.is_empty() {
+            let play_name = if play.name.is_empty() {
+                "<unnamed>"
+            } else {
+                &play.name
+            };
+            ctx.output.warning(&format!(
+                "Play '{}' has no tasks (nothing to execute)",
+                play_name
+            ));
         }
 
         // Warn on handlers that rely only on `listen` without a `name`.
@@ -411,7 +411,8 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
     let result = match validator.validate_file(playbook_path) {
         Ok(r) => r,
         Err(e) => {
-            ctx.output.error(&format!("Schema validation failed: {}", e));
+            ctx.output
+                .error(&format!("Schema validation failed: {}", e));
             return Ok(1);
         }
     };
@@ -430,7 +431,8 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
             error.path.clone()
         };
 
-        ctx.output.error(&format!("[{}] {}", location, error.message));
+        ctx.output
+            .error(&format!("[{}] {}", location, error.message));
 
         if let Some(ref suggestion) = error.suggestion {
             ctx.output.info(&format!("  suggestion: {}", suggestion));
@@ -446,7 +448,8 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
             warning.path.clone()
         };
 
-        ctx.output.warning(&format!("[{}] {}", location, warning.message));
+        ctx.output
+            .warning(&format!("[{}] {}", location, warning.message));
 
         if let Some(ref suggestion) = warning.suggestion {
             ctx.output.info(&format!("  suggestion: {}", suggestion));
@@ -456,15 +459,15 @@ async fn validate_playbook(playbook_path: &std::path::Path, ctx: &mut CommandCon
     // Print info (only in verbose mode)
     for info in &result.info {
         _info_count += 1;
-        ctx.output.debug(&format!("[{}] {}", info.path, info.message));
+        ctx.output
+            .debug(&format!("[{}] {}", info.path, info.message));
     }
 
     // Print summary
     ctx.output.section("Validation Results");
 
     if result.valid && warning_count == 0 {
-        ctx.output
-            .info("Playbook is valid. No issues found.");
+        ctx.output.info("Playbook is valid. No issues found.");
         Ok(0)
     } else if result.valid {
         ctx.output.warning(&format!(

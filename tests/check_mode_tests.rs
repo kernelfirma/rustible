@@ -13,29 +13,20 @@
 mod common;
 
 use std::collections::HashMap;
-use std::sync::Arc;
-
 use tempfile::TempDir;
 
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::{ExecutionContext, RuntimeContext};
-use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};
-use rustible::executor::{ExecutionStats, ExecutionStrategy, Executor, ExecutorConfig};
+use rustible::executor::task::{Handler, LoopSource, Task, TaskResult, TaskStatus};
+use rustible::executor::{ExecutionStats, Executor, ExecutorConfig};
 use rustible::modules::command::CommandModule;
 use rustible::modules::copy::CopyModule;
 use rustible::modules::file::FileModule;
-use rustible::modules::package::PackageModule;
-use rustible::modules::service::ServiceModule;
 use rustible::modules::shell::ShellModule;
-use rustible::modules::template::TemplateModule;
-use rustible::modules::user::UserModule;
-use rustible::modules::{
-    Diff, Module, ModuleContext, ModuleOutput, ModuleParams, ModuleStatus, ParamExt,
-};
+use rustible::modules::{Diff, Module, ModuleContext, ModuleOutput, ModuleParams, ModuleStatus};
 
 use common::{
-    check_mode_context, make_params, test_check_mode_config, test_module_context, MockConnection,
-    MockModule, PlayBuilder, PlaybookBuilder, TaskBuilder, TestContext,
+    check_mode_context, make_params, test_check_mode_config, test_module_context, MockModule,
 };
 
 // ============================================================================
@@ -142,8 +133,8 @@ async fn test_check_mode_with_diff() {
 fn test_command_module_check_mode() {
     let module = CommandModule;
     let params = make_params(vec![("cmd", serde_json::json!("echo hello"))]);
-
     let context = check_mode_context();
+
     let result = module.check(&params, &context).unwrap();
 
     // In check mode, command should report would execute
@@ -590,7 +581,10 @@ fn test_task_loop_definition() {
         ]);
 
     assert!(task.loop_items.is_some());
-    assert_eq!(task.loop_items.as_ref().unwrap().len(), 3);
+    match task.loop_items.as_ref().unwrap() {
+        LoopSource::Items(items) => assert_eq!(items.len(), 3),
+        LoopSource::Template(_) => panic!("Expected Items, got Template"),
+    }
 }
 
 #[tokio::test]
@@ -1043,6 +1037,23 @@ async fn test_complex_playbook_in_check_mode() {
     runtime.add_host("web2".to_string(), Some("webservers"));
     runtime.add_host("db1".to_string(), Some("databases"));
 
+    // Set local connection for test hosts to avoid SSH connection attempts
+    runtime.set_host_var(
+        "web1",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
+    runtime.set_host_var(
+        "web2",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
+    runtime.set_host_var(
+        "db1",
+        "ansible_connection".to_string(),
+        serde_json::json!("local"),
+    );
+
     runtime.set_global_var("environment".to_string(), serde_json::json!("testing"));
 
     let config = ExecutorConfig {
@@ -1158,7 +1169,6 @@ fn test_check_mode_with_empty_params() {
     let module = CommandModule;
     let params: ModuleParams = HashMap::new();
 
-    let context = check_mode_context();
     // Should return error for missing required param
     let result = module.validate_params(&params);
     // validate_params checks for cmd or argv

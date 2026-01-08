@@ -143,11 +143,7 @@ impl TemplateEngine {
     ///
     /// # Errors
     /// Returns an error if template parsing or rendering fails.
-    pub fn render(
-        &self,
-        template: &str,
-        vars: &HashMap<String, JsonValue>,
-    ) -> Result<String> {
+    pub fn render(&self, template: &str, vars: &HashMap<String, JsonValue>) -> Result<String> {
         // Fast path: no template syntax
         if !Self::is_template(template) {
             return Ok(template.to_string());
@@ -180,9 +176,8 @@ impl TemplateEngine {
 
         trace!("Rendering template: {}", template);
         // Convert IndexMap to a context that MiniJinja can use
-        let context: HashMap<String, JsonValue> = vars.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let context: HashMap<String, JsonValue> =
+            vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
         let tmpl = self.env.template_from_str(template)?;
         let result = tmpl.render(&context)?;
@@ -213,8 +208,10 @@ impl TemplateEngine {
                 let templated = self.render_with_indexmap(s, vars)?;
 
                 // Try to parse as JSON if it looks like a structured value
-                if templated.starts_with('[') || templated.starts_with('{')
-                    || templated == "true" || templated == "false"
+                if templated.starts_with('[')
+                    || templated.starts_with('{')
+                    || templated == "true"
+                    || templated == "false"
                     || templated.parse::<f64>().is_ok()
                 {
                     if let Ok(parsed) = serde_json::from_str::<JsonValue>(&templated) {
@@ -225,10 +222,8 @@ impl TemplateEngine {
             }
 
             JsonValue::Array(arr) => {
-                let templated: Result<Vec<_>> = arr
-                    .iter()
-                    .map(|v| self.render_value(v, vars))
-                    .collect();
+                let templated: Result<Vec<_>> =
+                    arr.iter().map(|v| self.render_value(v, vars)).collect();
                 Ok(JsonValue::Array(templated?))
             }
 
@@ -280,9 +275,8 @@ impl TemplateEngine {
         trace!("Evaluating condition: {}", expression);
 
         // Convert vars to HashMap for MiniJinja
-        let context: HashMap<String, JsonValue> = vars.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let context: HashMap<String, JsonValue> =
+            vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
         // Compile and evaluate the expression
         let expr = self.env.compile_expression(expression).map_err(|e| {
@@ -292,7 +286,10 @@ impl TemplateEngine {
         let result = expr.eval(&context).map_err(|e| {
             // Check if it's an undefined variable error - treat as false in non-strict mode
             if matches!(e.kind(), ErrorKind::UndefinedError) {
-                trace!("Undefined variable in condition '{}', treating as false", expression);
+                trace!(
+                    "Undefined variable in condition '{}', treating as false",
+                    expression
+                );
                 return Error::template_render(expression, format!("Undefined variable: {}", e));
             }
             Error::template_render(expression, format!("Failed to evaluate: {}", e))
@@ -304,18 +301,19 @@ impl TemplateEngine {
 
     /// Check if a string contains template syntax
     ///
-    /// Returns true if the string contains `{{` or `{%` which indicate
-    /// Jinja2 template expressions or statements.
+    /// Returns true if the string contains `{{`, `{%`, or `{#` which indicate
+    /// Jinja2 template expressions, statements, or comments.
     #[must_use]
     #[inline]
     pub fn is_template(s: &str) -> bool {
         // Optimization: Single-pass scan using memchr (via str::find) to avoid traversing
-        // the string twice (once for "{{", once for "{%").
+        // the string multiple times.
         let mut rest = s;
         while let Some(i) = rest.find('{') {
             if i + 1 < rest.len() {
                 let next = rest.as_bytes()[i + 1];
-                if next == b'{' || next == b'%' {
+                // Check for {{ (expression), {% (statement), or {# (comment)
+                if next == b'{' || next == b'%' || next == b'#' {
                     return true;
                 }
             }
@@ -337,7 +335,8 @@ impl Default for TemplateEngine {
 }
 
 /// Global shared template engine instance
-pub static TEMPLATE_ENGINE: Lazy<Arc<TemplateEngine>> = Lazy::new(|| Arc::new(TemplateEngine::new()));
+pub static TEMPLATE_ENGINE: Lazy<Arc<TemplateEngine>> =
+    Lazy::new(|| Arc::new(TemplateEngine::new()));
 
 /// Helper function to check if a MiniJinja value is truthy
 /// Uses MiniJinja's built-in Jinja2-compatible truthiness semantics
@@ -374,12 +373,16 @@ fn filter_capitalize(value: &str) -> String {
 }
 
 fn filter_title(value: &str) -> String {
-    value.split_whitespace()
+    value
+        .split_whitespace()
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
                 None => String::new(),
-                Some(c) => c.to_uppercase().chain(chars.map(|c| c.to_lowercase().next().unwrap_or(c))).collect(),
+                Some(c) => c
+                    .to_uppercase()
+                    .chain(chars.map(|c| c.to_lowercase().next().unwrap_or(c)))
+                    .collect(),
             }
         })
         .collect::<Vec<_>>()
@@ -394,7 +397,11 @@ fn filter_replace(value: &str, old: &str, new: &str) -> String {
     value.replace(old, new)
 }
 
-fn filter_regex_replace(value: &str, pattern: &str, replacement: &str) -> std::result::Result<String, minijinja::Error> {
+fn filter_regex_replace(
+    value: &str,
+    pattern: &str,
+    replacement: &str,
+) -> std::result::Result<String, minijinja::Error> {
     let re = regex::Regex::new(pattern).map_err(|e| {
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid regex: {}", e))
     })?;
@@ -433,7 +440,8 @@ fn filter_split(value: &str, sep: Option<&str>) -> Vec<String> {
 
 fn filter_join(value: Vec<MiniJinjaValue>, sep: Option<&str>) -> String {
     let sep = sep.unwrap_or("");
-    value.iter()
+    value
+        .iter()
         .map(|v| v.to_string())
         .collect::<Vec<_>>()
         .join(sep)
@@ -442,9 +450,18 @@ fn filter_join(value: Vec<MiniJinjaValue>, sep: Option<&str>) -> String {
 fn filter_int(value: MiniJinjaValue) -> i64 {
     if let Some(n) = value.as_i64() {
         n
+    } else if value.is_number() && !value.is_integer() {
+        // Handle float values by converting via string and truncating to int
+        value
+            .to_string()
+            .parse::<f64>()
+            .map(|f| f as i64)
+            .unwrap_or(0)
     } else if let Some(s) = value.as_str() {
         // Try parsing as float first, then truncate to int
-        s.parse::<f64>().map(|f| f as i64).unwrap_or_else(|_| s.parse().unwrap_or(0))
+        s.parse::<f64>()
+            .map(|f| f as i64)
+            .unwrap_or_else(|_| s.parse().unwrap_or(0))
     } else {
         0
     }
@@ -470,11 +487,14 @@ fn filter_bool(value: MiniJinjaValue) -> bool {
 
 fn filter_list(value: MiniJinjaValue) -> Vec<MiniJinjaValue> {
     if matches!(value.kind(), ValueKind::Seq) {
-        value.try_iter()
+        value
+            .try_iter()
             .map(|iter| iter.collect())
             .unwrap_or_default()
     } else if let Some(s) = value.as_str() {
-        s.chars().map(|c| MiniJinjaValue::from(c.to_string())).collect()
+        s.chars()
+            .map(|c| MiniJinjaValue::from(c.to_string()))
+            .collect()
     } else {
         vec![value]
     }
@@ -482,9 +502,14 @@ fn filter_list(value: MiniJinjaValue) -> Vec<MiniJinjaValue> {
 
 fn filter_first(value: MiniJinjaValue) -> MiniJinjaValue {
     if matches!(value.kind(), ValueKind::Seq) {
-        value.get_item(&MiniJinjaValue::from(0_i64)).unwrap_or(MiniJinjaValue::UNDEFINED)
+        value
+            .get_item(&MiniJinjaValue::from(0_i64))
+            .unwrap_or(MiniJinjaValue::UNDEFINED)
     } else if let Some(s) = value.as_str() {
-        s.chars().next().map(|c| MiniJinjaValue::from(c.to_string())).unwrap_or(MiniJinjaValue::UNDEFINED)
+        s.chars()
+            .next()
+            .map(|c| MiniJinjaValue::from(c.to_string()))
+            .unwrap_or(MiniJinjaValue::UNDEFINED)
     } else {
         MiniJinjaValue::UNDEFINED
     }
@@ -494,12 +519,17 @@ fn filter_last(value: MiniJinjaValue) -> MiniJinjaValue {
     if matches!(value.kind(), ValueKind::Seq) {
         let len = value.len().unwrap_or(0);
         if len > 0 {
-            value.get_item(&MiniJinjaValue::from((len - 1) as i64)).unwrap_or(MiniJinjaValue::UNDEFINED)
+            value
+                .get_item(&MiniJinjaValue::from((len - 1) as i64))
+                .unwrap_or(MiniJinjaValue::UNDEFINED)
         } else {
             MiniJinjaValue::UNDEFINED
         }
     } else if let Some(s) = value.as_str() {
-        s.chars().last().map(|c| MiniJinjaValue::from(c.to_string())).unwrap_or(MiniJinjaValue::UNDEFINED)
+        s.chars()
+            .last()
+            .map(|c| MiniJinjaValue::from(c.to_string()))
+            .unwrap_or(MiniJinjaValue::UNDEFINED)
     } else {
         MiniJinjaValue::UNDEFINED
     }
@@ -511,7 +541,8 @@ fn filter_length(value: MiniJinjaValue) -> usize {
 
 fn filter_unique(value: Vec<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
     let mut seen = std::collections::HashSet::new();
-    value.into_iter()
+    value
+        .into_iter()
         .filter(|v| {
             let key = v.to_string();
             if seen.contains(&key) {
@@ -588,9 +619,14 @@ fn filter_b64encode(value: &str) -> String {
 
 fn filter_b64decode(value: &str) -> std::result::Result<String, minijinja::Error> {
     use base64::Engine;
-    let decoded = base64::engine::general_purpose::STANDARD.decode(value).map_err(|e| {
-        minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid base64: {}", e))
-    })?;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .map_err(|e| {
+            minijinja::Error::new(
+                ErrorKind::InvalidOperation,
+                format!("Invalid base64: {}", e),
+            )
+        })?;
     String::from_utf8(decoded).map_err(|e| {
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid UTF-8: {}", e))
     })
@@ -598,33 +634,52 @@ fn filter_b64decode(value: &str) -> std::result::Result<String, minijinja::Error
 
 fn filter_to_json(value: MiniJinjaValue) -> std::result::Result<String, minijinja::Error> {
     serde_json::to_string(&value).map_err(|e| {
-        minijinja::Error::new(ErrorKind::InvalidOperation, format!("JSON serialization failed: {}", e))
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("JSON serialization failed: {}", e),
+        )
     })
 }
 
 fn filter_from_json(value: &str) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
     let json: serde_json::Value = serde_json::from_str(value).map_err(|e| {
-        minijinja::Error::new(ErrorKind::InvalidOperation, format!("JSON parse failed: {}", e))
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("JSON parse failed: {}", e),
+        )
     })?;
     Ok(MiniJinjaValue::from_serialize(&json))
 }
 
 fn filter_to_yaml(value: MiniJinjaValue) -> std::result::Result<String, minijinja::Error> {
     serde_yaml::to_string(&value).map_err(|e| {
-        minijinja::Error::new(ErrorKind::InvalidOperation, format!("YAML serialization failed: {}", e))
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("YAML serialization failed: {}", e),
+        )
     })
 }
 
-fn filter_mandatory(value: MiniJinjaValue, msg: Option<String>) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
+fn filter_mandatory(
+    value: MiniJinjaValue,
+    msg: Option<String>,
+) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
     if value.is_undefined() || value.is_none() {
         let error_msg = msg.unwrap_or_else(|| "Mandatory variable is not defined".to_string());
-        Err(minijinja::Error::new(ErrorKind::InvalidOperation, error_msg))
+        Err(minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            error_msg,
+        ))
     } else {
         Ok(value)
     }
 }
 
-fn filter_ternary(value: MiniJinjaValue, true_val: MiniJinjaValue, false_val: MiniJinjaValue) -> MiniJinjaValue {
+fn filter_ternary(
+    value: MiniJinjaValue,
+    true_val: MiniJinjaValue,
+    false_val: MiniJinjaValue,
+) -> MiniJinjaValue {
     if is_truthy_value(&value) {
         true_val
     } else {
@@ -632,7 +687,10 @@ fn filter_ternary(value: MiniJinjaValue, true_val: MiniJinjaValue, false_val: Mi
     }
 }
 
-fn filter_combine(value: MiniJinjaValue, other: MiniJinjaValue) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
+fn filter_combine(
+    value: MiniJinjaValue,
+    other: MiniJinjaValue,
+) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
     // Simple implementation - combines two objects
     let mut result = serde_json::Map::new();
 
@@ -640,7 +698,10 @@ fn filter_combine(value: MiniJinjaValue, other: MiniJinjaValue) -> std::result::
         for key in iter {
             if let Some(k) = key.as_str() {
                 if let Ok(v) = value.get_item(&key) {
-                    result.insert(k.to_string(), serde_json::to_value(&v).unwrap_or(serde_json::Value::Null));
+                    result.insert(
+                        k.to_string(),
+                        serde_json::to_value(&v).unwrap_or(serde_json::Value::Null),
+                    );
                 }
             }
         }
@@ -650,7 +711,10 @@ fn filter_combine(value: MiniJinjaValue, other: MiniJinjaValue) -> std::result::
         for key in iter {
             if let Some(k) = key.as_str() {
                 if let Ok(v) = other.get_item(&key) {
-                    result.insert(k.to_string(), serde_json::to_value(&v).unwrap_or(serde_json::Value::Null));
+                    result.insert(
+                        k.to_string(),
+                        serde_json::to_value(&v).unwrap_or(serde_json::Value::Null),
+                    );
                 }
             }
         }
@@ -659,14 +723,22 @@ fn filter_combine(value: MiniJinjaValue, other: MiniJinjaValue) -> std::result::
     Ok(MiniJinjaValue::from_serialize(&result))
 }
 
-fn filter_dict2items(value: MiniJinjaValue) -> std::result::Result<Vec<MiniJinjaValue>, minijinja::Error> {
+fn filter_dict2items(
+    value: MiniJinjaValue,
+) -> std::result::Result<Vec<MiniJinjaValue>, minijinja::Error> {
     let mut items = Vec::new();
     if let Ok(iter) = value.try_iter() {
         for key in iter {
             if let Ok(val) = value.get_item(&key) {
                 let mut item = serde_json::Map::new();
-                item.insert("key".to_string(), serde_json::to_value(&key).unwrap_or(serde_json::Value::Null));
-                item.insert("value".to_string(), serde_json::to_value(&val).unwrap_or(serde_json::Value::Null));
+                item.insert(
+                    "key".to_string(),
+                    serde_json::to_value(&key).unwrap_or(serde_json::Value::Null),
+                );
+                item.insert(
+                    "value".to_string(),
+                    serde_json::to_value(&val).unwrap_or(serde_json::Value::Null),
+                );
                 items.push(MiniJinjaValue::from_serialize(&item));
             }
         }
@@ -674,25 +746,42 @@ fn filter_dict2items(value: MiniJinjaValue) -> std::result::Result<Vec<MiniJinja
     Ok(items)
 }
 
-fn filter_items2dict(value: Vec<MiniJinjaValue>) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
+fn filter_items2dict(
+    value: Vec<MiniJinjaValue>,
+) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
     let mut result = serde_json::Map::new();
     for item in value {
-        if let (Ok(key), Ok(val)) = (item.get_item(&MiniJinjaValue::from("key")), item.get_item(&MiniJinjaValue::from("value"))) {
+        if let (Ok(key), Ok(val)) = (
+            item.get_item(&MiniJinjaValue::from("key")),
+            item.get_item(&MiniJinjaValue::from("value")),
+        ) {
             if let Some(k) = key.as_str() {
-                result.insert(k.to_string(), serde_json::to_value(&val).unwrap_or(serde_json::Value::Null));
+                result.insert(
+                    k.to_string(),
+                    serde_json::to_value(&val).unwrap_or(serde_json::Value::Null),
+                );
             }
         }
     }
     Ok(MiniJinjaValue::from_serialize(&result))
 }
 
-fn filter_selectattr(value: Vec<MiniJinjaValue>, attr: &str, test: Option<&str>, test_value: Option<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
-    value.into_iter()
+fn filter_selectattr(
+    value: Vec<MiniJinjaValue>,
+    attr: &str,
+    test: Option<&str>,
+    test_value: Option<MiniJinjaValue>,
+) -> Vec<MiniJinjaValue> {
+    value
+        .into_iter()
         .filter(|item| {
             if let Ok(attr_val) = item.get_item(&MiniJinjaValue::from(attr)) {
                 match test.unwrap_or("truthy") {
                     "truthy" => is_truthy_value(&attr_val),
-                    "equalto" | "eq" | "==" => test_value.as_ref().map(|v| attr_val.to_string() == v.to_string()).unwrap_or(false),
+                    "equalto" | "eq" | "==" => test_value
+                        .as_ref()
+                        .map(|v| attr_val.to_string() == v.to_string())
+                        .unwrap_or(false),
                     "defined" => !attr_val.is_undefined(),
                     _ => is_truthy_value(&attr_val),
                 }
@@ -703,13 +792,22 @@ fn filter_selectattr(value: Vec<MiniJinjaValue>, attr: &str, test: Option<&str>,
         .collect()
 }
 
-fn filter_rejectattr(value: Vec<MiniJinjaValue>, attr: &str, test: Option<&str>, test_value: Option<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
-    value.into_iter()
+fn filter_rejectattr(
+    value: Vec<MiniJinjaValue>,
+    attr: &str,
+    test: Option<&str>,
+    test_value: Option<MiniJinjaValue>,
+) -> Vec<MiniJinjaValue> {
+    value
+        .into_iter()
         .filter(|item| {
             if let Ok(attr_val) = item.get_item(&MiniJinjaValue::from(attr)) {
                 match test.unwrap_or("truthy") {
                     "truthy" => !is_truthy_value(&attr_val),
-                    "equalto" | "eq" | "==" => test_value.as_ref().map(|v| attr_val.to_string() != v.to_string()).unwrap_or(true),
+                    "equalto" | "eq" | "==" => test_value
+                        .as_ref()
+                        .map(|v| attr_val.to_string() != v.to_string())
+                        .unwrap_or(true),
                     "defined" => attr_val.is_undefined(),
                     _ => !is_truthy_value(&attr_val),
                 }
@@ -722,7 +820,8 @@ fn filter_rejectattr(value: Vec<MiniJinjaValue>, attr: &str, test: Option<&str>,
 
 fn filter_map_attr(value: Vec<MiniJinjaValue>, attr: Option<&str>) -> Vec<MiniJinjaValue> {
     if let Some(attr) = attr {
-        value.into_iter()
+        value
+            .into_iter()
             .filter_map(|item| item.get_item(&MiniJinjaValue::from(attr)).ok())
             .collect()
     } else {
@@ -780,8 +879,10 @@ fn test_mapping(value: &MiniJinjaValue) -> bool {
 
 fn test_iterable(value: &MiniJinjaValue) -> bool {
     // Iterable includes sequences, maps, and strings
-    matches!(value.kind(), ValueKind::Seq | ValueKind::Map | ValueKind::Iterable)
-        || value.as_str().is_some()
+    matches!(
+        value.kind(),
+        ValueKind::Seq | ValueKind::Map | ValueKind::Iterable
+    ) || value.as_str().is_some()
 }
 
 fn test_sequence(value: &MiniJinjaValue) -> bool {
@@ -831,7 +932,10 @@ fn test_search(value: &MiniJinjaValue, pattern: &str) -> bool {
 }
 
 fn test_startswith(value: &MiniJinjaValue, prefix: &str) -> bool {
-    value.as_str().map(|s| s.starts_with(prefix)).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| s.starts_with(prefix))
+        .unwrap_or(false)
 }
 
 fn test_endswith(value: &MiniJinjaValue, suffix: &str) -> bool {
@@ -839,23 +943,38 @@ fn test_endswith(value: &MiniJinjaValue, suffix: &str) -> bool {
 }
 
 fn test_file(value: &MiniJinjaValue) -> bool {
-    value.as_str().map(|s| std::path::Path::new(s).is_file()).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| std::path::Path::new(s).is_file())
+        .unwrap_or(false)
 }
 
 fn test_directory(value: &MiniJinjaValue) -> bool {
-    value.as_str().map(|s| std::path::Path::new(s).is_dir()).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| std::path::Path::new(s).is_dir())
+        .unwrap_or(false)
 }
 
 fn test_link(value: &MiniJinjaValue) -> bool {
-    value.as_str().map(|s| std::path::Path::new(s).is_symlink()).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| std::path::Path::new(s).is_symlink())
+        .unwrap_or(false)
 }
 
 fn test_exists(value: &MiniJinjaValue) -> bool {
-    value.as_str().map(|s| std::path::Path::new(s).exists()).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| std::path::Path::new(s).exists())
+        .unwrap_or(false)
 }
 
 fn test_abs(value: &MiniJinjaValue) -> bool {
-    value.as_str().map(|s| std::path::Path::new(s).is_absolute()).unwrap_or(false)
+    value
+        .as_str()
+        .map(|s| std::path::Path::new(s).is_absolute())
+        .unwrap_or(false)
 }
 
 fn test_success(value: &MiniJinjaValue) -> bool {
@@ -948,7 +1067,9 @@ mod tests {
     fn test_render_with_default_filter() {
         let engine = TemplateEngine::new();
         let vars = HashMap::new();
-        let result = engine.render("Hello, {{ name | default('World') }}!", &vars).unwrap();
+        let result = engine
+            .render("Hello, {{ name | default('World') }}!", &vars)
+            .unwrap();
         assert_eq!(result, "Hello, World!");
     }
 
@@ -985,10 +1106,17 @@ mod tests {
     fn test_evaluate_condition_is_defined() {
         let engine = TemplateEngine::new();
         let mut vars = IndexMap::new();
-        vars.insert("existing".to_string(), JsonValue::String("value".to_string()));
+        vars.insert(
+            "existing".to_string(),
+            JsonValue::String("value".to_string()),
+        );
 
-        assert!(engine.evaluate_condition("existing is defined", &vars).unwrap());
-        assert!(engine.evaluate_condition("nonexistent is undefined", &vars).unwrap());
+        assert!(engine
+            .evaluate_condition("existing is defined", &vars)
+            .unwrap());
+        assert!(engine
+            .evaluate_condition("nonexistent is undefined", &vars)
+            .unwrap());
     }
 
     #[test]
@@ -996,7 +1124,10 @@ mod tests {
         let engine = TemplateEngine::new();
         let mut vars = IndexMap::new();
         vars.insert("os".to_string(), JsonValue::String("Debian".to_string()));
-        vars.insert("version".to_string(), JsonValue::Number(serde_json::Number::from(10)));
+        vars.insert(
+            "version".to_string(),
+            JsonValue::Number(serde_json::Number::from(10)),
+        );
 
         assert!(engine.evaluate_condition("os == 'Debian'", &vars).unwrap());
         assert!(!engine.evaluate_condition("os == 'RedHat'", &vars).unwrap());
@@ -1031,7 +1162,10 @@ mod tests {
     fn test_render_value_nested() {
         let engine = TemplateEngine::new();
         let mut vars = IndexMap::new();
-        vars.insert("host".to_string(), JsonValue::String("localhost".to_string()));
+        vars.insert(
+            "host".to_string(),
+            JsonValue::String("localhost".to_string()),
+        );
 
         let value = serde_json::json!({
             "server": "{{ host }}",

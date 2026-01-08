@@ -137,8 +137,7 @@ proptest! {
         let valid_task = !task_name.is_empty() && task_name.len() <= 256;
 
         // Duration should be convertible
-        let duration = Duration::from_millis(duration_ms);
-        prop_assert!(duration.as_millis() >= 0);
+        let _duration = Duration::from_millis(duration_ms);
 
         let _ = (event_data, valid_host, valid_task);
     }

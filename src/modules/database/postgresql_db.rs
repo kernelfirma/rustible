@@ -32,6 +32,7 @@ use crate::modules::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -956,17 +957,6 @@ impl Module for PostgresqlDbModule {
             .join()
             .unwrap()
         })
-    }
-}
-
-/// Escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
     }
 }
 

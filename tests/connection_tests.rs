@@ -9,6 +9,8 @@
 //! - Error handling for all connection types
 //! - ExecuteOptions and TransferOptions builder patterns
 
+#![allow(unused_variables)]
+
 use std::path::Path;
 use std::sync::Arc;
 

@@ -55,7 +55,6 @@ pub struct Config {
     pub environment: HashMap<String, String>,
 }
 
-
 /// Default configuration values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -367,7 +366,6 @@ pub struct VaultConfig {
     /// Encrypt vault id
     pub encrypt_vault_id: Option<String>,
 }
-
 
 /// Galaxy settings
 #[derive(Debug, Clone, Serialize, Deserialize)]

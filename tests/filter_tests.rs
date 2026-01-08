@@ -16,14 +16,14 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::io::Write;
 use std::path::PathBuf;
-use tempfile::{tempdir, NamedTempFile};
+use tempfile::NamedTempFile;
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
 fn rustible_cmd() -> Command {
-    Command::cargo_bin("rustible").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("rustible")
 }
 
 fn fixtures_dir() -> PathBuf {

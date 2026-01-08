@@ -436,20 +436,27 @@ impl CopyModule {
     ) -> ModuleResult<ModuleOutput> {
         // Use the current tokio runtime handle to execute async operations
         // This allows us to bridge from the sync Module trait to async connection operations
+        // We use std::thread::scope to spawn on a separate thread, avoiding runtime nesting
         let handle = tokio::runtime::Handle::current();
-        handle.block_on(Self::execute_remote_async(
-            connection,
-            dest,
-            src,
-            content,
-            mode,
-            owner,
-            group,
-            backup,
-            backup_suffix,
-            check_mode,
-            diff_mode,
-        ))
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                handle.block_on(Self::execute_remote_async(
+                    connection,
+                    dest,
+                    src,
+                    content,
+                    mode,
+                    owner,
+                    group,
+                    backup,
+                    backup_suffix,
+                    check_mode,
+                    diff_mode,
+                ))
+            })
+            .join()
+            .unwrap()
+        })
     }
 
     /// Execute local copy (when connection is None or local)
@@ -772,11 +779,19 @@ impl Module for CopyModule {
             let handle = tokio::runtime::Handle::current();
 
             if let Some(content_str) = content {
-                let before = handle.block_on(async {
-                    match connection.download_content(dest_path).await {
-                        Ok(data) => String::from_utf8_lossy(&data).to_string(),
-                        Err(_) => String::new(),
-                    }
+                let conn = connection.clone();
+                let path = dest_path.to_path_buf();
+                let before = std::thread::scope(|s| {
+                    s.spawn(|| {
+                        handle.block_on(async {
+                            match conn.download_content(&path).await {
+                                Ok(data) => String::from_utf8_lossy(&data).to_string(),
+                                Err(_) => String::new(),
+                            }
+                        })
+                    })
+                    .join()
+                    .unwrap()
                 });
                 return Ok(Some(Diff::new(before, content_str)));
             }
@@ -787,11 +802,19 @@ impl Module for CopyModule {
                 if src_path.exists() {
                     let src_content = fs::read_to_string(src_path)
                         .unwrap_or_else(|_| "(binary file)".to_string());
-                    let dest_content = handle.block_on(async {
-                        match connection.download_content(dest_path).await {
-                            Ok(data) => String::from_utf8_lossy(&data).to_string(),
-                            Err(_) => String::new(),
-                        }
+                    let conn = connection.clone();
+                    let path = dest_path.to_path_buf();
+                    let dest_content = std::thread::scope(|s| {
+                        s.spawn(|| {
+                            handle.block_on(async {
+                                match conn.download_content(&path).await {
+                                    Ok(data) => String::from_utf8_lossy(&data).to_string(),
+                                    Err(_) => String::new(),
+                                }
+                            })
+                        })
+                        .join()
+                        .unwrap()
                     });
                     return Ok(Some(Diff::new(dest_content, src_content)));
                 }

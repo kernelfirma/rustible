@@ -610,6 +610,8 @@ impl TraceContextPropagator for B3Propagator {
     }
 }
 
+use crate::utils::shell_escape;
+
 /// SSH-friendly context propagator for embedding trace context in SSH commands.
 pub struct SshContextPropagator;
 
@@ -678,17 +680,6 @@ impl SshContextPropagator {
             trace_flags: TraceFlags::from_byte(flags),
             trace_state,
         })
-    }
-}
-
-/// Shell escape a string for safe use in shell commands.
-fn shell_escape(s: &str) -> String {
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
     }
 }
 

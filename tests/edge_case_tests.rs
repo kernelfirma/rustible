@@ -19,7 +19,6 @@ use rustible::template::TemplateEngine;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -389,7 +388,7 @@ async fn test_unreachable_host_handling() {
 
     // Create inventory with non-existent host
     let mut inventory = Inventory::new();
-    inventory.add_host(Host::new("totally-fake-host-that-does-not-exist"));
+    let _ = inventory.add_host(Host::new("totally-fake-host-that-does-not-exist"));
 
     // Parsing succeeds, execution would handle unreachable host
     assert!(playbook.play_count() > 0);
@@ -898,7 +897,7 @@ fn test_inventory_with_many_hosts() {
     // Add 500 hosts
     for i in 0..500 {
         let host = Host::new(format!("host-{}", i));
-        inventory.add_host(host);
+        let _ = inventory.add_host(host);
     }
 
     assert_eq!(inventory.hosts().count(), 500);

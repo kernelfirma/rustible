@@ -22,7 +22,7 @@ use serde_json;
 
 // Helper to get a command for testing
 fn rustible_cmd() -> Command {
-    Command::cargo_bin("rustible").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("rustible")
 }
 
 // Helper to create a test playbook

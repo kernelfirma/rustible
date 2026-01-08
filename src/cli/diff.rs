@@ -27,8 +27,7 @@ fn hunk_ranges(ops: &[DiffOp]) -> (usize, usize, usize, usize) {
 }
 
 /// Diff output format
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DiffFormat {
     /// Unified diff format (default)
     #[default]
@@ -40,7 +39,6 @@ pub enum DiffFormat {
     /// Inline format with markers
     Inline,
 }
-
 
 /// Diff display options
 #[derive(Debug, Clone)]

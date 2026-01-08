@@ -7,6 +7,8 @@
 //! - Parameter validation
 //! - Edge cases
 
+#![allow(unused_variables)]
+
 use rustible::modules::apt::{AptModule, AptState};
 use rustible::modules::{Module, ModuleClassification, ModuleContext, ParallelizationHint};
 use std::collections::HashMap;

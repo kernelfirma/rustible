@@ -376,7 +376,9 @@ impl PluginFactory {
 #[derive(Debug)]
 pub struct DefaultCallback {
     name: String,
+    #[allow(dead_code)]
     use_colors: bool,
+    #[allow(dead_code)]
     verbosity: u8,
 }
 
@@ -585,6 +587,7 @@ pub struct ProfileTasksTestCallback {
     name: String,
     slow_threshold_secs: f64,
     bottleneck_threshold_secs: f64,
+    #[allow(dead_code)]
     top_tasks_count: usize,
 }
 
@@ -637,8 +640,11 @@ impl CallbackPlugin for ProfileTasksTestCallback {
 #[derive(Debug)]
 pub struct OnelineTestCallback {
     name: String,
+    #[allow(dead_code)]
     show_task_name: bool,
+    #[allow(dead_code)]
     show_timestamp: bool,
+    #[allow(dead_code)]
     max_message_length: usize,
 }
 

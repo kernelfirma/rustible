@@ -7,8 +7,9 @@
 //! - Role execution and dependency resolution
 //! - Handler notification and deduplication
 //! - Block/rescue/always error handling
+//! - WinRM Windows host connectivity
 
-pub mod block_rescue_always_tests;
 pub mod handler_notification_tests;
 pub mod playbook_e2e_tests;
 pub mod role_execution_tests;
+pub mod winrm_tests;

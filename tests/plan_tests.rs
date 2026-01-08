@@ -1,6 +1,5 @@
 //! Tests for --plan flag functionality
 
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -33,7 +32,7 @@ fn test_plan_flag_shows_execution_plan() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -81,7 +80,7 @@ fn test_plan_shows_task_count() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -119,7 +118,7 @@ fn test_plan_shows_module_details() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -159,7 +158,7 @@ fn test_plan_shows_conditional_tasks() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -202,7 +201,7 @@ fn test_plan_shows_notify_handlers() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -241,7 +240,7 @@ fn test_plan_with_variables() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -277,7 +276,7 @@ fn test_plan_multiple_plays() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -322,7 +321,7 @@ fn test_plan_with_tags_filter() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -364,7 +363,7 @@ fn test_plan_package_modules() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -405,7 +404,7 @@ fn test_plan_user_and_group_modules() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -438,7 +437,7 @@ fn test_plan_git_module() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -469,7 +468,7 @@ fn test_plan_template_module() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -499,7 +498,7 @@ fn test_plan_shows_host_info() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -528,7 +527,7 @@ fn test_plan_warning_message() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -558,7 +557,7 @@ fn test_plan_exit_code_success() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")
@@ -585,7 +584,7 @@ fn test_plan_with_extra_vars() {
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("rustible").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rustible");
     cmd.arg("run")
         .arg(&playbook_path)
         .arg("--plan")

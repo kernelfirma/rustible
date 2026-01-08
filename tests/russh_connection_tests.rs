@@ -36,7 +36,7 @@ use rustible::connection::{
 };
 
 #[cfg(feature = "russh")]
-use rustible::connection::russh::{RusshConnection, RusshConnectionBuilder};
+use rustible::connection::russh::RusshConnectionBuilder;
 
 // ============================================================================
 // Mock Russh Connection for Testing
@@ -49,6 +49,7 @@ pub struct MockRusshConnection {
     identifier: String,
     pub host: String,
     pub port: u16,
+    #[allow(dead_code)]
     user: String,
     alive: AtomicBool,
     connected: AtomicBool,
@@ -63,6 +64,7 @@ pub struct MockRusshConnection {
     should_timeout: AtomicBool,
     latency_ms: AtomicU32,
     // Russh-specific features
+    #[allow(dead_code)]
     async_native: AtomicBool,
     use_key_auth: AtomicBool,
     use_password_auth: AtomicBool,

@@ -753,7 +753,7 @@ impl Task {
             return self.module.get(module_name);
         }
 
-        self.args.as_ref().map(|a| {
+        self.args.as_ref().map(|_args| {
             // Convert IndexMap to Value - this is a workaround
             // In real code, we'd handle this differently
             static EMPTY: serde_yaml::Value = serde_yaml::Value::Null;
@@ -850,7 +850,8 @@ impl Default for LoopControl {
 /// Handler definition (task triggered by notify)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Handler {
-    /// Handler name (must match notify name)
+    /// Handler name (optional if listen is provided)
+    #[serde(default)]
     pub name: String,
 
     /// Handler is actually a task
@@ -858,7 +859,7 @@ pub struct Handler {
     pub task: Task,
 
     /// Listen to additional trigger names
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub listen: Vec<String>,
 }
 
@@ -889,7 +890,8 @@ impl Handler {
 
     /// Check if this handler responds to a notification
     pub fn responds_to(&self, notification: &str) -> bool {
-        self.name == notification || self.listen.contains(&notification.to_string())
+        (!self.name.is_empty() && self.name == notification)
+            || self.listen.contains(&notification.to_string())
     }
 }
 

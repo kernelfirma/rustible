@@ -55,12 +55,14 @@ struct E2ETestConfig {
     /// Run tests locally (always enabled)
     local: bool,
     /// Run tests in Docker containers
+    #[allow(dead_code)]
     docker: bool,
     /// Run tests against SSH VMs
     ssh: bool,
     /// SSH configuration
     ssh_user: Option<String>,
     ssh_hosts: Vec<String>,
+    #[allow(dead_code)]
     ssh_key: Option<PathBuf>,
     /// Inventory path for VM tests
     inventory_path: Option<PathBuf>,
@@ -101,6 +103,7 @@ impl E2ETestConfig {
         self.local
     }
 
+    #[allow(dead_code)]
     fn should_run_docker(&self) -> bool {
         self.docker
     }

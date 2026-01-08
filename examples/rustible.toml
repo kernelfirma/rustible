@@ -1,0 +1,39 @@
+[logging]
+# Log level: error, warn, info, debug, trace
+level = "info"
+
+# Log format: "json" or "text"
+format = "json"
+
+# Log file path (optional, defaults to stdout)
+file = "/var/log/rustible/rustible.log"
+
+# Sampling configuration
+[logging.sampling]
+# Sample rate for successful operations (0.0 to 1.0)
+success_rate = 0.10
+
+# Slow operation threshold in milliseconds
+slow_threshold_ms = 1000
+
+# Always log these event patterns
+always_log_patterns = [
+    "error",
+    "failure",
+    "timeout",
+    "ssh_connection"
+]
+
+# Performance tracking
+[logging.performance]
+# Track duration metrics
+enable_duration = true
+
+# Track CPU usage
+enable_cpu = true
+
+# Track memory usage
+enable_memory = true
+
+# Track network metrics
+enable_network = true

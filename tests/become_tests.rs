@@ -12,16 +12,11 @@
 //! - Delegation with become
 //! - Security aspects (password protection in logs and memory)
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Arc;
-use tempfile::TempDir;
+#![allow(unused_imports)]
 
 use rustible::config::{Config, PrivilegeEscalation};
 use rustible::connection::local::LocalConnection;
-use rustible::connection::{
-    CommandResult, Connection, ConnectionConfig, ExecuteOptions, TransferOptions,
-};
+use rustible::connection::{ConnectionConfig, ExecuteOptions};
 use rustible::traits::BecomeConfig;
 
 // ============================================================================
@@ -698,7 +693,7 @@ mod become_with_connection {
     /// Test Local + become
     #[tokio::test]
     async fn test_local_with_become() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         let mut options = ExecuteOptions::new().with_escalation(Some("root".to_string()));
         options.escalate_method = Some("sudo".to_string());
@@ -755,7 +750,7 @@ mod become_with_connection {
     /// Test local connection builds command with sudo
     #[tokio::test]
     async fn test_local_builds_command_with_sudo() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         let mut options = ExecuteOptions::new().with_escalation(Some("root".to_string()));
         options.escalate_method = Some("sudo".to_string());
@@ -769,7 +764,7 @@ mod become_with_connection {
     /// Test local connection builds command with su
     #[tokio::test]
     async fn test_local_builds_command_with_su() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         let mut options = ExecuteOptions::new().with_escalation(Some("root".to_string()));
         options.escalate_method = Some("su".to_string());
@@ -781,7 +776,7 @@ mod become_with_connection {
     /// Test local connection builds command with doas
     #[tokio::test]
     async fn test_local_builds_command_with_doas() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         let mut options = ExecuteOptions::new().with_escalation(Some("root".to_string()));
         options.escalate_method = Some("doas".to_string());
@@ -1374,7 +1369,7 @@ mod integration {
     /// Test full become workflow with local connection
     #[tokio::test]
     async fn test_full_become_workflow_local() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         // Create options with full become configuration
         let mut options = ExecuteOptions::new()
@@ -1393,7 +1388,7 @@ mod integration {
     /// Test become with environment variables
     #[tokio::test]
     async fn test_become_with_environment() {
-        let conn = LocalConnection::new();
+        let _conn = LocalConnection::new();
 
         let options = ExecuteOptions::new()
             .with_escalation(Some("root".to_string()))
@@ -1454,7 +1449,7 @@ mod integration {
     fn test_become_all_connection_types() {
         let connection_types = vec!["local", "ssh", "docker"];
 
-        for conn_type in connection_types {
+        for _conn_type in connection_types {
             let mut options = ExecuteOptions::new().with_escalation(Some("root".to_string()));
             options.escalate_method = Some("sudo".to_string());
 

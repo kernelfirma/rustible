@@ -3,6 +3,7 @@
 //! This module handles SSH config parsing, host-specific settings,
 //! timeout configuration, and retry logic.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::ConnectionError;
+use crate::utils::get_regex;
 
 /// Default connection timeout in seconds
 pub const DEFAULT_TIMEOUT: u64 = 30;
@@ -20,6 +22,12 @@ pub const DEFAULT_RETRIES: u32 = 3;
 
 /// Default delay between retries in seconds
 pub const DEFAULT_RETRY_DELAY: u64 = 1;
+
+// Compile regexes once
+static HOST_DIRECTIVE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").expect("Invalid Host regex"));
+static KV_PAIR_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").expect("Invalid KV regex"));
 
 /// Main connection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -424,11 +432,6 @@ impl SshConfigParser {
         let mut current_hosts: Vec<String> = Vec::new();
         let mut current_config = HostConfig::default();
 
-        // Regex for matching Host directive
-        let host_re = Regex::new(r"^\s*Host\s+(.+)$").unwrap();
-        // Regex for matching key-value pairs
-        let kv_re = Regex::new(r"^\s*(\w+)\s+(.+)$").unwrap();
-
         for line in content.lines() {
             let line = line.trim();
 
@@ -438,7 +441,7 @@ impl SshConfigParser {
             }
 
             // Check for Host directive
-            if let Some(captures) = host_re.captures(line) {
+            if let Some(captures) = HOST_DIRECTIVE_REGEX.captures(line) {
                 // Save previous host config
                 if !current_hosts.is_empty() {
                     for host in &current_hosts {
@@ -454,7 +457,7 @@ impl SshConfigParser {
             }
 
             // Parse key-value pairs
-            if let Some(captures) = kv_re.captures(line) {
+            if let Some(captures) = KV_PAIR_REGEX.captures(line) {
                 let key = captures.get(1).unwrap().as_str().to_lowercase();
                 let value = captures.get(2).unwrap().as_str().trim().to_string();
 
@@ -526,7 +529,7 @@ fn matches_pattern(pattern: &str, host: &str) -> bool {
         .replace('*', ".*")
         .replace('?', ".");
 
-    if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
+    if let Ok(re) = get_regex(&format!("^{}$", regex_pattern)) {
         re.is_match(host)
     } else {
         false

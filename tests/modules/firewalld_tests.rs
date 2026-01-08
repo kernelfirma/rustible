@@ -9,6 +9,8 @@
 //! - Command building
 //! - Edge cases
 
+#![allow(unused_comparisons)]
+
 use rustible::modules::firewalld::{FirewalldModule, FirewalldState, ZoneTarget};
 use rustible::modules::{Module, ModuleClassification, ModuleContext, ParallelizationHint};
 use std::collections::HashMap;

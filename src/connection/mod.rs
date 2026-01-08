@@ -982,8 +982,13 @@ impl ConnectionBuilder {
                 // Kubernetes connection requires the kubernetes feature
                 #[cfg(feature = "kubernetes")]
                 {
-                    let conn =
-                        kubernetes::KubernetesConnection::new(namespace, pod, container, kubernetes::KubernetesAuth::default()).await?;
+                    let conn = kubernetes::KubernetesConnection::new(
+                        namespace,
+                        pod,
+                        container,
+                        kubernetes::KubernetesAuth::default(),
+                    )
+                    .await?;
                     Ok(Arc::new(conn))
                 }
                 #[cfg(not(feature = "kubernetes"))]

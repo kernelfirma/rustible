@@ -17,6 +17,7 @@
 //! - Inventory loading (YAML and INI)
 //! - Vault encrypt/decrypt cycle
 //! - Block/rescue/always execution
+#![allow(unused_variables)]
 
 use std::collections::HashMap;
 use std::fs;
@@ -37,6 +38,7 @@ use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig};
 // ============================================================================
 
 /// Path to integration test fixtures
+#[allow(dead_code)]
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -45,23 +47,26 @@ fn fixtures_path() -> PathBuf {
 }
 
 /// Get path to a fixture playbook
+#[allow(dead_code)]
 fn fixture_playbook(name: &str) -> PathBuf {
     fixtures_path().join("playbooks").join(name)
 }
 
 /// Get path to a fixture inventory
+#[allow(dead_code)]
 fn fixture_inventory(name: &str) -> PathBuf {
     fixtures_path().join("inventory").join(name)
 }
 
 /// Get path to a fixture vars file
+#[allow(dead_code)]
 fn fixture_vars(name: &str) -> PathBuf {
     fixtures_path().join("vars").join(name)
 }
 
 /// Helper to get a command for testing
 fn rustible_cmd() -> Command {
-    Command::cargo_bin("rustible").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("rustible")
 }
 
 /// Create a test executor with local connection
@@ -1687,8 +1692,6 @@ mod facts_tests {
 
     #[tokio::test]
     async fn test_facts_in_conditionals() {
-        let temp_dir = TempDir::new().unwrap();
-
         let mut runtime = RuntimeContext::new();
         runtime.add_host("localhost".to_string(), None);
         runtime.set_host_fact(

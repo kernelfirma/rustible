@@ -74,8 +74,7 @@ pub struct Cli {
 }
 
 /// Output format for CLI
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum OutputFormat {
     /// Human-readable output with colors
     #[default]
@@ -87,7 +86,6 @@ pub enum OutputFormat {
     /// Minimal output (only errors)
     Minimal,
 }
-
 
 /// Available subcommands
 #[derive(Subcommand, Debug, Clone)]
