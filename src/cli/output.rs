@@ -175,12 +175,19 @@ impl OutputFormatter {
     }
 
     /// Print task result
-    pub fn task_result(&self, host: &str, status: TaskStatus, message: Option<&str>) {
+    pub fn task_result(
+        &self,
+        host: &str,
+        status: TaskStatus,
+        message: Option<&str>,
+        duration: Option<Duration>,
+    ) {
         if self.json_mode {
             let result = serde_json::json!({
                 "host": host,
                 "status": status.as_str(),
-                "message": message
+                "message": message,
+                "duration_ms": duration.map(|d| d.as_millis())
             });
             println!("{}", serde_json::to_string(&result).unwrap());
             return;
@@ -215,6 +222,14 @@ impl OutputFormatter {
             print!(" => {}", msg);
         }
 
+        if let Some(d) = duration {
+            if self.use_color {
+                print!("  {}", format_duration(d).dimmed());
+            } else {
+                print!("  {}", format_duration(d));
+            }
+        }
+
         println!();
     }
 
@@ -240,7 +255,7 @@ impl OutputFormatter {
             return;
         }
 
-        self.task_result(host, status, None);
+        self.task_result(host, status, None, None);
 
         for (key, value) in details {
             if self.use_color {
@@ -586,7 +601,7 @@ impl OutputFormatter {
 
         sp.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
+                .template("{spinner:.green} {msg} {elapsed}")
                 .unwrap(),
         );
         sp.set_message(message.to_string());
