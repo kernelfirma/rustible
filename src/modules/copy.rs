@@ -16,6 +16,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, TransferOptions};
+use crate::utils::shell_escape;
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -106,7 +107,8 @@ impl CopyModule {
     /// The command should use %s as a placeholder for the file path
     fn validate_file(path: &Path, validate_cmd: &str) -> ModuleResult<()> {
         // Replace %s with the actual file path
-        let cmd = validate_cmd.replace("%s", &path.to_string_lossy());
+        // Use shell_escape to prevent command injection
+        let cmd = validate_cmd.replace("%s", &shell_escape(&path.to_string_lossy()));
 
         // Execute via shell to handle complex commands
         let output = Command::new("sh")
@@ -857,6 +859,53 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_validate_command_injection() {
+        let temp = TempDir::new().unwrap();
+        // Construct a filename that attempts to break out of the shell command
+        // validation command: ls %s
+        // filename: foo; touch pwned
+        // result: ls foo; touch pwned
+
+        // We need a directory for this to work cleanly as a destination
+        let dest_dir = temp.path().join("foo; touch pwned");
+
+        // However, we are copying TO a file.
+        // Let's use a destination path that contains the injection payload.
+        // The module will try to write to {dest}.rustible.tmp.{pid}
+        // Then run validation on it.
+
+        // Payload: "safe; echo pwned > pwned_file #"
+        // This is tricky because of the suffix .rustible.tmp...
+        // But if we can just execute `touch pwned`, that's enough.
+
+        let pwned_file = temp.path().join("pwned");
+        let payload = format!("safe; touch '{}' #", pwned_file.display());
+        let dest = temp.path().join(&payload);
+
+        let module = CopyModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("content".to_string(), serde_json::json!("content"));
+        params.insert(
+            "dest".to_string(),
+            serde_json::json!(dest.to_str().unwrap()),
+        );
+        params.insert("validate".to_string(), serde_json::json!("ls %s"));
+
+        let context = ModuleContext::default();
+        // This might fail due to "safe;..." not being a valid filename if we were actually creating it
+        // BUT CopyModule creates the temp file first.
+        // File::create("safe; touch '...' #.rustible.tmp.123") works on Linux.
+
+        // We expect execute to fail if the path is invalid, OR succeed if valid.
+        // But the side effect (touch pwned) is what we care about.
+
+        let _ = module.execute(&params, &context);
+
+        // If injection worked, pwned_file should exist
+        assert!(!pwned_file.exists(), "Command injection successful! pwned file created.");
+    }
 
     #[test]
     fn test_copy_content() {
