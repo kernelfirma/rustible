@@ -200,6 +200,7 @@ impl PackageState {
 }
 
 /// Module for package management
+#[derive(Default)]
 pub struct PackageModule;
 
 impl PackageModule {

@@ -244,6 +244,7 @@ impl AptParams {
 }
 
 /// Module for APT package management
+#[derive(Default)]
 pub struct AptModule;
 
 impl AptModule {

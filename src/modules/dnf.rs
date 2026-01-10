@@ -71,6 +71,7 @@ impl DnfState {
 }
 
 /// Module for DNF package management
+#[derive(Default)]
 pub struct DnfModule;
 
 impl DnfModule {
