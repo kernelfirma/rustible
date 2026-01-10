@@ -29,7 +29,7 @@
 //! - `delete`: Delete the specified rule
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -966,67 +966,6 @@ impl Module for UfwModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let config = UfwConfig::from_params(params)?;
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        // Get current status
-        let (is_active, _status) =
-            Self::get_ufw_status(connection, context).unwrap_or((false, String::new()));
-
-        before_lines.push(format!(
-            "status: {}",
-            if is_active { "active" } else { "inactive" }
-        ));
-
-        if let Some(ref state) = config.state {
-            let target_active = matches!(state, UfwState::Enabled);
-            after_lines.push(format!(
-                "status: {}",
-                if target_active { "active" } else { "inactive" }
-            ));
-        } else {
-            after_lines.push(format!(
-                "status: {}",
-                if is_active { "active" } else { "inactive" }
-            ));
-        }
-
-        if config.is_rule_operation() {
-            let exists = Self::rule_exists(connection, &config, context).unwrap_or(false);
-            before_lines.push(format!(
-                "rule: {}",
-                if exists { "present" } else { "absent" }
-            ));
-            after_lines.push(format!(
-                "rule: {}",
-                if config.delete { "absent" } else { "present" }
-            ));
-        }
-
-        let before = before_lines.join("\n");
-        let after = after_lines.join("\n");
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 /// Validate port specification

@@ -786,63 +786,6 @@ impl Module for GitModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let dest = params.get_string_required("dest")?;
-        let repo = params.get_string_required("repo")?;
-        let version = params.get_string("version")?;
-        let remote = params
-            .get_string("remote")?
-            .unwrap_or_else(|| "origin".to_string());
-
-        let is_repo = Self::is_git_repo(&dest);
-
-        if !is_repo {
-            Ok(Some(Diff::new(
-                "repository: absent",
-                format!(
-                    "repository: {} @ {}",
-                    repo,
-                    version.as_deref().unwrap_or("HEAD")
-                ),
-            )))
-        } else {
-            let current_version =
-                Self::get_current_version(&dest)?.unwrap_or_else(|| "unknown".to_string());
-            let current_branch = Self::get_current_branch(&dest)?;
-            let local_changes = Self::get_local_changes(&dest)?;
-            let target_version = version.unwrap_or_else(|| "HEAD".to_string());
-
-            // Build detailed before state
-            let mut before = format!(
-                "commit: {}\nbranch: {}",
-                &current_version[..8.min(current_version.len())],
-                current_branch.as_deref().unwrap_or("detached")
-            );
-
-            if !local_changes.is_empty() {
-                before.push_str(&format!("\nlocal changes: {} files", local_changes.len()));
-                for change in local_changes.iter().take(5) {
-                    before.push_str(&format!("\n  {}", change));
-                }
-                if local_changes.len() > 5 {
-                    before.push_str(&format!("\n  ... and {} more", local_changes.len() - 5));
-                }
-            }
-
-            // Build target state
-            let after = format!("commit: {}\nremote: {}", target_version, remote);
-
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1112,29 +1055,4 @@ mod tests {
         assert!(GitModule::is_bare_repo(dest));
     }
 
-    #[test]
-    fn test_diff_output_missing_repo() {
-        let module = GitModule;
-        let temp = TempDir::new().unwrap();
-        let dest_path = temp.path().join("nonexistent");
-
-        let mut params: ModuleParams = HashMap::new();
-        params.insert(
-            "repo".to_string(),
-            serde_json::json!("https://github.com/test/repo"),
-        );
-        params.insert(
-            "dest".to_string(),
-            serde_json::json!(dest_path.to_str().unwrap()),
-        );
-        params.insert("version".to_string(), serde_json::json!("v1.0.0"));
-
-        let context = ModuleContext::default();
-        let diff = module.diff(&params, &context).unwrap();
-
-        assert!(diff.is_some());
-        let diff = diff.unwrap();
-        assert!(diff.before.contains("absent"));
-        assert!(diff.after.contains("v1.0.0"));
-    }
 }

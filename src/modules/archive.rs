@@ -36,7 +36,7 @@ use super::{
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 /// Supported archive formats
@@ -549,46 +549,6 @@ impl Module for ArchiveModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let source_path = params.get_string_required("path")?;
-        let dest_path = params.get_string_required("dest")?;
-        let source = Path::new(&source_path);
-        let dest = Path::new(&dest_path);
-
-        let before = if dest.exists() {
-            let meta = fs::metadata(dest)?;
-            format!("archive: {} ({} bytes)", dest_path, meta.len())
-        } else {
-            "archive: absent".to_string()
-        };
-
-        let exclude_patterns: Vec<String> =
-            params.get_vec_string("exclude_path")?.unwrap_or_default();
-
-        let after = if source.exists() {
-            let file_count = Self::collect_files(source, &exclude_patterns)?.len();
-            format!(
-                "archive: {} ({} files from {})",
-                dest_path, file_count, source_path
-            )
-        } else {
-            format!("archive: {} (source not found)", dest_path)
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

@@ -1256,26 +1256,6 @@ impl Module for IosConfigModule {
             }
         })
     }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let ios_params = IosConfigParams::from_params(params)?;
-        let config_lines = self.build_config_lines(&ios_params, context)?;
-        let commands = self.build_commands(&ios_params, &config_lines, None);
-
-        Ok(Some(Diff {
-            before: "(current running configuration)".to_string(),
-            after: format!("{} configuration commands", commands.len()),
-            details: Some(commands.join("\n")),
-        }))
-    }
 }
 
 // ============================================================================

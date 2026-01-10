@@ -37,14 +37,13 @@
 //! - `port_state`: Port state (present, absent)
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
 use crate::utils::shell_escape;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 
@@ -1262,16 +1261,6 @@ impl Module for SELinuxModule {
         &[] // Required params depend on operation type
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        let mut params = HashMap::new();
-        params.insert("configfile", serde_json::json!("/etc/selinux/config"));
-        params.insert("persistent", serde_json::json!(true));
-        params.insert("recursive", serde_json::json!(false));
-        params.insert("reload", serde_json::json!(true));
-        params.insert("ftype", serde_json::json!("a"));
-        params
-    }
-
     fn execute(
         &self,
         params: &ModuleParams,
@@ -1301,91 +1290,12 @@ impl Module for SELinuxModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let operation = Self::determine_operation(params).ok();
-
-        match operation {
-            Some(SELinuxOperation::Mode) => {
-                let state_str = params.get_string("state")?.unwrap_or_default();
-                let desired_mode = SELinuxMode::from_str(&state_str).ok();
-                let current_mode = Self::get_current_mode(connection, context).ok();
-
-                if let (Some(current), Some(desired)) = (current_mode, desired_mode) {
-                    if current == desired {
-                        return Ok(None);
-                    }
-                    return Ok(Some(Diff::new(
-                        format!("mode: {}", current.as_str()),
-                        format!("mode: {}", desired.as_str()),
-                    )));
-                }
-            }
-            Some(SELinuxOperation::Boolean) => {
-                let name = params.get_string("boolean")?.unwrap_or_default();
-                let state = params
-                    .get_string("boolean_state")?
-                    .or_else(|| params.get_string("state").ok().flatten());
-                let desired = match state.as_deref() {
-                    Some("on") | Some("true") | Some("1") => Some(true),
-                    Some("off") | Some("false") | Some("0") => Some(false),
-                    _ => None,
-                };
-
-                if let (Some(current), Some(desired)) = (
-                    Self::get_boolean_value(connection, &name, context)
-                        .ok()
-                        .flatten(),
-                    desired,
-                ) {
-                    if current == desired {
-                        return Ok(None);
-                    }
-                    return Ok(Some(Diff::new(
-                        format!("{}: {}", name, if current { "on" } else { "off" }),
-                        format!("{}: {}", name, if desired { "on" } else { "off" }),
-                    )));
-                }
-            }
-            Some(SELinuxOperation::Context) => {
-                let target = params.get_string("target")?.unwrap_or_default();
-                let setype = params.get_string("setype")?;
-                let current = Self::get_file_context(connection, &target, context)
-                    .ok()
-                    .flatten();
-
-                if let (Some((_, _, t, _)), Some(ref desired)) = (&current, &setype) {
-                    if t == desired {
-                        return Ok(None);
-                    }
-                    return Ok(Some(Diff::new(
-                        format!("{}  {}", t, target),
-                        format!("{}  {}", desired, target),
-                    )));
-                }
-            }
-            _ => {}
-        }
-
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_selinux_mode_from_str() {

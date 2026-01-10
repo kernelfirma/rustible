@@ -4,7 +4,7 @@
 //! It supports both system-wide and user-specific crontabs.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -472,107 +472,6 @@ impl Module for CronModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = CronState::from_str(&state_str)?;
-        let user = params.get_string("user")?;
-
-        let current_crontab = Self::get_crontab(connection, user.as_deref(), context)?;
-        let existing_job = Self::find_job_in_crontab(&current_crontab, &name);
-
-        let before = match &existing_job {
-            Some((_, _, job)) => {
-                if job.special_time.is_some() {
-                    format!(
-                        "cron job '{}': {} {}{}",
-                        job.name,
-                        job.special_time.as_ref().unwrap(),
-                        job.job,
-                        if job.disabled { " (disabled)" } else { "" }
-                    )
-                } else {
-                    format!(
-                        "cron job '{}': {} {} {} {} {} {}{}",
-                        job.name,
-                        job.minute,
-                        job.hour,
-                        job.day,
-                        job.month,
-                        job.weekday,
-                        job.job,
-                        if job.disabled { " (disabled)" } else { "" }
-                    )
-                }
-            }
-            None => format!("cron job '{}': (absent)", name),
-        };
-
-        let after = match state {
-            CronState::Absent => format!("cron job '{}': (absent)", name),
-            CronState::Present => {
-                let job_cmd = params.get_string("job")?.unwrap_or_default();
-                let minute = params
-                    .get_string("minute")?
-                    .unwrap_or_else(|| "*".to_string());
-                let hour = params
-                    .get_string("hour")?
-                    .unwrap_or_else(|| "*".to_string());
-                let day = params.get_string("day")?.unwrap_or_else(|| "*".to_string());
-                let month = params
-                    .get_string("month")?
-                    .unwrap_or_else(|| "*".to_string());
-                let weekday = params
-                    .get_string("weekday")?
-                    .unwrap_or_else(|| "*".to_string());
-                let special_time = params.get_string("special_time")?;
-                let disabled = params.get_bool_or("disabled", false);
-
-                if special_time.is_some() {
-                    format!(
-                        "cron job '{}': {} {}{}",
-                        name,
-                        special_time.as_ref().unwrap(),
-                        job_cmd,
-                        if disabled { " (disabled)" } else { "" }
-                    )
-                } else {
-                    format!(
-                        "cron job '{}': {} {} {} {} {} {}{}",
-                        name,
-                        minute,
-                        hour,
-                        day,
-                        month,
-                        weekday,
-                        job_cmd,
-                        if disabled { " (disabled)" } else { "" }
-                    )
-                }
-            }
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

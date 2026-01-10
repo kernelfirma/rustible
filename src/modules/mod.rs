@@ -1269,42 +1269,42 @@ pub trait Module: Send + Sync {
         ParallelizationHint::FullyParallel
     }
 
-    /// Execute the module with the given parameters
+    /// Execute the module with the given parameters.
+    ///
+    /// This is the main entry point for module execution. Modules should:
+    /// - Handle `context.check_mode` internally (report what would change without changing)
+    /// - Handle `context.diff_mode` internally (include diff in output if applicable)
+    /// - Validate parameters at the start of execution
     fn execute(&self, params: &ModuleParams, context: &ModuleContext)
         -> ModuleResult<ModuleOutput>;
 
-    /// Check what would change without making changes (for check mode)
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Default implementation just calls execute with check_mode=true
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    /// Generate a diff of what would change
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        // Default implementation returns None
-        let _ = (params, context);
-        Ok(None)
-    }
-
-    /// Validate the parameters before execution
+    /// Validate the parameters before execution.
+    ///
+    /// Called by ModuleRegistry before execute(). Override to add custom validation.
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Default implementation does nothing
         let _ = params;
         Ok(())
     }
 
-    /// Returns the list of required parameters
+    /// Returns the list of required parameters.
+    ///
+    /// Called by ModuleRegistry to check required params are present before execute().
     fn required_params(&self) -> &[&'static str] {
         &[]
     }
 
-    /// Returns the list of optional parameters with their default values
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        HashMap::new()
+    /// Check what would change without making changes (check mode).
+    ///
+    /// This is a convenience method that calls execute() with check_mode=true.
+    /// Modules should handle check_mode internally in their execute() implementation
+    /// rather than overriding this method.
+    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
+        let check_context = ModuleContext {
+            check_mode: true,
+            ..context.clone()
+        };
+        self.execute(params, &check_context)
     }
 }
 
@@ -1637,12 +1637,8 @@ impl ModuleRegistry {
             }
         }
 
-        // Execute based on mode
-        if context.check_mode {
-            module.check(params, context)
-        } else {
-            module.execute(params, context)
-        }
+        // Execute module - modules handle check_mode internally via context.check_mode
+        module.execute(params, context)
     }
 }
 

@@ -44,7 +44,7 @@ use bollard::models::{
 use bollard::Docker;
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -819,23 +819,6 @@ impl Module for DockerContainerModule {
         {
             self.execute_stub(params, context)
         }
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = ContainerConfig::from_params(params)?;
-
-        let before = format!("container: {} (current state unknown)", config.name);
-        let after = format!("container: {} state={:?}", config.name, config.state);
-
-        Ok(Some(Diff::new(before, after)))
     }
 }
 

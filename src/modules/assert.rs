@@ -253,19 +253,6 @@ impl Module for AssertModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Assert module behaves the same in check mode - conditions are evaluated
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Assert module never produces diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

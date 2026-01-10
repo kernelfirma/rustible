@@ -588,14 +588,6 @@ impl Module for WaitForModule {
         self.wait_for_condition(&config, context.check_mode)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         let config = WaitForConfig::from_params(params)?;
         config.validate()

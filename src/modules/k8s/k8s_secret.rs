@@ -44,7 +44,7 @@
 //! ```
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use std::collections::HashMap;
@@ -464,34 +464,6 @@ impl Module for K8sSecretModule {
         ))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = SecretConfig::from_params(params)?;
-
-        let total_keys = config.data.len() + config.string_data.len();
-
-        let before = match config.state {
-            SecretState::Present => "absent or different configuration".to_string(),
-            SecretState::Absent => format!("Secret '{}/{}' exists", config.namespace, config.name),
-        };
-
-        let after = match config.state {
-            SecretState::Present => format!(
-                "Secret '{}/{}' type={} with {} keys",
-                config.namespace, config.name, config.secret_type, total_keys
-            ),
-            SecretState::Absent => format!("Secret '{}/{}' absent", config.namespace, config.name),
-        };
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

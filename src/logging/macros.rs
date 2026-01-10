@@ -1,4 +1,3 @@
-use tracing::{info, Level};
 
 #[macro_export]
 macro_rules! wide_event {

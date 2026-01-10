@@ -40,12 +40,6 @@ impl Module for SetFactModule {
         &[]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, Value> {
-        let mut params = HashMap::new();
-        params.insert("cacheable", Value::Bool(false));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Must have at least one parameter that's not 'cacheable'
         let fact_count = params.keys().filter(|k| k.as_str() != "cacheable").count();
@@ -131,20 +125,6 @@ impl Module for SetFactModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // set_fact behaves the same in check mode - it still sets the variables
-        // This is intentional because subsequent tasks may depend on these variables
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // set_fact doesn't produce diffs since it's not changing files
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

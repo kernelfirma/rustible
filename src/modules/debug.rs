@@ -188,19 +188,6 @@ impl Module for DebugModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Debug module behaves the same in check mode
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Debug module never produces diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

@@ -379,37 +379,6 @@ impl Module for SynchronizeModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // check mode is handled by execute with context.check_mode = true
-        // which adds -n flag to rsync
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        params: &ModuleParams,
-        context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Run with itemize to get detailed changes
-        let diff_context = ModuleContext {
-            check_mode: true,
-            diff_mode: true,
-            ..context.clone()
-        };
-
-        let output = self.execute(params, &diff_context)?;
-
-        if let Some(ref stdout) = output.stdout {
-            if !stdout.trim().is_empty() {
-                return Ok(Some(
-                    super::Diff::new("Current state", "Synchronized state")
-                        .with_details(stdout.clone()),
-                ));
-            }
-        }
-
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

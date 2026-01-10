@@ -4,7 +4,7 @@
 //! parameters and optionally persist them in configuration files.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -424,48 +424,6 @@ impl Module for SysctlModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = SysctlState::from_str(&state_str)?;
-
-        let current_value = Self::get_current_value(connection, &name, context).unwrap_or(None);
-
-        let before = format!(
-            "{} = {}",
-            name,
-            current_value.as_deref().unwrap_or("(not set)")
-        );
-
-        let after = match state {
-            SysctlState::Absent => format!("{} = (removed from config)", name),
-            SysctlState::Present => {
-                let value = params.get_string("value")?.unwrap_or_default();
-                format!("{} = {}", name, value)
-            }
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

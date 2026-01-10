@@ -691,65 +691,6 @@ impl Module for LineinfileModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let path_str = params.get_string_required("path")?;
-        let path = Path::new(&path_str);
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = LineState::from_str(&state_str)?;
-        let line = params.get_string("line")?;
-        let regexp_str = params.get_string("regexp")?;
-        let insertafter = params.get_string("insertafter")?;
-        let insertbefore = params.get_string("insertbefore")?;
-        let firstmatch = params.get_bool_or("firstmatch", false);
-
-        let regexp = if let Some(ref re_str) = regexp_str {
-            Some(
-                get_regex(re_str)
-                    .map_err(|e| ModuleError::InvalidParameter(format!("Invalid regexp: {}", e)))?,
-            )
-        } else {
-            None
-        };
-
-        let mut lines = Self::read_file(path)?;
-        let original_lines = lines.clone();
-
-        let changed = match state {
-            LineState::Present => {
-                if let Some(line_str) = line {
-                    Self::ensure_line_present(
-                        &mut lines,
-                        &line_str,
-                        regexp.as_ref(),
-                        insertafter.as_deref(),
-                        insertbefore.as_deref(),
-                        firstmatch,
-                    )?
-                } else {
-                    false
-                }
-            }
-            LineState::Absent => {
-                Self::ensure_line_absent(&mut lines, line.as_deref(), regexp.as_ref())?
-            }
-        };
-
-        if changed {
-            Ok(Some(Diff::new(original_lines.join("\n"), lines.join("\n"))))
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 #[cfg(test)]

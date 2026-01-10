@@ -55,7 +55,7 @@ use crate::modules::windows::{
     execute_powershell_sync, powershell_escape, validate_windows_username,
 };
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 
@@ -726,68 +726,6 @@ impl Module for WinUserModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state = params
-            .get_string("state")?
-            .map(|s| UserState::from_str(&s))
-            .transpose()?
-            .unwrap_or(UserState::Present);
-
-        let get_user_script = Self::generate_get_user_script(&name);
-        let (success, stdout, _) = execute_powershell_sync(connection, &get_user_script)?;
-
-        if !success {
-            return Ok(None);
-        }
-
-        let current_state = Self::parse_json_result(&stdout)?;
-        let user_exists = current_state["exists"].as_bool().unwrap_or(false);
-
-        let before = if user_exists {
-            let fullname = current_state["fullname"].as_str().unwrap_or("");
-            let enabled = current_state["enabled"].as_bool().unwrap_or(true);
-            let groups: Vec<&str> = current_state["groups"]
-                .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-                .unwrap_or_default();
-
-            format!(
-                "user: {}\nfullname: {}\nenabled: {}\ngroups: {}",
-                name,
-                fullname,
-                enabled,
-                groups.join(", ")
-            )
-        } else {
-            format!("user: {} (absent)", name)
-        };
-
-        let after = match state {
-            UserState::Present => format!("user: {} (present)", name),
-            UserState::Absent => format!("user: {} (absent)", name),
-            UserState::Query => before.clone(),
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

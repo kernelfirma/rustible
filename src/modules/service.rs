@@ -1338,37 +1338,6 @@ impl Module for ServiceModule {
         })
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        // Get connection from context
-        let connection = match context.connection.clone() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        // Use tokio runtime to execute async code
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => return Ok(None),
-        };
-
-        // Spawn blocking task on a separate thread to avoid runtime nesting issues
-        let params = params.clone();
-        let context = context.clone();
-        let module = self;
-        std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.diff_async(&params, &context, connection)))
-                .join()
-                .unwrap()
-        })
-    }
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@
 //! execution via async connections (SSH, Docker, etc.).
 
 use super::{
-    validate_env_var_name, validate_path_param, Diff, Module, ModuleClassification, ModuleContext,
+    validate_env_var_name, validate_path_param, Module, ModuleClassification, ModuleContext,
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -422,26 +422,6 @@ impl Module for CommandModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // For check mode, we run execute with check_mode=true in context
-        // The execute methods already handle check_mode internally
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        let mut output = self.execute(params, &check_context)?;
-
-        // Add diff to show what would be executed
-        if let Some(diff) = self.diff(params, context)? {
-            output.diff = Some(diff);
-        }
-        Ok(output)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let cmd = self.get_command_string(params)?;
-        Ok(Some(Diff::new("(none)", format!("Execute: {}", cmd))))
-    }
 }
 
 #[cfg(test)]

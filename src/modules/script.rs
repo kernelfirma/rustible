@@ -353,43 +353,6 @@ impl Module for ScriptModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let script_input = self.get_script_path(params)?;
-        let (script_path, args) = self.parse_script_and_args(&script_input);
-
-        // Check creates/removes conditions even in check mode
-        if !self.should_execute(params, context)? {
-            return Ok(
-                ModuleOutput::skipped("Would be skipped due to creates/removes condition")
-                    .with_data("script", serde_json::json!(script_path)),
-            );
-        }
-
-        // Verify the local script exists
-        if !std::path::Path::new(&script_path).exists() {
-            return Err(ModuleError::ExecutionFailed(format!(
-                "Local script not found: {}",
-                script_path
-            )));
-        }
-
-        Ok(ModuleOutput::ok(format!(
-            "Would execute script: {} {}",
-            script_path,
-            args.join(" ")
-        ))
-        .with_data("script", serde_json::json!(script_path))
-        .with_data("args", serde_json::json!(args)))
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Script module doesn't produce meaningful diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

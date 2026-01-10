@@ -11,7 +11,7 @@
 //! - Support for multiple key types (rsa, ecdsa, ed25519)
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -830,63 +830,6 @@ impl Module for KnownHostsModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let hostname = params.get_string_required("name")?;
-        let state = params
-            .get_string("state")?
-            .map(|s| KnownHostsState::from_str(&s))
-            .transpose()?
-            .unwrap_or(KnownHostsState::Present);
-
-        let path = params
-            .get_string("path")?
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::default_path);
-
-        let port = params.get_u32("port")?.map(|p| p as u16);
-        let key_type = params
-            .get_string("key_type")?
-            .map(|s| KeyType::from_str(&s))
-            .transpose()?;
-
-        let known_hosts = KnownHostsFile::load(&path)?;
-        let existing = known_hosts.find_entries(&hostname, port, key_type.as_ref());
-
-        let before = if existing.is_empty() {
-            "absent".to_string()
-        } else {
-            format!(
-                "{} entries: {}",
-                existing.len(),
-                existing
-                    .iter()
-                    .map(|e| e.key_type.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
-
-        let after = match state {
-            KnownHostsState::Present => "present".to_string(),
-            KnownHostsState::Absent => "absent".to_string(),
-        };
-
-        if (state == KnownHostsState::Present && !existing.is_empty())
-            || (state == KnownHostsState::Absent && existing.is_empty())
-        {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

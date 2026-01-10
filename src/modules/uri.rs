@@ -37,7 +37,7 @@
 //! ```
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use reqwest::{header, Client, Method, Response};
@@ -803,25 +803,6 @@ impl Module for UriModule {
         result
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let url = params.get_string_required("url")?;
-        let method = params
-            .get_string("method")?
-            .unwrap_or_else(|| "GET".to_string());
-
-        Ok(Some(Diff::new(
-            "No HTTP request made",
-            format!("{} request to {}", method, url),
-        )))
-    }
 }
 
 #[cfg(test)]
@@ -1091,24 +1072,6 @@ mod tests {
         assert!(!result.changed);
         assert!(result.msg.contains("Would make"));
         assert!(result.msg.contains("POST"));
-    }
-
-    #[test]
-    fn test_diff_output() {
-        let module = UriModule;
-        let params = create_params(vec![
-            ("url", serde_json::json!("https://api.example.com/users")),
-            ("method", serde_json::json!("DELETE")),
-        ]);
-
-        let context = ModuleContext::default();
-        let diff = module.diff(&params, &context).unwrap();
-
-        assert!(diff.is_some());
-        let diff = diff.unwrap();
-        assert!(diff.before.contains("No HTTP request"));
-        assert!(diff.after.contains("DELETE"));
-        assert!(diff.after.contains("https://api.example.com/users"));
     }
 
     #[test]

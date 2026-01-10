@@ -4,7 +4,7 @@
 //! and persistent hostname configuration.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -389,33 +389,6 @@ impl Module for HostnameModule {
         }
 
         Ok(output)
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let current_hostname = Self::get_current_hostname(connection, context).unwrap_or_default();
-
-        if current_hostname == name {
-            return Ok(None);
-        }
-
-        Ok(Some(Diff::new(
-            format!("hostname: {}", current_hostname),
-            format!("hostname: {}", name),
-        )))
     }
 }
 

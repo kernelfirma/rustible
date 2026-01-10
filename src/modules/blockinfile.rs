@@ -340,60 +340,6 @@ impl Module for BlockinfileModule {
 
         Ok(output)
     }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let path_str = params.get_string_required("path")?;
-        let path = Path::new(&path_str);
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = BlockState::from_str(&state_str)?;
-        let block = params.get_string("block")?;
-        let marker = params
-            .get_string("marker")?
-            .unwrap_or_else(|| "# {mark} ANSIBLE MANAGED BLOCK".to_string());
-        let insertafter = params.get_string("insertafter")?;
-        let insertbefore = params.get_string("insertbefore")?;
-
-        let (begin_marker, end_marker) = Self::create_markers(&marker);
-
-        let mut lines = Self::read_file(path)?;
-        let original_lines = lines.clone();
-
-        let changed = match state {
-            BlockState::Present => {
-                if let Some(block_str) = block {
-                    Self::ensure_block_present(
-                        &mut lines,
-                        &block_str,
-                        &begin_marker,
-                        &end_marker,
-                        insertafter.as_deref(),
-                        insertbefore.as_deref(),
-                    )?
-                } else {
-                    false
-                }
-            }
-            BlockState::Absent => {
-                Self::ensure_block_absent(&mut lines, &begin_marker, &end_marker)?
-            }
-        };
-
-        if changed {
-            Ok(Some(Diff::new(original_lines.join("\n"), lines.join("\n"))))
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 #[cfg(test)]

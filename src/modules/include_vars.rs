@@ -169,15 +169,6 @@ impl Module for IncludeVarsModule {
         &[]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, Value> {
-        let mut params = HashMap::new();
-        // name parameter allows scoping variables under a single key
-        params.insert("name", Value::Null);
-        // depth parameter for directory recursion (not yet implemented)
-        params.insert("depth", Value::Number(0.into()));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Must have either 'file' or 'dir' parameter
         let has_file = params.contains_key("file");
@@ -261,20 +252,6 @@ impl Module for IncludeVarsModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // In check mode, include_vars behaves the same way
-        // Variables are still loaded because subsequent tasks may depend on them
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // include_vars doesn't produce diffs since it's not changing files
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

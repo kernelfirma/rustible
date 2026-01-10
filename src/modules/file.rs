@@ -797,60 +797,6 @@ impl Module for FileModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let path_str = params.get_string_required("path")?;
-        let path = Path::new(&path_str);
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "file".to_string());
-        let state = FileState::from_str(&state_str)?;
-
-        let current_state = Self::get_current_state(path);
-
-        let before = match current_state {
-            Some(FileState::File) => "file exists".to_string(),
-            Some(FileState::Directory) => "directory exists".to_string(),
-            Some(FileState::Link) => {
-                if let Ok(target) = fs::read_link(path) {
-                    format!("symlink -> {}", target.display())
-                } else {
-                    "symlink".to_string()
-                }
-            }
-            Some(FileState::Hard) => "hard link".to_string(),
-            None => "absent".to_string(),
-            _ => "unknown".to_string(),
-        };
-
-        let after = match state {
-            FileState::File => "file exists".to_string(),
-            FileState::Directory => "directory exists".to_string(),
-            FileState::Link => {
-                if let Some(src) = params.get_string("src")? {
-                    format!("symlink -> {}", src)
-                } else {
-                    "symlink".to_string()
-                }
-            }
-            FileState::Hard => "hard link".to_string(),
-            FileState::Absent => "absent".to_string(),
-            FileState::Touch => "touched".to_string(),
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

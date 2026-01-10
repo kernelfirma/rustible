@@ -36,7 +36,7 @@
 //! ```
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use std::collections::HashMap;
@@ -452,38 +452,6 @@ impl Module for K8sConfigMapModule {
         ))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = ConfigMapConfig::from_params(params)?;
-
-        let before = match config.state {
-            ConfigMapState::Present => "absent or different configuration".to_string(),
-            ConfigMapState::Absent => {
-                format!("ConfigMap '{}/{}' exists", config.namespace, config.name)
-            }
-        };
-
-        let after = match config.state {
-            ConfigMapState::Present => format!(
-                "ConfigMap '{}/{}' with {} keys",
-                config.namespace,
-                config.name,
-                config.data.len()
-            ),
-            ConfigMapState::Absent => {
-                format!("ConfigMap '{}/{}' absent", config.namespace, config.name)
-            }
-        };
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use bollard::volume::{CreateVolumeOptions, ListVolumesOptions, RemoveVolumeOptio
 use bollard::Docker;
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -350,25 +350,6 @@ impl Module for DockerVolumeModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = VolumeConfig::from_params(params)?;
-
-        let before = format!("volume: {} (current state unknown)", config.name);
-        let after = format!(
-            "volume: {} state={:?} driver={}",
-            config.name, config.state, config.driver
-        );
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

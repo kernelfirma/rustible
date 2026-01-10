@@ -69,19 +69,6 @@ impl Module for FailModule {
         Ok(ModuleOutput::failed(message))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Fail module behaves the same in check mode - it still fails
-        self.execute(params, context)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Fail module never produces diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

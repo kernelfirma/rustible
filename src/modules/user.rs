@@ -3,7 +3,7 @@
 //! This module manages user accounts on the system.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -742,59 +742,6 @@ impl Module for UserModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = UserState::from_str(&state_str)?;
-
-        let user_info = Self::get_user_info_via_connection(connection, &name, context)?;
-
-        let before = if let Some(info) = &user_info {
-            format!(
-                "user: {}\nuid: {}\ngid: {}\nhome: {}\nshell: {}\ngroups: {}",
-                info.name,
-                info.uid,
-                info.gid,
-                info.home,
-                info.shell,
-                info.groups.join(",")
-            )
-        } else {
-            "user: (absent)".to_string()
-        };
-
-        let after = match state {
-            UserState::Absent => "user: (absent)".to_string(),
-            UserState::Present => {
-                if user_info.is_some() {
-                    before.clone()
-                } else {
-                    format!("user: {} (will be created)", name)
-                }
-            }
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

@@ -1067,54 +1067,6 @@ impl Module for SystemdUnitModule {
         })
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = SystemdUnitConfig::from_params(params)?;
-
-        if config.state == UnitState::Absent {
-            return Ok(None);
-        }
-
-        let connection = match context.connection.clone() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => return Ok(None),
-        };
-
-        let desired_content = Self::get_unit_content(&config, context)?;
-        let unit_path_string = config.unit_file_path();
-        let unit_path = Path::new(&unit_path_string);
-
-        let current_content = handle.block_on(async {
-            if connection.path_exists(unit_path).await.unwrap_or(false) {
-                connection
-                    .download_content(unit_path)
-                    .await
-                    .ok()
-                    .and_then(|bytes| String::from_utf8(bytes).ok())
-            } else {
-                None
-            }
-        });
-
-        let before = current_content.unwrap_or_default();
-        if before == desired_content {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, desired_content)))
-        }
-    }
 }
 
 /// Helper module for creating common unit file templates
