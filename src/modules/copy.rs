@@ -23,6 +23,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Module for copying files
 pub struct CopyModule;
@@ -609,10 +610,12 @@ impl CopyModule {
         // For validation, we'll copy to a temp file first, validate, then move
         let use_validation = validate.is_some();
         let temp_dest = if use_validation {
+            // Use cryptographically secure random UUID for temporary filename to prevent race conditions
+            // and predictable filename attacks.
             let temp_name = format!(
                 "{}.rustible.tmp.{}",
                 final_dest.display(),
-                std::process::id()
+                Uuid::new_v4()
             );
             std::path::PathBuf::from(temp_name)
         } else {
@@ -873,7 +876,7 @@ mod tests {
 
         // However, we are copying TO a file.
         // Let's use a destination path that contains the injection payload.
-        // The module will try to write to {dest}.rustible.tmp.{pid}
+        // The module will try to write to {dest}.rustible.tmp.{uuid}
         // Then run validation on it.
 
         // Payload: "safe; echo pwned > pwned_file #"
