@@ -12,3 +12,8 @@
 **Vulnerability:** The `ShellModule` was using POSIX-style single-quote escaping for all shells, including Windows `cmd.exe`. On Windows, `cmd.exe` does not treat single quotes as quotes, leading to command injection if the user input contained characters like `&` or `|` even when "escaped".
 **Learning:** Platform-specific behavior is critical. Abstraction layers like "shell" must account for the specific syntax and quoting rules of the underlying system. Assuming POSIX standards applies everywhere is a dangerous fallacy.
 **Prevention:** Explicitly detect the target shell/OS and apply appropriate escaping rules. For `cmd.exe`, double quotes `"` are generally safer for wrapping, but quoting logic is complex. Where possible, avoid shell construction entirely and use argument vectors (though `ShellModule` is specifically for shell execution).
+
+## 2024-05-24 - Insecure Temporary File Creation
+**Vulnerability:** The `CopyModule` was using a predictable filename format (`{dest}.rustible.tmp.{pid}`) for temporary files. This can lead to race conditions or symlink attacks if the destination directory is world-writable (like `/tmp`), potentially allowing an attacker to overwrite arbitrary files or cause a denial of service.
+**Learning:** Predictability is the enemy of security in shared environments. Using `pid` for temporary filenames is insufficient because PIDs are easily guessable and recyclable.
+**Prevention:** Use cryptographically secure random suffixes (e.g., `Uuid::new_v4()`) for temporary filenames. When creating files, prefer `O_EXCL` (e.g., `OpenOptions::create_new(true)`) to ensure the file does not already exist.
