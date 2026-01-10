@@ -956,49 +956,202 @@ fn default_loop_var() -> String {
 }
 
 /// Serial execution specification.
+///
+/// Defines how hosts should be batched during playbook execution.
+/// Supports fixed counts, percentages, and progressive batching.
+///
+/// # Examples
+///
+/// ```
+/// use rustible::playbook::SerialSpec;
+///
+/// // Execute on 5 hosts at a time
+/// let spec = SerialSpec::fixed(5);
+/// assert_eq!(spec.batch_size(100), 5);
+///
+/// // Execute on 10% of hosts at a time
+/// let spec = SerialSpec::percent(10.0);
+/// assert_eq!(spec.batch_size(100), 10);
+///
+/// // Progressive: 1, then 5, then 10 at a time
+/// let spec = SerialSpec::progressive(vec![
+///     SerialSpec::fixed(1),
+///     SerialSpec::fixed(5),
+///     SerialSpec::fixed(10),
+/// ]);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SerialSpec {
-    /// Fixed batch size
+    /// Fixed batch size (execute on exactly N hosts at a time)
     Fixed(usize),
-    /// Percentage of hosts
+    /// Percentage of hosts (e.g., "50%" means half the hosts)
     Percentage(String),
-    /// Progressive batch sizes
+    /// Progressive batch sizes (cycle through the list)
     Progressive(Vec<SerialSpec>),
 }
 
 impl SerialSpec {
+    // ===== Constructors =====
+
+    /// Create a fixed batch size specification
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rustible::playbook::SerialSpec;
+    ///
+    /// let spec = SerialSpec::fixed(5);
+    /// assert_eq!(spec.batch_size(100), 5);
+    /// ```
+    pub fn fixed(count: usize) -> Self {
+        SerialSpec::Fixed(count)
+    }
+
+    /// Create a percentage-based batch specification
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rustible::playbook::SerialSpec;
+    ///
+    /// let spec = SerialSpec::percent(25.0);
+    /// assert_eq!(spec.batch_size(100), 25);
+    /// assert_eq!(spec.batch_size(10), 3); // 25% of 10 = 2.5, rounded up to 3
+    /// ```
+    pub fn percent(pct: f64) -> Self {
+        SerialSpec::Percentage(format!("{}%", pct))
+    }
+
+    /// Create a progressive batch specification
+    ///
+    /// The executor will cycle through these batch sizes. This is useful
+    /// for canary deployments where you start with a small batch and
+    /// gradually increase.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rustible::playbook::SerialSpec;
+    ///
+    /// // Canary deployment: 1 host, then 5, then 25%
+    /// let spec = SerialSpec::progressive(vec![
+    ///     SerialSpec::fixed(1),
+    ///     SerialSpec::fixed(5),
+    ///     SerialSpec::percent(25.0),
+    /// ]);
+    /// ```
+    pub fn progressive(specs: Vec<SerialSpec>) -> Self {
+        SerialSpec::Progressive(specs)
+    }
+
+    /// Create a specification for all hosts (no batching)
+    ///
+    /// This is equivalent to `SerialSpec::percent(100.0)`.
+    pub fn all() -> Self {
+        SerialSpec::Percentage("100%".to_string())
+    }
+
+    // ===== Parsing =====
+
+    /// Parse a serial specification from a string
+    ///
+    /// Supports formats:
+    /// - `"5"` → Fixed(5)
+    /// - `"50%"` → Percentage("50%")
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rustible::playbook::SerialSpec;
+    ///
+    /// assert_eq!(SerialSpec::parse("5"), Some(SerialSpec::Fixed(5)));
+    /// assert_eq!(SerialSpec::parse("50%"), Some(SerialSpec::Percentage("50%".into())));
+    /// assert_eq!(SerialSpec::parse("invalid"), None);
+    /// ```
+    pub fn parse(s: &str) -> Option<Self> {
+        let s = s.trim();
+
+        // Check for percentage
+        if s.ends_with('%') {
+            let pct_str = s.trim_end_matches('%');
+            if pct_str.parse::<f64>().is_ok() {
+                return Some(SerialSpec::Percentage(s.to_string()));
+            }
+        }
+
+        // Try parsing as fixed number
+        if let Ok(n) = s.parse::<usize>() {
+            return Some(SerialSpec::Fixed(n));
+        }
+
+        None
+    }
+
+    // ===== Batch Calculation =====
+
+    /// Calculate the batch size for a given total number of hosts
+    ///
+    /// For progressive specs, returns the size of the first batch.
+    /// Use `calculate_batches()` to get all batch sizes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rustible::playbook::SerialSpec;
+    ///
+    /// let fixed = SerialSpec::fixed(5);
+    /// assert_eq!(fixed.batch_size(100), 5);
+    /// assert_eq!(fixed.batch_size(3), 3); // Can't exceed total hosts
+    ///
+    /// let pct = SerialSpec::percent(10.0);
+    /// assert_eq!(pct.batch_size(100), 10);
+    /// assert_eq!(pct.batch_size(5), 1); // Minimum 1
+    /// ```
+    pub fn batch_size(&self, total_hosts: usize) -> usize {
+        if total_hosts == 0 {
+            return 0;
+        }
+
+        match self {
+            SerialSpec::Fixed(n) => (*n).max(1).min(total_hosts),
+            SerialSpec::Percentage(pct) => {
+                let pct_value = Self::parse_percentage(pct);
+                let size = ((total_hosts as f64 * pct_value / 100.0).ceil() as usize).max(1);
+                size.min(total_hosts)
+            }
+            SerialSpec::Progressive(specs) => {
+                // Return size of first batch
+                specs
+                    .first()
+                    .map(|s| s.batch_size(total_hosts))
+                    .unwrap_or(total_hosts)
+            }
+        }
+    }
+
     /// Calculate batch sizes for a given number of hosts.
     /// Returns a vector of batch sizes that should be used in order.
     pub fn calculate_batches(&self, total_hosts: usize) -> Vec<usize> {
+        if total_hosts == 0 {
+            return vec![];
+        }
+
         match self {
             SerialSpec::Fixed(size) => {
-                if total_hosts == 0 || *size == 0 {
+                if *size == 0 {
                     return vec![];
                 }
-                vec![*size]
+                vec![(*size).min(total_hosts)]
             }
             SerialSpec::Percentage(pct) => {
-                if total_hosts == 0 {
-                    return vec![];
-                }
-
-                // Parse percentage (e.g., "50%" -> 50)
-                let pct_value = pct
-                    .trim_end_matches('%')
-                    .parse::<f64>()
-                    .unwrap_or(100.0)
-                    .max(0.0)
-                    .min(100.0);
-
-                let batch_size = ((total_hosts as f64 * pct_value / 100.0).ceil() as usize).max(1);
+                let pct_value = Self::parse_percentage(pct);
+                let batch_size = ((total_hosts as f64 * pct_value / 100.0).ceil() as usize)
+                    .max(1)
+                    .min(total_hosts);
                 vec![batch_size]
             }
             SerialSpec::Progressive(specs) => {
-                if total_hosts == 0 {
-                    return vec![];
-                }
-
                 // Calculate each batch size in the progression
                 specs
                     .iter()
@@ -1037,6 +1190,32 @@ impl SerialSpec {
         }
 
         batches
+    }
+
+    // ===== Helper Methods =====
+
+    /// Check if this is a fixed batch size
+    pub fn is_fixed(&self) -> bool {
+        matches!(self, SerialSpec::Fixed(_))
+    }
+
+    /// Check if this is a percentage-based batch
+    pub fn is_percentage(&self) -> bool {
+        matches!(self, SerialSpec::Percentage(_))
+    }
+
+    /// Check if this is a progressive batch specification
+    pub fn is_progressive(&self) -> bool {
+        matches!(self, SerialSpec::Progressive(_))
+    }
+
+    /// Parse a percentage string (e.g., "50%" -> 50.0)
+    fn parse_percentage(pct: &str) -> f64 {
+        pct.trim_end_matches('%')
+            .parse::<f64>()
+            .unwrap_or(100.0)
+            .max(0.0)
+            .min(100.0)
     }
 }
 
@@ -1136,5 +1315,189 @@ mod tests {
         let playbook = result.unwrap();
         assert_eq!(playbook.plays.len(), 1);
         assert_eq!(playbook.plays[0].name, "Test Play");
+    }
+
+    // SerialSpec tests
+
+    #[test]
+    fn test_serial_spec_fixed_constructor() {
+        let spec = SerialSpec::fixed(5);
+        assert!(spec.is_fixed());
+        assert!(!spec.is_percentage());
+        assert!(!spec.is_progressive());
+        assert_eq!(spec, SerialSpec::Fixed(5));
+    }
+
+    #[test]
+    fn test_serial_spec_percent_constructor() {
+        let spec = SerialSpec::percent(25.0);
+        assert!(!spec.is_fixed());
+        assert!(spec.is_percentage());
+        assert!(!spec.is_progressive());
+    }
+
+    #[test]
+    fn test_serial_spec_progressive_constructor() {
+        let spec = SerialSpec::progressive(vec![SerialSpec::fixed(1), SerialSpec::fixed(5)]);
+        assert!(!spec.is_fixed());
+        assert!(!spec.is_percentage());
+        assert!(spec.is_progressive());
+    }
+
+    #[test]
+    fn test_serial_spec_all_constructor() {
+        let spec = SerialSpec::all();
+        assert!(spec.is_percentage());
+        assert_eq!(spec.batch_size(100), 100);
+    }
+
+    #[test]
+    fn test_serial_spec_parse_fixed() {
+        assert_eq!(SerialSpec::parse("5"), Some(SerialSpec::Fixed(5)));
+        assert_eq!(SerialSpec::parse("100"), Some(SerialSpec::Fixed(100)));
+        assert_eq!(SerialSpec::parse("0"), Some(SerialSpec::Fixed(0)));
+    }
+
+    #[test]
+    fn test_serial_spec_parse_percentage() {
+        assert_eq!(
+            SerialSpec::parse("50%"),
+            Some(SerialSpec::Percentage("50%".into()))
+        );
+        assert_eq!(
+            SerialSpec::parse("10.5%"),
+            Some(SerialSpec::Percentage("10.5%".into()))
+        );
+    }
+
+    #[test]
+    fn test_serial_spec_parse_invalid() {
+        assert_eq!(SerialSpec::parse("invalid"), None);
+        assert_eq!(SerialSpec::parse("abc%"), None);
+        assert_eq!(SerialSpec::parse(""), None);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_size_fixed() {
+        let spec = SerialSpec::fixed(5);
+
+        assert_eq!(spec.batch_size(100), 5);
+        assert_eq!(spec.batch_size(10), 5);
+        assert_eq!(spec.batch_size(3), 3); // Limited by total hosts
+        assert_eq!(spec.batch_size(0), 0); // No hosts
+    }
+
+    #[test]
+    fn test_serial_spec_batch_size_percentage() {
+        let spec = SerialSpec::percent(10.0);
+
+        assert_eq!(spec.batch_size(100), 10);
+        assert_eq!(spec.batch_size(50), 5);
+        assert_eq!(spec.batch_size(5), 1); // Minimum 1
+        assert_eq!(spec.batch_size(0), 0); // No hosts
+    }
+
+    #[test]
+    fn test_serial_spec_batch_size_percentage_rounds_up() {
+        let spec = SerialSpec::percent(25.0);
+
+        // 25% of 10 = 2.5, should round up to 3
+        assert_eq!(spec.batch_size(10), 3);
+        // 25% of 3 = 0.75, should round up to 1
+        assert_eq!(spec.batch_size(3), 1);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_size_progressive() {
+        let spec = SerialSpec::progressive(vec![
+            SerialSpec::fixed(1),
+            SerialSpec::fixed(5),
+            SerialSpec::percent(50.0),
+        ]);
+
+        // Returns first batch size
+        assert_eq!(spec.batch_size(100), 1);
+    }
+
+    #[test]
+    fn test_serial_spec_calculate_batches_fixed() {
+        let spec = SerialSpec::fixed(5);
+
+        assert_eq!(spec.calculate_batches(100), vec![5]);
+        assert_eq!(spec.calculate_batches(3), vec![3]); // Limited
+        assert_eq!(spec.calculate_batches(0), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn test_serial_spec_calculate_batches_percentage() {
+        let spec = SerialSpec::percent(25.0);
+
+        assert_eq!(spec.calculate_batches(100), vec![25]);
+        assert_eq!(spec.calculate_batches(10), vec![3]); // Rounds up
+    }
+
+    #[test]
+    fn test_serial_spec_calculate_batches_progressive() {
+        let spec = SerialSpec::progressive(vec![
+            SerialSpec::fixed(1),
+            SerialSpec::fixed(5),
+            SerialSpec::fixed(10),
+        ]);
+
+        assert_eq!(spec.calculate_batches(100), vec![1, 5, 10]);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_hosts_fixed() {
+        let hosts: Vec<String> = (1..=10).map(|i| format!("host{}", i)).collect();
+        let spec = SerialSpec::fixed(3);
+
+        let batches = spec.batch_hosts(&hosts);
+
+        assert_eq!(batches.len(), 4); // 3 + 3 + 3 + 1
+        assert_eq!(batches[0].len(), 3);
+        assert_eq!(batches[1].len(), 3);
+        assert_eq!(batches[2].len(), 3);
+        assert_eq!(batches[3].len(), 1);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_hosts_percentage() {
+        let hosts: Vec<String> = (1..=10).map(|i| format!("host{}", i)).collect();
+        let spec = SerialSpec::percent(50.0);
+
+        let batches = spec.batch_hosts(&hosts);
+
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].len(), 5);
+        assert_eq!(batches[1].len(), 5);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_hosts_progressive() {
+        let hosts: Vec<String> = (1..=20).map(|i| format!("host{}", i)).collect();
+        let spec = SerialSpec::progressive(vec![
+            SerialSpec::fixed(1),
+            SerialSpec::fixed(5),
+            SerialSpec::fixed(10),
+        ]);
+
+        let batches = spec.batch_hosts(&hosts);
+
+        // 1 + 5 + 10 + 1 (cycles back) + 3 = 20
+        assert_eq!(batches[0].len(), 1);
+        assert_eq!(batches[1].len(), 5);
+        assert_eq!(batches[2].len(), 10);
+        assert_eq!(batches[3].len(), 1);
+        assert_eq!(batches[4].len(), 3);
+    }
+
+    #[test]
+    fn test_serial_spec_batch_hosts_empty() {
+        let hosts: Vec<String> = vec![];
+        let spec = SerialSpec::fixed(5);
+
+        let batches = spec.batch_hosts(&hosts);
+        assert!(batches.is_empty());
     }
 }

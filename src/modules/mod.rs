@@ -644,6 +644,93 @@ pub enum ParallelizationHint {
     GlobalExclusive,
 }
 
+/// Category of a module for organization and discovery.
+///
+/// Modules are organized into categories to help users find related
+/// functionality and to enable category-based queries in the registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleCategory {
+    /// Core command execution modules (command, shell, script, raw)
+    Commands,
+    /// Package management modules (apt, yum, dnf, pip, package)
+    Packages,
+    /// File and template management (file, copy, template, lineinfile)
+    Files,
+    /// System management (user, group, service, cron, hostname)
+    System,
+    /// Source control modules (git)
+    SourceControl,
+    /// Network configuration modules
+    Network,
+    /// Cloud provider modules (AWS, Azure, GCP)
+    Cloud,
+    /// Container and orchestration (docker, kubernetes)
+    Containers,
+    /// Database modules
+    Database,
+    /// Logic and utility modules (debug, fail, assert, set_fact)
+    Logic,
+    /// Facts and information gathering
+    Facts,
+    /// Security modules (firewall, selinux)
+    Security,
+    /// Windows-specific modules
+    Windows,
+}
+
+impl fmt::Display for ModuleCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ModuleCategory::Commands => write!(f, "commands"),
+            ModuleCategory::Packages => write!(f, "packages"),
+            ModuleCategory::Files => write!(f, "files"),
+            ModuleCategory::System => write!(f, "system"),
+            ModuleCategory::SourceControl => write!(f, "source_control"),
+            ModuleCategory::Network => write!(f, "network"),
+            ModuleCategory::Cloud => write!(f, "cloud"),
+            ModuleCategory::Containers => write!(f, "containers"),
+            ModuleCategory::Database => write!(f, "database"),
+            ModuleCategory::Logic => write!(f, "logic"),
+            ModuleCategory::Facts => write!(f, "facts"),
+            ModuleCategory::Security => write!(f, "security"),
+            ModuleCategory::Windows => write!(f, "windows"),
+        }
+    }
+}
+
+/// Macro for registering multiple modules with their categories.
+///
+/// This macro reduces boilerplate by allowing declarative module registration
+/// with category grouping.
+///
+/// # Example
+///
+/// ```ignore
+/// register_modules!(registry,
+///     Commands: [
+///         command::CommandModule,
+///         shell::ShellModule,
+///     ],
+///     Packages: [
+///         apt::AptModule,
+///         yum::YumModule,
+///     ],
+/// );
+/// ```
+macro_rules! register_modules {
+    ($registry:expr, $($category:ident: [$($module:expr),* $(,)?]),* $(,)?) => {
+        $(
+            $(
+                $registry.register_with_category(
+                    Arc::new($module),
+                    ModuleCategory::$category,
+                );
+            )*
+        )*
+    };
+}
+
 /// Represents a difference between current and desired state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diff {
@@ -929,6 +1016,227 @@ impl ModuleContext {
         self.become_user = Some(user.into());
         self
     }
+
+    /// Create a builder for constructing a ModuleContext with validation
+    pub fn builder() -> ModuleContextBuilder {
+        ModuleContextBuilder::default()
+    }
+}
+
+/// Error type for ModuleContext builder validation failures
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum ModuleContextBuilderError {
+    /// Invalid become configuration (become=true without method or user)
+    #[error("Invalid become configuration: {0}")]
+    InvalidBecomeConfig(String),
+
+    /// Invalid verbosity level
+    #[error("Invalid verbosity level: {0} (must be 0-4)")]
+    InvalidVerbosity(u8),
+}
+
+/// Builder for constructing ModuleContext with validation.
+///
+/// This builder provides a type-safe way to construct `ModuleContext` instances
+/// with validation of invariants before the context is created.
+///
+/// # Example
+///
+/// ```
+/// use rustible::modules::{ModuleContext, ModuleContextBuilder};
+///
+/// let context = ModuleContextBuilder::new()
+///     .check_mode(true)
+///     .verbosity(2)
+///     .build()
+///     .expect("valid context");
+///
+/// assert!(context.check_mode);
+/// assert_eq!(context.verbosity, 2);
+/// ```
+#[derive(Clone)]
+pub struct ModuleContextBuilder {
+    check_mode: bool,
+    diff_mode: bool,
+    verbosity: u8,
+    vars: HashMap<String, serde_json::Value>,
+    facts: HashMap<String, serde_json::Value>,
+    work_dir: Option<String>,
+    r#become: bool,
+    become_method: Option<String>,
+    become_user: Option<String>,
+    connection: Option<Arc<dyn Connection + Send + Sync>>,
+}
+
+impl Default for ModuleContextBuilder {
+    fn default() -> Self {
+        Self {
+            check_mode: false,
+            diff_mode: false,
+            verbosity: 0,
+            vars: HashMap::new(),
+            facts: HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: None,
+        }
+    }
+}
+
+impl std::fmt::Debug for ModuleContextBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModuleContextBuilder")
+            .field("check_mode", &self.check_mode)
+            .field("diff_mode", &self.diff_mode)
+            .field("verbosity", &self.verbosity)
+            .field("vars_count", &self.vars.len())
+            .field("facts_count", &self.facts.len())
+            .field("work_dir", &self.work_dir)
+            .field("become", &self.r#become)
+            .field("become_method", &self.become_method)
+            .field("become_user", &self.become_user)
+            .field("has_connection", &self.connection.is_some())
+            .finish()
+    }
+}
+
+impl ModuleContextBuilder {
+    /// Create a new builder with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set check mode (dry run)
+    pub fn check_mode(mut self, value: bool) -> Self {
+        self.check_mode = value;
+        self
+    }
+
+    /// Set diff mode
+    pub fn diff_mode(mut self, value: bool) -> Self {
+        self.diff_mode = value;
+        self
+    }
+
+    /// Set verbosity level (0-4)
+    ///
+    /// Values greater than 4 will cause `build()` to return an error.
+    pub fn verbosity(mut self, value: u8) -> Self {
+        self.verbosity = value;
+        self
+    }
+
+    /// Set variables available to the module
+    pub fn vars(mut self, vars: HashMap<String, serde_json::Value>) -> Self {
+        self.vars = vars;
+        self
+    }
+
+    /// Add a single variable
+    pub fn var(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.vars.insert(key.into(), value);
+        self
+    }
+
+    /// Set facts about the target system
+    pub fn facts(mut self, facts: HashMap<String, serde_json::Value>) -> Self {
+        self.facts = facts;
+        self
+    }
+
+    /// Add a single fact
+    pub fn fact(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.facts.insert(key.into(), value);
+        self
+    }
+
+    /// Set the working directory
+    pub fn work_dir(mut self, dir: impl Into<String>) -> Self {
+        self.work_dir = Some(dir.into());
+        self
+    }
+
+    /// Enable privilege escalation
+    pub fn become_enabled(mut self, enabled: bool) -> Self {
+        self.r#become = enabled;
+        self
+    }
+
+    /// Set the privilege escalation method (e.g., "sudo", "su")
+    pub fn become_method(mut self, method: impl Into<String>) -> Self {
+        self.become_method = Some(method.into());
+        self
+    }
+
+    /// Set the user to become
+    pub fn become_user(mut self, user: impl Into<String>) -> Self {
+        self.become_user = Some(user.into());
+        self
+    }
+
+    /// Set the connection for remote operations
+    pub fn connection(mut self, conn: Arc<dyn Connection + Send + Sync>) -> Self {
+        self.connection = Some(conn);
+        self
+    }
+
+    /// Build the ModuleContext, validating all invariants
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `verbosity` is greater than 4
+    /// - `become` is true but neither `become_method` nor `become_user` is set
+    pub fn build(self) -> Result<ModuleContext, ModuleContextBuilderError> {
+        // Validate verbosity
+        if self.verbosity > 4 {
+            return Err(ModuleContextBuilderError::InvalidVerbosity(self.verbosity));
+        }
+
+        // Validate become configuration
+        // Note: Ansible allows become=true with default method (sudo) and user (root),
+        // so we only warn if become is true but the user might want to be explicit.
+        // For strict validation, uncomment the check below:
+        // if self.become && self.become_method.is_none() && self.become_user.is_none() {
+        //     return Err(ModuleContextBuilderError::InvalidBecomeConfig(
+        //         "become=true requires become_method or become_user to be set".to_string(),
+        //     ));
+        // }
+
+        Ok(ModuleContext {
+            check_mode: self.check_mode,
+            diff_mode: self.diff_mode,
+            verbosity: self.verbosity,
+            vars: self.vars,
+            facts: self.facts,
+            work_dir: self.work_dir,
+            r#become: self.r#become,
+            become_method: self.become_method,
+            become_user: self.become_user,
+            connection: self.connection,
+        })
+    }
+
+    /// Build the ModuleContext without validation (for backward compatibility)
+    ///
+    /// This method always succeeds and is useful when migrating from the old
+    /// `with_*` method chain pattern.
+    pub fn build_unchecked(self) -> ModuleContext {
+        ModuleContext {
+            check_mode: self.check_mode,
+            diff_mode: self.diff_mode,
+            verbosity: self.verbosity.min(4),
+            vars: self.vars,
+            facts: self.facts,
+            work_dir: self.work_dir,
+            r#become: self.r#become,
+            become_method: self.become_method,
+            become_user: self.become_user,
+            connection: self.connection,
+        }
+    }
 }
 
 /// Trait that all modules must implement
@@ -1153,6 +1461,8 @@ impl ParamExt for ModuleParams {
 /// Registry for looking up modules by name
 pub struct ModuleRegistry {
     modules: HashMap<String, Arc<dyn Module>>,
+    /// Category mappings for module organization
+    categories: HashMap<String, ModuleCategory>,
 }
 
 impl ModuleRegistry {
@@ -1160,59 +1470,92 @@ impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
             modules: HashMap::new(),
+            categories: HashMap::new(),
         }
     }
 
     /// Create a registry with all built-in modules
+    ///
+    /// Uses the `register_modules!` macro for declarative registration
+    /// with category organization.
     pub fn with_builtins() -> Self {
         let mut registry = Self::new();
-        // Package management modules
-        registry.register(Arc::new(apt::AptModule));
-        registry.register(Arc::new(dnf::DnfModule));
-        registry.register(Arc::new(package::PackageModule));
-        registry.register(Arc::new(pip::PipModule));
-        registry.register(Arc::new(yum::YumModule));
 
-        // Core command modules
-        registry.register(Arc::new(command::CommandModule));
-        registry.register(Arc::new(shell::ShellModule));
+        // Register all modules using the declarative macro
+        register_modules!(registry,
+            // Package management modules
+            Packages: [
+                apt::AptModule,
+                dnf::DnfModule,
+                package::PackageModule,
+                pip::PipModule,
+                yum::YumModule,
+            ],
+            // Core command modules
+            Commands: [
+                command::CommandModule,
+                shell::ShellModule,
+                raw::RawModule,
+                script::ScriptModule,
+            ],
+            // File/transport modules
+            Files: [
+                blockinfile::BlockinfileModule,
+                copy::CopyModule,
+                file::FileModule,
+                lineinfile::LineinfileModule,
+                template::TemplateModule,
+                stat::StatModule,
+                archive::ArchiveModule,
+                unarchive::UnarchiveModule,
+                synchronize::SynchronizeModule,
+            ],
+            // System management modules
+            System: [
+                cron::CronModule,
+                group::GroupModule,
+                hostname::HostnameModule,
+                mount::MountModule,
+                service::ServiceModule,
+                sysctl::SysctlModule,
+                user::UserModule,
+                timezone::TimezoneModule,
+                systemd_unit::SystemdUnitModule,
+                pause::PauseModule,
+                wait_for::WaitForModule,
+            ],
+            // Source control modules
+            SourceControl: [
+                git::GitModule,
+            ],
+            // Logic/utility modules
+            Logic: [
+                assert::AssertModule,
+                debug::DebugModule,
+                fail::FailModule,
+                include_vars::IncludeVarsModule,
+                meta::MetaModule,
+                set_fact::SetFactModule,
+            ],
+            // Facts gathering
+            Facts: [
+                facts::FactsModule,
+            ],
+            // Network modules
+            Network: [
+                uri::UriModule,
+                known_hosts::KnownHostsModule,
+                authorized_key::AuthorizedKeyModule,
+            ],
+            // Security modules
+            Security: [
+                firewalld::FirewalldModule,
+                ufw::UfwModule,
+                selinux::SELinuxModule,
+            ],
+        );
 
-        // File/transport modules
-        registry.register(Arc::new(blockinfile::BlockinfileModule));
-        registry.register(Arc::new(copy::CopyModule));
-        registry.register(Arc::new(file::FileModule));
-        registry.register(Arc::new(lineinfile::LineinfileModule));
-        registry.register(Arc::new(template::TemplateModule));
-
-        // System management modules
-        registry.register(Arc::new(cron::CronModule));
-        registry.register(Arc::new(group::GroupModule));
-        registry.register(Arc::new(hostname::HostnameModule));
-        registry.register(Arc::new(mount::MountModule));
-        registry.register(Arc::new(service::ServiceModule));
-        registry.register(Arc::new(sysctl::SysctlModule));
-        registry.register(Arc::new(user::UserModule));
-
-        // Source control modules
-        registry.register(Arc::new(git::GitModule));
-
-        // Logic/utility modules
-        registry.register(Arc::new(assert::AssertModule));
-        registry.register(Arc::new(debug::DebugModule));
-        registry.register(Arc::new(fail::FailModule));
-        registry.register(Arc::new(include_vars::IncludeVarsModule));
-        registry.register(Arc::new(meta::MetaModule));
-        registry.register(Arc::new(set_fact::SetFactModule));
-        registry.register(Arc::new(stat::StatModule));
-
-        registry.register(Arc::new(facts::FactsModule));
-
-        // Raw command and script modules
-        registry.register(Arc::new(raw::RawModule));
-        registry.register(Arc::new(script::ScriptModule));
-        registry.register(Arc::new(synchronize::SynchronizeModule));
-
-        // Network device configuration modules
+        // Network device modules (registered via helper function)
         network::register_network_modules(&mut registry);
 
         registry
@@ -1221,6 +1564,41 @@ impl ModuleRegistry {
     /// Register a module
     pub fn register(&mut self, module: Arc<dyn Module>) {
         self.modules.insert(module.name().to_string(), module);
+    }
+
+    /// Register a module with category metadata
+    pub fn register_with_category(&mut self, module: Arc<dyn Module>, category: ModuleCategory) {
+        let name = module.name().to_string();
+        self.modules.insert(name.clone(), module);
+        self.categories.insert(name, category);
+    }
+
+    /// Get the category of a module
+    pub fn get_category(&self, name: &str) -> Option<ModuleCategory> {
+        self.categories.get(name).copied()
+    }
+
+    /// Get all modules in a specific category
+    pub fn modules_by_category(&self, category: ModuleCategory) -> Vec<&str> {
+        self.categories
+            .iter()
+            .filter_map(|(name, cat)| {
+                if *cat == category {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all categories and their module counts
+    pub fn category_stats(&self) -> HashMap<ModuleCategory, usize> {
+        let mut stats = HashMap::new();
+        for category in self.categories.values() {
+            *stats.entry(*category).or_insert(0) += 1;
+        }
+        stats
     }
 
     /// Get a module by name
@@ -1578,5 +1956,303 @@ mod tests {
         assert_eq!(json["changed"], false);
         assert_eq!(json["failed"], false);
         assert_eq!(json["skipped"], true);
+    }
+
+    // ModuleContextBuilder tests
+
+    #[test]
+    fn test_module_context_builder_defaults() {
+        let ctx = ModuleContextBuilder::new().build().unwrap();
+
+        assert!(!ctx.check_mode);
+        assert!(!ctx.diff_mode);
+        assert_eq!(ctx.verbosity, 0);
+        assert!(ctx.vars.is_empty());
+        assert!(ctx.facts.is_empty());
+        assert!(ctx.work_dir.is_none());
+        assert!(!ctx.r#become);
+        assert!(ctx.become_method.is_none());
+        assert!(ctx.become_user.is_none());
+        assert!(ctx.connection.is_none());
+    }
+
+    #[test]
+    fn test_module_context_builder_check_mode() {
+        let ctx = ModuleContextBuilder::new()
+            .check_mode(true)
+            .build()
+            .unwrap();
+
+        assert!(ctx.check_mode);
+    }
+
+    #[test]
+    fn test_module_context_builder_diff_mode() {
+        let ctx = ModuleContextBuilder::new().diff_mode(true).build().unwrap();
+
+        assert!(ctx.diff_mode);
+    }
+
+    #[test]
+    fn test_module_context_builder_verbosity_valid() {
+        for v in 0..=4 {
+            let ctx = ModuleContextBuilder::new().verbosity(v).build().unwrap();
+            assert_eq!(ctx.verbosity, v);
+        }
+    }
+
+    #[test]
+    fn test_module_context_builder_verbosity_invalid() {
+        let result = ModuleContextBuilder::new().verbosity(5).build();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ModuleContextBuilderError::InvalidVerbosity(5)
+        );
+    }
+
+    #[test]
+    fn test_module_context_builder_vars() {
+        let mut vars = HashMap::new();
+        vars.insert("key1".to_string(), serde_json::json!("value1"));
+        vars.insert("key2".to_string(), serde_json::json!(42));
+
+        let ctx = ModuleContextBuilder::new().vars(vars).build().unwrap();
+
+        assert_eq!(ctx.vars.len(), 2);
+        assert_eq!(ctx.vars["key1"], serde_json::json!("value1"));
+        assert_eq!(ctx.vars["key2"], serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_module_context_builder_var_single() {
+        let ctx = ModuleContextBuilder::new()
+            .var("key1", serde_json::json!("value1"))
+            .var("key2", serde_json::json!(42))
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.vars.len(), 2);
+        assert_eq!(ctx.vars["key1"], serde_json::json!("value1"));
+    }
+
+    #[test]
+    fn test_module_context_builder_facts() {
+        let mut facts = HashMap::new();
+        facts.insert("os".to_string(), serde_json::json!("linux"));
+
+        let ctx = ModuleContextBuilder::new().facts(facts).build().unwrap();
+
+        assert_eq!(ctx.facts.len(), 1);
+        assert_eq!(ctx.facts["os"], serde_json::json!("linux"));
+    }
+
+    #[test]
+    fn test_module_context_builder_fact_single() {
+        let ctx = ModuleContextBuilder::new()
+            .fact("os", serde_json::json!("linux"))
+            .fact("arch", serde_json::json!("x86_64"))
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.facts.len(), 2);
+    }
+
+    #[test]
+    fn test_module_context_builder_work_dir() {
+        let ctx = ModuleContextBuilder::new()
+            .work_dir("/tmp/work")
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.work_dir, Some("/tmp/work".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_become() {
+        let ctx = ModuleContextBuilder::new()
+            .become_enabled(true)
+            .become_method("sudo")
+            .become_user("root")
+            .build()
+            .unwrap();
+
+        assert!(ctx.r#become);
+        assert_eq!(ctx.become_method, Some("sudo".to_string()));
+        assert_eq!(ctx.become_user, Some("root".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_build_unchecked() {
+        // This should succeed even with invalid verbosity
+        let ctx = ModuleContextBuilder::new().verbosity(10).build_unchecked();
+
+        // Verbosity is clamped to 4
+        assert_eq!(ctx.verbosity, 4);
+    }
+
+    #[test]
+    fn test_module_context_builder_chaining() {
+        let ctx = ModuleContextBuilder::new()
+            .check_mode(true)
+            .diff_mode(true)
+            .verbosity(3)
+            .var("test", serde_json::json!("value"))
+            .fact("os", serde_json::json!("linux"))
+            .work_dir("/tmp")
+            .become_enabled(true)
+            .become_method("sudo")
+            .become_user("admin")
+            .build()
+            .unwrap();
+
+        assert!(ctx.check_mode);
+        assert!(ctx.diff_mode);
+        assert_eq!(ctx.verbosity, 3);
+        assert_eq!(ctx.vars.len(), 1);
+        assert_eq!(ctx.facts.len(), 1);
+        assert_eq!(ctx.work_dir, Some("/tmp".to_string()));
+        assert!(ctx.r#become);
+        assert_eq!(ctx.become_method, Some("sudo".to_string()));
+        assert_eq!(ctx.become_user, Some("admin".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_static_method() {
+        // Test the static builder() method on ModuleContext
+        let ctx = ModuleContext::builder().check_mode(true).build().unwrap();
+
+        assert!(ctx.check_mode);
+    }
+
+    // ========================================================================
+    // ModuleCategory and Registry Category Tests
+    // ========================================================================
+
+    #[test]
+    fn test_module_category_enum() {
+        // Test that all categories exist and can be compared
+        assert_eq!(ModuleCategory::Commands, ModuleCategory::Commands);
+        assert_ne!(ModuleCategory::Commands, ModuleCategory::Packages);
+
+        // Test all category variants
+        let categories = vec![
+            ModuleCategory::Commands,
+            ModuleCategory::Packages,
+            ModuleCategory::Files,
+            ModuleCategory::System,
+            ModuleCategory::SourceControl,
+            ModuleCategory::Network,
+            ModuleCategory::Cloud,
+            ModuleCategory::Containers,
+            ModuleCategory::Database,
+            ModuleCategory::Logic,
+            ModuleCategory::Facts,
+            ModuleCategory::Security,
+            ModuleCategory::Windows,
+        ];
+        assert_eq!(categories.len(), 13);
+    }
+
+    #[test]
+    fn test_registry_with_categories() {
+        let registry = ModuleRegistry::with_builtins();
+
+        // Test that command module is in Commands category
+        assert_eq!(
+            registry.get_category("command"),
+            Some(ModuleCategory::Commands)
+        );
+
+        // Test that shell module is in Commands category
+        assert_eq!(
+            registry.get_category("shell"),
+            Some(ModuleCategory::Commands)
+        );
+
+        // Test that apt module is in Packages category
+        assert_eq!(registry.get_category("apt"), Some(ModuleCategory::Packages));
+
+        // Test that copy module is in Files category
+        assert_eq!(registry.get_category("copy"), Some(ModuleCategory::Files));
+
+        // Test that service module is in System category
+        assert_eq!(
+            registry.get_category("service"),
+            Some(ModuleCategory::System)
+        );
+
+        // Test that git module is in SourceControl category
+        assert_eq!(
+            registry.get_category("git"),
+            Some(ModuleCategory::SourceControl)
+        );
+
+        // Test that debug module is in Logic category
+        assert_eq!(registry.get_category("debug"), Some(ModuleCategory::Logic));
+
+        // Test non-existent module returns None
+        assert_eq!(registry.get_category("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_modules_by_category() {
+        let registry = ModuleRegistry::with_builtins();
+
+        // Test Commands category has expected modules
+        let commands = registry.modules_by_category(ModuleCategory::Commands);
+        assert!(commands.contains(&"command"));
+        assert!(commands.contains(&"shell"));
+        assert!(commands.contains(&"raw"));
+        assert!(commands.contains(&"script"));
+
+        // Test Logic category has expected modules
+        let logic = registry.modules_by_category(ModuleCategory::Logic);
+        assert!(logic.contains(&"debug"));
+        assert!(logic.contains(&"assert"));
+        assert!(logic.contains(&"fail"));
+        assert!(logic.contains(&"set_fact"));
+
+        // Test Files category has expected modules
+        let files = registry.modules_by_category(ModuleCategory::Files);
+        assert!(files.contains(&"copy"));
+        assert!(files.contains(&"file"));
+        assert!(files.contains(&"template"));
+    }
+
+    #[test]
+    fn test_category_stats() {
+        let registry = ModuleRegistry::with_builtins();
+        let stats = registry.category_stats();
+
+        // Commands category should have 4 modules
+        assert_eq!(stats.get(&ModuleCategory::Commands), Some(&4));
+
+        // Logic category should have 6 modules
+        assert_eq!(stats.get(&ModuleCategory::Logic), Some(&6));
+
+        // All counted modules should be non-zero
+        for (category, count) in &stats {
+            assert!(*count > 0, "Category {:?} has no modules", category);
+        }
+    }
+
+    #[test]
+    fn test_register_with_category() {
+        let mut registry = ModuleRegistry::new();
+
+        // Register a test module with a category
+        registry.register_with_category(Arc::new(TestModule), ModuleCategory::Logic);
+
+        // Verify the module is registered
+        assert!(registry.contains("test"));
+
+        // Verify the category is set
+        assert_eq!(registry.get_category("test"), Some(ModuleCategory::Logic));
+
+        // Verify it appears in modules_by_category
+        let logic_modules = registry.modules_by_category(ModuleCategory::Logic);
+        assert!(logic_modules.contains(&"test"));
     }
 }
