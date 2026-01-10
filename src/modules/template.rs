@@ -8,8 +8,8 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
-use crate::utils::shell_escape;
 use crate::template::TEMPLATE_ENGINE;
+use crate::utils::shell_escape;
 use std::fs;
 use std::io::Read;
 #[cfg(unix)]

@@ -559,7 +559,9 @@ impl VaultArgs {
                         continue;
                     }
 
-                    let spinner = ctx.output.create_spinner(&format!("Rekeying {}...", file.display()));
+                    let spinner = ctx
+                        .output
+                        .create_spinner(&format!("Rekeying {}...", file.display()));
 
                     // We need to handle the Result inside the spinner block to ensure clear
                     let res = (|| -> Result<()> {
@@ -575,7 +577,13 @@ impl VaultArgs {
 
                     match res {
                         Ok(_) => ctx.output.info(&format!("Rekeyed: {}", file.display())),
-                        Err(e) => return Err(anyhow::anyhow!("Failed to rekey {}: {}", file.display(), e)),
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to rekey {}: {}",
+                                file.display(),
+                                e
+                            ))
+                        }
                     }
                 }
 

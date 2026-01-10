@@ -904,7 +904,10 @@ mod tests {
         let _ = module.execute(&params, &context);
 
         // If injection worked, pwned_file should exist
-        assert!(!pwned_file.exists(), "Command injection successful! pwned file created.");
+        assert!(
+            !pwned_file.exists(),
+            "Command injection successful! pwned file created."
+        );
     }
 
     #[test]

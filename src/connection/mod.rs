@@ -797,8 +797,8 @@ impl Default for ConnectionPoolConfig {
         Self {
             max_connections_per_host: 5,
             max_total_connections: 100,
-            idle_timeout_secs: 300,     // 5 minutes
-            max_lifetime_secs: 3600,    // 1 hour
+            idle_timeout_secs: 300,  // 5 minutes
+            max_lifetime_secs: 3600, // 1 hour
         }
     }
 }
@@ -1306,10 +1306,7 @@ mod tests {
             ConnectionPool::extract_host_key("docker://mycontainer"),
             "docker://mycontainer"
         );
-        assert_eq!(
-            ConnectionPool::extract_host_key("local"),
-            "local"
-        );
+        assert_eq!(ConnectionPool::extract_host_key("local"), "local");
     }
 
     #[test]

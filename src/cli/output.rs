@@ -411,7 +411,10 @@ impl OutputFormatter {
                 "type": "success",
                 "message": message
             });
-            println!("{}", serde_json::to_string(&success).expect("Failed to serialize output"));
+            println!(
+                "{}",
+                serde_json::to_string(&success).expect("Failed to serialize output")
+            );
             return;
         }
 
