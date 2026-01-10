@@ -714,7 +714,7 @@ impl Module for LineinfileModule {
 
         let regexp = if let Some(ref re_str) = regexp_str {
             Some(
-                Regex::new(re_str)
+                get_regex(re_str)
                     .map_err(|e| ModuleError::InvalidParameter(format!("Invalid regexp: {}", e)))?,
             )
         } else {
