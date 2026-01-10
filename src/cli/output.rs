@@ -101,6 +101,11 @@ impl OutputFormatter {
         self.multi_progress.clone()
     }
 
+    /// Check if JSON mode is enabled
+    pub fn is_json(&self) -> bool {
+        self.json_mode
+    }
+
     /// Print a banner/header
     pub fn banner(&self, title: &str) {
         if self.json_mode {
