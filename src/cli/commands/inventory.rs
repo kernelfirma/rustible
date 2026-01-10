@@ -415,14 +415,11 @@ impl ListHostsArgs {
             }
         } else {
             // Simple list output
-            ctx.output.section(&format!("Hosts ({})", hosts.len()));
-
             let host_names: Vec<String> = hosts.iter().map(|h| h.name.clone()).collect();
-            for name in &host_names {
-                println!("  {}", name);
-            }
+            ctx.output
+                .list(&format!("Hosts ({})", hosts.len()), &host_names);
 
-            if self.vars {
+            if self.vars && !ctx.output.is_json() {
                 println!();
                 for host in hosts {
                     if !host.vars.is_empty() {
@@ -468,8 +465,8 @@ impl ListTasksArgs {
                     .and_then(|n| n.as_str())
                     .unwrap_or("Unnamed play");
 
-                println!("\nPlay #{}: {}", play_idx + 1, play_name);
-                println!("{}", "-".repeat(40));
+                ctx.output
+                    .section(&format!("Play #{}: {}", play_idx + 1, play_name));
 
                 // Get tasks
                 if let Some(tasks) = play.get("tasks").and_then(|t| t.as_sequence()) {
