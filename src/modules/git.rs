@@ -581,6 +581,26 @@ impl Module for GitModule {
             }
         }
 
+        // Security: Prevent argument injection via refspec
+        if let Some(refspec) = params.get_string("refspec")? {
+            if refspec.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid refspec: '{}'. Refspecs cannot start with '-' to prevent argument injection.",
+                    refspec
+                )));
+            }
+        }
+
+        // Security: Prevent argument injection via version (branch/tag)
+        if let Some(version) = params.get_string("version")? {
+            if version.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid version: '{}'. Version/branch names cannot start with '-' to prevent argument injection.",
+                    version
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -1055,4 +1075,37 @@ mod tests {
         assert!(GitModule::is_bare_repo(dest));
     }
 
+    #[test]
+    fn test_git_module_argument_injection_protection() {
+        let module = GitModule;
+
+        // Test refspec starting with -
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "repo".to_string(),
+            serde_json::json!("https://github.com/test/repo"),
+        );
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+        params.insert("refspec".to_string(), serde_json::json!("--upload-pack=malicious"));
+
+        // This should fail validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+
+        // Test version starting with -
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "repo".to_string(),
+            serde_json::json!("https://github.com/test/repo"),
+        );
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+        params.insert("version".to_string(), serde_json::json!("-f"));
+        params.insert("update".to_string(), serde_json::json!(true));
+
+        // This should fail validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+    }
 }
