@@ -126,6 +126,26 @@ use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
 use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
+/// Events emitted during playbook execution.
+#[derive(Debug, Clone)]
+pub enum ExecutionEvent {
+    /// Playbook execution started
+    PlaybookStart(String),
+    /// Play execution started
+    PlayStart(String),
+    /// Task execution started
+    TaskStart(String),
+    /// Task completed on a host
+    HostTaskComplete(String, String, TaskResult), // host, task_name, result
+    /// Playbook execution finished
+    PlaybookFinish(String),
+    /// Generic log message
+    Log(String),
+}
+
+/// Callback function for execution events.
+pub type EventCallback = Arc<dyn Fn(ExecutionEvent) + Send + Sync>;
+
 /// Errors that can occur during playbook and task execution.
 ///
 /// This enum covers all error conditions that may arise during the
@@ -413,6 +433,7 @@ pub struct Executor {
     /// Shared module registry - created once per executor to avoid hot path overhead
     module_registry: Arc<ModuleRegistry>,
     connection_cache: Arc<RwLock<HashMap<String, Arc<dyn Connection + Send + Sync>>>>,
+    event_callback: Option<EventCallback>,
 }
 
 impl Executor {
@@ -435,6 +456,7 @@ impl Executor {
             recovery_manager: None,
             module_registry: Arc::new(ModuleRegistry::with_builtins()),
             connection_cache: Arc::new(RwLock::new(HashMap::new())),
+            event_callback: None,
         }
     }
 
@@ -457,7 +479,14 @@ impl Executor {
             recovery_manager: None,
             module_registry: Arc::new(ModuleRegistry::with_builtins()),
             connection_cache: Arc::new(RwLock::new(HashMap::new())),
+            event_callback: None,
         }
+    }
+
+    /// Set the event callback for this executor
+    pub fn with_event_callback(mut self, callback: EventCallback) -> Self {
+        self.event_callback = Some(callback);
+        self
     }
 
     /// Set the recovery manager for this executor
@@ -472,6 +501,9 @@ impl Executor {
         &self,
         playbook: &Playbook,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        if let Some(cb) = &self.event_callback {
+            cb(ExecutionEvent::PlaybookStart(playbook.name.clone()));
+        }
         info!("Starting playbook: {}", playbook.name);
 
         let tx_id = if let Some(rm) = &self.recovery_manager {
@@ -526,6 +558,9 @@ impl Executor {
             // Run any remaining notified handlers
             self.flush_handlers(tx_id.clone()).await?;
 
+            if let Some(cb) = &self.event_callback {
+                cb(ExecutionEvent::PlaybookFinish(playbook.name.clone()));
+            }
             info!("Playbook completed: {}", playbook.name);
             Ok(all_results)
         }
@@ -691,6 +726,9 @@ impl Executor {
         play: &Play,
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        if let Some(cb) = &self.event_callback {
+            cb(ExecutionEvent::PlayStart(play.name.clone()));
+        }
         info!("Starting play: {}", play.name);
 
         // Register handlers for this play
@@ -878,6 +916,10 @@ impl Executor {
         }
 
         for task in tasks {
+            if let Some(cb) = &self.event_callback {
+                cb(ExecutionEvent::TaskStart(task.name.clone()));
+            }
+
             // Determine which hosts should run this task based on block state
             let active_hosts: Vec<_> = hosts
                 .iter()
@@ -1209,6 +1251,7 @@ impl Executor {
                     .get(&host)
                     .cloned()
                     .unwrap_or_else(|| "/usr/bin/python3".to_string());
+                let callback = self.event_callback.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1256,6 +1299,30 @@ impl Executor {
                                 &module_registry,
                             )
                             .await;
+
+                        if let Some(cb) = &callback {
+                            if let Ok(res) = &task_result {
+                                cb(ExecutionEvent::HostTaskComplete(
+                                    host.clone(),
+                                    task.name.clone(),
+                                    res.clone(),
+                                ));
+                            } else if let Err(e) = &task_result {
+                                // Create a dummy failed result for the event
+                                let res = TaskResult {
+                                    status: TaskStatus::Failed,
+                                    changed: false,
+                                    msg: Some(e.to_string()),
+                                    result: None,
+                                    diff: None,
+                                };
+                                cb(ExecutionEvent::HostTaskComplete(
+                                    host.clone(),
+                                    task.name.clone(),
+                                    res,
+                                ));
+                            }
+                        }
 
                         if let Some(rm) = &recovery_manager {
                             if let Some(tid) = tx_id.as_ref() {
@@ -1629,6 +1696,7 @@ impl Executor {
                     .get(&host)
                     .cloned()
                     .unwrap_or_else(|| "/usr/bin/python3".to_string());
+                let callback = self.event_callback.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1660,10 +1728,31 @@ impl Executor {
 
                     match result {
                         Ok(task_result) => {
+                            if let Some(cb) = &callback {
+                                cb(ExecutionEvent::HostTaskComplete(
+                                    host.clone(),
+                                    task.name.clone(),
+                                    task_result.clone(),
+                                ));
+                            }
                             results.lock().await.insert(host, task_result);
                         }
                         Err(e) => {
                             error!("Task failed on host {}: {}", host, e);
+                            if let Some(cb) = &callback {
+                                let res = TaskResult {
+                                    status: TaskStatus::Failed,
+                                    changed: false,
+                                    msg: Some(e.to_string()),
+                                    result: None,
+                                    diff: None,
+                                };
+                                cb(ExecutionEvent::HostTaskComplete(
+                                    host.clone(),
+                                    task.name.clone(),
+                                    res,
+                                ));
+                            }
                             results.lock().await.insert(
                                 host,
                                 TaskResult {
