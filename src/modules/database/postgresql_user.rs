@@ -26,7 +26,7 @@
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
 use crate::utils::shell_escape;
@@ -740,63 +740,6 @@ impl Module for PostgresqlUserModule {
         self.execute(params, &check_context)
     }
 
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.clone() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => return Ok(None),
-        };
-
-        let config = UserConfig::from_params(params)?;
-
-        std::thread::scope(|s| {
-            s.spawn(|| {
-                handle.block_on(async {
-                    let exists = Self::role_exists(connection.as_ref(), &config, context).await?;
-
-                    let before = if exists {
-                        let info =
-                            Self::get_role_info(connection.as_ref(), &config, context).await?;
-                        if let Some(info) = info {
-                            format!(
-                                "role: {}\nlogin: {}\nsuperuser: {}\ncreatedb: {}\nstate: present",
-                                info.name, info.login, info.superuser, info.createdb
-                            )
-                        } else {
-                            format!("role: {}\nstate: present", config.name)
-                        }
-                    } else {
-                        format!("role: {}\nstate: absent", config.name)
-                    };
-
-                    let after = match config.state {
-                        UserState::Present => {
-                            let login = config.role_attr_flags.login.unwrap_or(false);
-                            let superuser = config.role_attr_flags.superuser.unwrap_or(false);
-                            let createdb = config.role_attr_flags.createdb.unwrap_or(false);
-                            format!(
-                                "role: {}\nlogin: {}\nsuperuser: {}\ncreatedb: {}\nstate: present",
-                                config.name, login, superuser, createdb
-                            )
-                        }
-                        UserState::Absent => format!("role: {}\nstate: absent", config.name),
-                    };
-
-                    if before == after {
-                        Ok(None)
-                    } else {
-                        Ok(Some(Diff::new(before, after)))
-                    }
-                })
-            })
-            .join()
-            .unwrap()
-        })
-    }
 }
 
 #[cfg(test)]

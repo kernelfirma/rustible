@@ -52,11 +52,10 @@
 use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
 use sqlx::Row;
-use std::collections::HashMap;
 use tokio::runtime::Handle;
 
 /// Desired state for a user
@@ -232,7 +231,8 @@ impl MysqlUserModule {
     /// Execute async operations
     fn execute_async<F, T>(f: F) -> ModuleResult<T>
     where
-        F: std::future::Future<Output = ModuleResult<T>>,
+        F: std::future::Future<Output = ModuleResult<T>> + Send,
+        T: Send,
     {
         if let Ok(handle) = Handle::try_current() {
             std::thread::scope(|s| {
@@ -495,18 +495,6 @@ impl Module for MysqlUserModule {
         &["name"]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        let mut params = HashMap::new();
-        params.insert("host", serde_json::json!("localhost"));
-        params.insert("state", serde_json::json!("present"));
-        params.insert("encrypted", serde_json::json!(false));
-        params.insert("append_privs", serde_json::json!(false));
-        params.insert("login_host", serde_json::json!("localhost"));
-        params.insert("login_port", serde_json::json!(3306));
-        params.insert("login_user", serde_json::json!("root"));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         let name = params.get_string_required("name")?;
         Self::validate_username(&name)?;
@@ -681,50 +669,6 @@ impl Module for MysqlUserModule {
         self.execute(params, &check_context)
     }
 
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let username = params.get_string_required("name")?;
-        let host = params
-            .get_string("host")?
-            .unwrap_or_else(|| "localhost".to_string());
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = UserState::from_str(&state_str)?;
-
-        let conn_params = extract_connection_params(params)?;
-
-        Self::execute_async(async {
-            let exists = Self::user_exists(&conn_params, &username, &host).await?;
-            let grants = if exists {
-                Self::get_privileges(&conn_params, &username, &host).await?
-            } else {
-                Vec::new()
-            };
-
-            let before = if exists {
-                format!("user: '{}'@'{}'\ngrants:\n{}", username, host, grants.join("\n"))
-            } else {
-                "user: (absent)".to_string()
-            };
-
-            let after = match state {
-                UserState::Absent => "user: (absent)".to_string(),
-                UserState::Present => {
-                    if exists {
-                        before.clone()
-                    } else {
-                        format!("user: '{}'@'{}' (will be created)", username, host)
-                    }
-                }
-            };
-
-            if before == after {
-                Ok(None)
-            } else {
-                Ok(Some(Diff::new(before, after)))
-            }
-        })
-    }
 }
 
 #[cfg(test)]
