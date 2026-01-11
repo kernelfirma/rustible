@@ -16,7 +16,7 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, TransferOptions};
-use crate::utils::shell_escape;
+use crate::utils::{compute_checksum, get_file_checksum, shell_escape};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -29,19 +29,6 @@ use uuid::Uuid;
 pub struct CopyModule;
 
 impl CopyModule {
-    fn get_file_checksum(path: &Path) -> std::io::Result<String> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut file = fs::File::open(path)?;
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
-
-        let mut hasher = DefaultHasher::new();
-        contents.hash(&mut hasher);
-        Ok(format!("{:x}", hasher.finish()))
-    }
-
     fn create_backup(dest: &Path, backup_suffix: &str) -> ModuleResult<Option<String>> {
         if dest.exists() {
             let backup_path = format!("{}{}", dest.display(), backup_suffix);
@@ -77,8 +64,8 @@ impl CopyModule {
         }
 
         // Compare checksums
-        let src_checksum = Self::get_file_checksum(src)?;
-        let dest_checksum = Self::get_file_checksum(dest)?;
+        let src_checksum = get_file_checksum(src)?;
+        let dest_checksum = get_file_checksum(dest)?;
 
         Ok(src_checksum != dest_checksum)
     }
@@ -171,16 +158,6 @@ impl CopyModule {
         }
     }
 
-    /// Compute a simple checksum for content comparison
-    fn compute_checksum(data: &[u8]) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        data.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    }
-
     /// Async implementation for remote copy using connection
     async fn execute_remote_async(
         connection: Arc<dyn Connection + Send + Sync>,
@@ -226,7 +203,7 @@ impl CopyModule {
                             let existing_str = String::from_utf8_lossy(&existing);
                             (
                                 existing_str.as_ref() != content_str,
-                                Some(Self::compute_checksum(&existing)),
+                                Some(compute_checksum(&existing)),
                             )
                         }
                         Err(_) => (true, None),
@@ -241,12 +218,13 @@ impl CopyModule {
                         )));
                     }
 
-                    let src_content = fs::read(src_path).map_err(ModuleError::Io)?;
+                    // Use streaming checksum for source file to avoid loading into memory
+                    let src_checksum =
+                        get_file_checksum(src_path).map_err(ModuleError::Io)?;
 
                     match connection.download_content(&final_dest).await {
                         Ok(existing) => {
-                            let src_checksum = Self::compute_checksum(&src_content);
-                            let dest_checksum = Self::compute_checksum(&existing);
+                            let dest_checksum = compute_checksum(&existing);
                             (src_checksum != dest_checksum, Some(dest_checksum))
                         }
                         Err(_) => (true, None),

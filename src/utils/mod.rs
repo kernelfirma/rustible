@@ -3,6 +3,41 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+use std::io::{self, Read};
+use std::path::Path;
+use std::fs::File;
+
+/// Compute a checksum for a file using streaming to avoid loading it entirely into memory.
+///
+/// This function uses `DefaultHasher` which is not cryptographically secure and
+/// may vary across Rust versions/runs, but is sufficient for internal change detection
+/// within the same process execution.
+pub fn get_file_checksum(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut hasher = DefaultHasher::new();
+    let mut buffer = [0; 8192];
+
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.write(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finish()))
+}
+
+/// Compute a checksum for a byte slice.
+///
+/// Matches the behavior of `get_file_checksum` by writing bytes directly to the hasher.
+pub fn compute_checksum(data: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(data);
+    format!("{:x}", hasher.finish())
+}
+
 /// Escape a string for safe use in shell commands.
 ///
 /// This function is essential for preventing command injection vulnerabilities.
@@ -177,5 +212,20 @@ mod tests {
             "\"with``backtick\""
         );
         assert_eq!(powershell_escape_double_quoted(""), "\"\"");
+    }
+
+    #[test]
+    fn test_checksum_consistency() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let content = b"hello world";
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(content).unwrap();
+
+        let file_sum = get_file_checksum(file.path()).unwrap();
+        let mem_sum = compute_checksum(content);
+
+        assert_eq!(file_sum, mem_sum);
     }
 }
