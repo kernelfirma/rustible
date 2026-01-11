@@ -27,7 +27,6 @@
 
 use parking_lot::RwLock;
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions, MySqlRow};
-use sqlx::{Error as SqlxError, Row};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

@@ -77,7 +77,7 @@ pub enum SslMode {
 }
 
 impl SslMode {
-    fn from_str(s: &str) -> ModuleResult<Self> {
+    pub fn from_str(s: &str) -> ModuleResult<Self> {
         match s.to_lowercase().as_str() {
             "disable" => Ok(SslMode::Disable),
             "allow" => Ok(SslMode::Allow),
@@ -685,16 +685,68 @@ impl PostgresqlDbModule {
     ) -> ModuleResult<ModuleOutput> {
         let config = DbConfig::from_params(params)?;
 
+        // In check mode, if diff mode is requested, we can calculate the diff
+        let diff = if context.check_mode && context.diff_mode {
+            let exists = Self::database_exists(connection.as_ref(), &config, context).await?;
+            let before = if exists {
+                let info = Self::get_database_info(connection.as_ref(), &config, context).await?;
+                if let Some(info) = info {
+                    format!(
+                        "database: {}\nowner: {}\nencoding: {}\nstate: present",
+                        info.get("name").unwrap_or(&String::new()),
+                        info.get("owner").unwrap_or(&String::new()),
+                        info.get("encoding").unwrap_or(&String::new())
+                    )
+                } else {
+                    format!("database: {}\nstate: present", config.name)
+                }
+            } else {
+                format!("database: {}\nstate: absent", config.name)
+            };
+
+            let after = match config.state {
+                DbState::Present => format!(
+                    "database: {}\nowner: {}\nencoding: {}\nstate: present",
+                    config.name,
+                    config.owner.as_deref().unwrap_or("(default)"),
+                    config.encoding
+                ),
+                DbState::Absent => format!("database: {}\nstate: absent", config.name),
+                DbState::Dump => format!(
+                    "database: {}\nstate: dump\ntarget: {}",
+                    config.name,
+                    config.target.as_deref().unwrap_or("(unspecified)")
+                ),
+                DbState::Restore => format!(
+                    "database: {}\nstate: restore\nsource: {}",
+                    config.name,
+                    config.target.as_deref().unwrap_or("(unspecified)")
+                ),
+            };
+
+            if before == after {
+                None
+            } else {
+                Some(Diff::new(before, after))
+            }
+        } else {
+            None
+        };
+
         match config.state {
             DbState::Present => {
                 let exists = Self::database_exists(connection.as_ref(), &config, context).await?;
 
                 if !exists {
                     if context.check_mode {
-                        return Ok(ModuleOutput::changed(format!(
+                        let mut output = ModuleOutput::changed(format!(
                             "Would create database '{}'",
                             config.name
-                        )));
+                        ));
+                        if let Some(d) = diff {
+                            output = output.with_diff(d);
+                        }
+                        return Ok(output);
                     }
 
                     Self::create_database(connection.as_ref(), &config, context).await?;
@@ -712,10 +764,51 @@ impl PostgresqlDbModule {
 
                     if let Some(current_info) = current {
                         if context.check_mode {
-                            return Ok(ModuleOutput::ok(format!(
-                                "Database '{}' exists",
-                                config.name
-                            )));
+                            // In check mode we need to know if it WOULD change
+                            // Re-using the diff logic logic or update logic to determine change status
+                            // For simplicity, we assume diff implies change if we have one, or check fields
+
+                            // Check for differences using the update logic (dry run essentially)
+                            // But update_database actually executes commands.
+                            // We should inspect the fields manually or trust the diff.
+                            // Let's check fields to be precise about 'changed' status.
+
+                            let mut needs_change = false;
+                            if let Some(ref desired_owner) = config.owner {
+                                if current_info.get("owner").map(|s| s.as_str()) != Some(desired_owner.as_str()) {
+                                    needs_change = true;
+                                }
+                            }
+                            if let Some(desired_limit) = config.conn_limit {
+                                let current_limit: i32 = current_info
+                                    .get("conn_limit")
+                                    .and_then(|s| s.parse().ok())
+                                    .unwrap_or(-1);
+                                if current_limit != desired_limit {
+                                    needs_change = true;
+                                }
+                            }
+                            if let Some(ref desired_tablespace) = config.tablespace {
+                                if current_info.get("tablespace").map(|s| s.as_str()) != Some(desired_tablespace.as_str()) {
+                                    needs_change = true;
+                                }
+                            }
+
+                            if needs_change {
+                                let mut output = ModuleOutput::changed(format!(
+                                    "Would update database '{}'",
+                                    config.name
+                                ));
+                                if let Some(d) = diff {
+                                    output = output.with_diff(d);
+                                }
+                                return Ok(output);
+                            } else {
+                                return Ok(ModuleOutput::ok(format!(
+                                    "Database '{}' exists",
+                                    config.name
+                                )));
+                            }
                         }
 
                         let changed = Self::update_database(
@@ -753,10 +846,14 @@ impl PostgresqlDbModule {
 
                 if exists {
                     if context.check_mode {
-                        return Ok(ModuleOutput::changed(format!(
+                        let mut output = ModuleOutput::changed(format!(
                             "Would drop database '{}'",
                             config.name
-                        )));
+                        ));
+                        if let Some(d) = diff {
+                            output = output.with_diff(d);
+                        }
+                        return Ok(output);
                     }
 
                     Self::drop_database(connection.as_ref(), &config, context).await?;
@@ -783,11 +880,15 @@ impl PostgresqlDbModule {
                 }
 
                 if context.check_mode {
-                    return Ok(ModuleOutput::changed(format!(
+                    let mut output = ModuleOutput::changed(format!(
                         "Would dump database '{}' to '{}'",
                         config.name,
                         config.target.as_deref().unwrap_or("(unspecified)")
-                    )));
+                    ));
+                    if let Some(d) = diff {
+                        output = output.with_diff(d);
+                    }
+                    return Ok(output);
                 }
 
                 let target = Self::dump_database(connection.as_ref(), &config, context).await?;
@@ -806,22 +907,30 @@ impl PostgresqlDbModule {
                 if !exists {
                     // Create the database first
                     if context.check_mode {
-                        return Ok(ModuleOutput::changed(format!(
+                        let mut output = ModuleOutput::changed(format!(
                             "Would create database '{}' and restore from '{}'",
                             config.name,
                             config.target.as_deref().unwrap_or("(unspecified)")
-                        )));
+                        ));
+                        if let Some(d) = diff {
+                            output = output.with_diff(d);
+                        }
+                        return Ok(output);
                     }
 
                     Self::create_database(connection.as_ref(), &config, context).await?;
                 }
 
                 if context.check_mode {
-                    return Ok(ModuleOutput::changed(format!(
+                    let mut output = ModuleOutput::changed(format!(
                         "Would restore database '{}' from '{}'",
                         config.name,
                         config.target.as_deref().unwrap_or("(unspecified)")
-                    )));
+                    ));
+                    if let Some(d) = diff {
+                        output = output.with_diff(d);
+                    }
+                    return Ok(output);
                 }
 
                 Self::restore_database(connection.as_ref(), &config, context).await?;
@@ -889,74 +998,6 @@ impl Module for PostgresqlDbModule {
             ..context.clone()
         };
         self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.clone() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => return Ok(None),
-        };
-
-        let config = DbConfig::from_params(params)?;
-
-        std::thread::scope(|s| {
-            s.spawn(|| {
-                handle.block_on(async {
-                    let exists =
-                        Self::database_exists(connection.as_ref(), &config, context).await?;
-
-                    let before = if exists {
-                        let info =
-                            Self::get_database_info(connection.as_ref(), &config, context).await?;
-                        if let Some(info) = info {
-                            format!(
-                                "database: {}\nowner: {}\nencoding: {}\nstate: present",
-                                info.get("name").unwrap_or(&String::new()),
-                                info.get("owner").unwrap_or(&String::new()),
-                                info.get("encoding").unwrap_or(&String::new())
-                            )
-                        } else {
-                            format!("database: {}\nstate: present", config.name)
-                        }
-                    } else {
-                        format!("database: {}\nstate: absent", config.name)
-                    };
-
-                    let after = match config.state {
-                        DbState::Present => format!(
-                            "database: {}\nowner: {}\nencoding: {}\nstate: present",
-                            config.name,
-                            config.owner.as_deref().unwrap_or("(default)"),
-                            config.encoding
-                        ),
-                        DbState::Absent => format!("database: {}\nstate: absent", config.name),
-                        DbState::Dump => format!(
-                            "database: {}\nstate: dump\ntarget: {}",
-                            config.name,
-                            config.target.as_deref().unwrap_or("(unspecified)")
-                        ),
-                        DbState::Restore => format!(
-                            "database: {}\nstate: restore\nsource: {}",
-                            config.name,
-                            config.target.as_deref().unwrap_or("(unspecified)")
-                        ),
-                    };
-
-                    if before == after {
-                        Ok(None)
-                    } else {
-                        Ok(Some(Diff::new(before, after)))
-                    }
-                })
-            })
-            .join()
-            .unwrap()
-        })
     }
 }
 

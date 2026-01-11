@@ -14,7 +14,7 @@ pub mod copy;
 pub mod cron;
 // Database modules disabled - requires sqlx integration
 // TODO: Enable when sqlx dependency is added with feature flag
-// pub mod database;
+pub mod database;
 pub mod debug;
 pub mod dnf;
 pub mod docker;
@@ -1552,6 +1552,21 @@ impl ModuleRegistry {
                 firewalld::FirewalldModule,
                 ufw::UfwModule,
                 selinux::SELinuxModule,
+            ],
+            // Database modules
+            Database: [
+                database::PostgresqlDbModule,
+                database::PostgresqlUserModule,
+                database::PostgresqlQueryModule,
+            ],
+        );
+
+        #[cfg(feature = "database")]
+        register_modules!(registry,
+            Database: [
+                database::MysqlDbModule,
+                database::MysqlUserModule,
+                database::MysqlQueryModule,
             ],
         );
 

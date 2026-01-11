@@ -22,7 +22,7 @@
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
 use crate::utils::shell_escape;
@@ -474,25 +474,6 @@ impl Module for PostgresqlQueryModule {
         self.execute(params, &check_context)
     }
 
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = QueryConfig::from_params(params)?;
-
-        let before = "(no changes)".to_string();
-        let after = if let Some(sql) = config.get_sql() {
-            format!("Execute query:\n{}", sql)
-        } else {
-            format!(
-                "Execute script: {}",
-                config.path_to_script.as_deref().unwrap_or("")
-            )
-        };
-
-        if Self::is_modification_query(config.query.as_deref().unwrap_or("")) {
-            Ok(Some(Diff::new(before, after)))
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 #[cfg(test)]
