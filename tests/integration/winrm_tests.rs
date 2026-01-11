@@ -17,8 +17,13 @@
 //! cargo test --test winrm_tests -- --ignored
 //! ```
 
+#![cfg(feature = "winrm")]
+
 use std::env;
 use std::path::Path;
+
+use rustible::connection::winrm::{WinRmAuth, WinRmConnectionBuilder};
+use rustible::connection::Connection;
 
 /// Helper to check if WinRM test environment is configured
 fn winrm_configured() -> bool {
@@ -61,20 +66,19 @@ mod tests {
         // This test would use WinRmConnectionBuilder to connect
         // and verify the connection is established
         println!(
-            "Would connect to {}:{} as {} (SSL: {})",
+            "Connecting to {}:{} as {} (SSL: {})",
             host, port, user, ssl
         );
 
-        // TODO: Implement actual connection test when running against real host
-        // let conn = WinRmConnectionBuilder::new(&host)
-        //     .port(port)
-        //     .use_ssl(ssl)
-        //     .auth(WinRmAuth::ntlm(&user, &pass))
-        //     .connect()
-        //     .await
-        //     .expect("Failed to connect");
-        //
-        // assert!(conn.is_alive().await);
+        let conn = WinRmConnectionBuilder::new(&host)
+            .port(port)
+            .use_ssl(ssl)
+            .auth(WinRmAuth::ntlm(&user, &pass))
+            .connect()
+            .await
+            .expect("Failed to connect");
+
+        assert!(conn.is_alive().await);
     }
 
     /// Test PowerShell command execution via WinRM
