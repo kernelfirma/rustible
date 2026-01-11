@@ -16,7 +16,7 @@ gcp = []
 # Database modules (PostgreSQL, MySQL, etc.) - stub implementation
 database = []
 # WinRM connection support (Windows Remote Management) - stub implementation
-winrm = []
+winrm = ["dep:secrecy", "dep:zeroize", "dep:md4"]
 # HTTP client features with reqwest - stub implementation
 reqwest = []
 # Background warmup of lazy-initialized components
@@ -114,6 +114,8 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 rand = "0.8"
 base64 = "0.22"
+secrecy = { version = "0.8", features = ["serde"], optional = true }
+zeroize = { version = "1.7", optional = true }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
@@ -182,6 +184,7 @@ zip = "2.2"
 
 # Checksums for stat module
 md5 = "0.7"
+md4 = { version = "0.10", optional = true }
 sha1 = "0.10"
 sha2 = "0.10"
 

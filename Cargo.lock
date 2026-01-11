@@ -3208,7 +3208,7 @@ dependencies = [
  "kube-core",
  "pem",
  "rustls 0.23.35",
- "secrecy",
+ "secrecy 0.10.3",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -3496,6 +3496,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
 dependencies = [
  "cfg-if",
+ "digest",
+]
+
+[[package]]
+name = "md4"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da5ac363534dce5fabf69949225e174fbf111a498bf0ff794c8ea1fba9f3dda"
+dependencies = [
  "digest",
 ]
 
@@ -4920,6 +4929,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "libc",
+ "md4",
  "md5",
  "minijinja",
  "mockall",
@@ -4937,6 +4947,7 @@ dependencies = [
  "russh",
  "russh-keys",
  "russh-sftp",
+ "secrecy 0.8.0",
  "semver",
  "serde",
  "serde_json",
@@ -4967,6 +4978,7 @@ dependencies = [
  "walkdir",
  "which",
  "wiremock",
+ "zeroize",
  "zip",
 ]
 
@@ -5223,6 +5235,16 @@ dependencies = [
  "generic-array 0.14.7",
  "pkcs8 0.10.2",
  "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "secrecy"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
+dependencies = [
+ "serde",
  "zeroize",
 ]
 
