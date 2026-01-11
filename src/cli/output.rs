@@ -354,58 +354,52 @@ impl OutputFormatter {
             }
         }
 
-        // Print duration
+        // Print execution summary
         let duration = self.start_time.elapsed();
         let duration_str = format_duration(duration);
 
+        println!();
         if self.use_color {
-            println!(
-                "\n{} {}",
-                "Playbook run took".bright_black(),
-                duration_str.bright_white()
-            );
-        } else {
-            println!("\nPlaybook run took {}", duration_str);
-        }
+            let width = 50;
+            let line = "─".repeat(width).bright_black();
+            println!("{}", line);
 
-        // Print final status summary
-        if self.use_color {
+            println!("  {:<12} : {}", "Duration".bright_white(), duration_str.cyan());
+
             if stats.has_failures() {
                 let failures = stats.total_failed();
-                println!(
-                    "{}",
-                    format!("Playbook run failed ({} failed).", failures)
-                        .red()
-                        .bold()
-                );
+                let status_msg = format!("FAILED ({} errors)", failures);
+                println!("  {:<12} : {}", "Status".bright_white(), status_msg.red().bold());
             } else {
                 let changes = stats.total_changed();
-                if changes > 0 {
-                    println!(
-                        "{}",
-                        format!("Playbook completed successfully ({} changed).", changes)
-                            .green()
-                            .bold()
-                    );
+                let (status_msg, status_color) = if changes > 0 {
+                    (format!("SUCCESS ({} changed)", changes), colored::Color::Yellow)
                 } else {
-                    println!(
-                        "{}",
-                        "Playbook completed successfully (no changes)."
-                            .green()
-                            .bold()
-                    );
-                }
+                    ("SUCCESS (no changes)".to_string(), colored::Color::Green)
+                };
+                println!("  {:<12} : {}", "Status".bright_white(), status_msg.color(status_color).bold());
             }
-        } else if stats.has_failures() {
-            let failures = stats.total_failed();
-            println!("Playbook run failed ({} failed).", failures);
+
+            println!("{}", line);
         } else {
-            let changes = stats.total_changed();
-            if changes > 0 {
-                println!("Playbook completed successfully ({} changed).", changes);
+            let width = 50;
+            let line = "-".repeat(width);
+            println!("{}", line);
+            println!("  {:<12} : {}", "Duration", duration_str);
+
+            if stats.has_failures() {
+                let failures = stats.total_failed();
+                println!("  {:<12} : FAILED ({} errors)", "Status", failures);
             } else {
-                println!("Playbook completed successfully (no changes).");
+                let changes = stats.total_changed();
+                let status_msg = if changes > 0 {
+                    format!("SUCCESS ({} changed)", changes)
+                } else {
+                    "SUCCESS (no changes)".to_string()
+                };
+                println!("  {:<12} : {}", "Status", status_msg);
             }
+            println!("{}", line);
         }
     }
 
