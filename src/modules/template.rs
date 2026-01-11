@@ -11,7 +11,6 @@ use crate::connection::TransferOptions;
 use crate::template::TEMPLATE_ENGINE;
 use crate::utils::shell_escape;
 use std::fs;
-use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -59,20 +58,6 @@ impl TemplateModule {
         TEMPLATE_ENGINE
             .render_with_json(template_content, context)
             .map_err(|e| ModuleError::TemplateError(format!("Failed to render template: {}", e)))
-    }
-
-    #[allow(dead_code)]
-    fn get_file_checksum(path: &Path) -> std::io::Result<String> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut file = fs::File::open(path)?;
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
-
-        let mut hasher = DefaultHasher::new();
-        contents.hash(&mut hasher);
-        Ok(format!("{:x}", hasher.finish()))
     }
 
     fn create_backup(dest: &Path, backup_suffix: &str) -> ModuleResult<Option<String>> {
