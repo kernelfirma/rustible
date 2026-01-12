@@ -204,6 +204,10 @@ impl OutputFormatter {
             status.as_str().to_string()
         };
 
+        // Calculate padding for alignment (longest status is "unreachable" = 11 chars)
+        let padding_len = 11usize.saturating_sub(status.as_str().len());
+        let padding = " ".repeat(padding_len);
+
         let host_str = if self.use_color {
             host.bright_white().bold().to_string()
         } else {
@@ -216,10 +220,10 @@ impl OutputFormatter {
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!("{}: [{}]", status_str, host_str);
+                print!("{}{}: [{}]", status_str, padding, host_str);
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!("{}: [{}]", status_str, host_str);
+                print!("{}{}: [{}]", status_str, padding, host_str);
             }
         }
 
