@@ -24,10 +24,11 @@
 //! - `daemon_reexec`: Re-execute systemd manager
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt,
+    validate_command_args, Diff, Module, ModuleClassification, ModuleContext, ModuleError,
+    ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{CommandResult, Connection, ExecuteOptions};
+use crate::utils::shell_escape;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -260,6 +261,12 @@ impl ServiceConfig {
             None => None,
         };
 
+        let arguments = params.get_string("arguments")?;
+        if let Some(ref args) = arguments {
+            // Validate arguments to prevent shell injection
+            validate_command_args(args)?;
+        }
+
         Ok(Self {
             name,
             state,
@@ -270,7 +277,7 @@ impl ServiceConfig {
             use_systemctl: params.get_bool("use_systemctl")?,
             daemon_reload: params.get_bool_or("daemon_reload", false),
             daemon_reexec: params.get_bool_or("daemon_reexec", false),
-            arguments: params.get_string("arguments")?,
+            arguments,
         })
     }
 
@@ -319,8 +326,8 @@ impl ServiceModule {
     ) -> ModuleResult<Vec<String>> {
         // Use systemctl list-units to find matching services
         let cmd = format!(
-            "systemctl list-units --type=service --all --no-legend --no-pager '{}' | awk '{{print $1}}'",
-            pattern
+            "systemctl list-units --type=service --all --no-legend --no-pager {} | awk '{{print $1}}'",
+            shell_escape(pattern)
         );
         let result = Self::execute_command(connection, &cmd, context).await?;
 
@@ -335,8 +342,8 @@ impl ServiceModule {
         } else {
             // Fallback: try list-unit-files for services that might not be loaded
             let cmd = format!(
-                "systemctl list-unit-files --type=service --no-legend --no-pager '{}' | awk '{{print $1}}'",
-                pattern
+                "systemctl list-unit-files --type=service --no-legend --no-pager {} | awk '{{print $1}}'",
+                shell_escape(pattern)
             );
             let result = Self::execute_command(connection, &cmd, context).await?;
 
@@ -358,8 +365,8 @@ impl ServiceModule {
     ) -> ModuleResult<bool> {
         // Use pgrep for pattern matching
         let cmd = format!(
-            "pgrep -f '{}' >/dev/null 2>&1 && echo yes || echo no",
-            pattern
+            "pgrep -f {} >/dev/null 2>&1 && echo yes || echo no",
+            shell_escape(pattern)
         );
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.stdout.trim() == "yes")
@@ -376,7 +383,7 @@ impl ServiceModule {
         service: &str,
         context: &ModuleContext,
     ) -> ModuleResult<bool> {
-        let cmd = format!("systemctl is-active {}", service);
+        let cmd = format!("systemctl is-active {}", shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.success)
     }
@@ -387,7 +394,7 @@ impl ServiceModule {
         service: &str,
         context: &ModuleContext,
     ) -> ModuleResult<bool> {
-        let cmd = format!("systemctl is-enabled {}", service);
+        let cmd = format!("systemctl is-enabled {}", shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.success)
     }
@@ -399,7 +406,7 @@ impl ServiceModule {
         action: &str,
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
-        let cmd = format!("systemctl {} {}", action, service);
+        let cmd = format!("systemctl {} {}", action, shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -423,7 +430,7 @@ impl ServiceModule {
         service: &str,
         context: &ModuleContext,
     ) -> ModuleResult<bool> {
-        let cmd = format!("service {} status", service);
+        let cmd = format!("service {} status", shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.success)
     }
@@ -436,7 +443,7 @@ impl ServiceModule {
         action: &str,
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
-        let cmd = format!("service {} {}", service, action);
+        let cmd = format!("service {} {}", shell_escape(service), action);
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -447,7 +454,7 @@ impl ServiceModule {
         service: &str,
         context: &ModuleContext,
     ) -> ModuleResult<bool> {
-        let cmd = format!("rc-service {} status", service);
+        let cmd = format!("rc-service {} status", shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.success)
     }
@@ -459,7 +466,7 @@ impl ServiceModule {
         action: &str,
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
-        let cmd = format!("rc-service {} {}", service, action);
+        let cmd = format!("rc-service {} {}", shell_escape(service), action);
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -473,8 +480,9 @@ impl ServiceModule {
     ) -> ModuleResult<bool> {
         let rl = runlevel.unwrap_or("default");
         let cmd = format!(
-            "rc-update show {} 2>/dev/null | grep -q '{}' && echo yes || echo no",
-            rl, service
+            "rc-update show {} 2>/dev/null | grep -q {} && echo yes || echo no",
+            shell_escape(rl),
+            shell_escape(service)
         );
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.stdout.trim() == "yes")
@@ -490,7 +498,12 @@ impl ServiceModule {
     ) -> ModuleResult<(bool, String, String)> {
         let rl = runlevel.unwrap_or("default");
         let action = if enable { "add" } else { "del" };
-        let cmd = format!("rc-update {} {} {}", action, service, rl);
+        let cmd = format!(
+            "rc-update {} {} {}",
+            action,
+            shell_escape(service),
+            shell_escape(rl)
+        );
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -509,7 +522,7 @@ impl ServiceModule {
         if has_chkconfig.stdout.trim() == "yes" {
             let cmd = format!(
                 "chkconfig --list {} 2>/dev/null | grep -E ':on' && echo yes || echo no",
-                service
+                shell_escape(service)
             );
             let result = Self::execute_command(connection, &cmd, context).await?;
             return Ok(result.stdout.contains("yes"));
@@ -524,7 +537,8 @@ impl ServiceModule {
             let rl = runlevel.unwrap_or("2");
             let cmd = format!(
                 "test -f /etc/rc{}.d/S??{} && echo yes || echo no",
-                rl, service
+                shell_escape(rl),
+                shell_escape(service)
             );
             let result = Self::execute_command(connection, &cmd, context).await?;
             return Ok(result.stdout.trim() == "yes");
@@ -533,7 +547,7 @@ impl ServiceModule {
         // Fallback: check for any S* symlink in rcN.d directories
         let cmd = format!(
             "ls /etc/rc*.d/S??{} 2>/dev/null | head -1 | grep -q . && echo yes || echo no",
-            service
+            shell_escape(service)
         );
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.stdout.trim() == "yes")
@@ -554,9 +568,14 @@ impl ServiceModule {
         if has_chkconfig.stdout.trim() == "yes" {
             let action = if enable { "on" } else { "off" };
             let cmd = if let Some(rl) = runlevel {
-                format!("chkconfig --level {} {} {}", rl, service, action)
+                format!(
+                    "chkconfig --level {} {} {}",
+                    shell_escape(rl),
+                    shell_escape(service),
+                    action
+                )
             } else {
-                format!("chkconfig {} {}", service, action)
+                format!("chkconfig {} {}", shell_escape(service), action)
             };
             let result = Self::execute_command(connection, &cmd, context).await?;
             return Ok((result.success, result.stdout, result.stderr));
@@ -568,9 +587,9 @@ impl ServiceModule {
 
         if has_updaterc.stdout.trim() == "yes" {
             let cmd = if enable {
-                format!("update-rc.d {} defaults", service)
+                format!("update-rc.d {} defaults", shell_escape(service))
             } else {
-                format!("update-rc.d -f {} remove", service)
+                format!("update-rc.d -f {} remove", shell_escape(service))
             };
             let result = Self::execute_command(connection, &cmd, context).await?;
             return Ok((result.success, result.stdout, result.stderr));
@@ -588,7 +607,7 @@ impl ServiceModule {
         action: &str,
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
-        let cmd = format!("initctl {} {}", action, service);
+        let cmd = format!("initctl {} {}", action, shell_escape(service));
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -601,7 +620,7 @@ impl ServiceModule {
     ) -> ModuleResult<bool> {
         let cmd = format!(
             "initctl status {} 2>/dev/null | grep -q 'running' && echo yes || echo no",
-            service
+            shell_escape(service)
         );
         let result = Self::execute_command(connection, &cmd, context).await?;
         Ok(result.stdout.trim() == "yes")
@@ -672,7 +691,10 @@ impl ServiceModule {
             }
             InitSystem::Upstart => {
                 // Upstart services are enabled by default if their .conf exists
-                let cmd = format!("test -f /etc/init/{}.conf && echo yes || echo no", service);
+                let cmd = format!(
+                    "test -f /etc/init/{}.conf && echo yes || echo no",
+                    shell_escape(service)
+                );
                 let result = Self::execute_command(connection, &cmd, context).await?;
                 Ok(result.stdout.trim() == "yes")
             }
@@ -705,11 +727,14 @@ impl ServiceModule {
             InitSystem::Upstart => {
                 // Upstart uses override files to disable services
                 if enable {
-                    let cmd = format!("rm -f /etc/init/{}.override", service);
+                    let cmd = format!("rm -f /etc/init/{}.override", shell_escape(service));
                     let result = Self::execute_command(connection, &cmd, context).await?;
                     Ok((result.success, result.stdout, result.stderr))
                 } else {
-                    let cmd = format!("echo 'manual' > /etc/init/{}.override", service);
+                    let cmd = format!(
+                        "echo 'manual' > /etc/init/{}.override",
+                        shell_escape(service)
+                    );
                     let result = Self::execute_command(connection, &cmd, context).await?;
                     Ok((result.success, result.stdout, result.stderr))
                 }
@@ -732,18 +757,24 @@ impl ServiceModule {
         match init {
             InitSystem::Systemd => {
                 let cmd = if let Some(args) = arguments {
-                    format!("systemctl {} {} {}", action, service, args)
+                    // arguments are already validated via validate_command_args in ServiceConfig::from_params
+                    format!(
+                        "systemctl {} {} {}",
+                        action,
+                        shell_escape(service),
+                        args.trim()
+                    )
                 } else {
-                    format!("systemctl {} {}", action, service)
+                    format!("systemctl {} {}", action, shell_escape(service))
                 };
                 let result = Self::execute_command(connection, &cmd, context).await?;
                 Ok((result.success, result.stdout, result.stderr))
             }
             InitSystem::SysV => {
                 let cmd = if let Some(args) = arguments {
-                    format!("service {} {} {}", service, action, args)
+                    format!("service {} {} {}", shell_escape(service), action, args.trim())
                 } else {
-                    format!("service {} {}", service, action)
+                    format!("service {} {}", shell_escape(service), action)
                 };
                 let result = Self::execute_command(connection, &cmd, context).await?;
                 Ok((result.success, result.stdout, result.stderr))
@@ -1450,6 +1481,16 @@ mod tests {
         let mut params = ModuleParams::new();
         params.insert("name".to_string(), serde_json::json!("nginx"));
         params.insert("sleep".to_string(), serde_json::json!(-1));
+
+        let result = ServiceConfig::from_params(&params);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_service_config_invalid_args_rejected() {
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("nginx"));
+        params.insert("arguments".to_string(), serde_json::json!("--foo; rm -rf /"));
 
         let result = ServiceConfig::from_params(&params);
         assert!(result.is_err());
