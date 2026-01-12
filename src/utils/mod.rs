@@ -4,10 +4,10 @@ pub mod regex_cache;
 pub use regex_cache::get_regex;
 
 use std::collections::hash_map::DefaultHasher;
+use std::fs::File;
 use std::hash::Hasher;
 use std::io::{self, Read};
 use std::path::Path;
-use std::fs::File;
 
 /// Compute a checksum for a file using streaming to avoid loading it entirely into memory.
 ///
@@ -36,6 +36,21 @@ pub fn compute_checksum(data: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     hasher.write(data);
     format!("{:x}", hasher.finish())
+}
+
+/// Determine if unsafe template helpers are allowed.
+///
+/// This gates filters/functions that can expose host details (e.g. realpath,
+/// expanduser, env lookups). Set `RUSTIBLE_ALLOW_UNSAFE_TEMPLATES` to a truthy
+/// value to enable them.
+pub fn unsafe_template_access_allowed() -> bool {
+    match std::env::var("RUSTIBLE_ALLOW_UNSAFE_TEMPLATES") {
+        Ok(value) => matches!(
+            value.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => false,
+    }
 }
 
 /// Escape a string for safe use in shell commands.

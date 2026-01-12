@@ -722,11 +722,22 @@ impl Handler for RusshClientHandler {
         if let Some(ref known_hosts_path) = self.auth_config.known_hosts_file {
             let path = expand_path(known_hosts_path);
             if path.exists() {
-                // TODO: Implement proper known_hosts verification
-                // For now, accept if the file exists
                 debug!("Known hosts file found at {:?}", path);
-                *self.key_verified.lock().await = true;
-                return Ok(true);
+                match check_known_hosts_path(&self.host, self.port, server_public_key, &path) {
+                    Ok(true) => {
+                        debug!("Host key verified against configured known_hosts");
+                        *self.key_verified.lock().await = true;
+                        return Ok(true);
+                    }
+                    Ok(false) => {
+                        warn!("Host key verification failed against configured known_hosts");
+                        return Ok(false);
+                    }
+                    Err(e) => {
+                        warn!("Error verifying host key: {}", e);
+                        return Ok(false);
+                    }
+                }
             }
         }
 

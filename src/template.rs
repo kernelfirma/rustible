@@ -11,6 +11,7 @@
 //! (`{{` or `{%`), rendering is bypassed entirely.
 
 use crate::error::{Error, Result};
+use crate::utils::unsafe_template_access_allowed;
 use indexmap::IndexMap;
 use lru::LruCache;
 use minijinja::value::{Kwargs, Value as MiniJinjaValue, ValueKind};
@@ -775,6 +776,9 @@ fn filter_dirname(value: &str) -> String {
 }
 
 fn filter_expanduser(value: &str) -> String {
+    if !unsafe_template_access_allowed() {
+        return value.to_string();
+    }
     if value.starts_with("~/") {
         if let Some(home) = dirs::home_dir() {
             return home.join(&value[2..]).to_string_lossy().to_string();
@@ -784,6 +788,9 @@ fn filter_expanduser(value: &str) -> String {
 }
 
 fn filter_realpath(value: &str) -> String {
+    if !unsafe_template_access_allowed() {
+        return value.to_string();
+    }
     std::fs::canonicalize(value)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| value.to_string())

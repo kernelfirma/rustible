@@ -10,7 +10,7 @@ pub mod schema;
 
 pub use playbook::{Handler, Play, Playbook, Task};
 
-use crate::utils::get_regex;
+use crate::utils::{get_regex, unsafe_template_access_allowed};
 use indexmap::IndexMap;
 use minijinja::value::ValueKind;
 use minijinja::{Environment, Value};
@@ -466,10 +466,16 @@ impl Parser {
         });
 
         env.add_filter("expanduser", |s: String| -> String {
+            if !unsafe_template_access_allowed() {
+                return s;
+            }
             shellexpand::tilde(&s).to_string()
         });
 
         env.add_filter("realpath", |s: String| -> String {
+            if !unsafe_template_access_allowed() {
+                return s;
+            }
             std::fs::canonicalize(&s)
                 .ok()
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
@@ -1024,6 +1030,9 @@ impl Parser {
             // Simplified lookup - would need full plugin system
             match plugin.as_str() {
                 "env" => {
+                    if !unsafe_template_access_allowed() {
+                        return Value::UNDEFINED;
+                    }
                     let var_value = args.as_ref().and_then(|a| {
                         if matches!(a.kind(), ValueKind::Seq) {
                             a.get_item(&Value::from(0)).ok()
