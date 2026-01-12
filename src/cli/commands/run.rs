@@ -287,6 +287,10 @@ impl RunArgs {
 
         // Return exit code
         if has_failures {
+            if ctx.verbosity == 0 {
+                ctx.output
+                    .hint("Run with -v for more details on failures");
+            }
             Ok(2)
         } else {
             Ok(0)
