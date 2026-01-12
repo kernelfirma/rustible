@@ -332,10 +332,22 @@ impl WaitForModule {
             Err(_) => return Ok(false), // File doesn't exist yet
         };
 
-        let reader = BufReader::new(file);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
+        let mut reader = BufReader::new(file);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    // Strip trailing newline to match `lines()` behavior
+                    if line.ends_with('\n') {
+                        line.pop();
+                        if line.ends_with('\r') {
+                            line.pop();
+                        }
+                    }
+
                     if regex.is_match(&line) {
                         return Ok(true);
                     }
