@@ -16,7 +16,6 @@ extern crate serde_json;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-
 // ============================================================================
 // Test Utilities - Mock Writer for Capturing Output
 // ============================================================================

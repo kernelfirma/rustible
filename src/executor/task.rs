@@ -611,14 +611,13 @@ impl Task {
                     drop(rt);
 
                     let rendered = TEMPLATE_ENGINE
-                        .render_value(
-                            &serde_json::Value::String(template.clone()),
-                            &vars,
-                        )
-                        .map_err(|e| ExecutorError::RuntimeError(format!(
-                            "Failed to render loop template '{}': {}",
-                            template, e
-                        )))?;
+                        .render_value(&serde_json::Value::String(template.clone()), &vars)
+                        .map_err(|e| {
+                            ExecutorError::RuntimeError(format!(
+                                "Failed to render loop template '{}': {}",
+                                template, e
+                            ))
+                        })?;
 
                     // The rendered value should be an array
                     match rendered {
@@ -1271,7 +1270,10 @@ impl Task {
                 result.result = Some(output.to_result_json());
                 Ok(result)
             }
-            Err(e) => Ok(TaskResult::failed(format!("{} module failed: {}", module_name, e))),
+            Err(e) => Ok(TaskResult::failed(format!(
+                "{} module failed: {}",
+                module_name, e
+            ))),
         }
     }
 

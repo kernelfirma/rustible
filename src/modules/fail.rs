@@ -125,7 +125,10 @@ mod tests {
     fn test_fail_check_mode_still_fails() {
         let module = FailModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("msg".to_string(), Value::String("Check mode fail".to_string()));
+        params.insert(
+            "msg".to_string(),
+            Value::String("Check mode fail".to_string()),
+        );
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.check(&params, &context).unwrap();

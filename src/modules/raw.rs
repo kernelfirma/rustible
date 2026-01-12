@@ -80,9 +80,12 @@ impl RawModule {
         };
 
         // Execute the command
-        let result = connection.execute(&actual_command, None).await.map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Raw command execution failed: {}", e))
-        })?;
+        let result = connection
+            .execute(&actual_command, None)
+            .await
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Raw command execution failed: {}", e))
+            })?;
 
         // Build output
         let mut output = if result.success {
@@ -153,11 +156,10 @@ impl Module for RawModule {
 
         // In check mode, we don't execute the command
         if context.check_mode {
-            return Ok(ModuleOutput::ok(format!(
-                "Would execute raw command: {}",
-                command
-            ))
-            .with_data("cmd", serde_json::json!(command)));
+            return Ok(
+                ModuleOutput::ok(format!("Would execute raw command: {}", command))
+                    .with_data("cmd", serde_json::json!(command)),
+            );
         }
 
         // We need to use an async runtime since Connection::execute is async
@@ -165,9 +167,8 @@ impl Module for RawModule {
         // we need to handle it here
 
         // Create a runtime to execute the async command
-        let rt = tokio::runtime::Handle::try_current().map_err(|_| {
-            ModuleError::ExecutionFailed("No async runtime available".to_string())
-        })?;
+        let rt = tokio::runtime::Handle::try_current()
+            .map_err(|_| ModuleError::ExecutionFailed("No async runtime available".to_string()))?;
 
         let connection = context.connection.clone();
         let cmd = command.clone();
@@ -178,7 +179,9 @@ impl Module for RawModule {
             s.spawn(|| {
                 rt.block_on(async move {
                     let connection = connection.ok_or_else(|| {
-                        ModuleError::ExecutionFailed("No connection available for raw command".to_string())
+                        ModuleError::ExecutionFailed(
+                            "No connection available for raw command".to_string(),
+                        )
                     })?;
 
                     let actual_command = if let Some(ref exec) = exec {
@@ -187,9 +190,15 @@ impl Module for RawModule {
                         cmd.clone()
                     };
 
-                    connection.execute(&actual_command, None).await.map_err(|e| {
-                        ModuleError::ExecutionFailed(format!("Raw command execution failed: {}", e))
-                    })
+                    connection
+                        .execute(&actual_command, None)
+                        .await
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!(
+                                "Raw command execution failed: {}",
+                                e
+                            ))
+                        })
                 })
             })
             .join()
@@ -227,11 +236,10 @@ impl Module for RawModule {
         let command = self.get_command(params)?;
 
         // In check mode, just report what would happen
-        Ok(ModuleOutput::ok(format!(
-            "Would execute raw command: {}",
-            command
-        ))
-        .with_data("cmd", serde_json::json!(command)))
+        Ok(
+            ModuleOutput::ok(format!("Would execute raw command: {}", command))
+                .with_data("cmd", serde_json::json!(command)),
+        )
     }
 
     fn diff(
@@ -297,7 +305,10 @@ mod tests {
     fn test_raw_check_mode() {
         let module = RawModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("raw".to_string(), Value::String("dangerous_command".to_string()));
+        params.insert(
+            "raw".to_string(),
+            Value::String("dangerous_command".to_string()),
+        );
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.check(&params, &context).unwrap();

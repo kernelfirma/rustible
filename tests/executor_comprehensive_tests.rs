@@ -32,7 +32,6 @@
 //! - test_failure_handling_any_errors_fatal
 #![allow(unused_variables)]
 
-
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::task::{Handler, Task, TaskResult, TaskStatus};

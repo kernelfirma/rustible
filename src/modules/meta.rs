@@ -217,8 +217,7 @@ impl MetaModule {
             }
             MetaAction::Noop => {
                 // Do nothing
-                ModuleOutput::ok("No operation")
-                    .with_data("meta_action", serde_json::json!("noop"))
+                ModuleOutput::ok("No operation").with_data("meta_action", serde_json::json!("noop"))
             }
         }
     }
@@ -302,7 +301,10 @@ mod tests {
     fn test_meta_flush_handlers() {
         let module = MetaModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("meta".to_string(), Value::String("flush_handlers".to_string()));
+        params.insert(
+            "meta".to_string(),
+            Value::String("flush_handlers".to_string()),
+        );
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -369,7 +371,10 @@ mod tests {
     fn test_meta_invalid_action() {
         let module = MetaModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("meta".to_string(), Value::String("invalid_action".to_string()));
+        params.insert(
+            "meta".to_string(),
+            Value::String("invalid_action".to_string()),
+        );
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context);
@@ -393,7 +398,10 @@ mod tests {
     fn test_meta_action_via_action_key() {
         let module = MetaModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("action".to_string(), Value::String("flush_handlers".to_string()));
+        params.insert(
+            "action".to_string(),
+            Value::String("flush_handlers".to_string()),
+        );
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();

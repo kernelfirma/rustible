@@ -594,13 +594,11 @@ impl Executor {
                 .get_var("ansible_user", Some(host))
                 .and_then(|v| v.as_str().map(str::to_string));
 
-            let ansible_port = runtime
-                .get_var("ansible_port", Some(host))
-                .and_then(|v| {
-                    v.as_u64()
-                        .and_then(|p| u16::try_from(p).ok())
-                        .or_else(|| v.as_str().and_then(|s| s.parse::<u16>().ok()))
-                });
+            let ansible_port = runtime.get_var("ansible_port", Some(host)).and_then(|v| {
+                v.as_u64()
+                    .and_then(|p| u16::try_from(p).ok())
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<u16>().ok()))
+            });
 
             let private_key = runtime
                 .get_var("ansible_ssh_private_key_file", Some(host))

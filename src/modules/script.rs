@@ -212,10 +212,10 @@ impl Module for ScriptModule {
 
         // Check creates/removes conditions
         if !self.should_execute(params, context)? {
-            return Ok(ModuleOutput::skipped(
-                "Skipped due to creates/removes condition",
-            )
-            .with_data("script", serde_json::json!(script_path)));
+            return Ok(
+                ModuleOutput::skipped("Skipped due to creates/removes condition")
+                    .with_data("script", serde_json::json!(script_path)),
+            );
         }
 
         let connection = context.connection.as_ref().ok_or_else(|| {
@@ -247,9 +247,7 @@ impl Module for ScriptModule {
                 .join()
                 .unwrap()
         })
-        .map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to upload script: {}", e))
-        })?;
+        .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload script: {}", e)))?;
 
         // Make the script executable
         let conn = connection.clone();
@@ -330,10 +328,7 @@ impl Module for ScriptModule {
         let mut output = if result.success {
             ModuleOutput::changed("Script executed successfully")
         } else {
-            ModuleOutput::failed(format!(
-                "Script failed with exit code {}",
-                result.exit_code
-            ))
+            ModuleOutput::failed(format!("Script failed with exit code {}", result.exit_code))
         };
 
         output.stdout = Some(result.stdout.clone());
@@ -360,10 +355,10 @@ impl Module for ScriptModule {
 
         // Check creates/removes conditions even in check mode
         if !self.should_execute(params, context)? {
-            return Ok(ModuleOutput::skipped(
-                "Would be skipped due to creates/removes condition",
-            )
-            .with_data("script", serde_json::json!(script_path)));
+            return Ok(
+                ModuleOutput::skipped("Would be skipped due to creates/removes condition")
+                    .with_data("script", serde_json::json!(script_path)),
+            );
         }
 
         // Verify the local script exists
@@ -454,7 +449,10 @@ mod tests {
     #[test]
     fn test_script_classification() {
         let module = ScriptModule;
-        assert_eq!(module.classification(), ModuleClassification::NativeTransport);
+        assert_eq!(
+            module.classification(),
+            ModuleClassification::NativeTransport
+        );
     }
 
     #[test]

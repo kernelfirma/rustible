@@ -435,7 +435,7 @@ async fn validate_playbook(
             .error(&format!("[{}] {}", location, error.message));
 
         if let Some(ref suggestion) = error.suggestion {
-            ctx.output.info(&format!("  suggestion: {}", suggestion));
+            ctx.output.hint(suggestion);
         }
     }
 
@@ -452,7 +452,7 @@ async fn validate_playbook(
             .warning(&format!("[{}] {}", location, warning.message));
 
         if let Some(ref suggestion) = warning.suggestion {
-            ctx.output.info(&format!("  suggestion: {}", suggestion));
+            ctx.output.hint(suggestion);
         }
     }
 
