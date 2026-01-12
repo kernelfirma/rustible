@@ -907,7 +907,7 @@ async fn test_connection_factory_new() {
     let config = ConnectionConfig::new();
     let factory = ConnectionFactory::new(config);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
     assert_eq!(stats.max_connections, 10);
 }
@@ -917,7 +917,7 @@ async fn test_connection_factory_with_pool_size() {
     let config = ConnectionConfig::new();
     let factory = ConnectionFactory::with_pool_size(config, 20);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.max_connections, 20);
 }
 
@@ -960,7 +960,7 @@ async fn test_connection_factory_close_all() {
     // Close all
     factory.close_all().await.unwrap();
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
 }
 
@@ -1727,14 +1727,14 @@ async fn test_connection_pool_stats() {
     let config = ConnectionConfig::new();
     let factory = ConnectionFactory::new(config);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
     assert_eq!(stats.max_connections, 10);
 
     // Get a connection
     let _conn = factory.get_connection("localhost").await.unwrap();
 
-    let stats_after = factory.pool_stats();
+    let stats_after = factory.pool_stats().await;
     assert_eq!(stats_after.active_connections, 1);
 }
 
@@ -1748,7 +1748,7 @@ async fn test_connection_pool_different_hosts() {
     let _conn2 = factory.get_connection("127.0.0.1").await.unwrap();
 
     // Both resolve to local, but have different pool keys
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     // They should be separate connections
     assert!(stats.active_connections >= 1);
 }
@@ -1768,7 +1768,7 @@ async fn test_connection_pool_reuse_same_host() {
     assert_eq!(conn2.identifier(), conn3.identifier());
 
     // Pool should still show only 1 connection
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 1);
 }
 
@@ -1777,7 +1777,7 @@ async fn test_connection_factory_with_custom_pool_size() {
     let config = ConnectionConfig::new();
     let factory = ConnectionFactory::with_pool_size(config, 5);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.max_connections, 5);
 }
 
@@ -1789,13 +1789,13 @@ async fn test_connection_factory_close_all_clears_pool() {
     // Create connections
     let _conn1 = factory.get_connection("localhost").await.unwrap();
 
-    let stats_before = factory.pool_stats();
+    let stats_before = factory.pool_stats().await;
     assert_eq!(stats_before.active_connections, 1);
 
     // Close all
     factory.close_all().await.unwrap();
 
-    let stats_after = factory.pool_stats();
+    let stats_after = factory.pool_stats().await;
     assert_eq!(stats_after.active_connections, 0);
 }
 

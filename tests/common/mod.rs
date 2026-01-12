@@ -39,7 +39,7 @@ use rustible::executor::task::{LoopSource, Task, TaskResult, TaskStatus};
 use rustible::executor::{ExecutionStats, ExecutorConfig, HostResult};
 use rustible::inventory::{Group, Host, Inventory};
 use rustible::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ModuleStatus, ParallelizationHint,
 };
 
@@ -468,7 +468,7 @@ impl Module for MockModule {
     fn execute(
         &self,
         _params: &ModuleParams,
-        _context: &ModuleContext,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         self.execution_count.fetch_add(1, Ordering::SeqCst);
 
@@ -478,18 +478,14 @@ impl Module for MockModule {
             ));
         }
 
-        Ok(self.result.clone())
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        if let Some(ref check_result) = self.check_result {
-            return Ok(check_result.clone());
+        // In check mode, return check_result if set
+        if context.check_mode {
+            if let Some(ref check_result) = self.check_result {
+                return Ok(check_result.clone());
+            }
         }
-        self.execute(params, context)
-    }
 
-    fn diff(&self, _params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        Ok(Some(Diff::new("before", "after")))
+        Ok(self.result.clone())
     }
 
     fn required_params(&self) -> &[&'static str] {

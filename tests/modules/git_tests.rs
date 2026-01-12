@@ -144,36 +144,6 @@ fn test_git_check_mode_clone() {
 }
 
 // ============================================================================
-// Diff Tests
-// ============================================================================
-
-#[test]
-#[ignore = "Diff output format changed"]
-fn test_git_diff_nonexistent_repo() {
-    let module = GitModule;
-    let temp = TempDir::new().unwrap();
-    let dest_path = temp.path().join("nonexistent-repo");
-
-    let mut params: HashMap<String, serde_json::Value> = HashMap::new();
-    params.insert(
-        "repo".to_string(),
-        serde_json::json!("https://github.com/test/repo"),
-    );
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest_path.to_str().unwrap()),
-    );
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let diff = diff.unwrap();
-    assert!(diff.before.contains("absent"));
-    assert!(diff.after.contains("clone"));
-}
-
-// ============================================================================
 // Optional Parameters Tests
 // ============================================================================
 

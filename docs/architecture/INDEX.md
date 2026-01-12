@@ -17,6 +17,7 @@ This index lists all architecture-related documents in this directory.
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Current | Internal architecture overview with async-first design, module tiers, and extension points |
 | [ARCHITECTURE_REVIEW_02.md](./ARCHITECTURE_REVIEW_02.md) | Complete | Full codebase architecture analysis with module cohesion ratings |
 | [REGISTRY_ARCHITECTURE.md](./REGISTRY_ARCHITECTURE.md) | Draft | Package registry system design as modern Ansible Galaxy replacement |
+| [provider-ecosystem.md](./provider-ecosystem.md) | Draft | Provider SDK and registry distribution model |
 
 ## Feature Design Documents
 
@@ -25,6 +26,9 @@ This index lists all architecture-related documents in this directory.
 | [distributed-execution.md](./distributed-execution.md) | Draft | Multi-controller architecture for horizontal scaling to 10,000+ hosts |
 | [terraform-integration.md](./terraform-integration.md) | Draft | Dynamic inventory from Terraform state and bidirectional variable sharing |
 | [web-ui.md](./web-ui.md) | Draft | Browser-based management console with live job output streaming |
+| [resource-graph-model.md](./resource-graph-model.md) | Draft | Declarative resource graph model and DAG mapping |
+| [awx-vault-integration.md](./awx-vault-integration.md) | Draft | AWX/Tower API compatibility scope and Vault integration plan |
+| [ansible-compat-gap.md](./ansible-compat-gap.md) | Draft | Compatibility gap inventory and test plan |
 
 ## Implementation Specifications
 

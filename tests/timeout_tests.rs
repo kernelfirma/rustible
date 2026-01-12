@@ -1427,7 +1427,7 @@ async fn test_connection_pool_timeout_handling() {
     // Close all and verify cleanup
     factory.close_all().await.unwrap();
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
 }
 

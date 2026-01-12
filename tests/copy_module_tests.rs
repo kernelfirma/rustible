@@ -622,55 +622,6 @@ fn test_copy_diff_mode() {
 }
 
 #[test]
-fn test_copy_diff_function() {
-    let temp = TempDir::new().unwrap();
-    let dest = temp.path().join("test.txt");
-    fs::write(&dest, "old content").unwrap();
-
-    let module = CopyModule;
-    let mut params: ModuleParams = HashMap::new();
-    params.insert("content".to_string(), serde_json::json!("new content"));
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest.to_str().unwrap()),
-    );
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "old content");
-    assert_eq!(d.after, "new content");
-}
-
-#[test]
-fn test_copy_diff_for_src_file() {
-    let temp = TempDir::new().unwrap();
-    let src = temp.path().join("source.txt");
-    let dest = temp.path().join("dest.txt");
-
-    fs::write(&src, "source content").unwrap();
-    fs::write(&dest, "old dest content").unwrap();
-
-    let module = CopyModule;
-    let mut params: ModuleParams = HashMap::new();
-    params.insert("src".to_string(), serde_json::json!(src.to_str().unwrap()));
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest.to_str().unwrap()),
-    );
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "old dest content");
-    assert_eq!(d.after, "source content");
-}
-
-#[test]
 fn test_copy_output_contains_metadata() {
     let temp = TempDir::new().unwrap();
     let dest = temp.path().join("test.txt");

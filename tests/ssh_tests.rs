@@ -1286,7 +1286,7 @@ mod ssh_performance {
         assert_eq!(conn2.identifier(), conn3.identifier());
 
         // Pool should only have 1 active connection
-        let stats = factory.pool_stats();
+        let stats = factory.pool_stats().await;
         assert_eq!(stats.active_connections, 1);
     }
 
@@ -1371,7 +1371,7 @@ mod ssh_performance {
         let config = ConnectionConfig::new();
         let factory = ConnectionFactory::with_pool_size(config, 5);
 
-        let stats = factory.pool_stats();
+        let stats = factory.pool_stats().await;
         assert_eq!(stats.max_connections, 5);
     }
 

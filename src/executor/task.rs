@@ -634,11 +634,11 @@ impl Task {
                 LoopSource::Template(template) => {
                     // Render the template to get the items
                     let rt = runtime.read().await;
-                    let vars = rt.get_merged_vars(&loop_ctx.host);
+                    let vars = rt.get_merged_vars_ref(&loop_ctx.host);
                     drop(rt);
 
                     let rendered = TEMPLATE_ENGINE
-                        .render_value(&serde_json::Value::String(template.clone()), &vars)
+                        .render_value(&serde_json::Value::String(template.clone()), vars.as_ref())
                         .map_err(|e| {
                             ExecutorError::RuntimeError(format!(
                                 "Failed to render loop template '{}': {}",
@@ -1311,11 +1311,11 @@ impl Task {
         runtime: &Arc<RwLock<RuntimeContext>>,
     ) -> ExecutorResult<IndexMap<String, JsonValue>> {
         let rt = runtime.read().await;
-        let vars = rt.get_merged_vars(&ctx.host);
+        let vars = rt.get_merged_vars_ref(&ctx.host);
         let mut result = IndexMap::new();
 
         for (key, value) in &self.args {
-            let templated = template_value(value, &vars)?;
+            let templated = template_value(value, vars.as_ref())?;
             result.insert(key.clone(), templated);
         }
 
@@ -1330,9 +1330,9 @@ impl Task {
         runtime: &Arc<RwLock<RuntimeContext>>,
     ) -> ExecutorResult<bool> {
         let rt = runtime.read().await;
-        let vars = rt.get_merged_vars(&ctx.host);
+        let vars = rt.get_merged_vars_ref(&ctx.host);
 
-        evaluate_expression(condition, &vars)
+        evaluate_expression(condition, vars.as_ref())
     }
 
     /// Apply changed_when override
@@ -1578,7 +1578,7 @@ impl Task {
         // Get all variables from runtime for potential content template substitution
         let vars = {
             let rt = runtime.read().await;
-            rt.get_merged_vars(&ctx.host)
+            rt.get_merged_vars_ref(&ctx.host)
         };
 
         // If content contains template variables, use the template module's rendering
@@ -1741,7 +1741,7 @@ impl Task {
         // Get all variables from runtime for template substitution
         let vars = {
             let rt = runtime.read().await;
-            rt.get_merged_vars(&ctx.host)
+            rt.get_merged_vars_ref(&ctx.host)
         };
 
         // Create module context from execution context with variables

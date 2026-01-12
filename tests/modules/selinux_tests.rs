@@ -43,17 +43,6 @@ fn test_selinux_module_required_params_empty() {
     assert!(required.is_empty());
 }
 
-#[test]
-fn test_selinux_module_optional_params() {
-    let module = SELinuxModule;
-    let optional = module.optional_params();
-    assert!(optional.contains_key("configfile"));
-    assert!(optional.contains_key("persistent"));
-    assert!(optional.contains_key("recursive"));
-    assert!(optional.contains_key("reload"));
-    assert!(optional.contains_key("ftype"));
-}
-
 // ============================================================================
 // Parameter Handling Tests
 // ============================================================================

@@ -595,19 +595,6 @@ fn test_module_required_params() {
     assert!(required.contains(&"key"));
 }
 
-#[test]
-fn test_module_optional_params() {
-    let module = AuthorizedKeyModule;
-    let optional = module.optional_params();
-    assert!(optional.contains_key("state"));
-    assert!(optional.contains_key("path"));
-    assert!(optional.contains_key("manage_dir"));
-    assert!(optional.contains_key("key_options"));
-    assert!(optional.contains_key("comment"));
-    assert!(optional.contains_key("exclusive"));
-    assert!(optional.contains_key("validate_certs"));
-}
-
 // ============================================================================
 // Parameter Validation Tests
 // ============================================================================

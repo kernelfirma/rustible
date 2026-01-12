@@ -1812,14 +1812,14 @@ fn test_retry_zero_attempts() {
 // SECTION 27: Connection Pool Edge Cases
 // ============================================================================
 
-#[test]
-fn test_connection_pool_stats() {
+#[tokio::test]
+async fn test_connection_pool_stats() {
     use rustible::connection::{ConnectionConfig, ConnectionFactory};
 
     let config = ConnectionConfig::default();
     let factory = ConnectionFactory::with_pool_size(config, 5);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
     assert_eq!(stats.max_connections, 5);
 }

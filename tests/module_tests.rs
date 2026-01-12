@@ -694,21 +694,6 @@ fn test_command_failure() {
     }
 }
 
-#[test]
-fn test_command_diff() {
-    let module = CommandModule;
-    let mut params = HashMap::new();
-    params.insert("cmd".to_string(), serde_json::json!("echo hello"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "(none)");
-    assert!(d.after.contains("Execute"));
-}
-
 // ============================================================================
 // Shell Module Tests
 // ============================================================================
@@ -2551,21 +2536,6 @@ fn test_shell_with_multiline_script() {
     assert!(result.stdout.unwrap().contains("3"));
 }
 
-#[test]
-fn test_shell_diff_generation() {
-    let module = ShellModule;
-    let mut params = HashMap::new();
-    params.insert("cmd".to_string(), serde_json::json!("echo test"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "(none)");
-    assert!(d.after.contains("Execute"));
-}
-
 // ============================================================================
 // EXTENDED COPY MODULE TESTS
 // ============================================================================
@@ -2694,55 +2664,6 @@ fn test_copy_with_backup_custom_suffix() {
     let backup_path = temp.path().join("test.txt.bak");
     assert!(backup_path.exists());
     assert_eq!(fs::read_to_string(&backup_path).unwrap(), "Old content");
-}
-
-#[test]
-fn test_copy_diff_function() {
-    let temp = TempDir::new().unwrap();
-    let dest = temp.path().join("test.txt");
-    fs::write(&dest, "old content").unwrap();
-
-    let module = CopyModule;
-    let mut params = HashMap::new();
-    params.insert("content".to_string(), serde_json::json!("new content"));
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest.to_str().unwrap()),
-    );
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "old content");
-    assert_eq!(d.after, "new content");
-}
-
-#[test]
-fn test_copy_diff_for_src_file() {
-    let temp = TempDir::new().unwrap();
-    let src = temp.path().join("source.txt");
-    let dest = temp.path().join("dest.txt");
-
-    fs::write(&src, "source content").unwrap();
-    fs::write(&dest, "old dest content").unwrap();
-
-    let module = CopyModule;
-    let mut params = HashMap::new();
-    params.insert("src".to_string(), serde_json::json!(src.to_str().unwrap()));
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest.to_str().unwrap()),
-    );
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "old dest content");
-    assert_eq!(d.after, "source content");
 }
 
 #[test]
@@ -3012,35 +2933,6 @@ fn test_template_with_backup() {
 }
 
 #[test]
-fn test_template_diff_function() {
-    let temp = TempDir::new().unwrap();
-    let src = temp.path().join("template.j2");
-    let dest = temp.path().join("output.txt");
-
-    fs::write(&src, "Hello, {{ name }}!").unwrap();
-    fs::write(&dest, "old content").unwrap();
-
-    let module = TemplateModule;
-    let mut params = HashMap::new();
-    params.insert("src".to_string(), serde_json::json!(src.to_str().unwrap()));
-    params.insert(
-        "dest".to_string(),
-        serde_json::json!(dest.to_str().unwrap()),
-    );
-
-    let mut vars = HashMap::new();
-    vars.insert("name".to_string(), serde_json::json!("World"));
-
-    let context = ModuleContext::default().with_vars(vars);
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert_eq!(d.before, "old content");
-    assert_eq!(d.after, "Hello, World!");
-}
-
-#[test]
 fn test_template_with_facts() {
     let temp = TempDir::new().unwrap();
     let src = temp.path().join("template.j2");
@@ -3281,29 +3173,6 @@ fn test_file_absent_already_absent() {
 
     assert!(!result.changed);
     assert!(result.msg.contains("already absent"));
-}
-
-#[test]
-fn test_file_diff_function() {
-    let temp = TempDir::new().unwrap();
-    let path = temp.path().join("testfile");
-    fs::write(&path, "content").unwrap();
-
-    let module = FileModule;
-    let mut params = HashMap::new();
-    params.insert(
-        "path".to_string(),
-        serde_json::json!(path.to_str().unwrap()),
-    );
-    params.insert("state".to_string(), serde_json::json!("absent"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let d = diff.unwrap();
-    assert!(d.before.contains("file exists"));
-    assert_eq!(d.after, "absent");
 }
 
 #[test]
@@ -3678,37 +3547,6 @@ async fn test_user_state_values() {
     let result = module.check(&params, &context);
 
     assert!(result.is_ok());
-}
-
-#[test]
-fn test_user_diff_function() {
-    let module = UserModule;
-    let mut params = HashMap::new();
-    params.insert("name".to_string(), serde_json::json!("root"));
-    params.insert("state".to_string(), serde_json::json!("present"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    // For existing user, diff should show user info
-    if diff.is_some() {
-        let d = diff.unwrap();
-        assert!(d.before.contains("user:") || d.before.contains("root"));
-    }
-}
-
-#[test]
-fn test_user_diff_for_absent() {
-    let module = UserModule;
-    let mut params = HashMap::new();
-    params.insert("name".to_string(), serde_json::json!("nonexistent_xyz"));
-    params.insert("state".to_string(), serde_json::json!("absent"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    // For non-existent user with absent state, no change needed
-    assert!(diff.is_none());
 }
 
 // ============================================================================

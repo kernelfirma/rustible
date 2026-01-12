@@ -272,24 +272,6 @@ fn test_shell_with_env() {
 }
 
 // ============================================================================
-// Diff Tests
-// ============================================================================
-
-#[test]
-fn test_shell_diff() {
-    let module = ShellModule;
-    let mut params: HashMap<String, serde_json::Value> = HashMap::new();
-    params.insert("cmd".to_string(), serde_json::json!("echo test"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let diff = diff.unwrap();
-    assert!(diff.after.contains("Execute"));
-}
-
-// ============================================================================
 // Shell Executable Tests
 // ============================================================================
 

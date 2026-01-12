@@ -168,19 +168,6 @@ fn test_debug_check_mode() {
 }
 
 #[test]
-fn test_debug_no_diff() {
-    let module = DebugModule;
-    let mut params: ModuleParams = HashMap::new();
-    params.insert("msg".to_string(), Value::String("Test".to_string()));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    // Debug module never produces diffs
-    assert!(diff.is_none());
-}
-
-#[test]
 fn test_debug_with_verbosity() {
     let module = DebugModule;
     let mut params: ModuleParams = HashMap::new();

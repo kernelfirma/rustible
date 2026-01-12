@@ -13,11 +13,18 @@ use std::time::Instant;
 // Helper Functions
 // ============================================================================
 
-/// Create a runtime with the specified number of hosts
+/// Create a runtime with the specified number of hosts configured for local connection
 fn create_runtime_with_hosts(count: usize) -> RuntimeContext {
     let mut runtime = RuntimeContext::new();
     for i in 0..count {
-        runtime.add_host(format!("host{}", i), None);
+        let hostname = format!("host{}", i);
+        runtime.add_host(hostname.clone(), None);
+        // Set ansible_connection to local to avoid SSH connection attempts
+        runtime.set_host_var(
+            &hostname,
+            "ansible_connection".to_string(),
+            serde_json::json!("local"),
+        );
     }
     runtime
 }

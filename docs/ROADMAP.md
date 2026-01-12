@@ -504,9 +504,11 @@ We track community requests and prioritize based on demand and alignment with pr
 |---------|-------|--------|----------|
 | Podman connection support | - | Planned (v1.0) | Medium |
 | Web UI for playbook management | - | Under consideration | Low |
-| Terraform integration | - | Under consideration | Medium |
-| HashiCorp Vault integration | - | Under consideration | Medium |
-| AWX/Tower API compatibility | - | Under consideration | Low |
+| [Terraform integration](architecture/terraform-integration.md) | - | Under consideration | Medium |
+| [HashiCorp Vault + AWX/Tower](architecture/awx-vault-integration.md) | - | Under consideration | Medium |
+| [Provider ecosystem](architecture/provider-ecosystem.md) | - | Under consideration | Medium |
+| [Declarative resource graph](architecture/resource-graph-model.md) | - | Under consideration | Medium |
+| [Compatibility gap plan](architecture/ansible-compat-gap.md) | - | Under consideration | Medium |
 | YAML anchor/alias support | - | Investigating | Medium |
 | Parallel role execution | - | Investigating | Medium |
 | Database modules (MySQL/PostgreSQL) | - | Planned (v0.2) | High |

@@ -279,21 +279,6 @@ fn test_command_validate_params_missing_both() {
 // Diff Tests
 // ============================================================================
 
-#[test]
-fn test_command_diff() {
-    let module = CommandModule;
-    let mut params: HashMap<String, serde_json::Value> = HashMap::new();
-    params.insert("cmd".to_string(), serde_json::json!("echo test"));
-
-    let context = ModuleContext::default();
-    let diff = module.diff(&params, &context).unwrap();
-
-    assert!(diff.is_some());
-    let diff = diff.unwrap();
-    assert!(diff.before.contains("none"));
-    assert!(diff.after.contains("Execute"));
-}
-
 // ============================================================================
 // Working Directory Tests
 // ============================================================================

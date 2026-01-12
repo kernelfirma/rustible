@@ -5,7 +5,8 @@
 //! - Fact storage
 //! - Register system for task results
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -314,7 +315,7 @@ impl ExecutionContext {
 }
 
 /// The main runtime context holding all state during execution
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RuntimeContext {
     /// Global variables (from inventory, playbook vars_files, etc.)
     global_vars: IndexMap<String, JsonValue>,
@@ -354,6 +355,40 @@ pub struct RuntimeContext {
 
     /// Include params
     include_params: IndexMap<String, JsonValue>,
+
+    /// Cached merged vars per host
+    merged_cache: Mutex<IndexMap<String, CachedMergedVars>>,
+
+    /// Version counter for invalidating merged cache
+    vars_version: AtomicU64,
+}
+
+#[derive(Debug, Clone)]
+struct CachedMergedVars {
+    version: u64,
+    vars: Arc<IndexMap<String, JsonValue>>,
+}
+
+impl Default for RuntimeContext {
+    fn default() -> Self {
+        Self {
+            global_vars: IndexMap::new(),
+            play_vars: IndexMap::new(),
+            task_vars: IndexMap::new(),
+            extra_vars: IndexMap::new(),
+            host_data: IndexMap::new(),
+            groups: IndexMap::new(),
+            all_hosts: Vec::new(),
+            magic_vars: IndexMap::new(),
+            role_defaults: IndexMap::new(),
+            block_vars: IndexMap::new(),
+            include_vars: IndexMap::new(),
+            role_params: IndexMap::new(),
+            include_params: IndexMap::new(),
+            merged_cache: Mutex::new(IndexMap::new()),
+            vars_version: AtomicU64::new(0),
+        }
+    }
 }
 
 impl RuntimeContext {
@@ -362,6 +397,10 @@ impl RuntimeContext {
         let mut ctx = Self::default();
         ctx.init_magic_vars();
         ctx
+    }
+
+    fn bump_vars_version(&self) {
+        self.vars_version.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Create a runtime context from an inventory
@@ -511,29 +550,34 @@ impl RuntimeContext {
     pub fn set_global_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting global var: {} = {:?}", name, value);
         self.global_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Set a play-level variable
     pub fn set_play_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting play var: {} = {:?}", name, value);
         self.play_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Set a task-level variable
     pub fn set_task_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting task var: {} = {:?}", name, value);
         self.task_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Set an extra variable (highest precedence)
     pub fn set_extra_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting extra var: {} = {:?}", name, value);
         self.extra_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Clear task-level variables (called between tasks)
     pub fn clear_task_vars(&mut self) {
         self.task_vars.clear();
+        self.bump_vars_version();
     }
 
     /// Remove specific task-level variables by name
@@ -542,12 +586,14 @@ impl RuntimeContext {
         for name in names {
             self.task_vars.swap_remove(*name);
         }
+        self.bump_vars_version();
     }
 
     /// Clear play-level variables (called between plays)
     pub fn clear_play_vars(&mut self) {
         self.play_vars.clear();
         self.task_vars.clear();
+        self.bump_vars_version();
     }
 
     /// Get a variable by name, respecting precedence
@@ -613,6 +659,37 @@ impl RuntimeContext {
     /// - Inline hint for better optimization
     #[inline]
     pub fn get_merged_vars(&self, host: &str) -> IndexMap<String, JsonValue> {
+        self.get_merged_vars_ref(host).as_ref().clone()
+    }
+
+    /// Get all variables merged for a specific host without cloning the map
+    ///
+    /// This returns an Arc to a cached merged map for hot paths.
+    pub fn get_merged_vars_ref(&self, host: &str) -> Arc<IndexMap<String, JsonValue>> {
+        let current_version = self.vars_version.load(Ordering::Relaxed);
+        if let Ok(cache) = self.merged_cache.lock() {
+            if let Some(entry) = cache.get(host) {
+                if entry.version == current_version {
+                    return Arc::clone(&entry.vars);
+                }
+            }
+        }
+
+        let merged = self.build_merged_vars(host);
+        let merged = Arc::new(merged);
+        if let Ok(mut cache) = self.merged_cache.lock() {
+            cache.insert(
+                host.to_string(),
+                CachedMergedVars {
+                    version: current_version,
+                    vars: Arc::clone(&merged),
+                },
+            );
+        }
+        merged
+    }
+
+    fn build_merged_vars(&self, host: &str) -> IndexMap<String, JsonValue> {
         // OPTIMIZATION: Pre-allocate with estimated capacity to reduce reallocations
         let host_facts_count = self
             .host_data
@@ -751,12 +828,15 @@ impl RuntimeContext {
                 group.hosts.push(host);
             }
         }
+
+        self.bump_vars_version();
     }
 
     /// Add a group to the inventory
     pub fn add_group(&mut self, name: String, group: InventoryGroup) {
         debug!("Adding group: {}", name);
         self.groups.insert(name, group);
+        self.bump_vars_version();
     }
 
     /// Get all hosts (returns a reference to avoid cloning)
@@ -799,6 +879,7 @@ impl RuntimeContext {
             .entry(host.to_string())
             .or_insert_with(HostVars::new);
         host_data.set_fact(name, value);
+        self.bump_vars_version();
     }
 
     /// Get a fact for a host
@@ -817,6 +898,7 @@ impl RuntimeContext {
         for (k, v) in facts {
             host_data.set_fact(k, v);
         }
+        self.bump_vars_version();
     }
 
     /// Register a task result for a host
@@ -827,6 +909,7 @@ impl RuntimeContext {
             .entry(host.to_string())
             .or_insert_with(HostVars::new);
         host_data.register(name, result);
+        self.bump_vars_version();
     }
 
     /// Get a registered result for a host
@@ -843,6 +926,7 @@ impl RuntimeContext {
             .entry(host.to_string())
             .or_insert_with(HostVars::new);
         host_data.set_var(name, value);
+        self.bump_vars_version();
     }
 
     /// Get a host variable
@@ -855,6 +939,7 @@ impl RuntimeContext {
     /// Set a magic variable
     pub fn set_magic_var(&mut self, name: String, value: JsonValue) {
         self.magic_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Check if a host exists in the inventory
@@ -880,45 +965,53 @@ impl RuntimeContext {
     pub fn set_role_default(&mut self, name: String, value: JsonValue) {
         trace!("Setting role default: {} = {:?}", name, value);
         self.role_defaults.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Set a block-level variable
     pub fn set_block_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting block var: {} = {:?}", name, value);
         self.block_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Clear block-level variables (called when exiting a block)
     pub fn clear_block_vars(&mut self) {
         self.block_vars.clear();
+        self.bump_vars_version();
     }
 
     /// Set an include_vars variable
     pub fn set_include_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting include var: {} = {:?}", name, value);
         self.include_vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Set role params (when using include_role with parameters)
     pub fn set_role_param(&mut self, name: String, value: JsonValue) {
         trace!("Setting role param: {} = {:?}", name, value);
         self.role_params.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Clear role params (after role execution)
     pub fn clear_role_params(&mut self) {
         self.role_params.clear();
+        self.bump_vars_version();
     }
 
     /// Set include params
     pub fn set_include_param(&mut self, name: String, value: JsonValue) {
         trace!("Setting include param: {} = {:?}", name, value);
         self.include_params.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Clear include params
     pub fn clear_include_params(&mut self) {
         self.include_params.clear();
+        self.bump_vars_version();
     }
 
     // =========================================================================
@@ -1011,6 +1104,7 @@ impl RuntimeContext {
             .entry(group.to_string())
             .or_insert_with(InventoryGroup::default);
         group_data.vars.insert(name, value);
+        self.bump_vars_version();
     }
 
     /// Get a group variable

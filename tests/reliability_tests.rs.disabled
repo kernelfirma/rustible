@@ -142,14 +142,14 @@ fn test_connection_timeout_error_type() {
 ///
 /// Purpose: Verify that when the connection pool is exhausted, the system
 /// properly handles the condition and can recover.
-#[test]
-fn test_connection_pool_exhaustion_recovery() {
+#[tokio::test]
+async fn test_connection_pool_exhaustion_recovery() {
     // Create a config with a small pool
     let config = ConnectionConfig::default();
     let factory = ConnectionFactory::with_pool_size(config, 2);
 
     // Check initial pool stats
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.max_connections, 2);
     assert_eq!(stats.active_connections, 0);
 }
@@ -164,7 +164,7 @@ async fn test_connection_pool_statistics() {
     let factory = ConnectionFactory::with_pool_size(config, 5);
 
     // Initial state
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
     assert_eq!(stats.max_connections, 5);
 
@@ -173,7 +173,7 @@ async fn test_connection_pool_statistics() {
     assert!(conn.is_alive().await);
 
     // Pool should now have one connection
-    let stats_after = factory.pool_stats();
+    let stats_after = factory.pool_stats().await;
     assert!(stats_after.active_connections >= 1);
 }
 
@@ -189,7 +189,7 @@ async fn test_connection_pool_eviction() {
     // Get connections - pool should manage capacity
     let _conn1 = factory.get_connection("localhost").await.unwrap();
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     // Pool should not exceed max_connections
     assert!(stats.active_connections <= stats.max_connections);
 }
@@ -228,7 +228,7 @@ async fn test_reconnection_after_failure() {
     factory.close_all().await.unwrap();
 
     // Pool should be empty after close_all
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert_eq!(stats.active_connections, 0);
 
     // Should be able to get a new connection
@@ -261,7 +261,7 @@ async fn test_concurrent_connections_stress() {
     assert!(completed.load(Ordering::SeqCst) > 0);
 
     // Pool stats should show activity
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     assert!(stats.active_connections >= 1);
 }
 

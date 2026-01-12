@@ -577,7 +577,7 @@ async fn stress_connection_pool_churn() {
 
     assert_eq!(results.len(), 100);
 
-    let stats = factory.pool_stats();
+    let stats = factory.pool_stats().await;
     println!(
         "Connection pool after churn: {} active, {} max",
         stats.active_connections, stats.max_connections
@@ -2038,7 +2038,7 @@ async fn extreme_pool_exhaustion_recovery() {
 
         join_all(handles).await;
 
-        let stats = factory.pool_stats();
+        let stats = factory.pool_stats().await;
         let total_acquired = acquired.load(Ordering::SeqCst);
         let total_exhaustion = exhaustion_detected.load(Ordering::SeqCst);
         let total_recovered = recovered.load(Ordering::SeqCst);
