@@ -6,11 +6,13 @@ use super::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
-use crate::connection::{Connection, ExecuteOptions};
+use crate::connection::{Connection, ExecuteOptions, TransferOptions};
 use crate::utils::shell_escape;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::runtime::Handle;
+use uuid::Uuid;
 
 /// Desired state for a user
 #[derive(Debug, Clone, PartialEq)]
@@ -369,24 +371,51 @@ impl UserModule {
         encrypted: bool,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Use chpasswd with echo pipe
+        // Use a temporary file to avoid exposing password in process list via echo
+        let temp_path = format!("/tmp/.ansible_passwd_{}", Uuid::new_v4());
+        let content = format!("{}:{}", name, password);
+
+        // Upload content to temp file with 600 permissions
+        let mut transfer_opts = TransferOptions::new();
+        transfer_opts = transfer_opts.with_mode(0o600);
+
+        let handle = Handle::try_current()
+            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?;
+
+        let conn_clone = connection.clone();
+        let temp_path_clone = temp_path.clone();
+        let content_clone = content.clone();
+
+        std::thread::scope(|s| {
+            s.spawn(|| handle.block_on(async {
+                conn_clone.upload_content(content_clone.as_bytes(), Path::new(&temp_path_clone), Some(transfer_opts)).await
+            }))
+            .join()
+            .unwrap()
+        }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload password file: {}", e)))?;
+
+        // Use chpasswd reading from the file
         let flag = if encrypted { "-e" } else { "" };
-        let command = format!(
-            "echo '{}:{}' | chpasswd {}",
-            shell_escape(name),
-            password.replace('\'', "'\\''"),
-            flag
-        );
+        let command = format!("chpasswd {} < {}", flag, shell_escape(&temp_path));
 
-        let (success, _, stderr) = Self::execute_command(connection, &command, context)?;
+        let result = Self::execute_command(connection, &command, context);
 
-        if success {
-            Ok(())
-        } else {
-            Err(ModuleError::ExecutionFailed(format!(
-                "Failed to set password: {}",
-                stderr
-            )))
+        // Clean up temp file regardless of success/failure
+        let rm_cmd = format!("rm -f {}", shell_escape(&temp_path));
+        let _ = Self::execute_command(connection, &rm_cmd, context);
+
+        match result {
+            Ok((success, _, stderr)) => {
+                if success {
+                    Ok(())
+                } else {
+                    Err(ModuleError::ExecutionFailed(format!(
+                        "Failed to set password: {}",
+                        stderr
+                    )))
+                }
+            }
+            Err(e) => Err(e),
         }
     }
 
