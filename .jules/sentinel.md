@@ -17,3 +17,8 @@
 **Vulnerability:** The `CopyModule` was using a predictable filename format (`{dest}.rustible.tmp.{pid}`) for temporary files. This can lead to race conditions or symlink attacks if the destination directory is world-writable (like `/tmp`), potentially allowing an attacker to overwrite arbitrary files or cause a denial of service.
 **Learning:** Predictability is the enemy of security in shared environments. Using `pid` for temporary filenames is insufficient because PIDs are easily guessable and recyclable.
 **Prevention:** Use cryptographically secure random suffixes (e.g., `Uuid::new_v4()`) for temporary filenames. When creating files, prefer `O_EXCL` (e.g., `OpenOptions::create_new(true)`) to ensure the file does not already exist.
+
+## 2024-05-25 - Password Exposure in Process List
+**Vulnerability:** The `user` module was setting passwords using `echo 'user:pass' | chpasswd`. This exposes the plaintext password in the system's process list (e.g., via `ps aux`) to all users on the machine during the execution window.
+**Learning:** Passing secrets as command line arguments or via pipe from `echo` is insecure because the arguments are visible to other processes.
+**Prevention:** Pass secrets via standard input directly if supported, or write them to a temporary file with restricted permissions (0600) and redirect input from that file. Always clean up temporary files immediately.
