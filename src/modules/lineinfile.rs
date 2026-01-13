@@ -13,6 +13,7 @@ use super::{
 };
 use crate::connection::TransferOptions;
 use crate::utils::get_regex;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -238,17 +239,22 @@ impl LineinfileModule {
     }
 
     fn apply_backrefs(line: &str, regexp: &Regex, original: &str) -> String {
+        static BACKREF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
+
         if let Some(captures) = regexp.captures(original) {
-            let mut result = line.to_string();
-
-            // Replace \1, \2, etc. with captured groups
-            for i in 0..captures.len() {
-                if let Some(m) = captures.get(i) {
-                    result = result.replace(&format!("\\{}", i), m.as_str());
-                }
-            }
-
-            result
+            BACKREF_RE
+                .replace_all(line, |caps: &regex::Captures| {
+                    let n = caps[1].parse::<usize>().unwrap_or(0);
+                    if let Some(m) = captures.get(n) {
+                        m.as_str().to_string()
+                    } else {
+                        // If group doesn't exist, keep the backref as-is (e.g., \99)
+                        // This matches current behavior where out-of-bound backrefs are ignored
+                        // (though the old implementation would just not match them in the loop)
+                        caps[0].to_string()
+                    }
+                })
+                .to_string()
         } else {
             line.to_string()
         }
@@ -912,5 +918,27 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap();
         assert!(!content.contains("#"));
         assert!(content.contains("key=value"));
+    }
+
+    #[test]
+    fn test_apply_backrefs_optimized() {
+        let re = Regex::new(r"^key=(\w+)_(\w+)").unwrap();
+        let original = "key=value_one";
+        let line = r"new_key=\1:\2";
+
+        let result = LineinfileModule::apply_backrefs(line, &re, original);
+        assert_eq!(result, "new_key=value:one");
+    }
+
+    #[test]
+    fn test_apply_backrefs_many_groups() {
+        // Test with > 9 groups to verify \10 is handled correctly
+        let re = Regex::new(r"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)").unwrap();
+        let original = "abcdefghij";
+        let line = r"\10";
+
+        let result = LineinfileModule::apply_backrefs(line, &re, original);
+        // Correct behavior should be 'j' (group 10), not 'a0' (group 1 + '0')
+        assert_eq!(result, "j");
     }
 }
