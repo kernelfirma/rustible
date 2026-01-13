@@ -372,14 +372,14 @@ impl OutputFormatter {
 
             if stats.has_failures() {
                 let failures = stats.total_failed();
-                let status_msg = format!("FAILED ({} errors)", failures);
+                let status_msg = format!("✖ FAILED ({} errors)", failures);
                 println!("  {:<12} : {}", "Status".bright_white(), status_msg.red().bold());
             } else {
                 let changes = stats.total_changed();
                 let (status_msg, status_color) = if changes > 0 {
-                    (format!("SUCCESS ({} changed)", changes), colored::Color::Yellow)
+                    (format!("✔ SUCCESS ({} changed)", changes), colored::Color::Yellow)
                 } else {
-                    ("SUCCESS (no changes)".to_string(), colored::Color::Green)
+                    ("✔ SUCCESS (no changes)".to_string(), colored::Color::Green)
                 };
                 println!("  {:<12} : {}", "Status".bright_white(), status_msg.color(status_color).bold());
             }
