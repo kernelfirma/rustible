@@ -1324,8 +1324,8 @@ fn parse_ini_value(value: &str) -> serde_yaml::Value {
 
     // Handle booleans
     match value.to_lowercase().as_str() {
-        "true" | "yes" | "on" => return serde_yaml::Value::Bool(true),
-        "false" | "no" | "off" => return serde_yaml::Value::Bool(false),
+        "true" | "yes" | "on" | "y" | "t" => return serde_yaml::Value::Bool(true),
+        "false" | "no" | "off" | "n" | "f" => return serde_yaml::Value::Bool(false),
         _ => {}
     }
 

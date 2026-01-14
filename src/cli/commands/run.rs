@@ -1259,8 +1259,11 @@ impl RunArgs {
 
     /// Check if a task should run based on tags
     fn should_run_task(&self, task: &serde_yaml::Value) -> bool {
+        let tags = Self::normalize_tags(&self.tags);
+        let skip_tags = Self::normalize_tags(&self.skip_tags);
+
         // If no tags specified, run everything
-        if self.tags.is_empty() && self.skip_tags.is_empty() {
+        if tags.is_empty() && skip_tags.is_empty() {
             return true;
         }
 
@@ -1280,15 +1283,15 @@ impl RunArgs {
             .unwrap_or_default();
 
         // Check skip_tags first
-        for skip_tag in &self.skip_tags {
+        for skip_tag in &skip_tags {
             if task_tags.contains(skip_tag) {
                 return false;
             }
         }
 
         // Check tags
-        if !self.tags.is_empty() {
-            for tag in &self.tags {
+        if !tags.is_empty() {
+            for tag in &tags {
                 if task_tags.contains(tag) || tag == "all" {
                     return true;
                 }
@@ -1297,6 +1300,15 @@ impl RunArgs {
         }
 
         true
+    }
+
+    fn normalize_tags(tags: &[String]) -> Vec<String> {
+        tags.iter()
+            .flat_map(|tag| tag.split(','))
+            .map(|tag| tag.trim())
+            .filter(|tag| !tag.is_empty())
+            .map(|tag| tag.to_string())
+            .collect()
     }
 
     /// Detect which module a task is using
@@ -1678,6 +1690,28 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(args.tags, vec!["install", "configure"]);
+    }
+
+    #[test]
+    fn test_normalize_tags_with_commas() {
+        let args = RunArgs::try_parse_from([
+            "run",
+            "playbook.yml",
+            "--tags",
+            "install, configure",
+            "--skip-tags",
+            "slow, noisy",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            RunArgs::normalize_tags(&args.tags),
+            vec!["install", "configure"]
+        );
+        assert_eq!(
+            RunArgs::normalize_tags(&args.skip_tags),
+            vec!["slow", "noisy"]
+        );
     }
 
     #[test]

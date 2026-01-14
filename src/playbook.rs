@@ -84,8 +84,8 @@ where
             E: de::Error,
         {
             match value.to_lowercase().as_str() {
-                "true" | "yes" | "y" | "1" | "on" => Ok(true),
-                "false" | "no" | "n" | "0" | "off" => Ok(false),
+                "true" | "yes" | "y" | "1" | "on" | "t" => Ok(true),
+                "false" | "no" | "n" | "0" | "off" | "f" => Ok(false),
                 _ => Err(de::Error::custom(format!("invalid boolean: {}", value))),
             }
         }

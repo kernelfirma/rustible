@@ -284,10 +284,10 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 | Task | Priority | Description |
 |------|----------|-------------|
 | Fix remaining tests | Critical | Achieve 100% test pass rate |
-| Ansible boolean compat | High | Fix remaining boolean edge cases |
-| Block parsing | High | Fix block parsing edge cases |
-| Python/FQCN edge cases | High | Fix FQCN resolution issues |
-| CLI edge cases | Medium | Fix CLI handling issues |
+| Ansible boolean compat | High | Done: handle y/n/t/f and string boolean variants consistently |
+| Block parsing | High | Done: treat null block/rescue/always as empty lists |
+| Python/FQCN edge cases | High | Done: normalize ansible.builtin/ansible.legacy module names |
+| CLI edge cases | Medium | Done: support comma-separated tags and richer extra-vars parsing |
 
 ### Execution Plan Preview
 
