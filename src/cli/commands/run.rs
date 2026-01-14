@@ -106,10 +106,18 @@ impl RunArgs {
         ));
 
         // Load playbook using executor's Playbook parser
-        ctx.output.info("Loading playbook...");
+        let spinner = ctx.output.create_spinner("Loading playbook...");
         let playbook = match Playbook::load(&self.playbook) {
-            Ok(pb) => pb,
+            Ok(pb) => {
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                pb
+            }
             Err(e) => {
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
                 ctx.output
                     .error(&format!("Failed to parse playbook: {}", e));
                 return Ok(1);
