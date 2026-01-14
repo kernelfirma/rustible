@@ -13,6 +13,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::Arc;
 use tokio::runtime::Handle;
+use uuid::Uuid;
 
 /// Regex pattern for validating cron time fields
 static CRON_FIELD_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -216,10 +217,17 @@ impl CronModule {
             .map(|u| format!("-u {}", shell_escape(u)))
             .unwrap_or_default();
 
+        // Generate a random delimiter to prevent heredoc injection attacks
+        // If the content contains the delimiter, an attacker could break out of the heredoc
+        // and execute arbitrary commands.
+        let delimiter = format!("RUSTIBLE_EOF_{}", Uuid::new_v4().simple());
+
         let cmd = format!(
-            "cat << 'RUSTIBLE_EOF' | crontab {}\n{}\nRUSTIBLE_EOF",
+            "cat << '{}' | crontab {}\n{}\n{}",
+            delimiter,
             user_flag,
-            content.trim()
+            content.trim(),
+            delimiter
         );
 
         let (success, _, stderr) = Self::execute_command(connection, &cmd, context)?;
