@@ -175,12 +175,8 @@ impl TemplateEngine {
         }
 
         trace!("Rendering template: {}", template);
-        // Convert IndexMap to a context that MiniJinja can use
-        let context: HashMap<String, JsonValue> =
-            vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
         let tmpl = self.env.template_from_str(template)?;
-        let result = tmpl.render(&context)?;
+        let result = tmpl.render(vars)?;
         Ok(result)
     }
 
@@ -289,17 +285,12 @@ impl TemplateEngine {
         }
 
         trace!("Evaluating condition: {}", expression);
-
-        // Convert vars to HashMap for MiniJinja
-        let context: HashMap<String, JsonValue> =
-            vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
         // Compile and evaluate the expression
         let expr = self.env.compile_expression(expression).map_err(|e| {
             Error::template_render(expression, format!("Failed to compile expression: {}", e))
         })?;
 
-        let result = expr.eval(&context).map_err(|e| {
+        let result = expr.eval(vars).map_err(|e| {
             // Check if it's an undefined variable error - treat as false in non-strict mode
             if matches!(e.kind(), ErrorKind::UndefinedError) {
                 trace!(
