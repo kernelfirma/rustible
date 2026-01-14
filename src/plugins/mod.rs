@@ -79,6 +79,7 @@
 
 pub mod filter;
 pub mod lookup;
+pub mod provider;
 
 /// Prelude module for convenient imports.
 pub mod prelude {
