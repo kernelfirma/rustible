@@ -62,6 +62,9 @@ mod types;
 mod aws_secrets_manager;
 mod hashicorp_vault;
 
+// Vault integration module (Issue #87 - AWX/Tower API Compatibility)
+pub mod vault;
+
 // Re-exports
 pub use backend::{SecretBackend, SecretBackendType};
 pub use cache::{SecretCache, SecretCacheConfig};

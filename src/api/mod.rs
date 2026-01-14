@@ -32,6 +32,9 @@ pub mod state;
 pub mod types;
 pub mod websocket;
 
+// AWX/Tower API compatibility module (Issue #87)
+pub mod awx;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
