@@ -93,6 +93,9 @@ pub mod throttle;
 /// Work-stealing scheduler for optimal load balancing.
 pub mod work_stealing;
 
+/// Declarative resource graph model for Terraform-like workflows.
+pub mod resource_graph;
+
 mod context;
 mod core;
 mod dependency_graph;
@@ -118,6 +121,10 @@ pub use playbook::{Play, Playbook};
 pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
+pub use resource_graph::{
+    AttributeChange, GraphNode, Resource, ResourceAction, ResourceGraph, ResourceGraphError,
+    ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput, ResourcePlan,
+};
 
 pub use core::{EventCallback, ExecutionEvent, Executor, ExecutorConfig};
 pub use dependency_graph::DependencyGraph;
