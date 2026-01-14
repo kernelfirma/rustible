@@ -12,13 +12,20 @@
 
 use crate::error::{Error, Result};
 use indexmap::IndexMap;
+use lru::LruCache;
 use minijinja::value::{Value as MiniJinjaValue, ValueKind};
 use minijinja::{Environment, ErrorKind};
 use once_cell::sync::Lazy;
+use parking_lot::{Mutex, RwLock};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tracing::trace;
+
+const DEFAULT_TEMPLATE_CACHE_SIZE: usize = 1000;
+const TEMPLATE_CACHE_SIZE_ENV: &str = "RUSTIBLE_TEMPLATE_CACHE_SIZE";
 
 /// Thread-safe template engine using MiniJinja
 ///
@@ -26,13 +33,36 @@ use tracing::trace;
 /// and condition evaluation should go through this engine to ensure consistent
 /// Jinja2 semantics.
 pub struct TemplateEngine {
-    env: Environment<'static>,
+    env: RwLock<Environment<'static>>,
+    template_cache: Option<Mutex<LruCache<String, String>>>,
+    expression_cache:
+        Option<Mutex<LruCache<String, Arc<minijinja::Expression<'static, 'static>>>>>,
+    template_counter: AtomicUsize,
 }
 
 impl TemplateEngine {
     /// Create a new template engine with Ansible-compatible filters and tests
     #[must_use]
     pub fn new() -> Self {
+        Self::with_cache_size(Self::default_cache_size())
+    }
+
+    /// Create a template engine with a specific cache size (0 disables caching).
+    #[must_use]
+    pub fn with_cache_size(cache_size: usize) -> Self {
+        let env = Self::build_environment();
+        let template_cache = Self::build_cache(cache_size);
+        let expression_cache = Self::build_cache(cache_size);
+
+        Self {
+            env: RwLock::new(env),
+            template_cache,
+            expression_cache,
+            template_counter: AtomicUsize::new(0),
+        }
+    }
+
+    fn build_environment() -> Environment<'static> {
         let mut env = Environment::new();
 
         // Configure environment for Ansible compatibility
@@ -44,7 +74,23 @@ impl TemplateEngine {
         // Register custom tests
         Self::register_tests(&mut env);
 
-        Self { env }
+        env
+    }
+
+    fn default_cache_size() -> usize {
+        std::env::var(TEMPLATE_CACHE_SIZE_ENV)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(DEFAULT_TEMPLATE_CACHE_SIZE)
+    }
+
+    fn build_cache<T>(cache_size: usize) -> Option<Mutex<LruCache<String, T>>> {
+        NonZeroUsize::new(cache_size).map(|capacity| Mutex::new(LruCache::new(capacity)))
+    }
+
+    fn next_template_name(&self) -> String {
+        let id = self.template_counter.fetch_add(1, Ordering::Relaxed);
+        format!("__rustible_template_{}", id)
     }
 
     /// Register Ansible-compatible filters
@@ -136,6 +182,72 @@ impl TemplateEngine {
         env.add_test("skipped", test_skipped);
     }
 
+    fn render_cached<S: serde::Serialize>(&self, template: &str, vars: &S) -> Result<String> {
+        // Fast path: no template syntax
+        if !Self::is_template(template) {
+            return Ok(template.to_string());
+        }
+
+        trace!("Rendering template: {}", template);
+
+        if let Some(cache) = &self.template_cache {
+            let mut cache = cache.lock();
+            if let Some(name) = cache.get(template).cloned() {
+                drop(cache);
+                let env = self.env.read();
+                let tmpl = env.get_template(&name)?;
+                return Ok(tmpl.render(vars)?);
+            }
+
+            let name = self.next_template_name();
+            let template_owned = template.to_string();
+            {
+                let mut env = self.env.write();
+                env.add_template_owned(name.clone(), template_owned.clone())?;
+            }
+
+            if let Some(evicted_name) = cache.put(template_owned, name.clone()) {
+                let mut env = self.env.write();
+                env.remove_template(&evicted_name);
+            }
+            drop(cache);
+
+            let env = self.env.read();
+            let tmpl = env.get_template(&name)?;
+            return Ok(tmpl.render(vars)?);
+        }
+
+        let env = self.env.read();
+        let tmpl = env.template_from_str(template)?;
+        Ok(tmpl.render(vars)?)
+    }
+
+    /// Clear cached templates and expressions.
+    pub fn clear_cache(&self) {
+        if let Some(cache) = &self.template_cache {
+            cache.lock().clear();
+        }
+        if let Some(cache) = &self.expression_cache {
+            cache.lock().clear();
+        }
+
+        let mut env = self.env.write();
+        env.clear_templates();
+    }
+
+    /// Return the number of cached templates and expressions.
+    pub fn cache_stats(&self) -> (usize, usize) {
+        let template_count = self
+            .template_cache
+            .as_ref()
+            .map_or(0, |cache| cache.lock().len());
+        let expression_count = self
+            .expression_cache
+            .as_ref()
+            .map_or(0, |cache| cache.lock().len());
+        (template_count, expression_count)
+    }
+
     /// Render a template string with variables from a HashMap
     ///
     /// # Performance
@@ -144,15 +256,7 @@ impl TemplateEngine {
     /// # Errors
     /// Returns an error if template parsing or rendering fails.
     pub fn render(&self, template: &str, vars: &HashMap<String, JsonValue>) -> Result<String> {
-        // Fast path: no template syntax
-        if !Self::is_template(template) {
-            return Ok(template.to_string());
-        }
-
-        trace!("Rendering template: {}", template);
-        let tmpl = self.env.template_from_str(template)?;
-        let result = tmpl.render(vars)?;
-        Ok(result)
+        self.render_cached(template, vars)
     }
 
     /// Render a template string with variables from an IndexMap
@@ -169,15 +273,7 @@ impl TemplateEngine {
         template: &str,
         vars: &IndexMap<String, JsonValue>,
     ) -> Result<String> {
-        // Fast path: no template syntax
-        if !Self::is_template(template) {
-            return Ok(template.to_string());
-        }
-
-        trace!("Rendering template: {}", template);
-        let tmpl = self.env.template_from_str(template)?;
-        let result = tmpl.render(vars)?;
-        Ok(result)
+        self.render_cached(template, vars)
     }
 
     /// Render a template string with a JSON Value context
@@ -185,15 +281,7 @@ impl TemplateEngine {
     /// This allows rendering directly with a serde_json::Value (e.g. Object) without
     /// converting it to HashMap/IndexMap first.
     pub fn render_with_json(&self, template: &str, context: &JsonValue) -> Result<String> {
-        // Fast path: no template syntax
-        if !Self::is_template(template) {
-            return Ok(template.to_string());
-        }
-
-        trace!("Rendering template: {}", template);
-        let tmpl = self.env.template_from_str(template)?;
-        let result = tmpl.render(context)?;
-        Ok(result)
+        self.render_cached(template, context)
     }
 
     /// Render a JSON value, templating any strings within it
@@ -285,10 +373,36 @@ impl TemplateEngine {
         }
 
         trace!("Evaluating condition: {}", expression);
-        // Compile and evaluate the expression
-        let expr = self.env.compile_expression(expression).map_err(|e| {
-            Error::template_render(expression, format!("Failed to compile expression: {}", e))
-        })?;
+        let expr = if let Some(cache) = &self.expression_cache {
+            let mut cache = cache.lock();
+            if let Some(cached) = cache.get(expression).cloned() {
+                cached
+            } else {
+                let compiled =
+                    EXPRESSION_ENV
+                        .compile_expression_owned(expression.to_string())
+                        .map_err(|e| {
+                            Error::template_render(
+                                expression,
+                                format!("Failed to compile expression: {}", e),
+                            )
+                        })?;
+                let compiled = Arc::new(compiled);
+                cache.put(expression.to_string(), Arc::clone(&compiled));
+                compiled
+            }
+        } else {
+            Arc::new(
+                EXPRESSION_ENV
+                    .compile_expression(expression)
+                    .map_err(|e| {
+                        Error::template_render(
+                            expression,
+                            format!("Failed to compile expression: {}", e),
+                        )
+                    })?,
+            )
+        };
 
         let result = expr.eval(vars).map_err(|e| {
             // Check if it's an undefined variable error - treat as false in non-strict mode
@@ -297,7 +411,10 @@ impl TemplateEngine {
                     "Undefined variable in condition '{}', treating as false",
                     expression
                 );
-                return Error::template_render(expression, format!("Undefined variable: {}", e));
+                return Error::template_render(
+                    expression,
+                    format!("Undefined variable: {}", e),
+                );
             }
             Error::template_render(expression, format!("Failed to evaluate: {}", e))
         })?;
@@ -340,6 +457,9 @@ impl Default for TemplateEngine {
         Self::new()
     }
 }
+
+static EXPRESSION_ENV: Lazy<Environment<'static>> =
+    Lazy::new(TemplateEngine::build_environment);
 
 /// Global shared template engine instance
 pub static TEMPLATE_ENGINE: Lazy<Arc<TemplateEngine>> =
@@ -1181,6 +1301,53 @@ mod tests {
         let result = engine.render_value(&value, &vars).unwrap();
         assert_eq!(result["server"], "localhost");
         assert_eq!(result["port"], 8080);
+    }
+
+    #[test]
+    fn test_template_cache_hits() {
+        let engine = TemplateEngine::with_cache_size(2);
+        let mut vars = HashMap::new();
+        vars.insert("name".to_string(), JsonValue::String("Alice".to_string()));
+
+        let template = "Hello, {{ name }}!";
+        engine.render(template, &vars).unwrap();
+        let (template_count, expression_count) = engine.cache_stats();
+        assert_eq!(template_count, 1);
+        assert_eq!(expression_count, 0);
+
+        engine.render(template, &vars).unwrap();
+        let (template_count, _) = engine.cache_stats();
+        assert_eq!(template_count, 1);
+    }
+
+    #[test]
+    fn test_expression_cache_hits() {
+        let engine = TemplateEngine::with_cache_size(2);
+        let vars = IndexMap::new();
+
+        assert!(engine.evaluate_condition("1", &vars).unwrap());
+        let (_, expression_count) = engine.cache_stats();
+        assert_eq!(expression_count, 1);
+
+        assert!(engine.evaluate_condition("1", &vars).unwrap());
+        let (_, expression_count) = engine.cache_stats();
+        assert_eq!(expression_count, 1);
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        let engine = TemplateEngine::with_cache_size(2);
+        let mut vars = HashMap::new();
+        vars.insert("name".to_string(), JsonValue::String("Alice".to_string()));
+
+        let template = "Hello, {{ name }}!";
+        engine.render(template, &vars).unwrap();
+        engine.evaluate_condition("1", &IndexMap::new()).unwrap();
+        engine.clear_cache();
+
+        let (template_count, expression_count) = engine.cache_stats();
+        assert_eq!(template_count, 0);
+        assert_eq!(expression_count, 0);
     }
 
     #[test]

@@ -88,6 +88,7 @@ regex = "1.10"
 glob = "0.3"
 globset = "0.4"
 walkdir = "2.4"
+lru = "0.12"
 shellexpand = "=3.1.0"  # Pin to avoid dirs 6.x which requires Rust 1.88+
 shell-words = "1.1"
 which = "5.0"  # Pin to avoid home 0.5.12 which requires Rust 1.88+

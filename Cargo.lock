@@ -5015,6 +5015,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "libc",
+ "lru",
  "md4",
  "md5",
  "minijinja",
