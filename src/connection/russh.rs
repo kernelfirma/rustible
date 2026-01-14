@@ -44,9 +44,8 @@ const WARMUP_TIMEOUT: Duration = Duration::from_secs(10);
 /// Minimum time between keepalive pings
 const MIN_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
-use super::config::{
-    default_identity_files, expand_path, ConnectionConfig, HostConfig, RetryConfig,
-};
+use super::config::{ConnectionConfig, HostConfig};
+use super::ssh_common;
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
     RusshError, TransferOptions,
@@ -859,13 +858,15 @@ impl RusshConnection {
         host_config: Option<HostConfig>,
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<Self> {
-        let host_config = host_config.unwrap_or_else(|| global_config.get_host_merged(host));
-        let retry_config = host_config.retry_config();
-
-        let actual_host = host_config.hostname.as_deref().unwrap_or(host);
-        let actual_port = host_config.port.unwrap_or(port);
-        let actual_user = host_config.user.as_deref().unwrap_or(user);
-        let timeout = host_config.timeout_duration();
+        let ssh_common::ResolvedConnectionParams {
+            host_config,
+            retry_config,
+            host: actual_host,
+            port: actual_port,
+            user: actual_user,
+            timeout,
+            identifier,
+        } = ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
 
         debug!(
             host = %actual_host,
@@ -874,17 +875,20 @@ impl RusshConnection {
             "Connecting via SSH (russh)"
         );
 
-        let identifier = format!("{}@{}:{}", actual_user, actual_host, actual_port);
-
         // Connect with retry logic
-        let handle = Self::connect_with_retry(
-            actual_host,
-            actual_port,
-            actual_user,
-            &host_config,
-            global_config,
-            timeout,
+        let handle = ssh_common::connect_with_retry_async(
             &retry_config,
+            "SSH connection",
+            || {
+                Self::do_connect(
+                    &actual_host,
+                    actual_port,
+                    &actual_user,
+                    &host_config,
+                    global_config,
+                    timeout,
+                )
+            },
         )
         .await?;
 
@@ -912,39 +916,6 @@ impl RusshConnection {
         );
 
         Ok(conn)
-    }
-
-    /// Connect with retry logic
-    async fn connect_with_retry(
-        host: &str,
-        port: u16,
-        user: &str,
-        host_config: &HostConfig,
-        global_config: &ConnectionConfig,
-        timeout: Duration,
-        retry_config: &RetryConfig,
-    ) -> ConnectionResult<Handle<ClientHandler>> {
-        let mut last_error = None;
-
-        for attempt in 0..=retry_config.max_retries {
-            if attempt > 0 {
-                let delay = retry_config.delay_for_attempt(attempt - 1);
-                debug!(attempt = %attempt, delay = ?delay, "Retrying SSH connection");
-                tokio::time::sleep(delay).await;
-            }
-
-            match Self::do_connect(host, port, user, host_config, global_config, timeout).await {
-                Ok(handle) => return Ok(handle),
-                Err(e) => {
-                    warn!(attempt = %attempt, error = %e, "SSH connection attempt failed");
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            ConnectionError::ConnectionFailed("Unknown connection error".to_string())
-        }))
     }
 
     /// Perform the actual connection
@@ -1012,10 +983,7 @@ impl RusshConnection {
         let accept_unknown = !host_config.strict_host_key_checking.unwrap_or(false);
 
         // Use configured known_hosts file if provided
-        let known_hosts_path = host_config
-            .user_known_hosts_file
-            .as_ref()
-            .map(PathBuf::from);
+        let known_hosts_path = ssh_common::user_known_hosts_path(host_config);
 
         let handler = ClientHandler::new(host, port, accept_unknown, known_hosts_path);
 
@@ -1048,32 +1016,7 @@ impl RusshConnection {
         }
 
         // Try key-based authentication
-        // 1. Try specific identity file if configured
-        if let Some(identity_file) = &host_config.identity_file {
-            let key_path = expand_path(identity_file);
-            if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
-                .await
-                .is_ok()
-            {
-                debug!(key = %key_path.display(), "Authenticated using key");
-                return Ok(());
-            }
-        }
-
-        // 2. Try default identity files from global config
-        for identity_file in &global_config.defaults.identity_files {
-            let key_path = expand_path(identity_file);
-            if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
-                .await
-                .is_ok()
-            {
-                debug!(key = %key_path.display(), "Authenticated using key");
-                return Ok(());
-            }
-        }
-
-        // 3. Try default identity files from ~/.ssh/
-        for key_path in default_identity_files() {
+        for key_path in ssh_common::identity_file_candidates(host_config, global_config) {
             if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
                 .await
                 .is_ok()
