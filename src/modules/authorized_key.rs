@@ -887,7 +887,6 @@ impl Module for AuthorizedKeyModule {
             )
         }
     }
-
 }
 
 #[cfg(test)]

@@ -30,7 +30,7 @@
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::utils::shell_escape;
 use std::collections::HashMap;
@@ -187,7 +187,10 @@ impl PgConnectionConfig {
         let mut args = Vec::new();
 
         if self.unix_socket.is_some() {
-            args.push(format!("-h {}", shell_escape(self.unix_socket.as_ref().unwrap())));
+            args.push(format!(
+                "-h {}",
+                shell_escape(self.unix_socket.as_ref().unwrap())
+            ));
         } else {
             args.push(format!("-h {}", shell_escape(&self.host)));
         }
@@ -261,7 +264,10 @@ pub struct PostgresqlDbModule;
 
 impl PostgresqlDbModule {
     /// Build execute options with privilege escalation and environment
-    fn build_execute_options(context: &ModuleContext, env: HashMap<String, String>) -> ExecuteOptions {
+    fn build_execute_options(
+        context: &ModuleContext,
+        env: HashMap<String, String>,
+    ) -> ExecuteOptions {
         let mut options = ExecuteOptions::new();
 
         for (key, value) in env {
@@ -288,7 +294,9 @@ impl PostgresqlDbModule {
         let result = connection
             .execute(command, Some(options))
             .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e)))?;
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e))
+            })?;
         Ok((result.success, result.stdout, result.stderr))
     }
 
@@ -529,7 +537,8 @@ impl PostgresqlDbModule {
                 terminate_sql
             );
             // Ignore errors from terminate - connections might not exist
-            let _ = Self::execute_command(connection, &cmd, context, config.conn.build_env_vars()).await;
+            let _ = Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                .await;
         }
 
         let drop_sql = format!("DROP DATABASE IF EXISTS {}", shell_escape(&config.name));
@@ -750,13 +759,12 @@ impl PostgresqlDbModule {
                     }
 
                     Self::create_database(connection.as_ref(), &config, context).await?;
-                    Ok(ModuleOutput::changed(format!(
-                        "Created database '{}'",
-                        config.name
-                    ))
-                    .with_data("name", serde_json::json!(config.name))
-                    .with_data("owner", serde_json::json!(config.owner))
-                    .with_data("encoding", serde_json::json!(config.encoding)))
+                    Ok(
+                        ModuleOutput::changed(format!("Created database '{}'", config.name))
+                            .with_data("name", serde_json::json!(config.name))
+                            .with_data("owner", serde_json::json!(config.owner))
+                            .with_data("encoding", serde_json::json!(config.encoding)),
+                    )
                 } else {
                     // Database exists, check if updates needed
                     let current =
@@ -775,7 +783,9 @@ impl PostgresqlDbModule {
 
                             let mut needs_change = false;
                             if let Some(ref desired_owner) = config.owner {
-                                if current_info.get("owner").map(|s| s.as_str()) != Some(desired_owner.as_str()) {
+                                if current_info.get("owner").map(|s| s.as_str())
+                                    != Some(desired_owner.as_str())
+                                {
                                     needs_change = true;
                                 }
                             }
@@ -789,7 +799,9 @@ impl PostgresqlDbModule {
                                 }
                             }
                             if let Some(ref desired_tablespace) = config.tablespace {
-                                if current_info.get("tablespace").map(|s| s.as_str()) != Some(desired_tablespace.as_str()) {
+                                if current_info.get("tablespace").map(|s| s.as_str())
+                                    != Some(desired_tablespace.as_str())
+                                {
                                     needs_change = true;
                                 }
                             }
@@ -820,11 +832,13 @@ impl PostgresqlDbModule {
                         .await?;
 
                         if changed {
-                            Ok(ModuleOutput::changed(format!(
-                                "Updated database '{}'",
-                                config.name
-                            ))
-                            .with_data("name", serde_json::json!(config.name)))
+                            Ok(
+                                ModuleOutput::changed(format!(
+                                    "Updated database '{}'",
+                                    config.name
+                                ))
+                                .with_data("name", serde_json::json!(config.name)),
+                            )
                         } else {
                             Ok(ModuleOutput::ok(format!(
                                 "Database '{}' is in desired state",
@@ -846,10 +860,8 @@ impl PostgresqlDbModule {
 
                 if exists {
                     if context.check_mode {
-                        let mut output = ModuleOutput::changed(format!(
-                            "Would drop database '{}'",
-                            config.name
-                        ));
+                        let mut output =
+                            ModuleOutput::changed(format!("Would drop database '{}'", config.name));
                         if let Some(d) = diff {
                             output = output.with_diff(d);
                         }
@@ -1019,7 +1031,10 @@ mod tests {
         assert_eq!(SslMode::from_str("disable").unwrap(), SslMode::Disable);
         assert_eq!(SslMode::from_str("require").unwrap(), SslMode::Require);
         assert_eq!(SslMode::from_str("verify-ca").unwrap(), SslMode::VerifyCa);
-        assert_eq!(SslMode::from_str("verify_full").unwrap(), SslMode::VerifyFull);
+        assert_eq!(
+            SslMode::from_str("verify_full").unwrap(),
+            SslMode::VerifyFull
+        );
         assert!(SslMode::from_str("invalid").is_err());
     }
 

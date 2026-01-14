@@ -438,7 +438,6 @@ impl Module for TemplateModule {
             )
         }
     }
-
 }
 
 #[cfg(test)]

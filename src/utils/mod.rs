@@ -88,7 +88,7 @@ pub fn shell_escape(s: &str) -> String {
 
     if safe {
         if s.is_empty() {
-             return "''".to_string();
+            return "''".to_string();
         }
         return s.to_string();
     }

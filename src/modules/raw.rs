@@ -231,7 +231,6 @@ impl Module for RawModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

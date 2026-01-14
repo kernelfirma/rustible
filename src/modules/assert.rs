@@ -252,7 +252,6 @@ impl Module for AssertModule {
             Ok(output)
         }
     }
-
 }
 
 #[cfg(test)]

@@ -1398,8 +1398,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_connection_pool_put_get() {
         let pool = AsyncConnectionPool::new(5);
-        let conn: Arc<dyn Connection + Send + Sync> =
-            Arc::new(local::LocalConnection::new());
+        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(local::LocalConnection::new());
 
         assert!(pool.put("local".to_string(), conn).await);
 

@@ -725,7 +725,6 @@ impl Module for WinUserModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

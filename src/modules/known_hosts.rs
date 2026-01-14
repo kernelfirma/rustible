@@ -829,7 +829,6 @@ impl Module for KnownHostsModule {
             }
         }
     }
-
 }
 
 #[cfg(test)]

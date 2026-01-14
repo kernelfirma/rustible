@@ -356,7 +356,6 @@ impl Module for GroupModule {
             }
         }
     }
-
 }
 
 #[cfg(test)]

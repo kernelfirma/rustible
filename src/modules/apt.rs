@@ -1086,7 +1086,6 @@ impl Module for AptModule {
 
         result
     }
-
 }
 
 #[cfg(test)]

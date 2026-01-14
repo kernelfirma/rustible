@@ -451,7 +451,6 @@ impl Module for K8sConfigMapModule {
             "Kubernetes support requires the 'kubernetes' feature".to_string(),
         ))
     }
-
 }
 
 #[cfg(test)]

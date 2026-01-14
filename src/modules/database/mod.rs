@@ -59,13 +59,13 @@ pub use postgresql_user::PostgresqlUserModule;
 
 // MySQL modules - require sqlx (database feature)
 #[cfg(feature = "database")]
-pub mod pool;
-#[cfg(feature = "database")]
 pub mod mysql_db;
 #[cfg(feature = "database")]
 pub mod mysql_query;
 #[cfg(feature = "database")]
 pub mod mysql_user;
+#[cfg(feature = "database")]
+pub mod pool;
 
 // Re-export MySQL modules when available
 #[cfg(feature = "database")]
@@ -77,7 +77,7 @@ pub use mysql_user::MysqlUserModule;
 
 // Re-export pool types when available
 #[cfg(feature = "database")]
-pub use pool::{DatabasePool, PoolConfig, PoolManager, PoolStats, global_pool_manager};
+pub use pool::{global_pool_manager, DatabasePool, PoolConfig, PoolManager, PoolStats};
 
 /// Common MySQL connection parameters used across all MySQL modules
 /// Only available when the `database` feature is enabled.
@@ -172,7 +172,10 @@ impl MysqlConnectionParams {
             )
         } else {
             // TCP connection
-            format!("mysql://{}@{}:{}{}{}", auth, self.host, self.port, db_part, query)
+            format!(
+                "mysql://{}@{}:{}{}{}",
+                auth, self.host, self.port, db_part, query
+            )
         }
     }
 }
@@ -322,10 +325,22 @@ mod tests {
     #[cfg(feature = "database")]
     #[test]
     fn test_ssl_mode_parsing() {
-        assert_eq!(MysqlSslMode::from_str("disabled"), Some(MysqlSslMode::Disabled));
-        assert_eq!(MysqlSslMode::from_str("DISABLED"), Some(MysqlSslMode::Disabled));
-        assert_eq!(MysqlSslMode::from_str("preferred"), Some(MysqlSslMode::Preferred));
-        assert_eq!(MysqlSslMode::from_str("required"), Some(MysqlSslMode::Required));
+        assert_eq!(
+            MysqlSslMode::from_str("disabled"),
+            Some(MysqlSslMode::Disabled)
+        );
+        assert_eq!(
+            MysqlSslMode::from_str("DISABLED"),
+            Some(MysqlSslMode::Disabled)
+        );
+        assert_eq!(
+            MysqlSslMode::from_str("preferred"),
+            Some(MysqlSslMode::Preferred)
+        );
+        assert_eq!(
+            MysqlSslMode::from_str("required"),
+            Some(MysqlSslMode::Required)
+        );
         assert_eq!(MysqlSslMode::from_str("invalid"), None);
     }
 }

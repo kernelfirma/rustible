@@ -636,7 +636,6 @@ impl Module for PipModule {
             )
         }
     }
-
 }
 
 #[cfg(test)]

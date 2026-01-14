@@ -965,7 +965,6 @@ impl Module for UfwModule {
 
         Ok(output)
     }
-
 }
 
 /// Validate port specification

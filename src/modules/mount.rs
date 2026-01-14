@@ -605,7 +605,6 @@ impl Module for MountModule {
             Ok(ModuleOutput::ok(msg))
         }
     }
-
 }
 
 #[cfg(test)]

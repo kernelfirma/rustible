@@ -463,7 +463,6 @@ impl Module for K8sSecretModule {
             "Kubernetes support requires the 'kubernetes' feature".to_string(),
         ))
     }
-
 }
 
 #[cfg(test)]

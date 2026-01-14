@@ -187,7 +187,6 @@ impl Module for DebugModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

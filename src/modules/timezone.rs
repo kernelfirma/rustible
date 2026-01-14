@@ -646,7 +646,6 @@ impl Module for TimezoneModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

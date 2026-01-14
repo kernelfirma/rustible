@@ -564,7 +564,6 @@ impl Module for YumModule {
 
         result
     }
-
 }
 
 #[cfg(test)]

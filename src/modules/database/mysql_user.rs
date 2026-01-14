@@ -53,7 +53,7 @@ use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use sqlx::Row;
 use tokio::runtime::Handle;
@@ -346,9 +346,9 @@ impl MysqlUserModule {
             )
         };
 
-        pool.execute(&query)
-            .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to update password: {}", e)))?;
+        pool.execute(&query).await.map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to update password: {}", e))
+        })?;
 
         Ok(())
     }
@@ -668,7 +668,6 @@ impl Module for MysqlUserModule {
         };
         self.execute(params, &check_context)
     }
-
 }
 
 #[cfg(test)]

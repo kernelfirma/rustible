@@ -458,7 +458,6 @@ impl Module for WinFeatureModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

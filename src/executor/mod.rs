@@ -93,15 +93,15 @@ pub mod throttle;
 /// Work-stealing scheduler for optimal load balancing.
 pub mod work_stealing;
 
-mod core;
-mod strategy;
-mod strategies;
-mod task_executor;
-mod handler_manager;
 mod context;
-mod results;
-mod errors;
+mod core;
 mod dependency_graph;
+mod errors;
+mod handler_manager;
+mod results;
+mod strategies;
+mod strategy;
+mod task_executor;
 
 // Re-exports for commonly used types from enhancement modules
 pub use async_runtime::{RuntimeConfig, RuntimeMetrics, SpawnOptions, TaskSpawner};

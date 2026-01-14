@@ -27,7 +27,7 @@
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::utils::shell_escape;
 use std::collections::HashMap;
@@ -231,7 +231,10 @@ pub struct PostgresqlUserModule;
 
 impl PostgresqlUserModule {
     /// Build execute options with privilege escalation and environment
-    fn build_execute_options(context: &ModuleContext, env: HashMap<String, String>) -> ExecuteOptions {
+    fn build_execute_options(
+        context: &ModuleContext,
+        env: HashMap<String, String>,
+    ) -> ExecuteOptions {
         let mut options = ExecuteOptions::new();
 
         for (key, value) in env {
@@ -258,7 +261,9 @@ impl PostgresqlUserModule {
         let result = connection
             .execute(command, Some(options))
             .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e)))?;
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e))
+            })?;
         Ok((result.success, result.stdout, result.stderr))
     }
 
@@ -330,9 +335,13 @@ impl PostgresqlUserModule {
             groups_query
         );
 
-        let (_, groups_stdout, _) =
-            Self::execute_command(connection, &groups_cmd, context, config.conn.build_env_vars())
-                .await?;
+        let (_, groups_stdout, _) = Self::execute_command(
+            connection,
+            &groups_cmd,
+            context,
+            config.conn.build_env_vars(),
+        )
+        .await?;
 
         let member_of: Vec<String> = groups_stdout
             .lines()
@@ -640,14 +649,15 @@ impl PostgresqlUserModule {
                         Self::update_role(connection.as_ref(), &config, &current, context).await?;
 
                     if changed {
-                        Ok(ModuleOutput::changed(format!("Updated role '{}'", config.name))
-                            .with_data("name", serde_json::json!(config.name)))
+                        Ok(
+                            ModuleOutput::changed(format!("Updated role '{}'", config.name))
+                                .with_data("name", serde_json::json!(config.name)),
+                        )
                     } else {
-                        Ok(ModuleOutput::ok(format!(
-                            "Role '{}' is in desired state",
-                            config.name
-                        ))
-                        .with_data("name", serde_json::json!(config.name)))
+                        Ok(
+                            ModuleOutput::ok(format!("Role '{}' is in desired state", config.name))
+                                .with_data("name", serde_json::json!(config.name)),
+                        )
                     }
                 } else {
                     if context.check_mode {
@@ -658,8 +668,10 @@ impl PostgresqlUserModule {
                     }
 
                     Self::create_role(connection.as_ref(), &config, context).await?;
-                    Ok(ModuleOutput::changed(format!("Created role '{}'", config.name))
-                        .with_data("name", serde_json::json!(config.name)))
+                    Ok(
+                        ModuleOutput::changed(format!("Created role '{}'", config.name))
+                            .with_data("name", serde_json::json!(config.name)),
+                    )
                 }
             }
 
@@ -675,7 +687,10 @@ impl PostgresqlUserModule {
                     }
 
                     Self::drop_role(connection.as_ref(), &config, context).await?;
-                    Ok(ModuleOutput::changed(format!("Dropped role '{}'", config.name)))
+                    Ok(ModuleOutput::changed(format!(
+                        "Dropped role '{}'",
+                        config.name
+                    )))
                 } else {
                     Ok(ModuleOutput::ok(format!(
                         "Role '{}' already absent",
@@ -739,7 +754,6 @@ impl Module for PostgresqlUserModule {
         };
         self.execute(params, &check_context)
     }
-
 }
 
 #[cfg(test)]

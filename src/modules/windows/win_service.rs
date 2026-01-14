@@ -701,7 +701,6 @@ impl Module for WinServiceModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

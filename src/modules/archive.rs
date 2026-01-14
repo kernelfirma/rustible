@@ -548,7 +548,6 @@ impl Module for ArchiveModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

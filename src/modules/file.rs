@@ -796,7 +796,6 @@ impl Module for FileModule {
             }
         }
     }
-
 }
 
 #[cfg(test)]

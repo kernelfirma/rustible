@@ -102,7 +102,7 @@ impl Executor {
                 &task.name,
                 &results,
             )
-                .await;
+            .await;
             return Ok(results);
         }
 
@@ -258,7 +258,7 @@ impl Executor {
             &task.name,
             &results,
         )
-            .await;
+        .await;
         Ok(results)
     }
 

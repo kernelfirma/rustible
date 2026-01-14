@@ -583,7 +583,6 @@ impl Module for DnfModule {
 
         result
     }
-
 }
 
 #[cfg(test)]

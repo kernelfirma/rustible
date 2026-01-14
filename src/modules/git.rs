@@ -805,7 +805,6 @@ impl Module for GitModule {
             .with_data("after", serde_json::json!(current_version)))
         }
     }
-
 }
 
 #[cfg(test)]
@@ -1086,12 +1085,18 @@ mod tests {
             serde_json::json!("https://github.com/test/repo"),
         );
         params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
-        params.insert("refspec".to_string(), serde_json::json!("--upload-pack=malicious"));
+        params.insert(
+            "refspec".to_string(),
+            serde_json::json!("--upload-pack=malicious"),
+        );
 
         // This should fail validation
         let result = module.validate_params(&params);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with '-'"));
 
         // Test version starting with -
         let mut params: ModuleParams = HashMap::new();
@@ -1106,6 +1111,9 @@ mod tests {
         // This should fail validation
         let result = module.validate_params(&params);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with '-'"));
     }
 }

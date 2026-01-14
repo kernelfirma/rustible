@@ -219,8 +219,7 @@ impl CopyModule {
                     }
 
                     // Use streaming checksum for source file to avoid loading into memory
-                    let src_checksum =
-                        get_file_checksum(src_path).map_err(ModuleError::Io)?;
+                    let src_checksum = get_file_checksum(src_path).map_err(ModuleError::Io)?;
 
                     match connection.download_content(&final_dest).await {
                         Ok(existing) => {
@@ -590,11 +589,7 @@ impl CopyModule {
         let temp_dest = if use_validation {
             // Use cryptographically secure random UUID for temporary filename to prevent race conditions
             // and predictable filename attacks.
-            let temp_name = format!(
-                "{}.rustible.tmp.{}",
-                final_dest.display(),
-                Uuid::new_v4()
-            );
+            let temp_name = format!("{}.rustible.tmp.{}", final_dest.display(), Uuid::new_v4());
             std::path::PathBuf::from(temp_name)
         } else {
             final_dest.clone()
@@ -742,7 +737,6 @@ impl Module for CopyModule {
             )
         }
     }
-
 }
 
 #[cfg(test)]

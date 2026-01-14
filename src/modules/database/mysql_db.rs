@@ -36,7 +36,7 @@ use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use sqlx::Row;
 use tokio::runtime::Handle;
@@ -107,9 +107,7 @@ impl MysqlDbModule {
         }
 
         // Reject MySQL reserved words
-        let reserved = [
-            "mysql", "information_schema", "performance_schema", "sys",
-        ];
+        let reserved = ["mysql", "information_schema", "performance_schema", "sys"];
         if reserved.contains(&name.to_lowercase().as_str()) {
             return Err(ModuleError::InvalidParameter(format!(
                 "Cannot manage system database: {}",
@@ -214,9 +212,9 @@ impl MysqlDbModule {
             query.push_str(&format!(" COLLATE {}", coll));
         }
 
-        pool.execute(&query)
-            .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to create database: {}", e)))?;
+        pool.execute(&query).await.map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to create database: {}", e))
+        })?;
 
         Ok(())
     }
@@ -255,18 +253,15 @@ impl MysqlDbModule {
             }
         }
 
-        pool.execute(&query)
-            .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to modify database: {}", e)))?;
+        pool.execute(&query).await.map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to modify database: {}", e))
+        })?;
 
         Ok(true)
     }
 
     /// Drop a database
-    async fn drop_database(
-        conn_params: &MysqlConnectionParams,
-        db_name: &str,
-    ) -> ModuleResult<()> {
+    async fn drop_database(conn_params: &MysqlConnectionParams, db_name: &str) -> ModuleResult<()> {
         let pool = global_pool_manager()
             .get_or_create(&conn_params.to_connection_url(None))
             .await
@@ -376,10 +371,8 @@ impl Module for MysqlDbModule {
                         )
                         .await?;
 
-                        let mut output = ModuleOutput::changed(format!(
-                            "Created database '{}'",
-                            db_name
-                        ));
+                        let mut output =
+                            ModuleOutput::changed(format!("Created database '{}'", db_name));
 
                         // Add database info to output
                         if let Some(info) = Self::get_database_info(&conn_params, &db_name).await? {
@@ -439,12 +432,11 @@ impl Module for MysqlDbModule {
                         .await?
                         .unwrap_or(current);
 
-                    Ok(ModuleOutput::changed(format!(
-                        "Modified database '{}' settings",
-                        db_name
-                    ))
-                    .with_data("encoding", serde_json::json!(updated.encoding))
-                    .with_data("collation", serde_json::json!(updated.collation)))
+                    Ok(
+                        ModuleOutput::changed(format!("Modified database '{}' settings", db_name))
+                            .with_data("encoding", serde_json::json!(updated.encoding))
+                            .with_data("collation", serde_json::json!(updated.collation)),
+                    )
                 }
             }
         })
@@ -457,7 +449,6 @@ impl Module for MysqlDbModule {
         };
         self.execute(params, &check_context)
     }
-
 }
 
 #[cfg(test)]

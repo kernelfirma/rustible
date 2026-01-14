@@ -378,7 +378,6 @@ impl Module for SynchronizeModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

@@ -471,7 +471,6 @@ impl Module for CronModule {
             }
         }
     }
-
 }
 
 #[cfg(test)]

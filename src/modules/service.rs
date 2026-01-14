@@ -772,7 +772,12 @@ impl ServiceModule {
             }
             InitSystem::SysV => {
                 let cmd = if let Some(args) = arguments {
-                    format!("service {} {} {}", shell_escape(service), action, args.trim())
+                    format!(
+                        "service {} {} {}",
+                        shell_escape(service),
+                        action,
+                        args.trim()
+                    )
                 } else {
                     format!("service {} {}", shell_escape(service), action)
                 };
@@ -1368,7 +1373,6 @@ impl Module for ServiceModule {
                 .unwrap()
         })
     }
-
 }
 
 #[cfg(test)]
@@ -1490,7 +1494,10 @@ mod tests {
     fn test_service_config_invalid_args_rejected() {
         let mut params = ModuleParams::new();
         params.insert("name".to_string(), serde_json::json!("nginx"));
-        params.insert("arguments".to_string(), serde_json::json!("--foo; rm -rf /"));
+        params.insert(
+            "arguments".to_string(),
+            serde_json::json!("--foo; rm -rf /"),
+        );
 
         let result = ServiceConfig::from_params(&params);
         assert!(result.is_err());

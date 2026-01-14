@@ -421,7 +421,6 @@ impl Module for CommandModule {
             self.execute_local(params, context)
         }
     }
-
 }
 
 #[cfg(test)]

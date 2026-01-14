@@ -650,5 +650,4 @@ mod tests {
         assert!(!result.changed);
         assert!(result.msg.contains("No pause required") || result.msg.contains("0"));
     }
-
 }

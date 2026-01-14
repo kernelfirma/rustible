@@ -595,7 +595,6 @@ impl Module for K8sDeploymentModule {
             "Kubernetes support requires the 'kubernetes' feature".to_string(),
         ))
     }
-
 }
 
 #[cfg(test)]

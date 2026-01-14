@@ -124,7 +124,6 @@ impl Module for SetFactModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

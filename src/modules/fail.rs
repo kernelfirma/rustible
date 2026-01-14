@@ -68,7 +68,6 @@ impl Module for FailModule {
         // Return a failed output with the message
         Ok(ModuleOutput::failed(message))
     }
-
 }
 
 #[cfg(test)]

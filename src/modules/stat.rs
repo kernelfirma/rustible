@@ -50,7 +50,6 @@ impl Module for StatModule {
         // Execute locally (remote execution would require connection in ModuleContext)
         self.execute_local(path, follow, get_checksum, &checksum_algorithm)
     }
-
 }
 
 impl StatModule {

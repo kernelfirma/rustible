@@ -953,7 +953,6 @@ impl Module for FactsModule {
         Ok(ModuleOutput::ok("Facts gathered successfully")
             .with_data("ansible_facts", serde_json::Value::Object(facts_json)))
     }
-
 }
 
 #[cfg(test)]

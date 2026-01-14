@@ -368,20 +368,35 @@ impl OutputFormatter {
             let line = "─".repeat(width).bright_black();
             println!("{}", line);
 
-            println!("  {:<12} : {}", "Duration".bright_white(), duration_str.cyan());
+            println!(
+                "  {:<12} : {}",
+                "Duration".bright_white(),
+                duration_str.cyan()
+            );
 
             if stats.has_failures() {
                 let failures = stats.total_failed();
                 let status_msg = format!("✖ FAILED ({} errors)", failures);
-                println!("  {:<12} : {}", "Status".bright_white(), status_msg.red().bold());
+                println!(
+                    "  {:<12} : {}",
+                    "Status".bright_white(),
+                    status_msg.red().bold()
+                );
             } else {
                 let changes = stats.total_changed();
                 let (status_msg, status_color) = if changes > 0 {
-                    (format!("✔ SUCCESS ({} changed)", changes), colored::Color::Yellow)
+                    (
+                        format!("✔ SUCCESS ({} changed)", changes),
+                        colored::Color::Yellow,
+                    )
                 } else {
                     ("✔ SUCCESS (no changes)".to_string(), colored::Color::Green)
                 };
-                println!("  {:<12} : {}", "Status".bright_white(), status_msg.color(status_color).bold());
+                println!(
+                    "  {:<12} : {}",
+                    "Status".bright_white(),
+                    status_msg.color(status_color).bold()
+                );
             }
 
             println!("{}", line);

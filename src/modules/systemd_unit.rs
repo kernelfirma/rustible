@@ -1001,7 +1001,6 @@ impl Module for SystemdUnitModule {
                 .unwrap()
         })
     }
-
 }
 
 /// Helper module for creating common unit file templates

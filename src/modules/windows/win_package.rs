@@ -903,7 +903,6 @@ impl Module for WinPackageModule {
             PackageProvider::Auto => unreachable!(),
         }
     }
-
 }
 
 #[cfg(test)]

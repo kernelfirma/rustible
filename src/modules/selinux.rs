@@ -1289,7 +1289,6 @@ impl Module for SELinuxModule {
             SELinuxOperation::Port => self.execute_port(params, context, connection),
         }
     }
-
 }
 
 #[cfg(test)]

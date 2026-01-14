@@ -23,7 +23,7 @@
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::utils::shell_escape;
 use std::collections::HashMap;
@@ -63,7 +63,9 @@ impl QueryConfig {
             ));
         }
 
-        let positional_args = params.get_vec_string("positional_args")?.unwrap_or_default();
+        let positional_args = params
+            .get_vec_string("positional_args")?
+            .unwrap_or_default();
 
         // Parse named_args from JSON object
         let named_args = if let Some(serde_json::Value::Object(obj)) = params.get("named_args") {
@@ -138,7 +140,10 @@ pub struct PostgresqlQueryModule;
 
 impl PostgresqlQueryModule {
     /// Build execute options with privilege escalation and environment
-    fn build_execute_options(context: &ModuleContext, env: HashMap<String, String>) -> ExecuteOptions {
+    fn build_execute_options(
+        context: &ModuleContext,
+        env: HashMap<String, String>,
+    ) -> ExecuteOptions {
         let mut options = ExecuteOptions::new();
 
         for (key, value) in env {
@@ -165,7 +170,9 @@ impl PostgresqlQueryModule {
         let result = connection
             .execute(command, Some(options))
             .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e)))?;
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Connection execute failed: {}", e))
+            })?;
         Ok((result.success, result.stdout, result.stderr))
     }
 
@@ -473,7 +480,6 @@ impl Module for PostgresqlQueryModule {
         };
         self.execute(params, &check_context)
     }
-
 }
 
 #[cfg(test)]
@@ -512,13 +518,27 @@ mod tests {
 
     #[test]
     fn test_is_modification_query() {
-        assert!(PostgresqlQueryModule::is_modification_query("INSERT INTO users VALUES (1)"));
-        assert!(PostgresqlQueryModule::is_modification_query("UPDATE users SET name = 'foo'"));
-        assert!(PostgresqlQueryModule::is_modification_query("DELETE FROM users"));
-        assert!(PostgresqlQueryModule::is_modification_query("CREATE TABLE foo (id INT)"));
-        assert!(PostgresqlQueryModule::is_modification_query("DROP TABLE foo"));
-        assert!(!PostgresqlQueryModule::is_modification_query("SELECT * FROM users"));
-        assert!(!PostgresqlQueryModule::is_modification_query("   SELECT * FROM users"));
+        assert!(PostgresqlQueryModule::is_modification_query(
+            "INSERT INTO users VALUES (1)"
+        ));
+        assert!(PostgresqlQueryModule::is_modification_query(
+            "UPDATE users SET name = 'foo'"
+        ));
+        assert!(PostgresqlQueryModule::is_modification_query(
+            "DELETE FROM users"
+        ));
+        assert!(PostgresqlQueryModule::is_modification_query(
+            "CREATE TABLE foo (id INT)"
+        ));
+        assert!(PostgresqlQueryModule::is_modification_query(
+            "DROP TABLE foo"
+        ));
+        assert!(!PostgresqlQueryModule::is_modification_query(
+            "SELECT * FROM users"
+        ));
+        assert!(!PostgresqlQueryModule::is_modification_query(
+            "   SELECT * FROM users"
+        ));
     }
 
     #[test]
@@ -545,7 +565,10 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("db".to_string(), serde_json::json!("mydb"));
         params.insert("query".to_string(), serde_json::json!("SELECT 1"));
-        params.insert("path_to_script".to_string(), serde_json::json!("/tmp/script.sql"));
+        params.insert(
+            "path_to_script".to_string(),
+            serde_json::json!("/tmp/script.sql"),
+        );
 
         let result = module.validate_params(&params);
         assert!(result.is_err());

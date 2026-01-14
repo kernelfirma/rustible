@@ -423,7 +423,6 @@ impl Module for SysctlModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

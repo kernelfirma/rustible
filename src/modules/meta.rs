@@ -262,7 +262,6 @@ impl Module for MetaModule {
         let action = self.get_action(params)?;
         Ok(self.execute_action(action, context))
     }
-
 }
 
 #[cfg(test)]

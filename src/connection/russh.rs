@@ -876,20 +876,16 @@ impl RusshConnection {
         );
 
         // Connect with retry logic
-        let handle = ssh_common::connect_with_retry_async(
-            &retry_config,
-            "SSH connection",
-            || {
-                Self::do_connect(
-                    &actual_host,
-                    actual_port,
-                    &actual_user,
-                    &host_config,
-                    global_config,
-                    timeout,
-                )
-            },
-        )
+        let handle = ssh_common::connect_with_retry_async(&retry_config, "SSH connection", || {
+            Self::do_connect(
+                &actual_host,
+                actual_port,
+                &actual_user,
+                &host_config,
+                global_config,
+                timeout,
+            )
+        })
         .await?;
 
         // Determine keepalive interval from host config or use default

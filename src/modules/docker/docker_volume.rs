@@ -349,7 +349,6 @@ impl Module for DockerVolumeModule {
             self.execute_stub(params, context)
         }
     }
-
 }
 
 #[cfg(test)]

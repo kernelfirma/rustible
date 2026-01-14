@@ -251,7 +251,6 @@ impl Module for IncludeVarsModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

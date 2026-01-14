@@ -387,12 +387,23 @@ impl UserModule {
         let content_clone = content.clone();
 
         std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(async {
-                conn_clone.upload_content(content_clone.as_bytes(), Path::new(&temp_path_clone), Some(transfer_opts)).await
-            }))
+            s.spawn(|| {
+                handle.block_on(async {
+                    conn_clone
+                        .upload_content(
+                            content_clone.as_bytes(),
+                            Path::new(&temp_path_clone),
+                            Some(transfer_opts),
+                        )
+                        .await
+                })
+            })
             .join()
             .unwrap()
-        }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload password file: {}", e)))?;
+        })
+        .map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to upload password file: {}", e))
+        })?;
 
         // Use chpasswd reading from the file
         let flag = if encrypted { "-e" } else { "" };
@@ -770,7 +781,6 @@ impl Module for UserModule {
             }
         }
     }
-
 }
 
 #[cfg(test)]

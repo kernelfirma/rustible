@@ -51,7 +51,7 @@ use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 use base64::Engine;
 use sqlx::mysql::MySqlRow;
@@ -115,11 +115,10 @@ impl MysqlQueryModule {
             let type_name = type_info.name();
 
             let value: serde_json::Value = match type_name {
-                "INT" | "BIGINT" | "SMALLINT" | "TINYINT" | "MEDIUMINT" => {
-                    row.try_get::<i64, _>(name.as_str())
-                        .map(serde_json::Value::from)
-                        .unwrap_or(serde_json::Value::Null)
-                }
+                "INT" | "BIGINT" | "SMALLINT" | "TINYINT" | "MEDIUMINT" => row
+                    .try_get::<i64, _>(name.as_str())
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
                 "INT UNSIGNED" | "BIGINT UNSIGNED" | "SMALLINT UNSIGNED" | "TINYINT UNSIGNED" => {
                     row.try_get::<u64, _>(name.as_str())
                         .map(serde_json::Value::from)
@@ -144,7 +143,9 @@ impl MysqlQueryModule {
                 "BLOB" | "MEDIUMBLOB" | "LONGBLOB" | "TINYBLOB" | "BINARY" | "VARBINARY" => {
                     // For binary data, encode as base64
                     row.try_get::<Vec<u8>, _>(name.as_str())
-                        .map(|v| serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&v)))
+                        .map(|v| {
+                            serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&v))
+                        })
                         .unwrap_or(serde_json::Value::Null)
                 }
                 "JSON" => row
@@ -176,10 +177,7 @@ impl MysqlQueryModule {
             .map_err(|e| ModuleError::ExecutionFailed(e.to_string()))?;
 
         // Determine if this is a SELECT query
-        let is_select = query
-            .trim()
-            .to_uppercase()
-            .starts_with("SELECT")
+        let is_select = query.trim().to_uppercase().starts_with("SELECT")
             || query.trim().to_uppercase().starts_with("SHOW")
             || query.trim().to_uppercase().starts_with("DESCRIBE")
             || query.trim().to_uppercase().starts_with("EXPLAIN");
@@ -191,7 +189,11 @@ impl MysqlQueryModule {
                 .map_err(|e| ModuleError::ExecutionFailed(format!("Query failed: {}", e)))?;
 
             let columns: Vec<String> = if !rows.is_empty() {
-                rows[0].columns().iter().map(|c| c.name().to_string()).collect()
+                rows[0]
+                    .columns()
+                    .iter()
+                    .map(|c| c.name().to_string())
+                    .collect()
             } else {
                 Vec::new()
             };
@@ -232,9 +234,9 @@ impl MysqlQueryModule {
             .map_err(|e| ModuleError::ExecutionFailed(e.to_string()))?;
 
         // Start transaction
-        pool.execute("START TRANSACTION")
-            .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to start transaction: {}", e)))?;
+        pool.execute("START TRANSACTION").await.map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to start transaction: {}", e))
+        })?;
 
         let mut results = Vec::new();
 
@@ -250,9 +252,9 @@ impl MysqlQueryModule {
         }
 
         // Commit transaction
-        pool.execute("COMMIT")
-            .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to commit transaction: {}", e)))?;
+        pool.execute("COMMIT").await.map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to commit transaction: {}", e))
+        })?;
 
         Ok(results)
     }
@@ -262,10 +264,7 @@ impl MysqlQueryModule {
         pool: &super::pool::DatabasePool,
         query: &str,
     ) -> ModuleResult<QueryResult> {
-        let is_select = query
-            .trim()
-            .to_uppercase()
-            .starts_with("SELECT")
+        let is_select = query.trim().to_uppercase().starts_with("SELECT")
             || query.trim().to_uppercase().starts_with("SHOW")
             || query.trim().to_uppercase().starts_with("DESCRIBE")
             || query.trim().to_uppercase().starts_with("EXPLAIN");
@@ -277,7 +276,11 @@ impl MysqlQueryModule {
                 .map_err(|e| ModuleError::ExecutionFailed(format!("Query failed: {}", e)))?;
 
             let columns: Vec<String> = if !rows.is_empty() {
-                rows[0].columns().iter().map(|c| c.name().to_string()).collect()
+                rows[0]
+                    .columns()
+                    .iter()
+                    .map(|c| c.name().to_string())
+                    .collect()
             } else {
                 Vec::new()
             };
@@ -455,7 +458,6 @@ impl Module for MysqlQueryModule {
         };
         self.execute(params, &check_context)
     }
-
 }
 
 #[cfg(test)]

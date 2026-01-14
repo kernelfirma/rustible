@@ -360,6 +360,7 @@ fn bench_task_scheduling_overhead(c: &mut Criterion) {
                 task_timeout: 300,
                 gather_facts: false,
                 extra_vars: HashMap::new(),
+                ..Default::default()
             };
             let executor = Executor::new(black_box(config));
             black_box(executor)

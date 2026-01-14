@@ -802,7 +802,6 @@ impl Module for UriModule {
 
         result
     }
-
 }
 
 #[cfg(test)]

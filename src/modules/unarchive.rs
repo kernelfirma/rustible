@@ -773,7 +773,6 @@ impl Module for UnarchiveModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use tracing::{debug, warn};
 
-use super::config::{default_identity_files, expand_path, ConnectionConfig, HostConfig, RetryConfig};
+use super::config::{
+    default_identity_files, expand_path, ConnectionConfig, HostConfig, RetryConfig,
+};
 use super::{ConnectionError, ConnectionResult};
 
 #[derive(Debug, Clone)]
@@ -174,10 +176,8 @@ mod tests {
         host_config.identity_file = Some("/tmp/test_key".to_string());
 
         let mut config = ConnectionConfig::default();
-        config.defaults.identity_files = vec![
-            "/tmp/test_key".to_string(),
-            "/tmp/other_key".to_string(),
-        ];
+        config.defaults.identity_files =
+            vec!["/tmp/test_key".to_string(), "/tmp/other_key".to_string()];
 
         let candidates = identity_file_candidates(&host_config, &config);
         assert!(candidates.len() >= 2);

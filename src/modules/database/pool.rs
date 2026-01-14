@@ -56,8 +56,8 @@ impl Default for PoolConfig {
             max_connections: 10,
             min_connections: 1,
             acquire_timeout: 30,
-            idle_timeout: 600,    // 10 minutes
-            max_lifetime: 1800,   // 30 minutes
+            idle_timeout: 600,  // 10 minutes
+            max_lifetime: 1800, // 30 minutes
             test_before_acquire: true,
         }
     }
@@ -255,7 +255,10 @@ impl PoolManager {
     }
 
     /// Get or create a pool for the given connection URL
-    pub async fn get_or_create(&self, connection_url: &str) -> Result<Arc<DatabasePool>, DatabaseError> {
+    pub async fn get_or_create(
+        &self,
+        connection_url: &str,
+    ) -> Result<Arc<DatabasePool>, DatabaseError> {
         // First, try to get from cache with read lock
         {
             let pools = self.pools.read();

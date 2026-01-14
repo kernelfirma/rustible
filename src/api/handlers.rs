@@ -356,7 +356,7 @@ async fn run_playbook_job(
         task_timeout: 300,
         gather_facts: true,
         extra_vars: req.extra_vars,
-        r#become: false,           // Default for API for now
+        r#become: false, // Default for API for now
         become_method: "sudo".to_string(),
         become_user: "root".to_string(),
         become_password: None,
@@ -394,22 +394,19 @@ async fn run_playbook_job(
                     _ => "unknown", // Handle potential future statuses
                 };
                 if let Some(msg) = &result.msg {
-                     format!("{}: [{}] => {}", status_str, host, msg)
+                    format!("{}: [{}] => {}", status_str, host, msg)
                 } else {
-                     format!("{}: [{}]", status_str, host)
+                    format!("{}: [{}]", status_str, host)
                 }
             }
-            ExecutionEvent::PlaybookFinish(_) => {
-                "Playbook execution completed".to_string()
-            }
+            ExecutionEvent::PlaybookFinish(_) => "Playbook execution completed".to_string(),
             ExecutionEvent::Log(msg) => msg,
         };
         state_clone.append_job_output(job_id_clone, msg, "stdout");
     });
 
     // Create executor with callback
-    let executor = Executor::with_runtime(executor_config, runtime)
-        .with_event_callback(callback);
+    let executor = Executor::with_runtime(executor_config, runtime).with_event_callback(callback);
 
     // Execute playbook
     match executor.run_playbook(&playbook).await {
@@ -429,11 +426,11 @@ async fn run_playbook_job(
 
             let has_failures = summary.failed > 0 || summary.unreachable > 0;
             if has_failures {
-                 state.update_job_status(job_id, JobStatus::Failed);
+                state.update_job_status(job_id, JobStatus::Failed);
             } else {
-                 state.update_job_status(job_id, JobStatus::Success);
+                state.update_job_status(job_id, JobStatus::Success);
             }
-        },
+        }
         Err(e) => {
             let error_msg = format!("Playbook execution failed: {}", e);
             error!("{}", error_msg);

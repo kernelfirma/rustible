@@ -416,7 +416,6 @@ impl Module for ShellModule {
             self.execute_local(params, context)
         }
     }
-
 }
 
 #[cfg(test)]

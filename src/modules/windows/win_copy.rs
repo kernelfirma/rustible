@@ -393,7 +393,6 @@ impl Module for WinCopyModule {
 
         Ok(output)
     }
-
 }
 
 impl WinCopyModule {

@@ -352,7 +352,6 @@ impl Module for ScriptModule {
 
         Ok(output)
     }
-
 }
 
 #[cfg(test)]

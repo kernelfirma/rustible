@@ -10,7 +10,10 @@ use crate::recovery::TransactionId;
 
 use super::results::update_stats;
 use super::task::{Task, TaskResult, TaskStatus};
-use super::{ExecutionEvent, ExecutionStats, ExecutionStrategy, Executor, ExecutorError, ExecutorResult, HostResult};
+use super::{
+    ExecutionEvent, ExecutionStats, ExecutionStrategy, Executor, ExecutorError, ExecutorResult,
+    HostResult,
+};
 
 impl Executor {
     /// Run tasks in linear strategy (all hosts per task before next task)

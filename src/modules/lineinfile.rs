@@ -239,7 +239,8 @@ impl LineinfileModule {
     }
 
     fn apply_backrefs(line: &str, regexp: &Regex, original: &str) -> String {
-        static BACKREF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
+        static BACKREF_RE: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
 
         if let Some(captures) = regexp.captures(original) {
             BACKREF_RE
@@ -696,7 +697,6 @@ impl Module for LineinfileModule {
             )
         }
     }
-
 }
 
 #[cfg(test)]
