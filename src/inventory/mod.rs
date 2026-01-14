@@ -128,9 +128,11 @@ pub use constructed::{
 // Re-export dynamic inventory plugin types
 pub use plugins::{
     create_plugin_from_config, create_plugin_from_file, sanitize_group_name, AwsEc2Plugin,
-    AzurePlugin, ComposeConfig, DynamicInventoryPlugin, DynamicPluginRegistry, FilterConfig,
-    FilterOperator, GcpPlugin, HostnameConfig, KeyedGroupConfig, PluginConfig, PluginConfigBuilder,
-    PluginConfigError, PluginConfigResult, PluginOption, PluginOptionType, TerraformPlugin,
+    AzurePlugin, CacheConfig, ComposeConfig, DynamicInventoryPlugin, DynamicPluginRegistry,
+    FilterConfig, FilterOperator, GcpPlugin, GroupByRule, HostnameConfig, KeyedGroupConfig,
+    LocalBackend, PluginConfig, PluginConfigBuilder, PluginConfigError, PluginConfigResult,
+    PluginOption, PluginOptionType, ResourceMapping, TerraformBackendType,
+    TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
 };
 
 use indexmap::IndexMap;

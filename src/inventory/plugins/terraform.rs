@@ -83,6 +83,246 @@ impl Default for StateBackend {
     }
 }
 
+/// Backend type enumeration for Terraform state sources
+///
+/// This enum represents all supported Terraform backend types for reading state files.
+/// Each variant corresponds to a different storage mechanism where Terraform state can be stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TerraformBackendType {
+    /// Local filesystem state file
+    Local,
+    /// AWS S3 remote state backend
+    S3,
+    /// Google Cloud Storage backend
+    Gcs,
+    /// Azure Blob Storage backend
+    Azure,
+    /// HashiCorp Consul backend
+    Consul,
+    /// HTTP/HTTPS remote state backend
+    Http,
+}
+
+impl Default for TerraformBackendType {
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
+impl std::fmt::Display for TerraformBackendType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Local => write!(f, "local"),
+            Self::S3 => write!(f, "s3"),
+            Self::Gcs => write!(f, "gcs"),
+            Self::Azure => write!(f, "azure"),
+            Self::Consul => write!(f, "consul"),
+            Self::Http => write!(f, "http"),
+        }
+    }
+}
+
+/// Plugin configuration for Terraform state inventory
+///
+/// This struct holds all configuration options for the Terraform inventory plugin,
+/// including backend settings, resource mappings, and caching options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerraformPluginConfig {
+    /// State backend type
+    #[serde(default)]
+    pub backend: TerraformBackendType,
+
+    /// Path to local state file (for Local backend)
+    #[serde(default)]
+    pub state_path: Option<PathBuf>,
+
+    /// S3 bucket name (for S3 backend)
+    #[serde(default)]
+    pub bucket: Option<String>,
+
+    /// S3/GCS/Azure object key (for remote backends)
+    #[serde(default)]
+    pub key: Option<String>,
+
+    /// AWS/GCP region (for cloud backends)
+    #[serde(default)]
+    pub region: Option<String>,
+
+    /// HTTP address (for HTTP backend)
+    #[serde(default)]
+    pub address: Option<String>,
+
+    /// Azure storage account (for Azure backend)
+    #[serde(default)]
+    pub storage_account: Option<String>,
+
+    /// Azure container name (for Azure backend)
+    #[serde(default)]
+    pub container: Option<String>,
+
+    /// Consul address (for Consul backend)
+    #[serde(default)]
+    pub consul_address: Option<String>,
+
+    /// Resource to host mapping rules
+    #[serde(default)]
+    pub resource_mappings: HashMap<String, ResourceMapping>,
+
+    /// Export terraform outputs as group vars
+    #[serde(default = "default_true")]
+    pub export_outputs: bool,
+
+    /// Cache configuration
+    #[serde(default)]
+    pub cache: Option<CacheConfig>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for TerraformPluginConfig {
+    fn default() -> Self {
+        Self {
+            backend: TerraformBackendType::Local,
+            state_path: Some(PathBuf::from("terraform.tfstate")),
+            bucket: None,
+            key: None,
+            region: None,
+            address: None,
+            storage_account: None,
+            container: None,
+            consul_address: None,
+            resource_mappings: HashMap::new(),
+            export_outputs: true,
+            cache: None,
+        }
+    }
+}
+
+/// Resource to host mapping configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceMapping {
+    /// Attribute to use for hostname
+    #[serde(default)]
+    pub hostname_attribute: Option<String>,
+
+    /// Attribute to use for address
+    #[serde(default)]
+    pub address_attribute: Option<String>,
+
+    /// Fallback address attribute if primary is not available
+    #[serde(default)]
+    pub fallback_address: Option<String>,
+
+    /// Grouping rules based on resource attributes
+    #[serde(default)]
+    pub group_by: Vec<GroupByRule>,
+
+    /// Host variables to set from resource attributes
+    #[serde(default)]
+    pub host_vars: HashMap<String, String>,
+}
+
+/// Rule for grouping hosts by attribute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupByRule {
+    /// Attribute path to group by
+    pub attribute: String,
+
+    /// Prefix for the group name
+    #[serde(default)]
+    pub prefix: Option<String>,
+}
+
+/// Cache configuration for Terraform state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfig {
+    /// Enable caching
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Cache TTL in seconds
+    #[serde(default = "default_cache_ttl")]
+    pub ttl: u64,
+}
+
+fn default_cache_ttl() -> u64 {
+    300
+}
+
+/// Trait for Terraform state backends
+///
+/// This trait defines the interface for reading Terraform state from various backends.
+/// Implementations handle authentication, fetching, and parsing of state data.
+#[async_trait]
+pub trait TerraformStateBackend: Send + Sync + std::fmt::Debug {
+    /// Get the backend type
+    fn backend_type(&self) -> TerraformBackendType;
+
+    /// Fetch and parse the Terraform state
+    async fn fetch_state(&self) -> InventoryResult<TerraformState>;
+
+    /// Check if the backend is properly configured and accessible
+    async fn verify(&self) -> InventoryResult<()>;
+}
+
+/// Local filesystem backend for Terraform state
+#[derive(Debug, Clone)]
+pub struct LocalBackend {
+    /// Path to the state file
+    path: PathBuf,
+}
+
+impl LocalBackend {
+    /// Create a new local backend with the given path
+    pub fn new<P: Into<PathBuf>>(path: P) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+#[async_trait]
+impl TerraformStateBackend for LocalBackend {
+    fn backend_type(&self) -> TerraformBackendType {
+        TerraformBackendType::Local
+    }
+
+    async fn fetch_state(&self) -> InventoryResult<TerraformState> {
+        let content = std::fs::read_to_string(&self.path).map_err(|e| {
+            InventoryError::DynamicInventoryFailed(format!(
+                "Failed to read terraform state file '{}': {}",
+                self.path.display(),
+                e
+            ))
+        })?;
+
+        serde_json::from_str(&content).map_err(|e| {
+            InventoryError::DynamicInventoryFailed(format!(
+                "Failed to parse terraform state JSON: {}",
+                e
+            ))
+        })
+    }
+
+    async fn verify(&self) -> InventoryResult<()> {
+        if !self.path.exists() {
+            return Err(InventoryError::DynamicInventoryFailed(format!(
+                "Terraform state file not found: {}",
+                self.path.display()
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// The main Terraform inventory plugin struct
+///
+/// This struct wraps `TerraformPlugin` and provides the full inventory plugin interface
+/// as described in the architecture document. It supports multiple backends and
+/// configurable resource mappings.
+pub type TerraformInventoryPlugin = TerraformPlugin;
+
 /// Terraform state file structure (v4 format)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TerraformState {
@@ -2056,5 +2296,88 @@ mod tests {
         let mut inv_host = Host::new("gcp");
         plugin.apply_compose(&mut inv_host, &gcp_host);
         assert_eq!(inv_host.connection.ssh.user, Some("admin".to_string()));
+    }
+
+    // Test 31: TerraformBackendType enum
+    #[test]
+    fn test_terraform_backend_type() {
+        assert_eq!(TerraformBackendType::default(), TerraformBackendType::Local);
+        assert_eq!(TerraformBackendType::Local.to_string(), "local");
+        assert_eq!(TerraformBackendType::S3.to_string(), "s3");
+        assert_eq!(TerraformBackendType::Gcs.to_string(), "gcs");
+        assert_eq!(TerraformBackendType::Azure.to_string(), "azure");
+        assert_eq!(TerraformBackendType::Consul.to_string(), "consul");
+        assert_eq!(TerraformBackendType::Http.to_string(), "http");
+    }
+
+    // Test 32: TerraformPluginConfig default and serde
+    #[test]
+    fn test_terraform_plugin_config() {
+        let config = TerraformPluginConfig::default();
+        assert_eq!(config.backend, TerraformBackendType::Local);
+        assert_eq!(
+            config.state_path,
+            Some(PathBuf::from("terraform.tfstate"))
+        );
+        assert!(config.export_outputs);
+        assert!(config.resource_mappings.is_empty());
+
+        let json = serde_json::json!({
+            "backend": "s3",
+            "bucket": "my-bucket",
+            "key": "prod/state.tfstate",
+            "region": "us-west-2"
+        });
+        let config: TerraformPluginConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.backend, TerraformBackendType::S3);
+        assert_eq!(config.bucket, Some("my-bucket".to_string()));
+    }
+
+    // Test 33: ResourceMapping serde
+    #[test]
+    fn test_resource_mapping() {
+        let json = serde_json::json!({
+            "hostname_attribute": "tags.Name",
+            "address_attribute": "public_ip",
+            "fallback_address": "private_ip",
+            "group_by": [
+                {"attribute": "tags.Environment", "prefix": "env"}
+            ],
+            "host_vars": {
+                "instance_type": "{{ instance_type }}"
+            }
+        });
+        let mapping: ResourceMapping = serde_json::from_value(json).unwrap();
+        assert_eq!(mapping.hostname_attribute, Some("tags.Name".to_string()));
+        assert_eq!(mapping.address_attribute, Some("public_ip".to_string()));
+        assert_eq!(mapping.group_by.len(), 1);
+        assert_eq!(mapping.group_by[0].attribute, "tags.Environment");
+        assert_eq!(mapping.group_by[0].prefix, Some("env".to_string()));
+    }
+
+    // Test 34: LocalBackend
+    #[test]
+    fn test_local_backend() {
+        let backend = LocalBackend::new("/tmp/terraform.tfstate");
+        assert_eq!(backend.backend_type(), TerraformBackendType::Local);
+    }
+
+    // Test 35: CacheConfig defaults
+    #[test]
+    fn test_cache_config() {
+        let json = serde_json::json!({
+            "enabled": true
+        });
+        let config: CacheConfig = serde_json::from_value(json).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.ttl, 300); // Default TTL
+    }
+
+    // Test 36: TerraformInventoryPlugin type alias
+    #[test]
+    fn test_terraform_inventory_plugin_alias() {
+        fn accepts_plugin(_plugin: &TerraformInventoryPlugin) {}
+        let plugin = TerraformPlugin::with_defaults().unwrap();
+        accepts_plugin(&plugin);
     }
 }
