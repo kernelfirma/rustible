@@ -774,33 +774,6 @@ impl Module for UnarchiveModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let src_str = params.get_string_required("src")?;
-        let dest_str = params.get_string_required("dest")?;
-        let dest = Path::new(&dest_str);
-
-        let before = if dest.exists() {
-            let file_count = walkdir::WalkDir::new(dest)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .count();
-            format!("dest: {} ({} items)", dest_str, file_count)
-        } else {
-            format!("dest: {} (absent)", dest_str)
-        };
-
-        let after = format!("dest: {} (extracted from {})", dest_str, src_str);
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

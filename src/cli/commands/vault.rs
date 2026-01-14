@@ -350,6 +350,9 @@ fn get_password_with_confirm(
 impl VaultArgs {
     /// Execute the vault command
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        // Initialize progress bars support
+        ctx.output.init_progress();
+
         match &self.action {
             VaultAction::Encrypt(args) => {
                 let password = get_password_with_confirm(args.vault_password_file.as_ref(), ctx)?;
@@ -363,7 +366,12 @@ impl VaultArgs {
                     return Ok(0);
                 }
 
-                let encrypted = engine.encrypt(&content)?;
+                let spinner = ctx.output.create_spinner("Encrypting...");
+                let encrypted = engine.encrypt(&content);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let encrypted = encrypted?;
 
                 let output_path = args.output_file.as_ref().unwrap_or(&args.file);
                 fs::write(output_path, &encrypted)
@@ -386,7 +394,12 @@ impl VaultArgs {
                     return Ok(0);
                 }
 
-                let decrypted = engine.decrypt(&content)?;
+                let spinner = ctx.output.create_spinner("Decrypting...");
+                let decrypted = engine.decrypt(&content);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let decrypted = decrypted?;
 
                 let output_path = args.output_file.as_ref().unwrap_or(&args.file);
                 fs::write(output_path, &decrypted)
@@ -410,7 +423,13 @@ impl VaultArgs {
                     return Ok(0);
                 }
 
-                let decrypted = engine.decrypt(&content)?;
+                let spinner = ctx.output.create_spinner("Decrypting...");
+                let decrypted = engine.decrypt(&content);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let decrypted = decrypted?;
+
                 println!("{}", String::from_utf8_lossy(&decrypted));
                 Ok(0)
             }
@@ -424,7 +443,12 @@ impl VaultArgs {
 
                 let was_encrypted = VaultEngine::is_encrypted(&content);
                 let plaintext = if was_encrypted {
-                    engine.decrypt(&content)?
+                    let spinner = ctx.output.create_spinner("Decrypting...");
+                    let decrypted = engine.decrypt(&content);
+                    if let Some(sp) = spinner {
+                        sp.finish_and_clear();
+                    }
+                    decrypted?
                 } else {
                     content.into_bytes()
                 };
@@ -452,7 +476,13 @@ impl VaultArgs {
 
                 // Re-encrypt if it was encrypted
                 if was_encrypted {
-                    let encrypted = engine.encrypt(&edited)?;
+                    let spinner = ctx.output.create_spinner("Encrypting...");
+                    let encrypted = engine.encrypt(&edited);
+                    if let Some(sp) = spinner {
+                        sp.finish_and_clear();
+                    }
+                    let encrypted = encrypted?;
+
                     fs::write(&args.file, &encrypted)?;
                 } else {
                     fs::write(&args.file, &edited)?;
@@ -497,7 +527,13 @@ impl VaultArgs {
                 }
 
                 // Encrypt and save
-                let encrypted = engine.encrypt(&content)?;
+                let spinner = ctx.output.create_spinner("Encrypting...");
+                let encrypted = engine.encrypt(&content);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let encrypted = encrypted?;
+
                 fs::write(&args.file, &encrypted)?;
 
                 ctx.output
@@ -523,13 +559,32 @@ impl VaultArgs {
                         continue;
                     }
 
-                    let decrypted = old_engine.decrypt(&content)?;
-                    let reencrypted = new_engine.encrypt(&decrypted)?;
+                    let spinner = ctx
+                        .output
+                        .create_spinner(&format!("Rekeying {}...", file.display()));
 
-                    fs::write(file, &reencrypted)
-                        .with_context(|| format!("Failed to write file: {}", file.display()))?;
+                    // We need to handle the Result inside the spinner block to ensure clear
+                    let res = (|| -> Result<()> {
+                        let decrypted = old_engine.decrypt(&content)?;
+                        let reencrypted = new_engine.encrypt(&decrypted)?;
+                        fs::write(file, &reencrypted)?;
+                        Ok(())
+                    })();
 
-                    ctx.output.info(&format!("Rekeyed: {}", file.display()));
+                    if let Some(sp) = spinner {
+                        sp.finish_and_clear();
+                    }
+
+                    match res {
+                        Ok(_) => ctx.output.info(&format!("Rekeyed: {}", file.display())),
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to rekey {}: {}",
+                                file.display(),
+                                e
+                            ))
+                        }
+                    }
                 }
 
                 Ok(0)
@@ -547,7 +602,12 @@ impl VaultArgs {
                     input.trim().as_bytes().to_vec()
                 };
 
-                let encrypted = engine.encrypt(&plaintext)?;
+                let spinner = ctx.output.create_spinner("Encrypting...");
+                let encrypted = engine.encrypt(&plaintext);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let encrypted = encrypted?;
 
                 if let Some(ref name) = args.name {
                     println!("{}: !vault |", name);
@@ -565,7 +625,13 @@ impl VaultArgs {
                 let password = get_password(args.vault_password_file.as_ref(), ctx)?;
                 let engine = VaultEngine::new(password);
 
-                let decrypted = engine.decrypt(&args.string)?;
+                let spinner = ctx.output.create_spinner("Decrypting...");
+                let decrypted = engine.decrypt(&args.string);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+                let decrypted = decrypted?;
+
                 println!("{}", String::from_utf8_lossy(&decrypted));
 
                 Ok(0)

@@ -15,7 +15,6 @@ use crate::connection::{Connection, ExecuteOptions, TransferOptions};
 use crate::utils::shell_escape;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -805,18 +804,6 @@ impl Module for AuthorizedKeyModule {
         &["user", "key"]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        let mut params = HashMap::new();
-        params.insert("state", serde_json::json!("present"));
-        params.insert("path", serde_json::json!(null));
-        params.insert("manage_dir", serde_json::json!(true));
-        params.insert("key_options", serde_json::json!(null));
-        params.insert("comment", serde_json::json!(null));
-        params.insert("exclusive", serde_json::json!(false));
-        params.insert("validate_certs", serde_json::json!(true));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Validate user parameter
         let user = params.get_string_required("user")?;
@@ -901,24 +888,6 @@ impl Module for AuthorizedKeyModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let diff_context = ModuleContext {
-            check_mode: true,
-            diff_mode: true,
-            ..context.clone()
-        };
-
-        let result = self.execute(params, &diff_context)?;
-        Ok(result.diff)
-    }
 }
 
 #[cfg(test)]

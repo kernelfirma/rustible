@@ -54,7 +54,7 @@ use crate::modules::windows::{
     execute_powershell_sync, powershell_escape, validate_package_name, validate_windows_path,
 };
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 
@@ -904,88 +904,6 @@ impl Module for WinPackageModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state = params
-            .get_string("state")?
-            .map(|s| PackageState::from_str(&s))
-            .transpose()?
-            .unwrap_or(PackageState::Present);
-        let provider = params
-            .get_string("provider")?
-            .map(|s| PackageProvider::from_str(&s))
-            .transpose()?
-            .unwrap_or(PackageProvider::Auto);
-
-        let actual_provider = match provider {
-            PackageProvider::Auto => Self::detect_provider(&name),
-            p => p,
-        };
-
-        let (is_installed, version) = match actual_provider {
-            PackageProvider::Chocolatey => {
-                let script = Self::generate_choco_package_check_script(&name);
-                let (success, stdout, _) = execute_powershell_sync(connection, &script)?;
-                if success {
-                    let result = Self::parse_json_result(&stdout)?;
-                    (
-                        result["installed"].as_bool().unwrap_or(false),
-                        result["version"].as_str().unwrap_or("").to_string(),
-                    )
-                } else {
-                    (false, String::new())
-                }
-            }
-            PackageProvider::Winget => {
-                let script = Self::generate_winget_check_script(&name);
-                let (success, stdout, _) = execute_powershell_sync(connection, &script)?;
-                if success {
-                    let result = Self::parse_json_result(&stdout)?;
-                    (
-                        result["installed"].as_bool().unwrap_or(false),
-                        result["version"].as_str().unwrap_or("").to_string(),
-                    )
-                } else {
-                    (false, String::new())
-                }
-            }
-            _ => (false, String::new()),
-        };
-
-        let before = if is_installed {
-            format!("package: {} (version {})", name, version)
-        } else {
-            format!("package: {} (not installed)", name)
-        };
-
-        let after = match state {
-            PackageState::Present | PackageState::Latest => {
-                format!("package: {} (installed)", name)
-            }
-            PackageState::Absent => {
-                format!("package: {} (not installed)", name)
-            }
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

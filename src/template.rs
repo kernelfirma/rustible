@@ -184,6 +184,22 @@ impl TemplateEngine {
         Ok(result)
     }
 
+    /// Render a template string with a JSON Value context
+    ///
+    /// This allows rendering directly with a serde_json::Value (e.g. Object) without
+    /// converting it to HashMap/IndexMap first.
+    pub fn render_with_json(&self, template: &str, context: &JsonValue) -> Result<String> {
+        // Fast path: no template syntax
+        if !Self::is_template(template) {
+            return Ok(template.to_string());
+        }
+
+        trace!("Rendering template: {}", template);
+        let tmpl = self.env.template_from_str(template)?;
+        let result = tmpl.render(context)?;
+        Ok(result)
+    }
+
     /// Render a JSON value, templating any strings within it
     ///
     /// Recursively templates all string values in the JSON structure.
@@ -301,12 +317,30 @@ impl TemplateEngine {
 
     /// Check if a string contains template syntax
     ///
-    /// Returns true if the string contains `{{` or `{%` which indicate
-    /// Jinja2 template expressions or statements.
+    /// Returns true if the string contains `{{`, `{%`, or `{#` which indicate
+    /// Jinja2 template expressions, statements, or comments.
     #[must_use]
     #[inline]
     pub fn is_template(s: &str) -> bool {
-        s.contains("{{") || s.contains("{%") || s.contains("{#")
+        // Optimization: Single-pass scan using memchr (via str::find) to avoid traversing
+        // the string multiple times.
+        let mut rest = s;
+        while let Some(i) = rest.find('{') {
+            if i + 1 < rest.len() {
+                let next = rest.as_bytes()[i + 1];
+                // Check for {{ (expression), {% (statement), or {# (comment)
+                if next == b'{' || next == b'%' || next == b'#' {
+                    return true;
+                }
+            }
+            // Advance past the found '{'
+            if i + 1 < rest.len() {
+                rest = &rest[i + 1..];
+            } else {
+                break;
+            }
+        }
+        false
     }
 }
 

@@ -3,7 +3,7 @@
 //! This module manages groups on the system.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -357,57 +357,6 @@ impl Module for GroupModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = GroupState::from_str(&state_str)?;
-
-        let group_info = Self::get_group_info_via_connection(connection, &name, context)?;
-
-        let before = if let Some(info) = &group_info {
-            format!(
-                "group: {}\ngid: {}\nmembers: {}",
-                info.name,
-                info.gid,
-                info.members.join(",")
-            )
-        } else {
-            "group: (absent)".to_string()
-        };
-
-        let after = match state {
-            GroupState::Absent => "group: (absent)".to_string(),
-            GroupState::Present => {
-                if group_info.is_some() {
-                    // Would need to compute differences based on params
-                    before.clone()
-                } else {
-                    format!("group: {} (will be created)", name)
-                }
-            }
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

@@ -26,7 +26,7 @@
 //! - `profiles`: Compose profiles to enable
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -760,29 +760,6 @@ impl Module for DockerComposeModule {
                 .join()
                 .unwrap()
         })
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = ComposeConfig::from_params(params)?;
-
-        let project = config
-            .project_name
-            .as_deref()
-            .or(config.project_src.as_deref())
-            .unwrap_or("unknown");
-
-        let before = format!("compose project: {} (current state unknown)", project);
-        let after = format!("compose project: {} state={:?}", project, config.state);
-
-        Ok(Some(Diff::new(before, after)))
     }
 }
 

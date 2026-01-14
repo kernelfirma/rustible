@@ -394,47 +394,6 @@ impl Module for WinCopyModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let dest = params.get_string_required("dest")?;
-        let content = params.get_string("content")?;
-
-        // Get current file content if it exists
-        let script = format!(
-            r#"
-$dest = {}
-if (Test-Path -LiteralPath $dest -PathType Leaf) {{
-    Get-Content -LiteralPath $dest -Raw
-}} else {{
-    ""
-}}
-"#,
-            powershell_escape(&dest)
-        );
-
-        let (success, stdout, _) = execute_powershell_sync(connection, &script)?;
-        let before = if success { stdout } else { String::new() };
-
-        let after = content.unwrap_or_else(|| "(binary content)".to_string());
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 impl WinCopyModule {

@@ -476,6 +476,12 @@ pub mod diagnostics;
 /// Command Metrics, and Prometheus Export.
 pub mod metrics;
 
+/// Structured logging system based on loggingsucks.com philosophy.
+///
+/// Provides wide-event logging with JSON output, trace ID propagation,
+/// and intelligent sampling for queryable analytics.
+pub mod logging;
+
 // ============================================================================
 // State Management
 // ============================================================================

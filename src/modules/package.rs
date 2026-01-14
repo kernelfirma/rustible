@@ -4,7 +4,7 @@
 //! (apt, dnf, yum, pacman, zypper, etc.).
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use std::collections::HashMap;
@@ -200,6 +200,7 @@ impl PackageState {
 }
 
 /// Module for package management
+#[derive(Default)]
 pub struct PackageModule;
 
 impl PackageModule {
@@ -402,71 +403,6 @@ impl Module for PackageModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let pkg_manager = if let Some(pm_str) = params.get_string("use")? {
-            PackageManager::from_str(&pm_str)?
-        } else {
-            match PackageManager::detect() {
-                Some(pm) => pm,
-                None => return Ok(None),
-            }
-        };
-
-        let packages: Vec<String> = if let Some(names) = params.get_vec_string("name")? {
-            names
-        } else {
-            vec![params.get_string_required("name")?]
-        };
-
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = PackageState::from_str(&state_str)?;
-
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        for package in &packages {
-            let is_installed = pkg_manager.is_installed(package)?;
-            let version = pkg_manager
-                .get_installed_version(package)?
-                .unwrap_or_default();
-
-            match state {
-                PackageState::Present | PackageState::Latest => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, version));
-                        after_lines.push(format!("{}: {}", package, version));
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (will be installed)", package));
-                    }
-                }
-                PackageState::Absent => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, version));
-                        after_lines.push(format!("{}: (will be removed)", package));
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (not installed)", package));
-                    }
-                }
-            }
-        }
-
-        Ok(Some(Diff::new(
-            before_lines.join("\n"),
-            after_lines.join("\n"),
-        )))
-    }
 }
 
 #[cfg(test)]

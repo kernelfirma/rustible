@@ -7,6 +7,7 @@ use super::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::utils::shell_escape;
 use std::path::Path;
 use std::process::Command;
 
@@ -24,18 +25,24 @@ impl SshConfig {
         let mut parts = vec!["ssh".to_string()];
 
         if let Some(key) = &self.key_file {
-            parts.push(format!("-i {}", key));
+            parts.push("-i".to_string());
+            parts.push(shell_escape(key));
             // Disable other key sources when using specific key
-            parts.push("-o IdentitiesOnly=yes".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("IdentitiesOnly=yes"));
         }
 
         if self.accept_hostkey {
-            parts.push("-o StrictHostKeyChecking=no".to_string());
-            parts.push("-o UserKnownHostsFile=/dev/null".to_string());
+            parts.push("-o".to_string());
+            parts.push(shell_escape("StrictHostKeyChecking=no"));
+            parts.push("-o".to_string());
+            parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
         }
 
         if let Some(opts) = &self.ssh_opts {
-            parts.push(opts.clone());
+            // Options might contain spaces, so we should escape them to be safe
+            // when git passes them to the shell
+            parts.push(shell_escape(opts));
         }
 
         if parts.len() > 1 {
@@ -574,6 +581,26 @@ impl Module for GitModule {
             }
         }
 
+        // Security: Prevent argument injection via refspec
+        if let Some(refspec) = params.get_string("refspec")? {
+            if refspec.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid refspec: '{}'. Refspecs cannot start with '-' to prevent argument injection.",
+                    refspec
+                )));
+            }
+        }
+
+        // Security: Prevent argument injection via version (branch/tag)
+        if let Some(version) = params.get_string("version")? {
+            if version.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid version: '{}'. Version/branch names cannot start with '-' to prevent argument injection.",
+                    version
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -779,63 +806,6 @@ impl Module for GitModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let dest = params.get_string_required("dest")?;
-        let repo = params.get_string_required("repo")?;
-        let version = params.get_string("version")?;
-        let remote = params
-            .get_string("remote")?
-            .unwrap_or_else(|| "origin".to_string());
-
-        let is_repo = Self::is_git_repo(&dest);
-
-        if !is_repo {
-            Ok(Some(Diff::new(
-                "repository: absent",
-                format!(
-                    "repository: {} @ {}",
-                    repo,
-                    version.as_deref().unwrap_or("HEAD")
-                ),
-            )))
-        } else {
-            let current_version =
-                Self::get_current_version(&dest)?.unwrap_or_else(|| "unknown".to_string());
-            let current_branch = Self::get_current_branch(&dest)?;
-            let local_changes = Self::get_local_changes(&dest)?;
-            let target_version = version.unwrap_or_else(|| "HEAD".to_string());
-
-            // Build detailed before state
-            let mut before = format!(
-                "commit: {}\nbranch: {}",
-                &current_version[..8.min(current_version.len())],
-                current_branch.as_deref().unwrap_or("detached")
-            );
-
-            if !local_changes.is_empty() {
-                before.push_str(&format!("\nlocal changes: {} files", local_changes.len()));
-                for change in local_changes.iter().take(5) {
-                    before.push_str(&format!("\n  {}", change));
-                }
-                if local_changes.len() > 5 {
-                    before.push_str(&format!("\n  ... and {} more", local_changes.len() - 5));
-                }
-            }
-
-            // Build target state
-            let after = format!("commit: {}\nremote: {}", target_version, remote);
-
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1009,8 +979,29 @@ mod tests {
             accept_hostkey: false,
         };
         let cmd = config.build_ssh_command().unwrap();
+        // /path/to/key is safe, so it is NOT quoted by shell_escape
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o IdentitiesOnly=yes"));
+        // IdentitiesOnly=yes contains =, so it IS quoted
+        assert!(cmd.contains("-o 'IdentitiesOnly=yes'"));
+
+        // With key file containing spaces (security check)
+        let config = SshConfig {
+            key_file: Some("/path/to/my key".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        // Contains space, so it IS quoted
+        assert!(cmd.contains("-i '/path/to/my key'"));
+
+        // With key file containing injection attempt (security check)
+        let config = SshConfig {
+            key_file: Some("id_rsa; rm -rf /".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+        assert!(cmd.contains("-i 'id_rsa; rm -rf /'"));
 
         // With accept_hostkey
         let config = SshConfig {
@@ -1019,8 +1010,8 @@ mod tests {
             accept_hostkey: true,
         };
         let cmd = config.build_ssh_command().unwrap();
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
-        assert!(cmd.contains("-o UserKnownHostsFile=/dev/null"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
+        assert!(cmd.contains("-o 'UserKnownHostsFile=/dev/null'"));
 
         // With custom ssh_opts
         let config = SshConfig {
@@ -1029,7 +1020,8 @@ mod tests {
             accept_hostkey: false,
         };
         let cmd = config.build_ssh_command().unwrap();
-        assert!(cmd.contains("ProxyCommand"));
+        // It should be quoted now because it contains spaces
+        assert!(cmd.contains("'-o ProxyCommand=ssh -W %h:%p proxy'"));
 
         // Combined options
         let config = SshConfig {
@@ -1039,8 +1031,33 @@ mod tests {
         };
         let cmd = config.build_ssh_command().unwrap();
         assert!(cmd.contains("-i /path/to/key"));
-        assert!(cmd.contains("-o StrictHostKeyChecking=no"));
+        assert!(cmd.contains("-o 'StrictHostKeyChecking=no'"));
         assert!(cmd.contains("-v"));
+    }
+
+    #[test]
+    fn test_ssh_command_injection_mitigation() {
+        // Attempt injection via key_file
+        let config = SshConfig {
+            key_file: Some("id_rsa; touch /tmp/pwned".to_string()),
+            ssh_opts: None,
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+
+        // Should be escaped: -i 'id_rsa; touch /tmp/pwned'
+        assert!(cmd.contains("-i 'id_rsa; touch /tmp/pwned'"));
+
+        // Attempt injection via ssh_opts
+        let config = SshConfig {
+            key_file: None,
+            ssh_opts: Some("-o ProxyCommand=nc 127.0.0.1 22; echo injection".to_string()),
+            accept_hostkey: false,
+        };
+        let cmd = config.build_ssh_command().unwrap();
+
+        // Should be escaped
+        assert!(cmd.contains("'-o ProxyCommand=nc 127.0.0.1 22; echo injection'"));
     }
 
     #[test]
@@ -1059,28 +1076,36 @@ mod tests {
     }
 
     #[test]
-    fn test_diff_output_missing_repo() {
+    fn test_git_module_argument_injection_protection() {
         let module = GitModule;
-        let temp = TempDir::new().unwrap();
-        let dest_path = temp.path().join("nonexistent");
 
+        // Test refspec starting with -
         let mut params: ModuleParams = HashMap::new();
         params.insert(
             "repo".to_string(),
             serde_json::json!("https://github.com/test/repo"),
         );
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+        params.insert("refspec".to_string(), serde_json::json!("--upload-pack=malicious"));
+
+        // This should fail validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+
+        // Test version starting with -
+        let mut params: ModuleParams = HashMap::new();
         params.insert(
-            "dest".to_string(),
-            serde_json::json!(dest_path.to_str().unwrap()),
+            "repo".to_string(),
+            serde_json::json!("https://github.com/test/repo"),
         );
-        params.insert("version".to_string(), serde_json::json!("v1.0.0"));
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+        params.insert("version".to_string(), serde_json::json!("-f"));
+        params.insert("update".to_string(), serde_json::json!(true));
 
-        let context = ModuleContext::default();
-        let diff = module.diff(&params, &context).unwrap();
-
-        assert!(diff.is_some());
-        let diff = diff.unwrap();
-        assert!(diff.before.contains("absent"));
-        assert!(diff.after.contains("v1.0.0"));
+        // This should fail validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
     }
 }

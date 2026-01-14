@@ -31,7 +31,7 @@ use bollard::Docker;
 use futures::StreamExt;
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -617,28 +617,6 @@ impl Module for DockerImageModule {
         {
             self.execute_stub(params, context)
         }
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = ImageConfig::from_params(params)?;
-
-        let before = format!("image: {} (current state unknown)", config.full_reference());
-        let after = format!(
-            "image: {} state={:?} source={:?}",
-            config.full_reference(),
-            config.state,
-            config.source
-        );
-
-        Ok(Some(Diff::new(before, after)))
     }
 }
 

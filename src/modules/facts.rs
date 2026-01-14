@@ -954,10 +954,6 @@ impl Module for FactsModule {
             .with_data("ansible_facts", serde_json::Value::Object(facts_json)))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Fact gathering is read-only, so check mode behaves the same
-        self.execute(params, context)
-    }
 }
 
 #[cfg(test)]

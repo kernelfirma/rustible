@@ -1498,31 +1498,6 @@ impl Module for NxosConfigModule {
                 .unwrap()
         })
     }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => return Ok(None),
-        };
-
-        let params = params.clone();
-        let context = context.clone();
-        let module = self;
-
-        std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.diff_async(&params, &context)))
-                .join()
-                .unwrap()
-        })
-    }
 }
 
 #[cfg(test)]

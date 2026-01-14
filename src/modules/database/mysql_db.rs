@@ -32,14 +32,13 @@
 //!     state: absent
 //! ```
 
-use super::pool::{global_pool_manager, PoolConfig};
+use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
 use sqlx::Row;
-use std::collections::HashMap;
 use tokio::runtime::Handle;
 
 /// Desired state for a database
@@ -124,7 +123,8 @@ impl MysqlDbModule {
     /// Execute database operations using async runtime
     fn execute_async<F, T>(f: F) -> ModuleResult<T>
     where
-        F: std::future::Future<Output = ModuleResult<T>>,
+        F: std::future::Future<Output = ModuleResult<T>> + Send,
+        T: Send,
     {
         // Try to use existing runtime, or create a new one
         if let Ok(handle) = Handle::try_current() {
@@ -305,15 +305,6 @@ impl Module for MysqlDbModule {
         &["name"]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        let mut params = HashMap::new();
-        params.insert("state", serde_json::json!("present"));
-        params.insert("login_host", serde_json::json!("localhost"));
-        params.insert("login_port", serde_json::json!(3306));
-        params.insert("login_user", serde_json::json!("root"));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         let name = params.get_string_required("name")?;
         Self::validate_db_name(&name)?;
@@ -467,56 +458,6 @@ impl Module for MysqlDbModule {
         self.execute(params, &check_context)
     }
 
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let db_name = params.get_string_required("name")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = DatabaseState::from_str(&state_str)?;
-
-        let encoding = params.get_string("encoding")?;
-        let collation = params.get_string("collation")?;
-
-        let conn_params = extract_connection_params(params)?;
-
-        Self::execute_async(async {
-            let current = Self::get_database_info(&conn_params, &db_name).await?;
-
-            let before = if let Some(ref info) = current {
-                format!(
-                    "database: {}\nencoding: {}\ncollation: {}",
-                    info.name, info.encoding, info.collation
-                )
-            } else {
-                "database: (absent)".to_string()
-            };
-
-            let after = match state {
-                DatabaseState::Absent => "database: (absent)".to_string(),
-                DatabaseState::Present => {
-                    let enc = encoding
-                        .as_deref()
-                        .or_else(|| current.as_ref().map(|c| c.encoding.as_str()))
-                        .unwrap_or("utf8mb4");
-                    let coll = collation
-                        .as_deref()
-                        .or_else(|| current.as_ref().map(|c| c.collation.as_str()))
-                        .unwrap_or("utf8mb4_general_ci");
-
-                    format!(
-                        "database: {}\nencoding: {}\ncollation: {}",
-                        db_name, enc, coll
-                    )
-                }
-            };
-
-            if before == after {
-                Ok(None)
-            } else {
-                Ok(Some(Diff::new(before, after)))
-            }
-        })
-    }
 }
 
 #[cfg(test)]

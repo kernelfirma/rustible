@@ -3,6 +3,41 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+use std::io::{self, Read};
+use std::path::Path;
+use std::fs::File;
+
+/// Compute a checksum for a file using streaming to avoid loading it entirely into memory.
+///
+/// This function uses `DefaultHasher` which is not cryptographically secure and
+/// may vary across Rust versions/runs, but is sufficient for internal change detection
+/// within the same process execution.
+pub fn get_file_checksum(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut hasher = DefaultHasher::new();
+    let mut buffer = [0; 8192];
+
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.write(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finish()))
+}
+
+/// Compute a checksum for a byte slice.
+///
+/// Matches the behavior of `get_file_checksum` by writing bytes directly to the hasher.
+pub fn compute_checksum(data: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(data);
+    format!("{:x}", hasher.finish())
+}
+
 /// Escape a string for safe use in shell commands.
 ///
 /// This function is essential for preventing command injection vulnerabilities.
@@ -28,20 +63,34 @@ pub use regex_cache::get_regex;
 /// assert_eq!(shell_escape("rm -rf /"), "'rm -rf /'");
 /// ```
 pub fn shell_escape(s: &str) -> String {
-    // If the string contains no special characters, return as-is
-    // This makes the output more readable for simple cases
-    // Safe characters: alphanumeric, underscore, hyphen, dot, slash, colon, plus
-    // Colon is needed for SELinux contexts (user:role:type:level)
-    // Plus is needed for timezone offsets (GMT+5)
-    if s.chars().all(|c| {
-        c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+'
-    }) {
+    let mut safe = true;
+    for c in s.chars() {
+        if !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '+')) {
+            safe = false;
+            break;
+        }
+    }
+
+    if safe {
+        if s.is_empty() {
+             return "''".to_string();
+        }
         return s.to_string();
     }
-    // Otherwise, wrap in single quotes and escape any single quotes within
-    // 'string' -> 'string'
-    // 'can't' -> 'can'\''t'
-    format!("'{}'", s.replace('\'', "'\\''"))
+
+    let mut escaped = String::with_capacity(s.len() + 16);
+    escaped.push('\'');
+
+    for c in s.chars() {
+        if c == '\'' {
+            escaped.push_str("'\\''");
+        } else {
+            escaped.push(c);
+        }
+    }
+
+    escaped.push('\'');
+    escaped
 }
 
 /// Escape a string for safe use in Windows cmd.exe.
@@ -58,9 +107,17 @@ pub fn shell_escape(s: &str) -> String {
 ///
 /// * The escaped string safe for cmd.exe execution
 pub fn cmd_escape(s: &str) -> String {
-    // Windows cmd.exe generally uses double quotes for arguments.
-    // To escape a double quote inside a double-quoted string, you often use two double quotes.
-    format!("\"{}\"", s.replace('"', "\"\""))
+    let mut escaped = String::with_capacity(s.len() + 16);
+    escaped.push('"');
+    for c in s.chars() {
+        if c == '"' {
+            escaped.push_str("\"\"");
+        } else {
+            escaped.push(c);
+        }
+    }
+    escaped.push('"');
+    escaped
 }
 
 /// Escapes a string for safe use in PowerShell commands.
@@ -68,16 +125,37 @@ pub fn cmd_escape(s: &str) -> String {
 /// This function handles special characters that could cause issues
 /// in PowerShell string literals.
 pub fn powershell_escape(s: &str) -> String {
-    // Use single quotes and escape embedded single quotes by doubling them
-    format!("'{}'", s.replace('\'', "''"))
+    let mut escaped = String::with_capacity(s.len() + 16);
+    escaped.push('\'');
+    for c in s.chars() {
+        if c == '\'' {
+            escaped.push_str("''");
+        } else {
+            escaped.push(c);
+        }
+    }
+    escaped.push('\'');
+    escaped
 }
 
 /// Escapes a string for use in PowerShell double-quoted strings.
 ///
 /// This handles backticks, dollar signs, and double quotes.
 pub fn powershell_escape_double_quoted(s: &str) -> String {
-    let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
-    format!("\"{}\"", escaped)
+    // let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
+    // format!("\"{}\"", escaped)
+    let mut escaped = String::with_capacity(s.len() + 16);
+    escaped.push('"');
+    for c in s.chars() {
+        match c {
+            '`' => escaped.push_str("``"),
+            '$' => escaped.push_str("`$"),
+            '"' => escaped.push_str("`\""),
+            _ => escaped.push(c),
+        }
+    }
+    escaped.push('"');
+    escaped
 }
 
 #[cfg(test)]
@@ -94,6 +172,9 @@ mod tests {
         assert_eq!(shell_escape("with space"), "'with space'");
         assert_eq!(shell_escape("with'quote"), "'with'\\''quote'");
         assert_eq!(shell_escape("don't"), "'don'\\''t'");
+
+        // Empty string
+        assert_eq!(shell_escape(""), "''");
 
         // Command injection attempts
         assert_eq!(shell_escape("pkg; rm -rf /"), "'pkg; rm -rf /'");
@@ -112,6 +193,7 @@ mod tests {
         assert_eq!(cmd_escape("with\"quote"), "\"with\"\"quote\"");
         assert_eq!(cmd_escape("foo&bar"), "\"foo&bar\"");
         assert_eq!(cmd_escape("foo|bar"), "\"foo|bar\"");
+        assert_eq!(cmd_escape(""), "\"\"");
     }
 
     #[test]
@@ -129,5 +211,21 @@ mod tests {
             powershell_escape_double_quoted("with`backtick"),
             "\"with``backtick\""
         );
+        assert_eq!(powershell_escape_double_quoted(""), "\"\"");
+    }
+
+    #[test]
+    fn test_checksum_consistency() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let content = b"hello world";
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(content).unwrap();
+
+        let file_sum = get_file_checksum(file.path()).unwrap();
+        let mem_sum = compute_checksum(content);
+
+        assert_eq!(file_sum, mem_sum);
     }
 }

@@ -28,7 +28,7 @@
 //! ```
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use std::collections::HashMap;
@@ -535,33 +535,6 @@ impl Module for K8sNamespaceModule {
         ))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = NamespaceConfig::from_params(params)?;
-
-        let before = match config.state {
-            NamespaceState::Present => "absent or different configuration".to_string(),
-            NamespaceState::Absent => format!("Namespace '{}' exists", config.name),
-        };
-
-        let after = match config.state {
-            NamespaceState::Present => format!(
-                "Namespace '{}' with {} labels",
-                config.name,
-                config.labels.len()
-            ),
-            NamespaceState::Absent => format!("Namespace '{}' absent", config.name),
-        };
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

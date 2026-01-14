@@ -774,56 +774,260 @@ impl ConnectionFactory {
     }
 }
 
-/// Connection pool for reusing connections
+/// Configuration for connection pool limits
+#[derive(Debug, Clone)]
+pub struct ConnectionPoolConfig {
+    /// Maximum connections per host (default: 5)
+    pub max_connections_per_host: usize,
+
+    /// Maximum total connections across all hosts (default: 100)
+    pub max_total_connections: usize,
+
+    /// Idle connection timeout in seconds (default: 300 = 5 minutes)
+    /// Connections unused for longer than this will be closed
+    pub idle_timeout_secs: u64,
+
+    /// Maximum connection lifetime in seconds (default: 3600 = 1 hour)
+    /// Connections older than this will be closed regardless of activity
+    pub max_lifetime_secs: u64,
+}
+
+impl Default for ConnectionPoolConfig {
+    fn default() -> Self {
+        Self {
+            max_connections_per_host: 5,
+            max_total_connections: 100,
+            idle_timeout_secs: 300,  // 5 minutes
+            max_lifetime_secs: 3600, // 1 hour
+        }
+    }
+}
+
+/// A pooled connection with lifecycle tracking
+struct PooledConnection {
+    connection: Arc<dyn Connection + Send + Sync>,
+    created_at: std::time::Instant,
+    last_used: std::time::Instant,
+    host_key: String,
+}
+
+impl PooledConnection {
+    fn new(connection: Arc<dyn Connection + Send + Sync>, host_key: String) -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            connection,
+            created_at: now,
+            last_used: now,
+            host_key,
+        }
+    }
+
+    fn touch(&mut self) {
+        self.last_used = std::time::Instant::now();
+    }
+
+    fn is_expired(&self, config: &ConnectionPoolConfig) -> bool {
+        let now = std::time::Instant::now();
+
+        // Check idle timeout
+        if now.duration_since(self.last_used).as_secs() > config.idle_timeout_secs {
+            return true;
+        }
+
+        // Check max lifetime
+        if now.duration_since(self.created_at).as_secs() > config.max_lifetime_secs {
+            return true;
+        }
+
+        false
+    }
+}
+
+/// Connection pool for reusing connections with resource limits
+///
+/// Provides:
+/// - Per-host connection limits to prevent overloading single targets
+/// - Total connection limits to prevent resource exhaustion
+/// - Idle timeout to release unused connections
+/// - Max lifetime to ensure connection rotation
 pub struct ConnectionPool {
-    /// Maximum number of connections per host
-    max_connections: usize,
+    /// Pool configuration
+    config: ConnectionPoolConfig,
     /// Active connections by pool key
-    connections: HashMap<String, Arc<dyn Connection + Send + Sync>>,
+    connections: HashMap<String, PooledConnection>,
+    /// Per-host connection counts for enforcing limits
+    host_counts: HashMap<String, usize>,
 }
 
 impl ConnectionPool {
-    /// Create a new connection pool
+    /// Create a new connection pool with default configuration
     pub fn new(max_connections: usize) -> Self {
+        Self::with_config(ConnectionPoolConfig {
+            max_total_connections: max_connections,
+            ..Default::default()
+        })
+    }
+
+    /// Create a new connection pool with custom configuration
+    pub fn with_config(config: ConnectionPoolConfig) -> Self {
         Self {
-            max_connections,
+            config,
             connections: HashMap::new(),
+            host_counts: HashMap::new(),
+        }
+    }
+
+    /// Extract the host key from a pool key for per-host tracking
+    /// e.g., "ssh://user@host:22/path" -> "host:22"
+    fn extract_host_key(pool_key: &str) -> String {
+        // Simple extraction: try to get host:port from the key
+        if let Some(stripped) = pool_key.strip_prefix("ssh://") {
+            // Format: user@host:port or host:port
+            let without_user = if let Some(at_pos) = stripped.find('@') {
+                &stripped[at_pos + 1..]
+            } else {
+                stripped
+            };
+            // Take everything before any path
+            if let Some(slash_pos) = without_user.find('/') {
+                without_user[..slash_pos].to_string()
+            } else {
+                without_user.to_string()
+            }
+        } else if pool_key.starts_with("docker://") || pool_key.starts_with("local") {
+            // For docker and local, use the full key as the host key
+            pool_key.to_string()
+        } else {
+            // Fallback: use the whole key
+            pool_key.to_string()
+        }
+    }
+
+    /// Clean up expired connections
+    fn cleanup_expired(&mut self) {
+        let expired_keys: Vec<String> = self
+            .connections
+            .iter()
+            .filter(|(_, pooled)| pooled.is_expired(&self.config))
+            .map(|(key, _)| key.clone())
+            .collect();
+
+        for key in expired_keys {
+            self.remove(&key);
+            tracing::trace!("Expired connection removed: {}", key);
         }
     }
 
     /// Get a connection from the pool
     pub fn get(&mut self, key: &str) -> Option<Arc<dyn Connection + Send + Sync>> {
-        self.connections.get(key).cloned()
+        // Clean up expired connections first
+        self.cleanup_expired();
+
+        // Get and touch the connection
+        if let Some(pooled) = self.connections.get_mut(key) {
+            pooled.touch();
+            Some(pooled.connection.clone())
+        } else {
+            None
+        }
     }
 
     /// Put a connection into the pool
-    pub fn put(&mut self, key: String, conn: Arc<dyn Connection + Send + Sync>) {
-        // Evict old connections if pool is full
-        if self.connections.len() >= self.max_connections {
-            // Remove oldest connection (simple FIFO for now)
-            if let Some(oldest_key) = self.connections.keys().next().cloned() {
-                self.connections.remove(&oldest_key);
+    ///
+    /// Returns `true` if the connection was added, `false` if pool limits prevented it
+    pub fn put(&mut self, key: String, conn: Arc<dyn Connection + Send + Sync>) -> bool {
+        // Clean up expired connections first
+        self.cleanup_expired();
+
+        let host_key = Self::extract_host_key(&key);
+
+        // Check per-host limit
+        let host_count = self.host_counts.get(&host_key).copied().unwrap_or(0);
+        if host_count >= self.config.max_connections_per_host {
+            tracing::warn!(
+                "Connection pool per-host limit reached for {}: {}/{}",
+                host_key,
+                host_count,
+                self.config.max_connections_per_host
+            );
+            return false;
+        }
+
+        // Check total limit
+        if self.connections.len() >= self.config.max_total_connections {
+            // Try to evict the oldest idle connection
+            let oldest_key = self
+                .connections
+                .iter()
+                .min_by_key(|(_, pooled)| pooled.last_used)
+                .map(|(key, _)| key.clone());
+
+            if let Some(key_to_remove) = oldest_key {
+                tracing::debug!(
+                    "Connection pool total limit reached, evicting oldest: {}",
+                    key_to_remove
+                );
+                self.remove(&key_to_remove);
+            } else {
+                tracing::warn!(
+                    "Connection pool total limit reached: {}/{}",
+                    self.connections.len(),
+                    self.config.max_total_connections
+                );
+                return false;
             }
         }
-        self.connections.insert(key, conn);
+
+        // Add the connection
+        let pooled = PooledConnection::new(conn, host_key.clone());
+        self.connections.insert(key, pooled);
+
+        // Update host count
+        *self.host_counts.entry(host_key).or_insert(0) += 1;
+
+        true
     }
 
     /// Remove a connection from the pool
     pub fn remove(&mut self, key: &str) -> Option<Arc<dyn Connection + Send + Sync>> {
-        self.connections.remove(key)
+        if let Some(pooled) = self.connections.remove(key) {
+            // Update host count
+            if let Some(count) = self.host_counts.get_mut(&pooled.host_key) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    self.host_counts.remove(&pooled.host_key);
+                }
+            }
+            Some(pooled.connection)
+        } else {
+            None
+        }
     }
 
     /// Drain all connections from the pool
     pub fn drain(&mut self) -> Vec<Arc<dyn Connection + Send + Sync>> {
-        self.connections.drain().map(|(_, v)| v).collect()
+        self.host_counts.clear();
+        self.connections
+            .drain()
+            .map(|(_, pooled)| pooled.connection)
+            .collect()
     }
 
     /// Get pool statistics
     pub fn stats(&self) -> PoolStats {
         PoolStats {
             active_connections: self.connections.len(),
-            max_connections: self.max_connections,
+            max_connections: self.config.max_total_connections,
+            max_per_host: self.config.max_connections_per_host,
+            host_count: self.host_counts.len(),
+            idle_timeout_secs: self.config.idle_timeout_secs,
+            max_lifetime_secs: self.config.max_lifetime_secs,
         }
+    }
+
+    /// Get detailed per-host statistics
+    pub fn host_stats(&self) -> HashMap<String, usize> {
+        self.host_counts.clone()
     }
 }
 
@@ -832,8 +1036,16 @@ impl ConnectionPool {
 pub struct PoolStats {
     /// Number of active connections
     pub active_connections: usize,
-    /// Maximum number of connections allowed
+    /// Maximum total connections allowed
     pub max_connections: usize,
+    /// Maximum connections per host
+    pub max_per_host: usize,
+    /// Number of unique hosts with connections
+    pub host_count: usize,
+    /// Idle timeout in seconds
+    pub idle_timeout_secs: u64,
+    /// Maximum connection lifetime in seconds
+    pub max_lifetime_secs: u64,
 }
 
 /// Builder for creating connections with custom options
@@ -1065,5 +1277,54 @@ mod tests {
         assert_eq!(options.timeout, Some(30));
         assert!(options.escalate);
         assert_eq!(options.escalate_user, Some("root".to_string()));
+    }
+
+    #[test]
+    fn test_connection_pool_config_default() {
+        let config = ConnectionPoolConfig::default();
+        assert_eq!(config.max_connections_per_host, 5);
+        assert_eq!(config.max_total_connections, 100);
+        assert_eq!(config.idle_timeout_secs, 300);
+        assert_eq!(config.max_lifetime_secs, 3600);
+    }
+
+    #[test]
+    fn test_connection_pool_extract_host_key() {
+        assert_eq!(
+            ConnectionPool::extract_host_key("ssh://user@example.com:22"),
+            "example.com:22"
+        );
+        assert_eq!(
+            ConnectionPool::extract_host_key("ssh://example.com:22"),
+            "example.com:22"
+        );
+        assert_eq!(
+            ConnectionPool::extract_host_key("ssh://user@host:2222/path"),
+            "host:2222"
+        );
+        assert_eq!(
+            ConnectionPool::extract_host_key("docker://mycontainer"),
+            "docker://mycontainer"
+        );
+        assert_eq!(ConnectionPool::extract_host_key("local"), "local");
+    }
+
+    #[test]
+    fn test_connection_pool_stats() {
+        let config = ConnectionPoolConfig {
+            max_connections_per_host: 3,
+            max_total_connections: 10,
+            idle_timeout_secs: 60,
+            max_lifetime_secs: 300,
+        };
+        let pool = ConnectionPool::with_config(config);
+        let stats = pool.stats();
+
+        assert_eq!(stats.active_connections, 0);
+        assert_eq!(stats.max_connections, 10);
+        assert_eq!(stats.max_per_host, 3);
+        assert_eq!(stats.host_count, 0);
+        assert_eq!(stats.idle_timeout_secs, 60);
+        assert_eq!(stats.max_lifetime_secs, 300);
     }
 }

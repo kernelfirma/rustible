@@ -12,7 +12,7 @@
 //! - `restart`: Whether to restart the computer if required
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 
@@ -459,54 +459,6 @@ impl Module for WinFeatureModule {
         Ok(output)
     }
 
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let config = WinFeatureConfig::from_params(params)?;
-
-        let check_script = Self::build_check_features_script(&config.names);
-        let (success, stdout, _) = execute_powershell_sync(connection, &check_script)?;
-
-        if !success {
-            return Ok(None);
-        }
-
-        let current_status = Self::parse_feature_results(&stdout)?;
-
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        for name in &config.names {
-            if let Some(feature_info) = current_status.get(name) {
-                let is_installed = feature_info["Installed"].as_bool().unwrap_or(false);
-                let state_str = if is_installed {
-                    "Installed"
-                } else {
-                    "Not installed"
-                };
-
-                before_lines.push(format!("{}: {}", name, state_str));
-
-                let after_state = match config.state {
-                    WinFeatureState::Present => "Installed",
-                    WinFeatureState::Absent => "Not installed",
-                };
-                after_lines.push(format!("{}: {}", name, after_state));
-            }
-        }
-
-        let before = before_lines.join("\n");
-        let after = after_lines.join("\n");
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

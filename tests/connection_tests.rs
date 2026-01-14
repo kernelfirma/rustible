@@ -1264,6 +1264,10 @@ fn test_pool_stats() {
     let stats = PoolStats {
         active_connections: 5,
         max_connections: 10,
+        max_per_host: 5,
+        host_count: 1,
+        idle_timeout_secs: 300,
+        max_lifetime_secs: 3600,
     };
 
     assert_eq!(stats.active_connections, 5);

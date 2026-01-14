@@ -7,7 +7,7 @@
 //! execution via async connections (SSH, Docker, etc.).
 
 use super::{
-    validate_env_var_name, validate_path_param, Diff, Module, ModuleClassification, ModuleContext,
+    validate_env_var_name, validate_path_param, Module, ModuleClassification, ModuleContext,
     ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -297,73 +297,86 @@ impl CommandModule {
         context: &ModuleContext,
         connection: Arc<dyn Connection + Send + Sync>,
     ) -> ModuleResult<ModuleOutput> {
-        // Use tokio runtime to execute async operations
-        let rt = tokio::runtime::Runtime::new().map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
-        })?;
-
         let params_clone = params.clone();
         let check_mode = context.check_mode;
         let cmd_display = self.get_command_string(params)?;
         let options = self.build_execute_options(params, context)?;
         let warn_on_stderr = params.get_bool_or("warn", true);
 
-        rt.block_on(async {
-            // Check creates/removes conditions on remote
-            if let Some(output) = self
-                .check_creates_removes_remote(&params_clone, &connection)
-                .await?
-            {
-                return Ok(output);
-            }
+        // Use scoped thread with a NEW runtime to avoid blocking the parent tokio runtime
+        // This prevents deadlock when called from within an async context
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    // Create a new runtime in this thread - this avoids nesting
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
+                        })?;
 
-            // In check mode, return what would happen
-            if check_mode {
-                return Ok(ModuleOutput::changed(format!(
-                    "Would execute: {}",
-                    cmd_display
-                )));
-            }
+                    rt.block_on(async {
+                        // Check creates/removes conditions on remote
+                        if let Some(output) = self
+                            .check_creates_removes_remote(&params_clone, &connection)
+                            .await?
+                        {
+                            return Ok(output);
+                        }
 
-            // Execute via connection
-            let result = connection
-                .execute(&cmd_display, Some(options))
-                .await
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!(
-                        "Failed to execute '{}': {}",
-                        cmd_display, e
-                    ))
-                })?;
+                        // In check mode, return what would happen
+                        if check_mode {
+                            return Ok(ModuleOutput::changed(format!(
+                                "Would execute: {}",
+                                cmd_display
+                            )));
+                        }
 
-            if result.success {
-                let mut output = ModuleOutput::changed(format!(
-                    "Command '{}' executed successfully",
-                    cmd_display
-                ))
-                .with_command_output(
-                    Some(result.stdout.clone()),
-                    Some(result.stderr.clone()),
-                    Some(result.exit_code),
-                );
+                        // Execute via connection
+                        let result = connection
+                            .execute(&cmd_display, Some(options))
+                            .await
+                            .map_err(|e| {
+                                ModuleError::ExecutionFailed(format!(
+                                    "Failed to execute '{}': {}",
+                                    cmd_display, e
+                                ))
+                            })?;
 
-                if warn_on_stderr && !result.stderr.is_empty() {
-                    output
-                        .data
-                        .insert("warnings".to_string(), serde_json::json!([result.stderr]));
-                }
+                        if result.success {
+                            let mut output = ModuleOutput::changed(format!(
+                                "Command '{}' executed successfully",
+                                cmd_display
+                            ))
+                            .with_command_output(
+                                Some(result.stdout.clone()),
+                                Some(result.stderr.clone()),
+                                Some(result.exit_code),
+                            );
 
-                Ok(output)
-            } else {
-                Err(ModuleError::CommandFailed {
-                    code: result.exit_code,
-                    message: if result.stderr.is_empty() {
-                        result.stdout
-                    } else {
-                        result.stderr
-                    },
+                            if warn_on_stderr && !result.stderr.is_empty() {
+                                output.data.insert(
+                                    "warnings".to_string(),
+                                    serde_json::json!([result.stderr]),
+                                );
+                            }
+
+                            Ok(output)
+                        } else {
+                            Err(ModuleError::CommandFailed {
+                                code: result.exit_code,
+                                message: if result.stderr.is_empty() {
+                                    result.stdout
+                                } else {
+                                    result.stderr
+                                },
+                            })
+                        }
+                    })
                 })
-            }
+                .join()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
         })
     }
 }
@@ -409,26 +422,6 @@ impl Module for CommandModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // For check mode, we run execute with check_mode=true in context
-        // The execute methods already handle check_mode internally
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        let mut output = self.execute(params, &check_context)?;
-
-        // Add diff to show what would be executed
-        if let Some(diff) = self.diff(params, context)? {
-            output.diff = Some(diff);
-        }
-        Ok(output)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let cmd = self.get_command_string(params)?;
-        Ok(Some(Diff::new("(none)", format!("Execute: {}", cmd))))
-    }
 }
 
 #[cfg(test)]

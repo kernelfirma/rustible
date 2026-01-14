@@ -15,6 +15,8 @@ use super::auth::{AuthenticatedUser, Claims};
 use super::error::{ApiError, ApiResult};
 use super::state::AppState;
 use super::types::*;
+use crate::executor::task::TaskStatus;
+use crate::executor::{ExecutionEvent, ExecutionStrategy, Executor, ExecutorConfig};
 use crate::inventory::{Host, Inventory};
 
 // ============================================================================
@@ -344,42 +346,102 @@ async fn run_playbook_job(
         );
     }
 
-    // TODO: Actually execute the playbook using the Executor
-    // For now, simulate execution
-    state.append_job_output(job_id, "Execution started...".to_string(), "stdout");
+    // Create executor config
+    let executor_config = ExecutorConfig {
+        forks: req.forks.unwrap_or(5),
+        check_mode: req.check,
+        diff_mode: req.diff,
+        verbosity: req.verbosity,
+        strategy: ExecutionStrategy::Linear,
+        task_timeout: 300,
+        gather_facts: true,
+        extra_vars: req.extra_vars,
+        r#become: false,           // Default for API for now
+        become_method: "sudo".to_string(),
+        become_user: "root".to_string(),
+        become_password: None,
+    };
 
-    // Simulate some work
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    // Create runtime context
+    use crate::executor::runtime::RuntimeContext;
+    let runtime = if let Some(inv) = inventory.as_ref() {
+        RuntimeContext::from_inventory(inv)
+    } else {
+        RuntimeContext::new()
+    };
 
-    state.append_job_output(job_id, "Gathering facts...".to_string(), "stdout");
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    // Setup event callback
+    let job_id_clone = job_id;
+    let state_clone = state.clone();
+    let callback = Arc::new(move |event: ExecutionEvent| {
+        let msg = match event {
+            ExecutionEvent::PlaybookStart(name) => {
+                format!("Starting playbook: {}", name)
+            }
+            ExecutionEvent::PlayStart(name) => {
+                format!("PLAY [{}] ***", name)
+            }
+            ExecutionEvent::TaskStart(name) => {
+                format!("TASK [{}] ***", name)
+            }
+            ExecutionEvent::HostTaskComplete(host, _task, result) => {
+                let status_str = match result.status {
+                    TaskStatus::Ok => "ok",
+                    TaskStatus::Changed => "changed",
+                    TaskStatus::Failed => "failed",
+                    TaskStatus::Skipped => "skipping",
+                    TaskStatus::Unreachable => "unreachable",
+                    _ => "unknown", // Handle potential future statuses
+                };
+                if let Some(msg) = &result.msg {
+                     format!("{}: [{}] => {}", status_str, host, msg)
+                } else {
+                     format!("{}: [{}]", status_str, host)
+                }
+            }
+            ExecutionEvent::PlaybookFinish(_) => {
+                "Playbook execution completed".to_string()
+            }
+            ExecutionEvent::Log(msg) => msg,
+        };
+        state_clone.append_job_output(job_id_clone, msg, "stdout");
+    });
 
-    for (_i, play) in playbook.plays.iter().enumerate() {
-        state.append_job_output(job_id, format!("PLAY [{}] ***", play.name), "stdout");
+    // Create executor with callback
+    let executor = Executor::with_runtime(executor_config, runtime)
+        .with_event_callback(callback);
 
-        for task in play.all_tasks() {
-            state.append_job_output(job_id, format!("TASK [{}] ***", task.name), "stdout");
+    // Execute playbook
+    match executor.run_playbook(&playbook).await {
+        Ok(results) => {
+            // Calculate stats
+            let summary = Executor::summarize_results(&results);
+            let job_stats = JobStats {
+                hosts: results.len(),
+                ok: summary.ok,
+                changed: summary.changed,
+                failed: summary.failed,
+                skipped: summary.skipped,
+                unreachable: summary.unreachable,
+            };
 
-            // Simulate task execution
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            state.set_job_stats(job_id, job_stats);
 
-            state.append_job_output(job_id, format!("ok: [localhost]"), "stdout");
+            let has_failures = summary.failed > 0 || summary.unreachable > 0;
+            if has_failures {
+                 state.update_job_status(job_id, JobStatus::Failed);
+            } else {
+                 state.update_job_status(job_id, JobStatus::Success);
+            }
+        },
+        Err(e) => {
+            let error_msg = format!("Playbook execution failed: {}", e);
+            error!("{}", error_msg);
+            state.append_job_output(job_id, error_msg.clone(), "stderr");
+            state.set_job_error(job_id, error_msg);
+            state.update_job_status(job_id, JobStatus::Failed);
         }
     }
-
-    // Set final stats
-    let stats = JobStats {
-        hosts: inventory.as_ref().map(|i| i.host_count()).unwrap_or(1),
-        ok: playbook.task_count(),
-        changed: 0,
-        failed: 0,
-        skipped: 0,
-        unreachable: 0,
-    };
-    state.set_job_stats(job_id, stats);
-
-    state.append_job_output(job_id, "Playbook execution completed".to_string(), "stdout");
-    state.update_job_status(job_id, JobStatus::Success);
 }
 
 // ============================================================================

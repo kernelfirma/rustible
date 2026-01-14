@@ -45,7 +45,7 @@
 
 use crate::modules::windows::{execute_powershell_sync, powershell_escape, validate_service_name};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 
@@ -702,62 +702,6 @@ impl Module for WinServiceModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let name = params.get_string_required("name")?;
-        let state = params.get_string("state")?;
-        let start_mode = params.get_string("start_mode")?;
-
-        let status_script = Self::generate_service_status_script(&name);
-        let (success, stdout, _) = execute_powershell_sync(connection, &status_script)?;
-
-        if !success {
-            return Ok(None);
-        }
-
-        let current_state = Self::parse_json_result(&stdout)?;
-        let service_exists = current_state["exists"].as_bool().unwrap_or(false);
-
-        if !service_exists {
-            let before = format!("service: {} (absent)", name);
-            let after = format!("service: {} (will be created)", name);
-            return Ok(Some(Diff::new(before, after)));
-        }
-
-        let current_status = current_state["state"].as_str().unwrap_or("unknown");
-        let current_start_mode = current_state["start_mode"].as_str().unwrap_or("unknown");
-
-        let before = format!(
-            "service: {}\nstate: {}\nstart_mode: {}",
-            name, current_status, current_start_mode
-        );
-
-        let desired_state = state.as_deref().unwrap_or(current_status);
-        let desired_start_mode = start_mode.as_deref().unwrap_or(current_start_mode);
-
-        let after = format!(
-            "service: {}\nstate: {}\nstart_mode: {}",
-            name, desired_state, desired_start_mode
-        );
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

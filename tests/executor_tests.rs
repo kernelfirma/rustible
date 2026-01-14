@@ -834,10 +834,11 @@ async fn test_full_playbook_execution() {
 
 #[tokio::test]
 async fn test_conditional_task_execution() {
+    // Use localhost to ensure a local connection (no SSH needed)
     let mut runtime = RuntimeContext::new();
-    runtime.add_host("server1".to_string(), None);
+    runtime.add_host("localhost".to_string(), None);
     runtime.set_host_var(
-        "server1",
+        "localhost",
         "install_nginx".to_string(),
         serde_json::json!(true),
     );
@@ -849,28 +850,45 @@ async fn test_conditional_task_execution() {
     let mut play = Play::new("Test", "all");
     play.gather_facts = false;
 
-    // This should run
+    // Task with truthy variable condition - should run
     play.add_task(
         Task::new("Should run", "debug")
-            .arg("msg", "Running")
+            .arg("msg", "Running because install_nginx is true")
             .when("install_nginx"),
     );
 
-    // This should be skipped
+    // Task with literal false condition - should skip
     play.add_task(
         Task::new("Should skip", "debug")
-            .arg("msg", "Skipping")
+            .arg("msg", "This should never appear")
             .when("false"),
     );
 
     playbook.add_play(play);
 
     let results = executor.run_playbook(&playbook).await.unwrap();
-    let host_result = results.get("server1").unwrap();
+    let host_result = results.get("localhost").unwrap();
 
-    // One task ran, one was skipped
-    assert!(host_result.stats.ok >= 1 || host_result.stats.changed >= 1);
-    assert!(host_result.stats.skipped >= 1);
+    // Verify no connection issues
+    assert_eq!(
+        host_result.stats.unreachable, 0,
+        "Host should be reachable (using local connection)"
+    );
+
+    // Verify the conditional task ran (ok or changed, depending on module)
+    assert!(
+        host_result.stats.ok >= 1 || host_result.stats.changed >= 1,
+        "Expected at least one task to succeed, got: ok={}, changed={}",
+        host_result.stats.ok,
+        host_result.stats.changed
+    );
+
+    // Verify the false-condition task was skipped
+    assert!(
+        host_result.stats.skipped >= 1,
+        "Expected at least one task to be skipped, got: skipped={}",
+        host_result.stats.skipped
+    );
 }
 
 #[tokio::test]

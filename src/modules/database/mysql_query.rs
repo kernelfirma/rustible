@@ -50,9 +50,10 @@
 use super::pool::global_pool_manager;
 use super::{extract_connection_params, MysqlConnectionParams};
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt, ParallelizationHint,
 };
+use base64::Engine;
 use sqlx::mysql::MySqlRow;
 use sqlx::{Column, Row, TypeInfo};
 use std::collections::HashMap;
@@ -87,7 +88,8 @@ impl MysqlQueryModule {
     /// Execute async operations
     fn execute_async<F, T>(f: F) -> ModuleResult<T>
     where
-        F: std::future::Future<Output = ModuleResult<T>>,
+        F: std::future::Future<Output = ModuleResult<T>> + Send,
+        T: Send,
     {
         if let Ok(handle) = Handle::try_current() {
             std::thread::scope(|s| {
@@ -142,7 +144,7 @@ impl MysqlQueryModule {
                 "BLOB" | "MEDIUMBLOB" | "LONGBLOB" | "TINYBLOB" | "BINARY" | "VARBINARY" => {
                     // For binary data, encode as base64
                     row.try_get::<Vec<u8>, _>(name.as_str())
-                        .map(|v| serde_json::json!(base64::encode(&v)))
+                        .map(|v| serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&v)))
                         .unwrap_or(serde_json::Value::Null)
                 }
                 "JSON" => row
@@ -352,15 +354,6 @@ impl Module for MysqlQueryModule {
         &["query"]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        let mut params = HashMap::new();
-        params.insert("single_transaction", serde_json::json!(false));
-        params.insert("login_host", serde_json::json!("localhost"));
-        params.insert("login_port", serde_json::json!(3306));
-        params.insert("login_user", serde_json::json!("root"));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Validate query format
         Self::parse_queries(params)?;
@@ -463,22 +456,6 @@ impl Module for MysqlQueryModule {
         self.execute(params, &check_context)
     }
 
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let queries = Self::parse_queries(params)?;
-
-        if queries.is_empty() {
-            return Ok(None);
-        }
-
-        let before = "(not executed)".to_string();
-        let after = if queries.len() == 1 {
-            format!("Execute: {}", queries[0])
-        } else {
-            format!("Execute {} queries", queries.len())
-        };
-
-        Ok(Some(Diff::new(before, after)))
-    }
 }
 
 #[cfg(test)]

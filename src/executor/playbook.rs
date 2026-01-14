@@ -83,6 +83,33 @@ where
     Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// Helper function to deserialize string or sequence into Vec<String>
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = JsonValue::deserialize(deserializer)?;
+    match value {
+        JsonValue::Null => Ok(Vec::new()),
+        JsonValue::String(s) => Ok(vec![s]),
+        JsonValue::Bool(b) => Ok(vec![b.to_string()]),
+        JsonValue::Number(n) => Ok(vec![n.to_string()]),
+        JsonValue::Array(seq) => {
+            let mut result = Vec::new();
+            for item in seq {
+                match item {
+                    JsonValue::String(s) => result.push(s),
+                    JsonValue::Bool(b) => result.push(b.to_string()),
+                    JsonValue::Number(n) => result.push(n.to_string()),
+                    other => result.push(format!("{:?}", other)),
+                }
+            }
+            Ok(result)
+        }
+        other => Ok(vec![format!("{:?}", other)]),
+    }
+}
+
 use crate::executor::task::{Handler, Task};
 use crate::executor::{ExecutorError, ExecutorResult};
 
@@ -511,10 +538,11 @@ fn default_loop_var() -> String {
 /// Handler definition from YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandlerDefinition {
-    /// Handler name
+    /// Handler name (optional - handlers can be identified by listen topics)
+    #[serde(default)]
     pub name: String,
     /// Listen for additional notification names
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub listen: Vec<String>,
     /// When condition
     #[serde(default)]

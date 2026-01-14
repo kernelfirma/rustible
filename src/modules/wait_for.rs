@@ -332,10 +332,22 @@ impl WaitForModule {
             Err(_) => return Ok(false), // File doesn't exist yet
         };
 
-        let reader = BufReader::new(file);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
+        let mut reader = BufReader::new(file);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    // Strip trailing newline to match `lines()` behavior
+                    if line.ends_with('\n') {
+                        line.pop();
+                        if line.ends_with('\r') {
+                            line.pop();
+                        }
+                    }
+
                     if regex.is_match(&line) {
                         return Ok(true);
                     }
@@ -586,14 +598,6 @@ impl Module for WaitForModule {
         config.validate()?;
 
         self.wait_for_condition(&config, context.check_mode)
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
     }
 
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {

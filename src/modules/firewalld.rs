@@ -22,7 +22,7 @@
 //! - `timeout`: Timeout for temporary rules in seconds
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -1034,70 +1034,6 @@ impl Module for FirewalldModule {
         };
 
         Ok(output.with_data("zone", serde_json::json!(config.zone)))
-    }
-
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let config = FirewalldConfig::from_params(params)?;
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        before_lines.push(format!("zone: {}", config.zone));
-        after_lines.push(format!("zone: {}", config.zone));
-
-        let should_enable = config.state.should_be_present();
-
-        // Check service
-        if let Some(ref service) = config.service {
-            let is_enabled =
-                Self::query_service(connection, &config, service, context).unwrap_or(false);
-            before_lines.push(format!(
-                "service {}: {}",
-                service,
-                if is_enabled { "enabled" } else { "disabled" }
-            ));
-            after_lines.push(format!(
-                "service {}: {}",
-                service,
-                if should_enable { "enabled" } else { "disabled" }
-            ));
-        }
-
-        // Check port
-        if let Some(ref port) = config.port {
-            let is_enabled = Self::query_port(connection, &config, port, context).unwrap_or(false);
-            before_lines.push(format!(
-                "port {}: {}",
-                port,
-                if is_enabled { "enabled" } else { "disabled" }
-            ));
-            after_lines.push(format!(
-                "port {}: {}",
-                port,
-                if should_enable { "enabled" } else { "disabled" }
-            ));
-        }
-
-        let before = before_lines.join("\n");
-        let after = after_lines.join("\n");
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
     }
 }
 

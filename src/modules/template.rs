@@ -8,78 +8,13 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
+use crate::template::TEMPLATE_ENGINE;
 use crate::utils::shell_escape;
-use minijinja::value::Kwargs;
-use minijinja::{Environment, Error, Value};
-use once_cell::sync::Lazy;
 use std::fs;
-use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use tokio::runtime::Handle;
-
-/// Global Minijinja environment with pre-registered filters
-static TEMPLATE_ENV: Lazy<Environment<'static>> = Lazy::new(|| {
-    let mut env = Environment::new();
-
-    // Add custom filters similar to Ansible/Jinja2 (Tera compatibility)
-
-    // Default filter compatibility: handle empty strings
-    env.add_filter(
-        "default",
-        |value: Value, kwargs: Kwargs| -> Result<Value, Error> {
-            let is_empty = value.is_undefined()
-                || value.is_none()
-                || (value.as_str().map(|s| s.is_empty()).unwrap_or(false));
-            if is_empty {
-                if let Ok(default) = kwargs.get::<Value>("value") {
-                    return Ok(default);
-                }
-            }
-            Ok(value)
-        },
-    );
-
-    // Upper/Lower/Trim are built-in in minijinja
-
-    // Replace filter with 'from'/'to' compatibility
-    env.add_filter(
-        "replace",
-        |value: String, kwargs: Kwargs| -> Result<Value, Error> {
-            // Minijinja replace uses old, new, count.
-            // Tera uses from, to.
-            let from = kwargs
-                .get::<&str>("from")
-                .or_else(|_| kwargs.get::<&str>("old"))
-                .unwrap_or("");
-
-            let to = kwargs
-                .get::<&str>("to")
-                .or_else(|_| kwargs.get::<&str>("new"))
-                .unwrap_or("");
-
-            Ok(Value::from(value.replace(from, to)))
-        },
-    );
-
-    // Join filter with 'sep' compatibility
-    env.add_filter(
-        "join",
-        |value: Value, kwargs: Kwargs| -> Result<Value, Error> {
-            let sep = kwargs.get::<&str>("sep").unwrap_or(",");
-
-            if let Ok(iter) = value.try_iter() {
-                let items: Vec<String> = iter.map(|v| v.to_string()).collect();
-                Ok(Value::from(items.join(sep)))
-            } else {
-                Ok(value)
-            }
-        },
-    );
-
-    env
-});
 
 /// Module for rendering templates
 pub struct TemplateModule;
@@ -119,25 +54,10 @@ impl TemplateModule {
         template_content: &str,
         context: &serde_json::Value,
     ) -> ModuleResult<String> {
-        // Use the shared environment without cloning it
-        // minijinja::Environment is thread-safe and designed to be shared
-        TEMPLATE_ENV
-            .render_str(template_content, context)
+        // Use the shared global TemplateEngine
+        TEMPLATE_ENGINE
+            .render_with_json(template_content, context)
             .map_err(|e| ModuleError::TemplateError(format!("Failed to render template: {}", e)))
-    }
-
-    #[allow(dead_code)]
-    fn get_file_checksum(path: &Path) -> std::io::Result<String> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut file = fs::File::open(path)?;
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
-
-        let mut hasher = DefaultHasher::new();
-        contents.hash(&mut hasher);
-        Ok(format!("{:x}", hasher.finish()))
     }
 
     fn create_backup(dest: &Path, backup_suffix: &str) -> ModuleResult<Option<String>> {
@@ -519,73 +439,6 @@ impl Module for TemplateModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let src = params.get_string("src")?;
-        let content = params.get_string("content")?;
-        let dest = params.get_string_required("dest")?;
-        let dest_path = Path::new(&dest);
-        let extra_vars = params.get("vars");
-
-        // Get template content from either src file or content parameter
-        let template_content = match (&src, &content) {
-            (Some(src_path_str), _) => {
-                let src_path = Path::new(src_path_str);
-                if !src_path.exists() {
-                    return Err(ModuleError::ExecutionFailed(format!(
-                        "Template source '{}' does not exist",
-                        src_path_str
-                    )));
-                }
-                fs::read_to_string(src_path)?
-            }
-            (None, Some(content_str)) => content_str.clone(),
-            (None, None) => {
-                return Err(ModuleError::MissingParameter(
-                    "Either 'src' or 'content' is required".to_string(),
-                ));
-            }
-        };
-        let ctx = Self::build_context(context, extra_vars);
-        let rendered = Self::render_template(&template_content, &ctx)?;
-
-        // Check if we have a connection for remote diff
-        if let Some(ref conn) = context.connection {
-            let handle = Handle::try_current().map_err(|e| {
-                ModuleError::ExecutionFailed(format!("No tokio runtime available: {}", e))
-            })?;
-
-            let before = handle.block_on(async {
-                if conn.path_exists(dest_path).await.unwrap_or(false) {
-                    conn.download_content(dest_path)
-                        .await
-                        .ok()
-                        .and_then(|bytes| String::from_utf8(bytes).ok())
-                        .unwrap_or_default()
-                } else {
-                    String::new()
-                }
-            });
-
-            Ok(Some(Diff::new(before, rendered)))
-        } else {
-            // Local diff
-            let before = if dest_path.exists() {
-                fs::read_to_string(dest_path).unwrap_or_default()
-            } else {
-                String::new()
-            };
-
-            Ok(Some(Diff::new(before, rendered)))
-        }
-    }
 }
 
 #[cfg(test)]

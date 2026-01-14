@@ -36,7 +36,7 @@
 //! ```
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -647,79 +647,6 @@ impl Module for TimezoneModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let timezone = params.get_string_required("name")?;
-        let strategy_str = params
-            .get_string("use")?
-            .unwrap_or_else(|| "auto".to_string());
-        let strategy = TimezoneStrategy::from_str(&strategy_str)?;
-        let ntp_enabled = params.get_bool("ntp")?;
-        let hwclock_str = params.get_string("hwclock")?;
-        let hwclock_mode = hwclock_str
-            .as_ref()
-            .map(|s| HwclockMode::from_str(s))
-            .transpose()?;
-
-        let effective_strategy = match strategy {
-            TimezoneStrategy::Auto => Self::detect_strategy(connection, context)?,
-            s => s,
-        };
-
-        let current_timezone = Self::get_current_timezone(connection, &effective_strategy, context)
-            .unwrap_or_else(|_| String::from("(unknown)"));
-
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        // Timezone
-        before_lines.push(format!("timezone: {}", current_timezone));
-        after_lines.push(format!("timezone: {}", timezone));
-
-        // NTP
-        if let Some(ntp) = ntp_enabled {
-            let current_ntp = Self::get_ntp_status(connection, context).unwrap_or(false);
-            before_lines.push(format!("ntp: {}", if current_ntp { "yes" } else { "no" }));
-            after_lines.push(format!("ntp: {}", if ntp { "yes" } else { "no" }));
-        }
-
-        // Hardware clock
-        if let Some(ref hwclock) = hwclock_mode {
-            let current_hwclock =
-                Self::get_hwclock_mode(connection, context).unwrap_or(HwclockMode::Utc);
-            let current_str = match current_hwclock {
-                HwclockMode::Utc => "UTC",
-                HwclockMode::Local => "local",
-            };
-            let desired_str = match hwclock {
-                HwclockMode::Utc => "UTC",
-                HwclockMode::Local => "local",
-            };
-            before_lines.push(format!("hwclock: {}", current_str));
-            after_lines.push(format!("hwclock: {}", desired_str));
-        }
-
-        let before = before_lines.join("\n");
-        let after = after_lines.join("\n");
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

@@ -263,31 +263,6 @@ impl Module for MetaModule {
         Ok(self.execute_action(action, context))
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let action = self.get_action(params)?;
-
-        // In check mode, most meta actions would still execute (they're control flow)
-        // but we indicate what would happen
-        let mut output = self.execute_action(action, context);
-
-        if action == MetaAction::ClearFacts {
-            // ClearFacts would change state, so in check mode we just report
-            output = ModuleOutput::ok("Would clear facts (check mode)")
-                .with_data("meta_action", serde_json::json!("clear_facts"))
-                .with_data("clear_facts", serde_json::json!(true));
-        }
-
-        Ok(output)
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Meta module doesn't produce diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

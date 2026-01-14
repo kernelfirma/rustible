@@ -13,6 +13,70 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// ============================================================================
+// Configuration Merge Macros
+// ============================================================================
+// These macros simplify the repetitive field merging logic when combining
+// configuration values from multiple sources.
+
+/// Merge an Option<T> field - uses `other` if Some, otherwise falls back to `base`
+///
+/// # Example
+/// ```ignore
+/// merge_option!(self.defaults.inventory, other.defaults.inventory)
+/// ```
+macro_rules! merge_option {
+    ($base:expr, $other:expr) => {
+        $other.or_else(|| $base.clone())
+    };
+}
+
+/// Merge a field with a known default value - uses `other` if non-default, otherwise `base`
+///
+/// # Example
+/// ```ignore
+/// merge_with_default!(self.defaults.forks, other.defaults.forks, 5)
+/// ```
+macro_rules! merge_with_default {
+    ($base:expr, $other:expr, $default:expr) => {
+        if $other != $default {
+            $other
+        } else {
+            $base.clone()
+        }
+    };
+}
+
+/// Merge a Vec field - uses `other` if non-empty, otherwise `base`
+///
+/// # Example
+/// ```ignore
+/// merge_vec!(self.defaults.roles_path, other.defaults.roles_path)
+/// ```
+macro_rules! merge_vec {
+    ($base:expr, $other:expr) => {
+        if $other.is_empty() {
+            $base.clone()
+        } else {
+            $other
+        }
+    };
+}
+
+/// Merge a HashMap field - extends `base` with entries from `other`
+///
+/// # Example
+/// ```ignore
+/// merge_hashmap!(self.environment, other.environment)
+/// ```
+macro_rules! merge_hashmap {
+    ($base:expr, $other:expr) => {{
+        let mut merged = $base.clone();
+        merged.extend($other);
+        merged
+    }};
+}
+
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -490,104 +554,80 @@ impl Config {
     }
 
     /// Merge another config into this one
+    ///
+    /// Uses merge macros for cleaner, declarative field merging.
+    /// Priority: `other` takes precedence for non-default values.
     fn merge(&self, other: Config) -> Config {
-        // For simplicity, other takes precedence for non-default values
         Config {
             defaults: Defaults {
-                inventory: other
-                    .defaults
-                    .inventory
-                    .or_else(|| self.defaults.inventory.clone()),
-                remote_user: other
-                    .defaults
-                    .remote_user
-                    .or_else(|| self.defaults.remote_user.clone()),
-                forks: if other.defaults.forks != 5 {
-                    other.defaults.forks
-                } else {
-                    self.defaults.forks
-                },
-                module_name: if other.defaults.module_name != "command" {
-                    other.defaults.module_name
-                } else {
-                    self.defaults.module_name.clone()
-                },
+                // Option fields: use other if Some, otherwise base
+                inventory: merge_option!(self.defaults.inventory, other.defaults.inventory),
+                remote_user: merge_option!(self.defaults.remote_user, other.defaults.remote_user),
+                retry_files_save_path: merge_option!(
+                    self.defaults.retry_files_save_path,
+                    other.defaults.retry_files_save_path
+                ),
+
+                // Fields with known defaults: use other if different from default
+                forks: merge_with_default!(self.defaults.forks, other.defaults.forks, 5),
+                module_name: merge_with_default!(
+                    self.defaults.module_name,
+                    other.defaults.module_name,
+                    "command"
+                ),
+                timeout: merge_with_default!(self.defaults.timeout, other.defaults.timeout, 30),
+                transport: merge_with_default!(
+                    self.defaults.transport,
+                    other.defaults.transport,
+                    "ssh"
+                ),
+
+                // Vec fields: use other if non-empty
+                roles_path: merge_vec!(self.defaults.roles_path, other.defaults.roles_path),
+                collections_path: merge_vec!(
+                    self.defaults.collections_path,
+                    other.defaults.collections_path
+                ),
+                action_plugins: merge_vec!(
+                    self.defaults.action_plugins,
+                    other.defaults.action_plugins
+                ),
+                strategy_plugins: merge_vec!(
+                    self.defaults.strategy_plugins,
+                    other.defaults.strategy_plugins
+                ),
+
+                // Direct override fields: other always wins
                 host_key_checking: other.defaults.host_key_checking,
-                timeout: if other.defaults.timeout != 30 {
-                    other.defaults.timeout
-                } else {
-                    self.defaults.timeout
-                },
                 gathering: other.defaults.gathering,
-                transport: if other.defaults.transport != "ssh" {
-                    other.defaults.transport
-                } else {
-                    self.defaults.transport.clone()
-                },
                 hash_behaviour: other.defaults.hash_behaviour,
                 retry_files_enabled: other.defaults.retry_files_enabled,
-                retry_files_save_path: other
-                    .defaults
-                    .retry_files_save_path
-                    .or_else(|| self.defaults.retry_files_save_path.clone()),
-                roles_path: if other.defaults.roles_path.is_empty() {
-                    self.defaults.roles_path.clone()
-                } else {
-                    other.defaults.roles_path
-                },
-                collections_path: if other.defaults.collections_path.is_empty() {
-                    self.defaults.collections_path.clone()
-                } else {
-                    other.defaults.collections_path
-                },
-                action_plugins: if other.defaults.action_plugins.is_empty() {
-                    self.defaults.action_plugins.clone()
-                } else {
-                    other.defaults.action_plugins
-                },
-                strategy_plugins: if other.defaults.strategy_plugins.is_empty() {
-                    self.defaults.strategy_plugins.clone()
-                } else {
-                    other.defaults.strategy_plugins
-                },
                 strategy: other.defaults.strategy,
             },
+
+            // Nested config sections: direct override (could be extended with sub-merging)
             connection: other.connection,
             privilege_escalation: other.privilege_escalation,
             ssh: other.ssh,
             colors: other.colors,
             logging: other.logging,
+
+            // Vault config: merge individual fields
             vault: VaultConfig {
-                password_file: other
-                    .vault
-                    .password_file
-                    .or_else(|| self.vault.password_file.clone()),
-                identity_list: if other.vault.identity_list.is_empty() {
-                    self.vault.identity_list.clone()
-                } else {
-                    other.vault.identity_list
-                },
-                encrypt_vault_id: other
-                    .vault
-                    .encrypt_vault_id
-                    .or_else(|| self.vault.encrypt_vault_id.clone()),
+                password_file: merge_option!(self.vault.password_file, other.vault.password_file),
+                identity_list: merge_vec!(self.vault.identity_list, other.vault.identity_list),
+                encrypt_vault_id: merge_option!(
+                    self.vault.encrypt_vault_id,
+                    other.vault.encrypt_vault_id
+                ),
             },
+
             galaxy: other.galaxy,
-            module_paths: if other.module_paths.is_empty() {
-                self.module_paths.clone()
-            } else {
-                other.module_paths
-            },
-            role_paths: if other.role_paths.is_empty() {
-                self.role_paths.clone()
-            } else {
-                other.role_paths
-            },
-            environment: {
-                let mut env = self.environment.clone();
-                env.extend(other.environment);
-                env
-            },
+
+            // Top-level collections
+            module_paths: merge_vec!(self.module_paths, other.module_paths),
+            role_paths: merge_vec!(self.role_paths, other.role_paths),
+            environment: merge_hashmap!(self.environment, other.environment),
         }
     }
 
@@ -725,5 +765,166 @@ mod tests {
         config.apply_env_overrides();
         assert_eq!(config.defaults.forks, 20);
         std::env::remove_var("RUSTIBLE_FORKS");
+    }
+
+    // ========================================================================
+    // Merge Macro Tests
+    // ========================================================================
+
+    #[test]
+    fn test_merge_option_macro() {
+        // When other is Some, use other
+        let base: Option<String> = Some("base".to_string());
+        let other: Option<String> = Some("other".to_string());
+        let result = merge_option!(base, other);
+        assert_eq!(result, Some("other".to_string()));
+
+        // When other is None, fall back to base
+        let base: Option<String> = Some("base".to_string());
+        let other: Option<String> = None;
+        let result = merge_option!(base, other);
+        assert_eq!(result, Some("base".to_string()));
+
+        // When both are None, result is None
+        let base: Option<String> = None;
+        let other: Option<String> = None;
+        let result = merge_option!(base, other);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_merge_with_default_macro() {
+        // When other differs from default, use other
+        let base = 5;
+        let other = 10;
+        let result = merge_with_default!(base, other, 5);
+        assert_eq!(result, 10);
+
+        // When other equals default, use base
+        let base = 20;
+        let other = 5;
+        let result = merge_with_default!(base, other, 5);
+        assert_eq!(result, 20);
+
+        // Works with strings too
+        let base = "custom".to_string();
+        let other = "command".to_string();
+        let result = merge_with_default!(base, other, "command");
+        assert_eq!(result, "custom");
+    }
+
+    #[test]
+    fn test_merge_vec_macro() {
+        // When other is non-empty, use other
+        let base = vec!["a".to_string()];
+        let other = vec!["b".to_string(), "c".to_string()];
+        let result = merge_vec!(base, other);
+        assert_eq!(result, vec!["b".to_string(), "c".to_string()]);
+
+        // When other is empty, use base
+        let base = vec!["a".to_string()];
+        let other: Vec<String> = vec![];
+        let result = merge_vec!(base, other);
+        assert_eq!(result, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn test_merge_hashmap_macro() {
+        // HashMap merge extends base with other
+        let mut base = HashMap::new();
+        base.insert("key1".to_string(), "value1".to_string());
+
+        let mut other = HashMap::new();
+        other.insert("key2".to_string(), "value2".to_string());
+
+        let result = merge_hashmap!(base, other);
+        assert_eq!(result.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(result.get("key2"), Some(&"value2".to_string()));
+
+        // Other overrides base for same keys
+        let mut base = HashMap::new();
+        base.insert("key".to_string(), "base".to_string());
+
+        let mut other = HashMap::new();
+        other.insert("key".to_string(), "other".to_string());
+
+        let result = merge_hashmap!(base, other);
+        assert_eq!(result.get("key"), Some(&"other".to_string()));
+    }
+
+    #[test]
+    fn test_config_merge_comprehensive() {
+        // Test comprehensive merge behavior with the refactored function
+        let base = Config {
+            defaults: Defaults {
+                inventory: Some(PathBuf::from("/base/inventory")),
+                remote_user: Some("baseuser".to_string()),
+                forks: 10,   // Non-default
+                timeout: 60, // Non-default
+                roles_path: vec![PathBuf::from("/base/roles")],
+                ..Defaults::default()
+            },
+            module_paths: vec![PathBuf::from("/base/modules")],
+            environment: {
+                let mut env = HashMap::new();
+                env.insert("BASE_VAR".to_string(), "base_value".to_string());
+                env
+            },
+            ..Config::default()
+        };
+
+        let other = Config {
+            defaults: Defaults {
+                inventory: Some(PathBuf::from("/other/inventory")),
+                remote_user: None,  // Should fall back to base
+                forks: 5,           // Default value, should use base
+                timeout: 90,        // Non-default, should use other
+                roles_path: vec![], // Empty, should use base
+                ..Defaults::default()
+            },
+            module_paths: vec![PathBuf::from("/other/modules")],
+            environment: {
+                let mut env = HashMap::new();
+                env.insert("OTHER_VAR".to_string(), "other_value".to_string());
+                env
+            },
+            ..Config::default()
+        };
+
+        let merged = base.merge(other);
+
+        // Option: other wins when Some
+        assert_eq!(
+            merged.defaults.inventory,
+            Some(PathBuf::from("/other/inventory"))
+        );
+
+        // Option: base wins when other is None
+        assert_eq!(merged.defaults.remote_user, Some("baseuser".to_string()));
+
+        // Default check: base wins when other is default
+        assert_eq!(merged.defaults.forks, 10);
+
+        // Default check: other wins when other is non-default
+        assert_eq!(merged.defaults.timeout, 90);
+
+        // Vec: base wins when other is empty
+        assert_eq!(
+            merged.defaults.roles_path,
+            vec![PathBuf::from("/base/roles")]
+        );
+
+        // Vec: other wins when other is non-empty
+        assert_eq!(merged.module_paths, vec![PathBuf::from("/other/modules")]);
+
+        // HashMap: merged from both
+        assert_eq!(
+            merged.environment.get("BASE_VAR"),
+            Some(&"base_value".to_string())
+        );
+        assert_eq!(
+            merged.environment.get("OTHER_VAR"),
+            Some(&"other_value".to_string())
+        );
     }
 }

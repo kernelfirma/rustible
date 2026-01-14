@@ -16,30 +16,19 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, TransferOptions};
+use crate::utils::{compute_checksum, get_file_checksum, shell_escape};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Module for copying files
 pub struct CopyModule;
 
 impl CopyModule {
-    fn get_file_checksum(path: &Path) -> std::io::Result<String> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut file = fs::File::open(path)?;
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
-
-        let mut hasher = DefaultHasher::new();
-        contents.hash(&mut hasher);
-        Ok(format!("{:x}", hasher.finish()))
-    }
-
     fn create_backup(dest: &Path, backup_suffix: &str) -> ModuleResult<Option<String>> {
         if dest.exists() {
             let backup_path = format!("{}{}", dest.display(), backup_suffix);
@@ -75,8 +64,8 @@ impl CopyModule {
         }
 
         // Compare checksums
-        let src_checksum = Self::get_file_checksum(src)?;
-        let dest_checksum = Self::get_file_checksum(dest)?;
+        let src_checksum = get_file_checksum(src)?;
+        let dest_checksum = get_file_checksum(dest)?;
 
         Ok(src_checksum != dest_checksum)
     }
@@ -106,7 +95,8 @@ impl CopyModule {
     /// The command should use %s as a placeholder for the file path
     fn validate_file(path: &Path, validate_cmd: &str) -> ModuleResult<()> {
         // Replace %s with the actual file path
-        let cmd = validate_cmd.replace("%s", &path.to_string_lossy());
+        // Use shell_escape to prevent command injection
+        let cmd = validate_cmd.replace("%s", &shell_escape(&path.to_string_lossy()));
 
         // Execute via shell to handle complex commands
         let output = Command::new("sh")
@@ -168,16 +158,6 @@ impl CopyModule {
         }
     }
 
-    /// Compute a simple checksum for content comparison
-    fn compute_checksum(data: &[u8]) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        data.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    }
-
     /// Async implementation for remote copy using connection
     async fn execute_remote_async(
         connection: Arc<dyn Connection + Send + Sync>,
@@ -223,7 +203,7 @@ impl CopyModule {
                             let existing_str = String::from_utf8_lossy(&existing);
                             (
                                 existing_str.as_ref() != content_str,
-                                Some(Self::compute_checksum(&existing)),
+                                Some(compute_checksum(&existing)),
                             )
                         }
                         Err(_) => (true, None),
@@ -238,12 +218,13 @@ impl CopyModule {
                         )));
                     }
 
-                    let src_content = fs::read(src_path).map_err(ModuleError::Io)?;
+                    // Use streaming checksum for source file to avoid loading into memory
+                    let src_checksum =
+                        get_file_checksum(src_path).map_err(ModuleError::Io)?;
 
                     match connection.download_content(&final_dest).await {
                         Ok(existing) => {
-                            let src_checksum = Self::compute_checksum(&src_content);
-                            let dest_checksum = Self::compute_checksum(&existing);
+                            let dest_checksum = compute_checksum(&existing);
                             (src_checksum != dest_checksum, Some(dest_checksum))
                         }
                         Err(_) => (true, None),
@@ -607,10 +588,12 @@ impl CopyModule {
         // For validation, we'll copy to a temp file first, validate, then move
         let use_validation = validate.is_some();
         let temp_dest = if use_validation {
+            // Use cryptographically secure random UUID for temporary filename to prevent race conditions
+            // and predictable filename attacks.
             let temp_name = format!(
                 "{}.rustible.tmp.{}",
                 final_dest.display(),
-                std::process::id()
+                Uuid::new_v4()
             );
             std::path::PathBuf::from(temp_name)
         } else {
@@ -760,96 +743,6 @@ impl Module for CopyModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let dest = params.get_string_required("dest")?;
-        let dest_path = Path::new(&dest);
-        let content = params.get_string("content")?;
-
-        // For remote connections, we need to fetch the remote file content
-        if let Some(ref connection) = context.connection {
-            // Use async bridge to get remote file content
-            let handle = tokio::runtime::Handle::current();
-
-            if let Some(content_str) = content {
-                let conn = connection.clone();
-                let path = dest_path.to_path_buf();
-                let before = std::thread::scope(|s| {
-                    s.spawn(|| {
-                        handle.block_on(async {
-                            match conn.download_content(&path).await {
-                                Ok(data) => String::from_utf8_lossy(&data).to_string(),
-                                Err(_) => String::new(),
-                            }
-                        })
-                    })
-                    .join()
-                    .unwrap()
-                });
-                return Ok(Some(Diff::new(before, content_str)));
-            }
-
-            let src = params.get_string("src")?;
-            if let Some(src_str) = src {
-                let src_path = Path::new(&src_str);
-                if src_path.exists() {
-                    let src_content = fs::read_to_string(src_path)
-                        .unwrap_or_else(|_| "(binary file)".to_string());
-                    let conn = connection.clone();
-                    let path = dest_path.to_path_buf();
-                    let dest_content = std::thread::scope(|s| {
-                        s.spawn(|| {
-                            handle.block_on(async {
-                                match conn.download_content(&path).await {
-                                    Ok(data) => String::from_utf8_lossy(&data).to_string(),
-                                    Err(_) => String::new(),
-                                }
-                            })
-                        })
-                        .join()
-                        .unwrap()
-                    });
-                    return Ok(Some(Diff::new(dest_content, src_content)));
-                }
-            }
-
-            return Ok(None);
-        }
-
-        // Local diff
-        if let Some(content_str) = content {
-            let before = if dest_path.exists() {
-                fs::read_to_string(dest_path).unwrap_or_default()
-            } else {
-                String::new()
-            };
-            return Ok(Some(Diff::new(before, content_str)));
-        }
-
-        let src = params.get_string("src")?;
-        if let Some(src_str) = src {
-            let src_path = Path::new(&src_str);
-            if src_path.exists() {
-                let src_content =
-                    fs::read_to_string(src_path).unwrap_or_else(|_| "(binary file)".to_string());
-                let dest_content = if dest_path.exists() {
-                    fs::read_to_string(dest_path).unwrap_or_else(|_| "(binary file)".to_string())
-                } else {
-                    String::new()
-                };
-                return Ok(Some(Diff::new(dest_content, src_content)));
-            }
-        }
-
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
@@ -857,6 +750,56 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_validate_command_injection() {
+        let temp = TempDir::new().unwrap();
+        // Construct a filename that attempts to break out of the shell command
+        // validation command: ls %s
+        // filename: foo; touch pwned
+        // result: ls foo; touch pwned
+
+        // We need a directory for this to work cleanly as a destination
+        let dest_dir = temp.path().join("foo; touch pwned");
+
+        // However, we are copying TO a file.
+        // Let's use a destination path that contains the injection payload.
+        // The module will try to write to {dest}.rustible.tmp.{uuid}
+        // Then run validation on it.
+
+        // Payload: "safe; echo pwned > pwned_file #"
+        // This is tricky because of the suffix .rustible.tmp...
+        // But if we can just execute `touch pwned`, that's enough.
+
+        let pwned_file = temp.path().join("pwned");
+        let payload = format!("safe; touch '{}' #", pwned_file.display());
+        let dest = temp.path().join(&payload);
+
+        let module = CopyModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("content".to_string(), serde_json::json!("content"));
+        params.insert(
+            "dest".to_string(),
+            serde_json::json!(dest.to_str().unwrap()),
+        );
+        params.insert("validate".to_string(), serde_json::json!("ls %s"));
+
+        let context = ModuleContext::default();
+        // This might fail due to "safe;..." not being a valid filename if we were actually creating it
+        // BUT CopyModule creates the temp file first.
+        // File::create("safe; touch '...' #.rustible.tmp.123") works on Linux.
+
+        // We expect execute to fail if the path is invalid, OR succeed if valid.
+        // But the side effect (touch pwned) is what we care about.
+
+        let _ = module.execute(&params, &context);
+
+        // If injection worked, pwned_file should exist
+        assert!(
+            !pwned_file.exists(),
+            "Command injection successful! pwned file created."
+        );
+    }
 
     #[test]
     fn test_copy_content() {

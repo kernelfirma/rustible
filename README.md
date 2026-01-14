@@ -1,12 +1,12 @@
 # Rustible
 
-A high-performance, async configuration management tool written in Rust. Drop-in replacement for Ansible delivering 5x+ performance improvements.
+Safe and fast async configuration management tool written in Rust. Drop-in replacement for Ansible delivering performance improvements.
 
 **Acknowledgment**: Rustible is inspired by Ansible's excellent design and playbook syntax. This project builds upon those proven concepts while leveraging Rust's performance and safety advantages.
 
 ## Why Rustible?
 
-- **High Performance**: Compiled Rust binary with connection pooling (5-11x faster than Ansible)
+- **High Performance**: Compiled Rust binary with connection pooling (Much faster than Ansible)
 - **Full Compatibility**: Identical YAML playbook syntax to Ansible
 - **Type Safety**: Compile-time configuration validation with superior error messages
 - **Parallel Execution**: Concurrent task execution by default

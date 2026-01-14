@@ -287,6 +287,10 @@ impl RunArgs {
 
         // Return exit code
         if has_failures {
+            if ctx.verbosity == 0 {
+                ctx.output
+                    .hint("Run with -v for more details on failures");
+            }
             Ok(2)
         } else {
             Ok(0)
@@ -912,14 +916,18 @@ impl RunArgs {
                         }
                     }
                     for host in &hosts {
-                        ctx.output.task_result(host, TaskStatus::Ok, None);
+                        ctx.output.task_result(host, TaskStatus::Ok, None, None);
                         stats.lock().await.record(host, TaskStatus::Ok);
                     }
                 }
                 Err(e) => {
                     for host in &hosts {
-                        ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                        ctx.output.task_result(
+                            host,
+                            TaskStatus::Failed,
+                            Some(&e.to_string()),
+                            None,
+                        );
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                     return Err(anyhow::anyhow!("Failed to gather facts: {}", e));
@@ -1136,6 +1144,7 @@ impl RunArgs {
             host: String,
             status: TaskStatus,
             message: Option<String>,
+            duration: Option<std::time::Duration>,
         }
 
         let mut all_results: Vec<HostResult> = Vec::with_capacity(hosts.len());
@@ -1166,6 +1175,7 @@ impl RunArgs {
                                 host,
                                 status: TaskStatus::Skipped,
                                 message: Some("conditional check failed".to_string()),
+                                duration: None,
                             };
                         }
 
@@ -1175,11 +1185,14 @@ impl RunArgs {
                                 host,
                                 status: TaskStatus::Changed,
                                 message: Some(format!("[check mode] would run: {}", module)),
+                                duration: None,
                             };
                         }
 
+                        let start = Instant::now();
                         // Execute the task
                         let exec_result = self.execute_module(ctx, &host, task, vars).await;
+                        let duration = start.elapsed();
 
                         match exec_result {
                             Ok((changed, message)) => {
@@ -1192,6 +1205,7 @@ impl RunArgs {
                                     host,
                                     status,
                                     message,
+                                    duration: Some(duration),
                                 }
                             }
                             Err(e) => {
@@ -1200,12 +1214,14 @@ impl RunArgs {
                                         host,
                                         status: TaskStatus::Ignored,
                                         message: Some(format!("ignored error: {}", e)),
+                                        duration: Some(duration),
                                     }
                                 } else {
                                     HostResult {
                                         host,
                                         status: TaskStatus::Failed,
                                         message: Some(e.to_string()),
+                                        duration: Some(duration),
                                     }
                                 }
                             }
@@ -1229,8 +1245,12 @@ impl RunArgs {
 
         // Print results and update stats in host order
         for result in all_results {
-            ctx.output
-                .task_result(&result.host, result.status, result.message.as_deref());
+            ctx.output.task_result(
+                &result.host,
+                result.status,
+                result.message.as_deref(),
+                result.duration,
+            );
             stats.lock().await.record(&result.host, result.status);
         }
 

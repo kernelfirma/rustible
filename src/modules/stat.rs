@@ -51,10 +51,6 @@ impl Module for StatModule {
         self.execute_local(path, follow, get_checksum, &checksum_algorithm)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Stat is read-only, so check mode behaves the same as normal mode
-        self.execute(params, context)
-    }
 }
 
 impl StatModule {

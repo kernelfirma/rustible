@@ -101,6 +101,11 @@ impl OutputFormatter {
         self.multi_progress.clone()
     }
 
+    /// Check if JSON mode is enabled
+    pub fn is_json(&self) -> bool {
+        self.json_mode
+    }
+
     /// Print a banner/header
     pub fn banner(&self, title: &str) {
         if self.json_mode {
@@ -175,12 +180,19 @@ impl OutputFormatter {
     }
 
     /// Print task result
-    pub fn task_result(&self, host: &str, status: TaskStatus, message: Option<&str>) {
+    pub fn task_result(
+        &self,
+        host: &str,
+        status: TaskStatus,
+        message: Option<&str>,
+        duration: Option<Duration>,
+    ) {
         if self.json_mode {
             let result = serde_json::json!({
                 "host": host,
                 "status": status.as_str(),
-                "message": message
+                "message": message,
+                "duration_ms": duration.map(|d| d.as_millis())
             });
             println!("{}", serde_json::to_string(&result).unwrap());
             return;
@@ -191,6 +203,10 @@ impl OutputFormatter {
         } else {
             status.as_str().to_string()
         };
+
+        // Calculate padding for alignment (longest status is "unreachable" = 11 chars)
+        let padding_len = 11usize.saturating_sub(status.as_str().len());
+        let padding = " ".repeat(padding_len);
 
         let host_str = if self.use_color {
             host.bright_white().bold().to_string()
@@ -204,15 +220,23 @@ impl OutputFormatter {
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!("{}: [{}]", status_str, host_str);
+                print!("{}{}: [{}]", status_str, padding, host_str);
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!("{}: [{}]", status_str, host_str);
+                print!("{}{}: [{}]", status_str, padding, host_str);
             }
         }
 
         if let Some(msg) = message {
             print!(" => {}", msg);
+        }
+
+        if let Some(d) = duration {
+            if self.use_color {
+                print!("  {}", format_duration(d).dimmed());
+            } else {
+                print!("  {}", format_duration(d));
+            }
         }
 
         println!();
@@ -240,7 +264,7 @@ impl OutputFormatter {
             return;
         }
 
-        self.task_result(host, status, None);
+        self.task_result(host, status, None, None);
 
         for (key, value) in details {
             if self.use_color {
@@ -334,58 +358,73 @@ impl OutputFormatter {
             }
         }
 
-        // Print duration
+        // Print execution summary
         let duration = self.start_time.elapsed();
         let duration_str = format_duration(duration);
 
+        println!();
         if self.use_color {
-            println!(
-                "\n{} {}",
-                "Playbook run took".bright_black(),
-                duration_str.bright_white()
-            );
-        } else {
-            println!("\nPlaybook run took {}", duration_str);
-        }
+            let width = 50;
+            let line = "─".repeat(width).bright_black();
+            println!("{}", line);
 
-        // Print final status summary
-        if self.use_color {
+            println!("  {:<12} : {}", "Duration".bright_white(), duration_str.cyan());
+
             if stats.has_failures() {
                 let failures = stats.total_failed();
-                println!(
-                    "{}",
-                    format!("Playbook run failed ({} failed).", failures)
-                        .red()
-                        .bold()
-                );
+                let status_msg = format!("✖ FAILED ({} errors)", failures);
+                println!("  {:<12} : {}", "Status".bright_white(), status_msg.red().bold());
             } else {
                 let changes = stats.total_changed();
-                if changes > 0 {
-                    println!(
-                        "{}",
-                        format!("Playbook completed successfully ({} changed).", changes)
-                            .green()
-                            .bold()
-                    );
+                let (status_msg, status_color) = if changes > 0 {
+                    (format!("✔ SUCCESS ({} changed)", changes), colored::Color::Yellow)
                 } else {
-                    println!(
-                        "{}",
-                        "Playbook completed successfully (no changes)."
-                            .green()
-                            .bold()
-                    );
-                }
+                    ("✔ SUCCESS (no changes)".to_string(), colored::Color::Green)
+                };
+                println!("  {:<12} : {}", "Status".bright_white(), status_msg.color(status_color).bold());
             }
-        } else if stats.has_failures() {
-            let failures = stats.total_failed();
-            println!("Playbook run failed ({} failed).", failures);
+
+            println!("{}", line);
         } else {
-            let changes = stats.total_changed();
-            if changes > 0 {
-                println!("Playbook completed successfully ({} changed).", changes);
+            let width = 50;
+            let line = "-".repeat(width);
+            println!("{}", line);
+            println!("  {:<12} : {}", "Duration", duration_str);
+
+            if stats.has_failures() {
+                let failures = stats.total_failed();
+                println!("  {:<12} : FAILED ({} errors)", "Status", failures);
             } else {
-                println!("Playbook completed successfully (no changes).");
+                let changes = stats.total_changed();
+                let status_msg = if changes > 0 {
+                    format!("SUCCESS ({} changed)", changes)
+                } else {
+                    "SUCCESS (no changes)".to_string()
+                };
+                println!("  {:<12} : {}", "Status", status_msg);
             }
+            println!("{}", line);
+        }
+    }
+
+    /// Print a success message
+    pub fn success(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "success",
+                "message": message
+            });
+            println!(
+                "{}",
+                serde_json::to_string(&success).expect("Failed to serialize output")
+            );
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "SUCCESS:".green().bold(), message);
+        } else {
+            println!("SUCCESS: {}", message);
         }
     }
 
@@ -568,7 +607,7 @@ impl OutputFormatter {
 
         sp.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
+                .template("{spinner:.green} {msg} {elapsed}")
                 .unwrap(),
         );
         sp.set_message(message.to_string());

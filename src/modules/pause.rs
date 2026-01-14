@@ -151,15 +151,6 @@ impl Module for PauseModule {
         &[]
     }
 
-    fn optional_params(&self) -> HashMap<&'static str, Value> {
-        let mut params = HashMap::new();
-        params.insert("seconds", Value::Null);
-        params.insert("minutes", Value::Null);
-        params.insert("prompt", Value::Null);
-        params.insert("echo", Value::Bool(true));
-        params
-    }
-
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Validate seconds if present
         if let Some(seconds) = params.get("seconds") {
@@ -241,7 +232,51 @@ impl Module for PauseModule {
     ) -> ModuleResult<ModuleOutput> {
         // In check mode, just report what would happen
         if context.check_mode {
-            return self.check(params, context);
+            let prompt = params.get_string("prompt")?;
+            let duration = self.calculate_duration(params)?;
+            let is_interactive = self.is_interactive();
+
+            let message = match (duration, &prompt, is_interactive) {
+                (Some(secs), None, _) if secs > 0 => {
+                    if secs >= 60 {
+                        format!(
+                            "Would pause for {} minute(s) and {} second(s)",
+                            secs / 60,
+                            secs % 60
+                        )
+                    } else {
+                        format!("Would pause for {} second(s)", secs)
+                    }
+                }
+                (duration_opt, Some(prompt_text), true) => {
+                    if let Some(secs) = duration_opt {
+                        format!(
+                            "Would prompt user with '{}' and pause for {} seconds",
+                            prompt_text.trim(),
+                            secs
+                        )
+                    } else {
+                        format!("Would prompt user with '{}'", prompt_text.trim())
+                    }
+                }
+                (duration_opt, Some(_), false) => {
+                    if let Some(secs) = duration_opt {
+                        format!(
+                            "Would skip prompt (non-interactive) and pause for {} seconds",
+                            secs
+                        )
+                    } else {
+                        "Would skip prompt (non-interactive mode)".to_string()
+                    }
+                }
+                (None, None, true) => "Would wait for user to press Enter".to_string(),
+                (None, None, false) => "Would skip pause (non-interactive mode)".to_string(),
+                (Some(0), None, _) => "No pause required (0 seconds)".to_string(),
+                // Catch-all for any other cases
+                _ => "Pause would complete".to_string(),
+            };
+
+            return Ok(ModuleOutput::ok(message));
         }
 
         let prompt = params.get_string("prompt")?;
@@ -369,63 +404,6 @@ impl Module for PauseModule {
         output.data = output_data;
 
         Ok(output)
-    }
-
-    fn check(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let prompt = params.get_string("prompt")?;
-        let duration = self.calculate_duration(params)?;
-        let is_interactive = self.is_interactive();
-
-        let message = match (duration, &prompt, is_interactive) {
-            (Some(secs), None, _) if secs > 0 => {
-                if secs >= 60 {
-                    format!(
-                        "Would pause for {} minute(s) and {} second(s)",
-                        secs / 60,
-                        secs % 60
-                    )
-                } else {
-                    format!("Would pause for {} second(s)", secs)
-                }
-            }
-            (duration_opt, Some(prompt_text), true) => {
-                if let Some(secs) = duration_opt {
-                    format!(
-                        "Would prompt user with '{}' and pause for {} seconds",
-                        prompt_text.trim(),
-                        secs
-                    )
-                } else {
-                    format!("Would prompt user with '{}'", prompt_text.trim())
-                }
-            }
-            (duration_opt, Some(_), false) => {
-                if let Some(secs) = duration_opt {
-                    format!(
-                        "Would skip prompt (non-interactive) and pause for {} seconds",
-                        secs
-                    )
-                } else {
-                    "Would skip prompt (non-interactive mode)".to_string()
-                }
-            }
-            (None, None, true) => "Would wait for user to press Enter".to_string(),
-            (None, None, false) => "Would skip pause (non-interactive mode)".to_string(),
-            (Some(0), None, _) => "No pause required (0 seconds)".to_string(),
-            // Catch-all for any other cases
-            _ => "Pause would complete".to_string(),
-        };
-
-        Ok(ModuleOutput::ok(message))
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Pause module never produces diffs - it doesn't change any state
-        Ok(None)
     }
 }
 
@@ -673,24 +651,4 @@ mod tests {
         assert!(result.msg.contains("No pause required") || result.msg.contains("0"));
     }
 
-    #[test]
-    fn test_pause_optional_params() {
-        let module = PauseModule;
-        let optional = module.optional_params();
-
-        assert!(optional.contains_key("seconds"));
-        assert!(optional.contains_key("minutes"));
-        assert!(optional.contains_key("prompt"));
-        assert!(optional.contains_key("echo"));
-    }
-
-    #[test]
-    fn test_pause_diff_returns_none() {
-        let module = PauseModule;
-        let params: ModuleParams = HashMap::new();
-        let context = ModuleContext::default();
-
-        let diff = module.diff(&params, &context).unwrap();
-        assert!(diff.is_none());
-    }
 }

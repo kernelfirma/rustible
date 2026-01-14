@@ -4,7 +4,7 @@
 //! and configuring persistent mounts in /etc/fstab.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
@@ -606,83 +606,6 @@ impl Module for MountModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let connection = match context.connection.as_ref() {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let path = params.get_string_required("path")?;
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "mounted".to_string());
-        let state = MountState::from_str(&state_str)?;
-
-        let is_mounted = Self::is_mounted(connection, &path, context).unwrap_or(false);
-        let fstab_content = Self::read_fstab(connection, context).unwrap_or_default();
-        let fstab_entry = Self::find_fstab_entry(&fstab_content, &path);
-
-        let before = format!(
-            "path: {}\nmounted: {}\nfstab: {}",
-            path,
-            if is_mounted { "yes" } else { "no" },
-            fstab_entry
-                .as_ref()
-                .map(|(_, e)| e.to_fstab_line())
-                .unwrap_or_else(|| "(not in fstab)".to_string())
-        );
-
-        let after = match state {
-            MountState::Absent => format!("path: {}\nmounted: no\nfstab: (not in fstab)", path),
-            MountState::Unmounted => {
-                let src = params.get_string("src")?.unwrap_or_default();
-                let fstype = params
-                    .get_string("fstype")?
-                    .unwrap_or_else(|| "auto".to_string());
-                let opts = params
-                    .get_string("opts")?
-                    .unwrap_or_else(|| "defaults".to_string());
-                format!(
-                    "path: {}\nmounted: no\nfstab: {} {} {} {}",
-                    path, src, path, fstype, opts
-                )
-            }
-            MountState::Present | MountState::Mounted => {
-                let src = params.get_string("src")?.unwrap_or_default();
-                let fstype = params
-                    .get_string("fstype")?
-                    .unwrap_or_else(|| "auto".to_string());
-                let opts = params
-                    .get_string("opts")?
-                    .unwrap_or_else(|| "defaults".to_string());
-                let mounted = matches!(state, MountState::Mounted);
-                format!(
-                    "path: {}\nmounted: {}\nfstab: {} {} {} {}",
-                    path,
-                    if mounted { "yes" } else { "no" },
-                    src,
-                    path,
-                    fstype,
-                    opts
-                )
-            }
-            MountState::Remounted => before.clone(),
-        };
-
-        if before == after {
-            Ok(None)
-        } else {
-            Ok(Some(Diff::new(before, after)))
-        }
-    }
 }
 
 #[cfg(test)]

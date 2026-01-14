@@ -4,7 +4,7 @@
 //! requirements files, proxy configuration, and different package states.
 
 use super::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use std::collections::HashMap;
@@ -637,104 +637,6 @@ impl Module for PipModule {
         }
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    fn diff(&self, params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        let config = PipConfig::from_params(params)?;
-
-        // Get state
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = PipState::from_str(&state_str)?;
-
-        // Get version specification
-        let version = params.get_string("version")?;
-
-        // Handle requirements file differently
-        if let Some(requirements) = params.get_string("requirements")? {
-            return Ok(Some(Diff::new(
-                "(requirements not shown)",
-                format!("Install from: {}", requirements),
-            )));
-        }
-
-        // Handle individual packages
-        let packages: Vec<String> = if let Some(names) = params.get_vec_string("name")? {
-            names
-        } else {
-            vec![params.get_string_required("name")?]
-        };
-
-        let mut before_lines = Vec::new();
-        let mut after_lines = Vec::new();
-
-        for package in &packages {
-            let is_installed = self.is_package_installed(&config, package)?;
-            let installed_version = if is_installed {
-                self.get_installed_version(&config, package)?
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
-
-            let target_spec = Self::build_package_spec(package, version.as_deref());
-
-            match state {
-                PipState::Present => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, installed_version));
-                        if version.is_some() {
-                            after_lines.push(format!("{}: {}", package, target_spec));
-                        } else {
-                            after_lines.push(format!("{}: {}", package, installed_version));
-                        }
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (will be installed)", target_spec));
-                    }
-                }
-                PipState::Latest => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, installed_version));
-                        after_lines.push(format!("{}: (will be upgraded)", package));
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (will be installed)", package));
-                    }
-                }
-                PipState::ForceReinstall => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, installed_version));
-                        after_lines.push(format!("{}: (will be reinstalled)", package));
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (will be installed)", package));
-                    }
-                }
-                PipState::Absent => {
-                    if is_installed {
-                        before_lines.push(format!("{}: {}", package, installed_version));
-                        after_lines.push(format!("{}: (will be removed)", package));
-                    } else {
-                        before_lines.push(format!("{}: (not installed)", package));
-                        after_lines.push(format!("{}: (not installed)", package));
-                    }
-                }
-            }
-        }
-
-        Ok(Some(Diff::new(
-            before_lines.join("\n"),
-            after_lines.join("\n"),
-        )))
-    }
 }
 
 #[cfg(test)]

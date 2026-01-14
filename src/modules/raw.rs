@@ -232,24 +232,6 @@ impl Module for RawModule {
         Ok(output)
     }
 
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        let command = self.get_command(params)?;
-
-        // In check mode, just report what would happen
-        Ok(
-            ModuleOutput::ok(format!("Would execute raw command: {}", command))
-                .with_data("cmd", serde_json::json!(command)),
-        )
-    }
-
-    fn diff(
-        &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
-    ) -> ModuleResult<Option<super::Diff>> {
-        // Raw module doesn't produce meaningful diffs
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
