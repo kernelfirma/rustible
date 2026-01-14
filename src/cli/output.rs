@@ -399,6 +399,31 @@ impl OutputFormatter {
                 );
             }
 
+            println!();
+            if stats.has_failures() {
+                let failures = stats.total_failed();
+                let message = format!("FAILED ({} errors)", failures);
+                let width: usize = 60;
+                let padding = width.saturating_sub(message.len()) / 2;
+                let left_pad = "=".repeat(padding);
+                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                println!("{}", banner.red().bold());
+            } else {
+                let changes = stats.total_changed();
+                let message = if changes > 0 {
+                    format!("SUCCESS ({} changed)", changes)
+                } else {
+                    "SUCCESS (no changes)".to_string()
+                };
+                let width: usize = 60;
+                let padding = width.saturating_sub(message.len()) / 2;
+                let left_pad = "=".repeat(padding);
+                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                println!("{}", banner.green().bold());
+            }
+
             println!("{}", line);
         } else {
             let width = 50;
