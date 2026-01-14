@@ -6,7 +6,6 @@
 #   Full stack:   docker compose --profile testing --profile monitoring up -d
 #   Cleanup:      docker compose down -v
 #
-version: '3.8'
 
 networks:
   rustible_network:
