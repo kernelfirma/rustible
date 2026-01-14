@@ -504,10 +504,10 @@ We track community requests and prioritize based on demand and alignment with pr
 |---------|-------|--------|----------|
 | Podman connection support | - | Planned (v1.0) | Medium |
 | Web UI for playbook management | - | Under consideration | Low |
-| [Terraform integration](architecture/terraform-integration.md) | - | Under consideration | Medium |
-| [HashiCorp Vault + AWX/Tower](architecture/awx-vault-integration.md) | - | Under consideration | Medium |
-| [Provider ecosystem](architecture/provider-ecosystem.md) | - | Under consideration | Medium |
-| [Declarative resource graph](architecture/resource-graph-model.md) | - | Under consideration | Medium |
+| [Terraform integration](architecture/terraform-integration.md) | - | :construction: In Progress ([PR #152](https://github.com/adolago/rustible/pull/152)) | Medium |
+| [HashiCorp Vault + AWX/Tower](architecture/awx-vault-integration.md) | - | :construction: In Progress ([PR #153](https://github.com/adolago/rustible/pull/153)) | Medium |
+| [Provider ecosystem](architecture/provider-ecosystem.md) | - | :construction: In Progress ([PR #154](https://github.com/adolago/rustible/pull/154)) | Medium |
+| [Declarative resource graph](architecture/resource-graph-model.md) | - | :construction: In Progress ([PR #155](https://github.com/adolago/rustible/pull/155)) | Medium |
 | [Compatibility gap plan](architecture/ansible-compat-gap.md) | - | Under consideration | Medium |
 | YAML anchor/alias support | - | Investigating | Medium |
 | Parallel role execution | - | Investigating | Medium |

@@ -70,7 +70,6 @@ use crate::connection::{Connection, ExecuteOptions, TransferOptions};
 use crate::template::TEMPLATE_ENGINE;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
