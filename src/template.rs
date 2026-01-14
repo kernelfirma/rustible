@@ -13,7 +13,7 @@
 use crate::error::{Error, Result};
 use indexmap::IndexMap;
 use lru::LruCache;
-use minijinja::value::{Value as MiniJinjaValue, ValueKind};
+use minijinja::value::{Kwargs, Value as MiniJinjaValue, ValueKind};
 use minijinja::{Environment, ErrorKind};
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
@@ -479,9 +479,55 @@ fn is_truthy_value(value: &MiniJinjaValue) -> bool {
 // FILTERS
 // ============================================================================
 
-fn filter_default(value: MiniJinjaValue, default: Option<MiniJinjaValue>) -> MiniJinjaValue {
-    if value.is_undefined() || value.is_none() {
-        default.unwrap_or(MiniJinjaValue::from(""))
+fn filter_default(
+    value: MiniJinjaValue,
+    default: Option<MiniJinjaValue>,
+    kwargs: Kwargs,
+) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
+    if value.is_undefined() || value.is_none() || (value.kind() == ValueKind::String && value.as_str() == Some("")) {
+        if let Some(d) = default {
+            Ok(d)
+        } else if let Ok(d) = kwargs.get::<MiniJinjaValue>("value") {
+            Ok(d)
+        } else {
+            Ok(MiniJinjaValue::from(""))
+        }
+    } else {
+        Ok(value)
+    }
+}
+
+fn filter_quote(value: MiniJinjaValue) -> MiniJinjaValue {
+    if let Some(s) = value.as_str() {
+        let mut escaped = String::with_capacity(s.len() + 2 + s.len() / 2);
+        escaped.push('"');
+        for c in s.chars() {
+            match c {
+                '\\' => escaped.push_str("\\\\"),
+                '"' => escaped.push_str("\\\""),
+                _ => escaped.push(c),
+            }
+        }
+        escaped.push('"');
+        MiniJinjaValue::from(escaped)
+    } else {
+        value
+    }
+}
+
+fn filter_systemd_escape(value: MiniJinjaValue) -> MiniJinjaValue {
+    if let Some(s) = value.as_str() {
+        let mut escaped = String::with_capacity(s.len() * 2);
+        for c in s.chars() {
+            match c {
+                '\\' => escaped.push_str("\\\\"),
+                '\n' => escaped.push_str("\\n"),
+                '\t' => escaped.push_str("\\t"),
+                '%' => escaped.push_str("%%"),
+                _ => escaped.push(c),
+            }
+        }
+        MiniJinjaValue::from(escaped)
     } else {
         value
     }
