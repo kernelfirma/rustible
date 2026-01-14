@@ -13,11 +13,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task;
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
-use super::config::{
-    default_identity_files, expand_path, ConnectionConfig, HostConfig, RetryConfig,
-};
+use super::config::{ConnectionConfig, HostConfig};
+use super::ssh_common;
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
     TransferOptions,
@@ -44,13 +43,15 @@ impl SshConnection {
         host_config: Option<HostConfig>,
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<Self> {
-        let host_config = host_config.unwrap_or_else(|| global_config.get_host_merged(host));
-        let retry_config = host_config.retry_config();
-
-        let actual_host = host_config.hostname.as_deref().unwrap_or(host);
-        let actual_port = host_config.port.unwrap_or(port);
-        let actual_user = host_config.user.as_deref().unwrap_or(user);
-        let timeout = host_config.timeout_duration();
+        let ssh_common::ResolvedConnectionParams {
+            host_config,
+            retry_config,
+            host: actual_host,
+            port: actual_port,
+            user: actual_user,
+            timeout,
+            identifier,
+        } = ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
 
         debug!(
             host = %actual_host,
@@ -59,12 +60,10 @@ impl SshConnection {
             "Connecting via SSH"
         );
 
-        let identifier = format!("{}@{}:{}", actual_user, actual_host, actual_port);
-
         // Clone values for the blocking task
-        let host_owned = actual_host.to_string();
+        let host_owned = actual_host.clone();
         let port_owned = actual_port;
-        let user_owned = actual_user.to_string();
+        let user_owned = actual_user.clone();
         let config_owned = host_config.clone();
         let global_config_owned = global_config.clone();
         let timeout_owned = timeout;
@@ -72,15 +71,16 @@ impl SshConnection {
 
         // Run connection in a blocking task since ssh2 is synchronous
         let session = task::spawn_blocking(move || {
-            Self::connect_with_retry(
-                &host_owned,
-                port_owned,
-                &user_owned,
-                &config_owned,
-                &global_config_owned,
-                timeout_owned,
-                &retry_config_owned,
-            )
+            ssh_common::connect_with_retry_blocking(&retry_config_owned, "SSH connection", || {
+                Self::do_connect(
+                    &host_owned,
+                    port_owned,
+                    &user_owned,
+                    &config_owned,
+                    &global_config_owned,
+                    timeout_owned,
+                )
+            })
         })
         .await
         .map_err(|e| ConnectionError::ConnectionFailed(format!("Task join error: {}", e)))??;
@@ -91,39 +91,6 @@ impl SshConnection {
             host_config,
             connected: Arc::new(Mutex::new(true)),
         })
-    }
-
-    /// Connect with retry logic
-    fn connect_with_retry(
-        host: &str,
-        port: u16,
-        user: &str,
-        host_config: &HostConfig,
-        global_config: &ConnectionConfig,
-        timeout: Duration,
-        retry_config: &RetryConfig,
-    ) -> ConnectionResult<Session> {
-        let mut last_error = None;
-
-        for attempt in 0..=retry_config.max_retries {
-            if attempt > 0 {
-                let delay = retry_config.delay_for_attempt(attempt - 1);
-                debug!(attempt = %attempt, delay = ?delay, "Retrying SSH connection");
-                std::thread::sleep(delay);
-            }
-
-            match Self::do_connect(host, port, user, host_config, global_config, timeout) {
-                Ok(session) => return Ok(session),
-                Err(e) => {
-                    warn!(attempt = %attempt, error = %e, "SSH connection attempt failed");
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            ConnectionError::ConnectionFailed("Unknown connection error".to_string())
-        }))
     }
 
     /// Perform the actual connection
@@ -201,30 +168,7 @@ impl SshConnection {
 
         // Try key-based authentication
         if methods.contains("publickey") {
-            // Try specific identity file if configured
-            if let Some(identity_file) = &host_config.identity_file {
-                let key_path = expand_path(identity_file);
-                if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
-                    .is_ok()
-                {
-                    debug!(key = %key_path.display(), "Authenticated using key");
-                    return Ok(());
-                }
-            }
-
-            // Try default identity files from global config
-            for identity_file in &global_config.defaults.identity_files {
-                let key_path = expand_path(identity_file);
-                if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
-                    .is_ok()
-                {
-                    debug!(key = %key_path.display(), "Authenticated using key");
-                    return Ok(());
-                }
-            }
-
-            // Try default identity files
-            for key_path in default_identity_files() {
+            for key_path in ssh_common::identity_file_candidates(host_config, global_config) {
                 if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
                     .is_ok()
                 {

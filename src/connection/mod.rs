@@ -56,6 +56,9 @@ pub mod docker;
 /// Local execution connection implementation.
 pub mod local;
 
+/// Shared SSH connection utilities.
+pub(crate) mod ssh_common;
+
 /// Pure Rust SSH implementation using russh.
 #[cfg(feature = "russh")]
 pub mod russh;
