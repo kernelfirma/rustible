@@ -1,3 +1,7 @@
+## 2024-01-12 - HINT vs INFO for actionable feedback
+**Learning:** Users often miss actionable advice when it's buried in standard INFO logs, especially when running with default verbosity. Elevating these suggestions to a distinct "HINT" level (styled in cyan) makes them pop out without being alarming like warnings or errors.
+**Action:** When providing specific, actionable fixes (like "Use X instead of Y"), use `ctx.output.hint()` instead of `ctx.output.info()`.
+
 ## 2024-05-24 - [Improved Debug Module Visibility]
 **Learning:** CLI tools often hide module-specific output in "simplified" execution paths unless explicitly handled. Users coming from Ansible expect `debug` output to be visible inline with the task status, not buried in verbose logs.
 **Action:** When implementing CLI task runners, ensure that task results can propagate an optional "message" field that is displayed alongside the status (e.g., `ok: [host] => message`), even for non-failure states.
