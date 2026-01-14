@@ -1123,7 +1123,6 @@ fn test_hash_in_values_vs_comments() {
 // ============================================================================
 
 #[test]
-#[ignore = "to_yaml filter not implemented"]
 fn test_to_yaml_filter() {
     let engine = TemplateEngine::new();
     let mut vars = HashMap::new();
@@ -1140,7 +1139,6 @@ fn test_to_yaml_filter() {
 }
 
 #[test]
-#[ignore = "from_yaml filter not implemented"]
 fn test_from_yaml_filter() {
     let engine = TemplateEngine::new();
     let mut vars = HashMap::new();

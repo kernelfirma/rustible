@@ -136,8 +136,12 @@ impl TemplateEngine {
         env.add_filter("b64encode", filter_b64encode);
         env.add_filter("b64decode", filter_b64decode);
         env.add_filter("to_json", filter_to_json);
+        env.add_filter("to_nice_json", filter_to_nice_json);
         env.add_filter("from_json", filter_from_json);
         env.add_filter("to_yaml", filter_to_yaml);
+        env.add_filter("to_nice_yaml", filter_to_nice_yaml);
+        env.add_filter("from_yaml", filter_from_yaml);
+        env.add_filter("from_yaml_all", filter_from_yaml_all);
 
         // Ansible-specific filters
         env.add_filter("mandatory", filter_mandatory);
@@ -367,8 +371,8 @@ impl TemplateEngine {
 
         // Handle literal booleans (common case)
         match expression.to_lowercase().as_str() {
-            "true" | "yes" => return Ok(true),
-            "false" | "no" => return Ok(false),
+            "true" | "yes" | "on" | "y" | "t" => return Ok(true),
+            "false" | "no" | "off" | "n" | "f" => return Ok(false),
             _ => {}
         }
 
@@ -768,6 +772,29 @@ fn filter_to_json(value: MiniJinjaValue) -> std::result::Result<String, minijinj
     })
 }
 
+fn filter_to_nice_json(
+    value: MiniJinjaValue,
+    indent: Option<usize>,
+) -> std::result::Result<String, minijinja::Error> {
+    let indent = indent.unwrap_or(4);
+    if indent == 4 {
+        serde_json::to_string_pretty(&value).map_err(|e| {
+            minijinja::Error::new(
+                ErrorKind::InvalidOperation,
+                format!("JSON serialization failed: {}", e),
+            )
+        })
+    } else {
+        let json = serde_json::to_value(&value).map_err(|e| {
+            minijinja::Error::new(
+                ErrorKind::InvalidOperation,
+                format!("JSON serialization failed: {}", e),
+            )
+        })?;
+        format_json_with_indent(&json, indent)
+    }
+}
+
 fn filter_from_json(value: &str) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
     let json: serde_json::Value = serde_json::from_str(value).map_err(|e| {
         minijinja::Error::new(
@@ -783,6 +810,69 @@ fn filter_to_yaml(value: MiniJinjaValue) -> std::result::Result<String, minijinj
         minijinja::Error::new(
             ErrorKind::InvalidOperation,
             format!("YAML serialization failed: {}", e),
+        )
+    })
+}
+
+fn filter_to_nice_yaml(
+    value: MiniJinjaValue,
+    _indent: Option<usize>,
+    _width: Option<usize>,
+) -> std::result::Result<String, minijinja::Error> {
+    serde_yaml::to_string(&value).map_err(|e| {
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("YAML serialization failed: {}", e),
+        )
+    })
+}
+
+fn filter_from_yaml(value: &str) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
+    let yaml: serde_yaml::Value = serde_yaml::from_str(value).map_err(|e| {
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("YAML parse failed: {}", e),
+        )
+    })?;
+    Ok(MiniJinjaValue::from_serialize(&yaml))
+}
+
+fn filter_from_yaml_all(value: &str) -> std::result::Result<Vec<MiniJinjaValue>, minijinja::Error> {
+    use serde::Deserialize;
+
+    let mut docs = Vec::new();
+    for doc in serde_yaml::Deserializer::from_str(value) {
+        let yaml = serde_yaml::Value::deserialize(doc).map_err(|e| {
+            minijinja::Error::new(
+                ErrorKind::InvalidOperation,
+                format!("YAML parse failed: {}", e),
+            )
+        })?;
+        docs.push(MiniJinjaValue::from_serialize(&yaml));
+    }
+    Ok(docs)
+}
+
+fn format_json_with_indent(
+    value: &serde_json::Value,
+    indent: usize,
+) -> std::result::Result<String, minijinja::Error> {
+    use serde::Serialize;
+
+    let mut buf = Vec::new();
+    let indent_bytes = vec![b' '; indent];
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
+    let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+    value.serialize(&mut ser).map_err(|e| {
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("JSON serialization failed: {}", e),
+        )
+    })?;
+    String::from_utf8(buf).map_err(|e| {
+        minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("JSON serialization failed: {}", e),
         )
     })
 }
@@ -1370,5 +1460,15 @@ mod tests {
     #[test]
     fn test_filter_b64decode() {
         assert_eq!(filter_b64decode("aGVsbG8=").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_filter_from_yaml() {
+        let engine = TemplateEngine::new();
+        let vars = HashMap::new();
+        let result = engine
+            .render("{{ ('a: 1' | from_yaml).a }}", &vars)
+            .unwrap();
+        assert_eq!(result.trim(), "1");
     }
 }

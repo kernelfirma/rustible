@@ -820,8 +820,8 @@ pub mod resolve {
         match value {
             serde_yaml::Value::Bool(b) => Some(*b),
             serde_yaml::Value::String(s) => match s.to_lowercase().as_str() {
-                "true" | "yes" | "on" | "1" => Some(true),
-                "false" | "no" | "off" | "0" | "" => Some(false),
+                "true" | "yes" | "on" | "1" | "y" | "t" => Some(true),
+                "false" | "no" | "off" | "0" | "" | "n" | "f" => Some(false),
                 _ => None,
             },
             serde_yaml::Value::Number(n) => n.as_i64().map(|i| i != 0),

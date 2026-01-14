@@ -22,8 +22,8 @@ where
     match &value {
         JsonValue::Bool(b) => Ok(*b),
         JsonValue::String(s) => match s.to_lowercase().as_str() {
-            "yes" | "true" | "on" | "1" => Ok(true),
-            "no" | "false" | "off" | "0" | "" => Ok(false),
+            "yes" | "true" | "on" | "1" | "y" | "t" => Ok(true),
+            "no" | "false" | "off" | "0" | "" | "n" | "f" => Ok(false),
             _ => Err(D::Error::custom(format!("invalid boolean string: {}", s))),
         },
         JsonValue::Number(n) => {
@@ -56,8 +56,8 @@ where
         Some(JsonValue::Null) => Ok(None),
         Some(JsonValue::Bool(b)) => Ok(Some(b)),
         Some(JsonValue::String(s)) => match s.to_lowercase().as_str() {
-            "yes" | "true" | "on" | "1" => Ok(Some(true)),
-            "no" | "false" | "off" | "0" | "" => Ok(Some(false)),
+            "yes" | "true" | "on" | "1" | "y" | "t" => Ok(Some(true)),
+            "no" | "false" | "off" | "0" | "" | "n" | "f" => Ok(Some(false)),
             _ => Err(D::Error::custom(format!("invalid boolean string: {}", s))),
         },
         Some(JsonValue::Number(n)) => {
@@ -1222,6 +1222,16 @@ fn parse_task_definition(
     Ok(tasks)
 }
 
+fn normalize_builtin_module_name(name: &str) -> &str {
+    if let Some(stripped) = name.strip_prefix("ansible.builtin.") {
+        stripped.rsplit('.').next().unwrap_or(stripped)
+    } else if let Some(stripped) = name.strip_prefix("ansible.legacy.") {
+        stripped.rsplit('.').next().unwrap_or(stripped)
+    } else {
+        name
+    }
+}
+
 /// Find the module name and args in a task definition
 fn find_module_in_definition(
     def: &TaskDefinition,
@@ -1287,7 +1297,7 @@ fn find_module_in_definition(
                     full_args.insert("_raw_params".to_string(), JsonValue::String(s.clone()));
                 }
 
-                return Ok((key.clone(), full_args));
+                return Ok((normalize_builtin_module_name(key).to_string(), full_args));
             }
         }
     }
@@ -1310,7 +1320,7 @@ fn find_module_in_definition(
                 }
             };
 
-            return Ok((key.clone(), args));
+            return Ok((normalize_builtin_module_name(key).to_string(), args));
         }
     }
 
@@ -1361,6 +1371,8 @@ fn parse_handler_definition(def: HandlerDefinition) -> ExecutorResult<Handler> {
 
         (module_name, module_args)
     };
+
+    let module_name = normalize_builtin_module_name(&module_name).to_string();
 
     Ok(Handler {
         name: def.name,
@@ -1420,6 +1432,28 @@ mod tests {
 
         let task = &play.tasks[0];
         assert_eq!(task.name, "Debug message");
+        assert_eq!(task.module, "debug");
+    }
+
+    #[test]
+    fn test_parse_flexible_booleans_and_fqcn() {
+        let yaml = r#"
+- name: Test Play
+  hosts: all
+  gather_facts: n
+  become: t
+  tasks:
+    - name: Debug message
+      ansible.builtin.debug:
+        msg: "Hello World"
+"#;
+
+        let playbook = Playbook::parse(yaml, None).unwrap();
+        let play = &playbook.plays[0];
+        assert!(!play.gather_facts);
+        assert!(play.r#become);
+
+        let task = &play.tasks[0];
         assert_eq!(task.module, "debug");
     }
 

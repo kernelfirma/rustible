@@ -193,13 +193,58 @@ impl CommandContext {
         let mut vars = HashMap::new();
 
         for var in &self.extra_vars {
-            if let Some(file_path) = var.strip_prefix('@') {
+            let trimmed = var.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if let Some(file_path) = trimmed.strip_prefix('@') {
                 // Load from file
                 let content = std::fs::read_to_string(file_path)?;
                 let file_vars: HashMap<String, serde_yaml::Value> = serde_yaml::from_str(&content)?;
                 vars.extend(file_vars);
-            } else if let Some((key, value)) = var.split_once('=') {
-                // Parse key=value
+                continue;
+            }
+
+            if !trimmed.contains('=') {
+                let value: serde_yaml::Value = serde_yaml::from_str(trimmed)?;
+                if let serde_yaml::Value::Mapping(mapping) = value {
+                    for (key, value) in mapping {
+                        let key = key.as_str().ok_or_else(|| {
+                            anyhow::anyhow!("Extra vars mapping keys must be strings")
+                        })?;
+                        vars.insert(key.to_string(), value);
+                    }
+                } else {
+                    anyhow::bail!("Extra vars must be key=value or a YAML/JSON mapping");
+                }
+                continue;
+            }
+
+            let mut tokens: Vec<String> = Vec::new();
+            if trimmed.chars().any(char::is_whitespace) {
+                let split_tokens = shell_words::split(trimmed).map_err(|e| {
+                    anyhow::anyhow!("Failed to parse extra vars string '{}': {}", trimmed, e)
+                })?;
+                if split_tokens.len() > 1 && split_tokens.iter().all(|token| token.contains('=')) {
+                    tokens = split_tokens;
+                }
+            }
+
+            if tokens.is_empty() {
+                let (key, value) = trimmed
+                    .split_once('=')
+                    .ok_or_else(|| anyhow::anyhow!("Invalid extra vars entry: {}", trimmed))?;
+                let parsed_value: serde_yaml::Value = serde_yaml::from_str(value)
+                    .unwrap_or_else(|_| serde_yaml::Value::String(value.to_string()));
+                vars.insert(key.to_string(), parsed_value);
+                continue;
+            }
+
+            for token in tokens {
+                let (key, value) = token
+                    .split_once('=')
+                    .ok_or_else(|| anyhow::anyhow!("Invalid extra vars entry: {}", token))?;
                 let parsed_value: serde_yaml::Value = serde_yaml::from_str(value)
                     .unwrap_or_else(|_| serde_yaml::Value::String(value.to_string()));
                 vars.insert(key.to_string(), parsed_value);
@@ -216,4 +261,44 @@ impl CommandContext {
 pub trait Runnable {
     /// Execute the command
     async fn run(&self, ctx: &mut CommandContext) -> Result<i32>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn test_parse_extra_vars_json_mapping() {
+        let cli =
+            Cli::try_parse_from(["rustible", "-e", "{\"a\": 1, \"b\": 2}", "run", "play.yml"])
+                .unwrap();
+        let ctx = CommandContext::new(&cli, Config::default());
+        let vars = ctx.parse_extra_vars().unwrap();
+
+        assert_eq!(vars.get("a").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(vars.get("b").and_then(|v| v.as_i64()), Some(2));
+    }
+
+    #[test]
+    fn test_parse_extra_vars_multiple_pairs() {
+        let cli = Cli::try_parse_from(["rustible", "-e", "a=1 b=2", "run", "play.yml"]).unwrap();
+        let ctx = CommandContext::new(&cli, Config::default());
+        let vars = ctx.parse_extra_vars().unwrap();
+
+        assert_eq!(vars.get("a").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(vars.get("b").and_then(|v| v.as_i64()), Some(2));
+    }
+
+    #[test]
+    fn test_parse_extra_vars_value_with_spaces() {
+        let cli =
+            Cli::try_parse_from(["rustible", "-e", "message=hello world", "run", "play.yml"])
+                .unwrap();
+        let ctx = CommandContext::new(&cli, Config::default());
+        let vars = ctx.parse_extra_vars().unwrap();
+
+        assert_eq!(vars.get("message").and_then(|v| v.as_str()), Some("hello world"));
+    }
 }

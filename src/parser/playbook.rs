@@ -17,8 +17,8 @@ where
     match &value {
         serde_yaml::Value::Bool(b) => Ok(*b),
         serde_yaml::Value::String(s) => match s.to_lowercase().as_str() {
-            "yes" | "true" | "on" | "1" => Ok(true),
-            "no" | "false" | "off" | "0" | "" => Ok(false),
+            "yes" | "true" | "on" | "1" | "y" | "t" => Ok(true),
+            "no" | "false" | "off" | "0" | "" | "n" | "f" => Ok(false),
             _ => Err(D::Error::custom(format!("invalid boolean string: {}", s))),
         },
         serde_yaml::Value::Number(n) => {
@@ -52,8 +52,8 @@ where
         Some(serde_yaml::Value::Null) => Ok(None),
         Some(serde_yaml::Value::Bool(b)) => Ok(Some(b)),
         Some(serde_yaml::Value::String(s)) => match s.to_lowercase().as_str() {
-            "yes" | "true" | "on" | "1" => Ok(Some(true)),
-            "no" | "false" | "off" | "0" | "" => Ok(Some(false)),
+            "yes" | "true" | "on" | "1" | "y" | "t" => Ok(Some(true)),
+            "no" | "false" | "off" | "0" | "" | "n" | "f" => Ok(Some(false)),
             _ => Err(D::Error::custom(format!("invalid boolean string: {}", s))),
         },
         Some(serde_yaml::Value::Number(n)) => {
@@ -97,6 +97,15 @@ where
         }
         other => Ok(vec![format!("{:?}", other)]),
     }
+}
+
+/// Deserialize a YAML sequence, treating `null`/`~` as an empty list.
+fn deserialize_seq_or_null<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// A complete playbook containing multiple plays
@@ -571,15 +580,15 @@ pub struct Task {
     pub args: Option<IndexMap<String, serde_yaml::Value>>,
 
     /// Block of tasks (for block/rescue/always)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub block: Vec<Task>,
 
     /// Rescue tasks (run on block failure)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub rescue: Vec<Task>,
 
     /// Always tasks (always run after block)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub always: Vec<Task>,
 
     /// Connection type
@@ -1179,6 +1188,34 @@ mod tests {
         assert_eq!(task.name, "Install nginx");
         assert_eq!(task.r#become, Some(true));
         assert!(task.notify.contains(&"restart nginx".to_string()));
+    }
+
+    #[test]
+    fn test_task_boolean_variants() {
+        let yaml = r#"
+name: Boolean task
+ignore_errors: y
+ignore_unreachable: f
+"#;
+
+        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        assert!(task.ignore_errors);
+        assert!(!task.ignore_unreachable);
+    }
+
+    #[test]
+    fn test_task_block_null_defaults() {
+        let yaml = r#"
+name: Block task
+block:
+rescue:
+always:
+"#;
+
+        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        assert!(task.block.is_empty());
+        assert!(task.rescue.is_empty());
+        assert!(task.always.is_empty());
     }
 
     #[test]

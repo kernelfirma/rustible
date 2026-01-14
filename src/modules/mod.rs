@@ -1588,9 +1588,20 @@ impl ModuleRegistry {
         self.categories.insert(name, category);
     }
 
+    fn normalize_module_name<'a>(name: &'a str) -> &'a str {
+        if let Some(stripped) = name.strip_prefix("ansible.builtin.") {
+            stripped.rsplit('.').next().unwrap_or(stripped)
+        } else if let Some(stripped) = name.strip_prefix("ansible.legacy.") {
+            stripped.rsplit('.').next().unwrap_or(stripped)
+        } else {
+            name
+        }
+    }
+
     /// Get the category of a module
     pub fn get_category(&self, name: &str) -> Option<ModuleCategory> {
-        self.categories.get(name).copied()
+        let normalized = Self::normalize_module_name(name);
+        self.categories.get(normalized).copied()
     }
 
     /// Get all modules in a specific category
@@ -1618,12 +1629,14 @@ impl ModuleRegistry {
 
     /// Get a module by name
     pub fn get(&self, name: &str) -> Option<Arc<dyn Module>> {
-        self.modules.get(name).cloned()
+        let normalized = Self::normalize_module_name(name);
+        self.modules.get(normalized).cloned()
     }
 
     /// Check if a module exists
     pub fn contains(&self, name: &str) -> bool {
-        self.modules.contains_key(name)
+        let normalized = Self::normalize_module_name(name);
+        self.modules.contains_key(normalized)
     }
 
     /// Get all module names
@@ -1708,6 +1721,15 @@ mod tests {
 
         let module = registry.get("test").unwrap();
         assert_eq!(module.name(), "test");
+    }
+
+    #[test]
+    fn test_module_registry_builtin_fqcn() {
+        let mut registry = ModuleRegistry::new();
+        registry.register(Arc::new(TestModule));
+
+        assert!(registry.get("ansible.builtin.test").is_some());
+        assert!(registry.get("ansible.legacy.test").is_some());
     }
 
     #[test]
