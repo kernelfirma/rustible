@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
 use crate::executor::runtime::ExecutionContext;
-use crate::recovery::{TaskOutcome, TransactionId};
+use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 use super::results::update_stats;
 use super::task::{Task, TaskResult, TaskStatus};
@@ -96,36 +96,13 @@ impl Executor {
                     );
                 }
             }
-            if let Some(rm) = &self.recovery_manager {
-                if let Some(tid) = tx_id.as_ref() {
-                    for (host, res) in &results {
-                        let outcome = match res.status {
-                            TaskStatus::Ok => TaskOutcome::Success,
-                            TaskStatus::Changed => TaskOutcome::Changed,
-                            TaskStatus::Failed => TaskOutcome::Failed {
-                                message: res.msg.clone().unwrap_or_default(),
-                            },
-                            TaskStatus::Skipped => TaskOutcome::Skipped,
-                            TaskStatus::Unreachable => TaskOutcome::Unreachable {
-                                message: res.msg.clone().unwrap_or_default(),
-                            },
-                        };
-
-                        if let Err(e) = rm
-                            .record_task(
-                                tid.clone(),
-                                task.name.clone(),
-                                host.clone(),
-                                outcome,
-                                res.changed,
-                            )
-                            .await
-                        {
-                            warn!("Failed to record task outcome for host {}: {}", host, e);
-                        }
-                    }
-                }
-            }
+            Self::record_task_outcomes(
+                self.recovery_manager.as_ref(),
+                tx_id.as_ref(),
+                &task.name,
+                &results,
+            )
+                .await;
             return Ok(results);
         }
 
@@ -275,36 +252,13 @@ impl Executor {
             .map_err(|_| ExecutorError::RuntimeError("Failed to unwrap results".into()))?
             .into_inner();
 
-        if let Some(rm) = &self.recovery_manager {
-            if let Some(tid) = tx_id.as_ref() {
-                for (host, res) in &results {
-                    let outcome = match res.status {
-                        TaskStatus::Ok => TaskOutcome::Success,
-                        TaskStatus::Changed => TaskOutcome::Changed,
-                        TaskStatus::Failed => TaskOutcome::Failed {
-                            message: res.msg.clone().unwrap_or_default(),
-                        },
-                        TaskStatus::Skipped => TaskOutcome::Skipped,
-                        TaskStatus::Unreachable => TaskOutcome::Unreachable {
-                            message: res.msg.clone().unwrap_or_default(),
-                        },
-                    };
-
-                    if let Err(e) = rm
-                        .record_task(
-                            tid.clone(),
-                            task.name.clone(),
-                            host.clone(),
-                            outcome,
-                            res.changed,
-                        )
-                        .await
-                    {
-                        warn!("Failed to record task outcome for host {}: {}", host, e);
-                    }
-                }
-            }
-        }
+        Self::record_task_outcomes(
+            self.recovery_manager.as_ref(),
+            tx_id.as_ref(),
+            &task.name,
+            &results,
+        )
+            .await;
         Ok(results)
     }
 
@@ -316,5 +270,59 @@ impl Executor {
         } else if task_result.status == TaskStatus::Unreachable {
             host_result.unreachable = true;
         }
+    }
+
+    pub(super) async fn record_task_outcome(
+        recovery_manager: Option<&Arc<RecoveryManager>>,
+        tx_id: Option<&TransactionId>,
+        task_name: &str,
+        host: &str,
+        result: &TaskResult,
+    ) {
+        let Some(rm) = recovery_manager else {
+            return;
+        };
+        let Some(tid) = tx_id else {
+            return;
+        };
+
+        let outcome = task_outcome_from_result(result);
+        if let Err(e) = rm
+            .record_task(
+                tid.clone(),
+                task_name.to_string(),
+                host.to_string(),
+                outcome,
+                result.changed,
+            )
+            .await
+        {
+            warn!("Failed to record task outcome for host {}: {}", host, e);
+        }
+    }
+
+    pub(super) async fn record_task_outcomes(
+        recovery_manager: Option<&Arc<RecoveryManager>>,
+        tx_id: Option<&TransactionId>,
+        task_name: &str,
+        results: &HashMap<String, TaskResult>,
+    ) {
+        for (host, result) in results {
+            Self::record_task_outcome(recovery_manager, tx_id, task_name, host, result).await;
+        }
+    }
+}
+
+fn task_outcome_from_result(result: &TaskResult) -> TaskOutcome {
+    match result.status {
+        TaskStatus::Ok => TaskOutcome::Success,
+        TaskStatus::Changed => TaskOutcome::Changed,
+        TaskStatus::Failed => TaskOutcome::Failed {
+            message: result.msg.clone().unwrap_or_default(),
+        },
+        TaskStatus::Skipped => TaskOutcome::Skipped,
+        TaskStatus::Unreachable => TaskOutcome::Unreachable {
+            message: result.msg.clone().unwrap_or_default(),
+        },
     }
 }

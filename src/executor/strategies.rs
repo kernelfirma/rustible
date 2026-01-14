@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::executor::runtime::ExecutionContext;
-use crate::recovery::{TaskOutcome, TransactionId};
+use crate::recovery::TransactionId;
 
 use super::results::update_stats;
 use super::task::{Task, TaskResult, TaskStatus};
@@ -262,57 +262,26 @@ impl Executor {
                     )
                     .await;
 
-                if let Some(rm) = &self.recovery_manager {
-                    if let Some(tid) = tx_id.as_ref() {
-                        let (outcome, changed) = match &task_result {
-                            Ok(r) => {
-                                let outcome = match r.status {
-                                    TaskStatus::Ok => TaskOutcome::Success,
-                                    TaskStatus::Changed => TaskOutcome::Changed,
-                                    TaskStatus::Failed => TaskOutcome::Failed {
-                                        message: r.msg.clone().unwrap_or_default(),
-                                    },
-                                    TaskStatus::Skipped => TaskOutcome::Skipped,
-                                    TaskStatus::Unreachable => TaskOutcome::Unreachable {
-                                        message: r.msg.clone().unwrap_or_default(),
-                                    },
-                                };
-                                (outcome, r.changed)
-                            }
-                            Err(e) => (
-                                TaskOutcome::Failed {
-                                    message: e.to_string(),
-                                },
-                                false,
-                            ),
-                        };
-                        if let Err(e) = rm
-                            .record_task(
-                                tid.clone(),
-                                task.name.clone(),
-                                host.clone(),
-                                outcome,
-                                changed,
-                            )
-                            .await
-                        {
-                            warn!("Failed to record task outcome for host {}: {}", host, e);
-                        }
-                    }
-                }
+                let task_result = match task_result {
+                    Ok(result) => result,
+                    Err(e) => TaskResult {
+                        status: TaskStatus::Failed,
+                        changed: false,
+                        msg: Some(e.to_string()),
+                        result: None,
+                        diff: None,
+                    },
+                };
+                Self::record_task_outcome(
+                    self.recovery_manager.as_ref(),
+                    tx_id.as_ref(),
+                    &task.name,
+                    host,
+                    &task_result,
+                )
+                .await;
 
-                match task_result {
-                    Ok(result) => {
-                        update_stats(&mut host_result.stats, &result);
-                        if result.status == TaskStatus::Failed {
-                            host_result.failed = true;
-                        }
-                    }
-                    Err(_) => {
-                        host_result.failed = true;
-                        host_result.stats.failed += 1;
-                    }
-                }
+                apply_task_result(&mut host_result, &task_result);
             }
 
             let mut results = HashMap::with_capacity(1);
@@ -434,82 +403,35 @@ impl Executor {
                                 &module_registry,
                             )
                             .await;
+                        let task_result = match task_result {
+                            Ok(result) => result,
+                            Err(e) => TaskResult {
+                                status: TaskStatus::Failed,
+                                changed: false,
+                                msg: Some(e.to_string()),
+                                result: None,
+                                diff: None,
+                            },
+                        };
 
                         if let Some(cb) = &callback {
-                            if let Ok(res) = &task_result {
-                                cb(ExecutionEvent::HostTaskComplete(
-                                    host.clone(),
-                                    task.name.clone(),
-                                    res.clone(),
-                                ));
-                            } else if let Err(e) = &task_result {
-                                // Create a dummy failed result for the event
-                                let res = TaskResult {
-                                    status: TaskStatus::Failed,
-                                    changed: false,
-                                    msg: Some(e.to_string()),
-                                    result: None,
-                                    diff: None,
-                                };
-                                cb(ExecutionEvent::HostTaskComplete(
-                                    host.clone(),
-                                    task.name.clone(),
-                                    res,
-                                ));
-                            }
+                            cb(ExecutionEvent::HostTaskComplete(
+                                host.clone(),
+                                task.name.clone(),
+                                task_result.clone(),
+                            ));
                         }
 
-                        if let Some(rm) = &recovery_manager {
-                            if let Some(tid) = tx_id.as_ref() {
-                                let (outcome, changed) = match &task_result {
-                                    Ok(r) => {
-                                        let outcome = match r.status {
-                                            TaskStatus::Ok => TaskOutcome::Success,
-                                            TaskStatus::Changed => TaskOutcome::Changed,
-                                            TaskStatus::Failed => TaskOutcome::Failed {
-                                                message: r.msg.clone().unwrap_or_default(),
-                                            },
-                                            TaskStatus::Skipped => TaskOutcome::Skipped,
-                                            TaskStatus::Unreachable => TaskOutcome::Unreachable {
-                                                message: r.msg.clone().unwrap_or_default(),
-                                            },
-                                        };
-                                        (outcome, r.changed)
-                                    }
-                                    Err(e) => (
-                                        TaskOutcome::Failed {
-                                            message: e.to_string(),
-                                        },
-                                        false,
-                                    ),
-                                };
-                                if let Err(e) = rm
-                                    .record_task(
-                                        tid.clone(),
-                                        task.name.clone(),
-                                        host.clone(),
-                                        outcome,
-                                        changed,
-                                    )
-                                    .await
-                                {
-                                    warn!("Failed to record task outcome for host {}: {}", host, e);
-                                }
-                            }
-                        }
+                        Self::record_task_outcome(
+                            recovery_manager.as_ref(),
+                            tx_id.as_ref(),
+                            &task.name,
+                            &host,
+                            &task_result,
+                        )
+                        .await;
 
-                        match task_result {
-                            Ok(result) => {
-                                update_stats(&mut host_result.stats, &result);
-                                if result.status == TaskStatus::Failed {
-                                    host_result.failed = true;
-                                }
-                            }
-                            Err(_) => {
-                                host_result.failed = true;
-                                host_result.stats.failed += 1;
-                            }
-                        }
+                        apply_task_result(&mut host_result, &task_result);
                     }
 
                     results.lock().await.insert(host, host_result);
@@ -646,5 +568,14 @@ impl Executor {
         );
 
         Ok(all_results)
+    }
+}
+
+fn apply_task_result(host_result: &mut HostResult, task_result: &TaskResult) {
+    update_stats(&mut host_result.stats, task_result);
+    if task_result.status == TaskStatus::Failed {
+        host_result.failed = true;
+    } else if task_result.status == TaskStatus::Unreachable {
+        host_result.unreachable = true;
     }
 }
