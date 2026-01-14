@@ -58,7 +58,10 @@ pub use config::{
     KeyedGroupConfig, PluginConfig, PluginConfigBuilder, PluginConfigError, PluginConfigResult,
 };
 pub use gcp::GcpPlugin;
-pub use terraform::TerraformPlugin;
+pub use terraform::{
+    CacheConfig, GroupByRule, LocalBackend, ResourceMapping, TerraformBackendType,
+    TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
+};
 
 use super::{Inventory, InventoryError, InventoryResult};
 use async_trait::async_trait;
