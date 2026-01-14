@@ -110,11 +110,11 @@ pub mod winrm;
 pub mod kubernetes;
 
 use async_trait::async_trait;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::RwLock;
 
 // Re-export config types at module level for convenience
 pub use crate::config::SshConfig;
@@ -597,7 +597,7 @@ pub struct ConnectionFactory {
     /// Global configuration
     config: Arc<ConnectionConfig>,
     /// Connection pool
-    pool: Arc<RwLock<ConnectionPool>>,
+    pool: AsyncConnectionPool,
 }
 
 impl ConnectionFactory {
@@ -605,7 +605,7 @@ impl ConnectionFactory {
     pub fn new(config: ConnectionConfig) -> Self {
         Self {
             config: Arc::new(config),
-            pool: Arc::new(RwLock::new(ConnectionPool::new(10))), // Default pool size of 10
+            pool: AsyncConnectionPool::new(10), // Default pool size of 10
         }
     }
 
@@ -613,7 +613,7 @@ impl ConnectionFactory {
     pub fn with_pool_size(config: ConnectionConfig, pool_size: usize) -> Self {
         Self {
             config: Arc::new(config),
-            pool: Arc::new(RwLock::new(ConnectionPool::new(pool_size))),
+            pool: AsyncConnectionPool::new(pool_size),
         }
     }
 
@@ -626,19 +626,23 @@ impl ConnectionFactory {
         let pool_key = conn_type.pool_key();
 
         // Try to get from pool first - release lock before await
-        let pooled_conn = { self.pool.write().get(&pool_key) };
+        let pooled_conn = self.pool.get(&pool_key).await;
 
         if let Some(conn) = pooled_conn {
             if conn.is_alive().await {
                 return Ok(conn);
             }
+            self.pool.remove(&pool_key).await;
         }
 
         // Create new connection
         let conn = self.create_connection(&conn_type).await?;
 
         // Add to pool
-        self.pool.write().put(pool_key, conn.clone());
+        let pooled = self.pool.put(pool_key, conn.clone()).await;
+        if !pooled {
+            tracing::debug!("Connection pool full, returning unpooled connection");
+        }
 
         Ok(conn)
     }
@@ -759,10 +763,7 @@ impl ConnectionFactory {
 
     /// Close all connections in the pool
     pub async fn close_all(&self) -> ConnectionResult<()> {
-        let connections: Vec<_> = {
-            let mut pool = self.pool.write();
-            pool.drain()
-        };
+        let connections = self.pool.drain().await;
 
         for conn in connections {
             let _ = conn.close().await;
@@ -772,8 +773,8 @@ impl ConnectionFactory {
     }
 
     /// Get pool statistics
-    pub fn pool_stats(&self) -> PoolStats {
-        self.pool.read().stats()
+    pub async fn pool_stats(&self) -> PoolStats {
+        self.pool.stats().await
     }
 }
 
@@ -942,6 +943,10 @@ impl ConnectionPool {
         // Clean up expired connections first
         self.cleanup_expired();
 
+        if self.connections.contains_key(&key) {
+            let _ = self.remove(&key);
+        }
+
         let host_key = Self::extract_host_key(&key);
 
         // Check per-host limit
@@ -1031,6 +1036,65 @@ impl ConnectionPool {
     /// Get detailed per-host statistics
     pub fn host_stats(&self) -> HashMap<String, usize> {
         self.host_counts.clone()
+    }
+}
+
+/// Async-aware wrapper around the connection pool.
+#[derive(Clone)]
+pub struct AsyncConnectionPool {
+    inner: Arc<RwLock<ConnectionPool>>,
+}
+
+impl AsyncConnectionPool {
+    /// Create a new async connection pool with default configuration.
+    pub fn new(max_connections: usize) -> Self {
+        Self::with_config(ConnectionPoolConfig {
+            max_total_connections: max_connections,
+            ..Default::default()
+        })
+    }
+
+    /// Create a new async connection pool with custom configuration.
+    pub fn with_config(config: ConnectionPoolConfig) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(ConnectionPool::with_config(config))),
+        }
+    }
+
+    /// Get a connection from the pool.
+    pub async fn get(&self, key: &str) -> Option<Arc<dyn Connection + Send + Sync>> {
+        let mut pool = self.inner.write().await;
+        pool.get(key)
+    }
+
+    /// Put a connection into the pool.
+    pub async fn put(&self, key: String, conn: Arc<dyn Connection + Send + Sync>) -> bool {
+        let mut pool = self.inner.write().await;
+        pool.put(key, conn)
+    }
+
+    /// Remove a connection from the pool.
+    pub async fn remove(&self, key: &str) -> Option<Arc<dyn Connection + Send + Sync>> {
+        let mut pool = self.inner.write().await;
+        pool.remove(key)
+    }
+
+    /// Drain all connections from the pool.
+    pub async fn drain(&self) -> Vec<Arc<dyn Connection + Send + Sync>> {
+        let mut pool = self.inner.write().await;
+        pool.drain()
+    }
+
+    /// Get pool statistics.
+    pub async fn stats(&self) -> PoolStats {
+        let pool = self.inner.read().await;
+        pool.stats()
+    }
+
+    /// Get per-host connection counts.
+    pub async fn host_stats(&self) -> HashMap<String, usize> {
+        let pool = self.inner.read().await;
+        pool.host_stats()
     }
 }
 
@@ -1329,5 +1393,21 @@ mod tests {
         assert_eq!(stats.host_count, 0);
         assert_eq!(stats.idle_timeout_secs, 60);
         assert_eq!(stats.max_lifetime_secs, 300);
+    }
+
+    #[tokio::test]
+    async fn test_async_connection_pool_put_get() {
+        let pool = AsyncConnectionPool::new(5);
+        let conn: Arc<dyn Connection + Send + Sync> =
+            Arc::new(local::LocalConnection::new());
+
+        assert!(pool.put("local".to_string(), conn).await);
+
+        let pooled = pool.get("local").await;
+        assert!(pooled.is_some());
+        assert!(pooled.unwrap().is_alive().await);
+
+        let stats = pool.stats().await;
+        assert_eq!(stats.active_connections, 1);
     }
 }
