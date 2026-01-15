@@ -311,7 +311,7 @@ async fn run_playbook_job(
     };
 
     // Parse playbook
-    let playbook = match crate::playbook::Playbook::from_file(&playbook_path).await {
+    let playbook = match crate::executor::playbook::Playbook::load(&playbook_path) {
         Ok(pb) => pb,
         Err(e) => {
             let error_msg = format!("Failed to parse playbook: {}", e);
@@ -328,8 +328,8 @@ async fn run_playbook_job(
         job_id,
         format!(
             "Playbook: {} plays, {} tasks",
-            playbook.play_count(),
-            playbook.task_count()
+            playbook.plays.len(),
+            playbook.plays.iter().map(|p| p.pre_tasks.len() + p.tasks.len() + p.post_tasks.len()).sum::<usize>()
         ),
         "stdout",
     );
