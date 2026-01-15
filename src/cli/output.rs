@@ -58,6 +58,7 @@ impl TaskStatus {
 }
 
 /// Output formatter for different output modes
+#[derive(Clone)]
 pub struct OutputFormatter {
     /// Use colored output
     use_color: bool,
@@ -232,10 +233,17 @@ impl OutputFormatter {
         }
 
         if let Some(d) = duration {
+            let duration_str = format_duration(d);
             if self.use_color {
-                print!("  {}", format_duration(d).dimmed());
+                if d.as_secs() >= 5 {
+                    print!("  {}", duration_str.red());
+                } else if d.as_secs() >= 1 {
+                    print!("  {}", duration_str.yellow());
+                } else {
+                    print!("  {}", duration_str.dimmed());
+                }
             } else {
-                print!("  {}", format_duration(d));
+                print!("  {}", duration_str);
             }
         }
 
