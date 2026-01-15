@@ -156,7 +156,7 @@ impl YumModule {
     ) -> ModuleResult<(bool, String, String)> {
         let mut cmd_parts: Vec<String> = vec!["yum".to_string()];
         cmd_parts.extend(args.iter().cloned());
-        cmd_parts.extend(packages.iter().map(|s| shell_escape(s)));
+        cmd_parts.extend(packages.iter().map(|s| shell_escape(s).into_owned()));
 
         let cmd = cmd_parts.join(" ");
 

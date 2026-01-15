@@ -26,23 +26,23 @@ impl SshConfig {
 
         if let Some(key) = &self.key_file {
             parts.push("-i".to_string());
-            parts.push(shell_escape(key));
+            parts.push(shell_escape(key).into_owned());
             // Disable other key sources when using specific key
             parts.push("-o".to_string());
-            parts.push(shell_escape("IdentitiesOnly=yes"));
+            parts.push(shell_escape("IdentitiesOnly=yes").into_owned());
         }
 
         if self.accept_hostkey {
             parts.push("-o".to_string());
-            parts.push(shell_escape("StrictHostKeyChecking=no"));
+            parts.push(shell_escape("StrictHostKeyChecking=no").into_owned());
             parts.push("-o".to_string());
-            parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
+            parts.push(shell_escape("UserKnownHostsFile=/dev/null").into_owned());
         }
 
         if let Some(opts) = &self.ssh_opts {
             // Options might contain spaces, so we should escape them to be safe
             // when git passes them to the shell
-            parts.push(shell_escape(opts));
+            parts.push(shell_escape(opts).into_owned());
         }
 
         if parts.len() > 1 {

@@ -218,7 +218,7 @@ impl AptParams {
         // default_release
         if let Some(ref release) = self.default_release {
             opts.push("-t".to_string());
-            opts.push(shell_escape(release));
+            opts.push(shell_escape(release).into_owned());
         }
 
         // force
@@ -396,7 +396,10 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<String> = packages
+            .iter()
+            .map(|p| shell_escape(p).into_owned())
+            .collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let only_upgrade_flag = if apt_params.only_upgrade {
@@ -433,7 +436,10 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<String> = packages
+            .iter()
+            .map(|p| shell_escape(p).into_owned())
+            .collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let purge_flag = if apt_params.purge { "--purge" } else { "" };
@@ -466,7 +472,10 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<String> = packages
+            .iter()
+            .map(|p| shell_escape(p).into_owned())
+            .collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(
@@ -496,7 +505,10 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<String> = packages
+            .iter()
+            .map(|p| shell_escape(p).into_owned())
+            .collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(

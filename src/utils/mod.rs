@@ -3,6 +3,7 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::Hasher;
@@ -77,7 +78,7 @@ pub fn unsafe_template_access_allowed() -> bool {
 /// assert_eq!(shell_escape("don't"), "'don'\\''t'");
 /// assert_eq!(shell_escape("rm -rf /"), "'rm -rf /'");
 /// ```
-pub fn shell_escape(s: &str) -> String {
+pub fn shell_escape(s: &str) -> Cow<'_, str> {
     let mut safe = true;
     for c in s.chars() {
         if !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '+')) {
@@ -88,9 +89,9 @@ pub fn shell_escape(s: &str) -> String {
 
     if safe {
         if s.is_empty() {
-            return "''".to_string();
+            return Cow::Borrowed("''");
         }
-        return s.to_string();
+        return Cow::Borrowed(s);
     }
 
     let mut escaped = String::with_capacity(s.len() + 16);
@@ -105,7 +106,7 @@ pub fn shell_escape(s: &str) -> String {
     }
 
     escaped.push('\'');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escape a string for safe use in Windows cmd.exe.
@@ -121,9 +122,10 @@ pub fn shell_escape(s: &str) -> String {
 /// # Returns
 ///
 /// * The escaped string safe for cmd.exe execution
-pub fn cmd_escape(s: &str) -> String {
+pub fn cmd_escape(s: &str) -> Cow<'_, str> {
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('"');
+
     for c in s.chars() {
         if c == '"' {
             escaped.push_str("\"\"");
@@ -131,15 +133,37 @@ pub fn cmd_escape(s: &str) -> String {
             escaped.push(c);
         }
     }
+
+    // Optimization: If no quotes were found and string is otherwise safe (though cmd rules are complex),
+    // we might be able to return borrowed. But cmd escaping typically always quotes for safety unless trivial.
+    // The previous implementation ALWAYS quoted and allocated.
+    // Given cmd weirdness, always quoting is safer, but we still allocate.
+    // However, the previous implementation did:
+    // let mut escaped = String::with_capacity(s.len() + 16);
+    // escaped.push('"');
+    // ...
+    // escaped.push('"');
+    //
+    // So it always allocated.
+    // If we want to return Cow, we can check if it needs escaping.
+    // But cmd_escape contract seems to be "wrap in quotes".
+    // So we'll keep it allocating but return Cow::Owned to match signature.
+
     escaped.push('"');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escapes a string for safe use in PowerShell commands.
 ///
 /// This function handles special characters that could cause issues
 /// in PowerShell string literals.
-pub fn powershell_escape(s: &str) -> String {
+///
+/// PowerShell escaping rules are tricky because of "expression mode".
+/// Even simple strings like `1+1` or `-flag` can be interpreted as expressions or parameters
+/// if not quoted. Therefore, we conservatively always wrap in single quotes to ensure
+/// the value is treated as a string literal.
+pub fn powershell_escape(s: &str) -> Cow<'_, str> {
+    // Always escape for safety in PowerShell expression mode
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('\'');
     for c in s.chars() {
@@ -150,15 +174,17 @@ pub fn powershell_escape(s: &str) -> String {
         }
     }
     escaped.push('\'');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escapes a string for use in PowerShell double-quoted strings.
 ///
 /// This handles backticks, dollar signs, and double quotes.
-pub fn powershell_escape_double_quoted(s: &str) -> String {
-    // let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
-    // format!("\"{}\"", escaped)
+pub fn powershell_escape_double_quoted(s: &str) -> Cow<'_, str> {
+    // This function wraps in double quotes.
+    // Unlike the others, this seems to be for partial string interpolation or specific use cases.
+    // Original always allocated.
+
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('"');
     for c in s.chars() {
@@ -170,7 +196,7 @@ pub fn powershell_escape_double_quoted(s: &str) -> String {
         }
     }
     escaped.push('"');
-    escaped
+    Cow::Owned(escaped)
 }
 
 #[cfg(test)]
@@ -199,6 +225,20 @@ mod tests {
         assert_eq!(shell_escape("foo|bar"), "'foo|bar'");
         assert_eq!(shell_escape("foo>bar"), "'foo>bar'");
         assert_eq!(shell_escape("foo&bar"), "'foo&bar'");
+    }
+
+    #[test]
+    fn test_shell_escape_cow() {
+        // Verify we are actually avoiding allocation
+        match shell_escape("simple") {
+            Cow::Borrowed(_) => {},
+            Cow::Owned(_) => panic!("Should be borrowed"),
+        }
+
+        match shell_escape("with space") {
+            Cow::Borrowed(_) => panic!("Should be owned"),
+            Cow::Owned(_) => {},
+        }
     }
 
     #[test]

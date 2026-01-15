@@ -229,10 +229,10 @@ $result | ConvertTo-Json -Compress
             name = powershell_escape(name),
             password_section = password_section,
             fullname = fullname
-                .map(|f| powershell_escape(f))
+                .map(|f| powershell_escape(f).into_owned())
                 .unwrap_or_else(|| "$null".to_string()),
             description = description
-                .map(|d| powershell_escape(d))
+                .map(|d| powershell_escape(d).into_owned())
                 .unwrap_or_else(|| "$null".to_string()),
             password_never_expires = if password_never_expires {
                 "true"
