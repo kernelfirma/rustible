@@ -609,7 +609,7 @@ impl PostgresqlDbModule {
         }
 
         cmd_parts.push(format!("-f {}", shell_escape(target)));
-        cmd_parts.push(shell_escape(&config.name));
+        cmd_parts.push(shell_escape(&config.name).into_owned());
 
         let cmd = cmd_parts.join(" ");
         let (success, _, stderr) =
@@ -667,7 +667,7 @@ impl PostgresqlDbModule {
                 cmd_parts.push(opts.clone());
             }
 
-            cmd_parts.push(shell_escape(target));
+            cmd_parts.push(shell_escape(target).into_owned());
 
             cmd_parts.join(" ")
         };
