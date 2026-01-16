@@ -33,13 +33,13 @@ impl TaskStatus {
     /// Get the colored string representation
     pub fn colored_string(&self) -> String {
         match self {
-            TaskStatus::Ok => "ok".green().to_string(),
-            TaskStatus::Changed => "changed".yellow().to_string(),
-            TaskStatus::Skipped => "skipping".cyan().to_string(),
-            TaskStatus::Failed => "failed".red().bold().to_string(),
-            TaskStatus::Unreachable => "unreachable".red().bold().to_string(),
-            TaskStatus::Rescued => "rescued".magenta().to_string(),
-            TaskStatus::Ignored => "ignored".blue().to_string(),
+            TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
+            TaskStatus::Changed => format!("~ {}", "changed").yellow().to_string(),
+            TaskStatus::Skipped => format!("- {}", "skipping").cyan().to_string(),
+            TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
+            TaskStatus::Unreachable => format!("✖ {}", "unreachable").red().bold().to_string(),
+            TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
+            TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
         }
     }
 
