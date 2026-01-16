@@ -154,8 +154,8 @@ impl YumModule {
         packages: &[String],
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let mut cmd_parts: Vec<String> = vec!["yum".to_string()];
-        cmd_parts.extend(args.iter().cloned());
+        let mut cmd_parts: Vec<std::borrow::Cow<'_, str>> = vec![std::borrow::Cow::Borrowed("yum")];
+        cmd_parts.extend(args.iter().map(|s| std::borrow::Cow::Borrowed(s.as_str())));
         cmd_parts.extend(packages.iter().map(|s| shell_escape(s)));
 
         let cmd = cmd_parts.join(" ");

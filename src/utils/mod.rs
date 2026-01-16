@@ -3,6 +3,7 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::Hasher;
@@ -77,7 +78,7 @@ pub fn unsafe_template_access_allowed() -> bool {
 /// assert_eq!(shell_escape("don't"), "'don'\\''t'");
 /// assert_eq!(shell_escape("rm -rf /"), "'rm -rf /'");
 /// ```
-pub fn shell_escape(s: &str) -> String {
+pub fn shell_escape(s: &str) -> Cow<'_, str> {
     let mut safe = true;
     for c in s.chars() {
         if !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '+')) {
@@ -88,9 +89,9 @@ pub fn shell_escape(s: &str) -> String {
 
     if safe {
         if s.is_empty() {
-            return "''".to_string();
+            return Cow::Borrowed("''");
         }
-        return s.to_string();
+        return Cow::Borrowed(s);
     }
 
     let mut escaped = String::with_capacity(s.len() + 16);
@@ -105,7 +106,7 @@ pub fn shell_escape(s: &str) -> String {
     }
 
     escaped.push('\'');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escape a string for safe use in Windows cmd.exe.
@@ -121,7 +122,7 @@ pub fn shell_escape(s: &str) -> String {
 /// # Returns
 ///
 /// * The escaped string safe for cmd.exe execution
-pub fn cmd_escape(s: &str) -> String {
+pub fn cmd_escape(s: &str) -> Cow<'_, str> {
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('"');
     for c in s.chars() {
@@ -132,14 +133,14 @@ pub fn cmd_escape(s: &str) -> String {
         }
     }
     escaped.push('"');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escapes a string for safe use in PowerShell commands.
 ///
 /// This function handles special characters that could cause issues
 /// in PowerShell string literals.
-pub fn powershell_escape(s: &str) -> String {
+pub fn powershell_escape(s: &str) -> Cow<'_, str> {
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('\'');
     for c in s.chars() {
@@ -150,13 +151,13 @@ pub fn powershell_escape(s: &str) -> String {
         }
     }
     escaped.push('\'');
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escapes a string for use in PowerShell double-quoted strings.
 ///
 /// This handles backticks, dollar signs, and double quotes.
-pub fn powershell_escape_double_quoted(s: &str) -> String {
+pub fn powershell_escape_double_quoted(s: &str) -> Cow<'_, str> {
     // let escaped = s.replace('`', "``").replace('$', "`$").replace('"', "`\"");
     // format!("\"{}\"", escaped)
     let mut escaped = String::with_capacity(s.len() + 16);
@@ -170,7 +171,7 @@ pub fn powershell_escape_double_quoted(s: &str) -> String {
         }
     }
     escaped.push('"');
-    escaped
+    Cow::Owned(escaped)
 }
 
 #[cfg(test)]

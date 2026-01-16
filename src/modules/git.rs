@@ -22,20 +22,20 @@ struct SshConfig {
 impl SshConfig {
     /// Build the GIT_SSH_COMMAND environment variable
     fn build_ssh_command(&self) -> Option<String> {
-        let mut parts = vec!["ssh".to_string()];
+        let mut parts: Vec<std::borrow::Cow<'_, str>> = vec![std::borrow::Cow::Borrowed("ssh")];
 
         if let Some(key) = &self.key_file {
-            parts.push("-i".to_string());
+            parts.push(std::borrow::Cow::Borrowed("-i"));
             parts.push(shell_escape(key));
             // Disable other key sources when using specific key
-            parts.push("-o".to_string());
+            parts.push(std::borrow::Cow::Borrowed("-o"));
             parts.push(shell_escape("IdentitiesOnly=yes"));
         }
 
         if self.accept_hostkey {
-            parts.push("-o".to_string());
+            parts.push(std::borrow::Cow::Borrowed("-o"));
             parts.push(shell_escape("StrictHostKeyChecking=no"));
-            parts.push("-o".to_string());
+            parts.push(std::borrow::Cow::Borrowed("-o"));
             parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
         }
 
