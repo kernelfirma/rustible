@@ -37,7 +37,10 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::collection::{Collection, CollectionRegistry, Fqcn};
 //!
 //! // Parse a FQCN
@@ -47,13 +50,16 @@
 //! assert_eq!(fqcn.resource, "json_query");
 //!
 //! // Load collections
-//! let registry = CollectionRegistry::new()
+//! let registry = CollectionRegistry::builder()
 //!     .with_search_path("~/.ansible/collections")
 //!     .with_search_path("./collections")
-//!     .build()?;
+//!     .build()
+//!     .await?;
 //!
 //! // Resolve a module from a collection
-//! let module = registry.resolve_module(&fqcn)?;
+//! let module = registry.resolve_module(&fqcn).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod dependency;
@@ -75,7 +81,7 @@ pub use runtime::{PluginRouting, RuntimeConfig};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that can occur during collection operations

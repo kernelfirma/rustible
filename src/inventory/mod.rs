@@ -67,7 +67,10 @@
 //!
 //! The inventory plugin system allows extending inventory sources:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::inventory::plugin::{
 //!     InventoryPluginFactory,
 //!     InventoryPluginConfig,
@@ -82,6 +85,8 @@
 //!
 //! let plugin = InventoryPluginFactory::create("aws_ec2", config)?;
 //! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Pattern Matching
@@ -1038,11 +1043,6 @@ impl Inventory {
             return Ok(self.hosts.values().collect());
         }
 
-        // Handle complex patterns with operators
-        if pattern.contains(':') {
-            return self.parse_complex_pattern(pattern);
-        }
-
         // Handle regex pattern
         if pattern.starts_with('~') {
             let regex_str = &pattern[1..];
@@ -1054,6 +1054,14 @@ impl Inventory {
                 .values()
                 .filter(|h| regex.is_match(&h.name))
                 .collect());
+        }
+
+        // Handle complex patterns with operators
+        if pattern.contains(':') {
+            let parts = split_pattern(pattern);
+            if parts.len() > 1 {
+                return self.parse_complex_pattern(pattern);
+            }
         }
 
         // Handle glob/wildcard pattern

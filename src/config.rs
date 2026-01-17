@@ -22,8 +22,21 @@ use std::path::PathBuf;
 /// Merge an Option<T> field - uses `other` if Some, otherwise falls back to `base`
 ///
 /// # Example
-/// ```ignore
-/// merge_option!(self.defaults.inventory, other.defaults.inventory)
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # macro_rules! merge_option {
+/// #     ($base:expr, $other:expr) => {
+/// #         $other.or_else(|| $base.clone())
+/// #     };
+/// # }
+/// # let base = Some("inventory.yml".to_string());
+/// # let other: Option<String> = None;
+/// let merged = merge_option!(base, other);
+/// # let _ = merged;
+/// # Ok(())
+/// # }
 /// ```
 macro_rules! merge_option {
     ($base:expr, $other:expr) => {
@@ -34,8 +47,25 @@ macro_rules! merge_option {
 /// Merge a field with a known default value - uses `other` if non-default, otherwise `base`
 ///
 /// # Example
-/// ```ignore
-/// merge_with_default!(self.defaults.forks, other.defaults.forks, 5)
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # macro_rules! merge_with_default {
+/// #     ($base:expr, $other:expr, $default:expr) => {
+/// #         if $other != $default {
+/// #             $other
+/// #         } else {
+/// #             $base.clone()
+/// #         }
+/// #     };
+/// # }
+/// # let base = 10;
+/// # let other = 5;
+/// let merged = merge_with_default!(base, other, 5);
+/// # let _ = merged;
+/// # Ok(())
+/// # }
 /// ```
 macro_rules! merge_with_default {
     ($base:expr, $other:expr, $default:expr) => {
@@ -50,8 +80,25 @@ macro_rules! merge_with_default {
 /// Merge a Vec field - uses `other` if non-empty, otherwise `base`
 ///
 /// # Example
-/// ```ignore
-/// merge_vec!(self.defaults.roles_path, other.defaults.roles_path)
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # macro_rules! merge_vec {
+/// #     ($base:expr, $other:expr) => {
+/// #         if $other.is_empty() {
+/// #             $base.clone()
+/// #         } else {
+/// #             $other
+/// #         }
+/// #     };
+/// # }
+/// # let base: Vec<String> = vec!["/etc/rustible/roles".to_string()];
+/// # let other: Vec<String> = Vec::new();
+/// let merged = merge_vec!(base, other);
+/// # let _ = merged;
+/// # Ok(())
+/// # }
 /// ```
 macro_rules! merge_vec {
     ($base:expr, $other:expr) => {
@@ -66,8 +113,24 @@ macro_rules! merge_vec {
 /// Merge a HashMap field - extends `base` with entries from `other`
 ///
 /// # Example
-/// ```ignore
-/// merge_hashmap!(self.environment, other.environment)
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use std::collections::HashMap;
+/// # macro_rules! merge_hashmap {
+/// #     ($base:expr, $other:expr) => {{
+/// #         let mut merged = $base.clone();
+/// #         merged.extend($other);
+/// #         merged
+/// #     }};
+/// # }
+/// # let base: HashMap<String, String> = HashMap::new();
+/// # let other: HashMap<String, String> = HashMap::new();
+/// let merged = merge_hashmap!(base, other);
+/// # let _ = merged;
+/// # Ok(())
+/// # }
 /// ```
 macro_rules! merge_hashmap {
     ($base:expr, $other:expr) => {{

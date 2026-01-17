@@ -9,7 +9,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::retry::{RetryPolicy, BackoffStrategy, JitterStrategy};
 //! use std::time::Duration;
 //!
@@ -26,6 +29,8 @@
 //!     // Your fallible operation here
 //!     Ok::<_, Error>(())
 //! }).await;
+//! # Ok(())
+//! # }
 //! ```
 
 use rand::Rng;
@@ -77,7 +82,7 @@ impl BackoffStrategy {
             Self::Linear => base_millis * (attempt as f64 + 1.0),
             Self::Exponential { multiplier } => base_millis * multiplier.powf(attempt as f64),
             Self::Fibonacci => {
-                let fib = fibonacci(attempt + 1);
+                let fib = fibonacci(attempt + 2);
                 base_millis * fib as f64
             }
             Self::Polynomial { exponent } => {
@@ -151,14 +156,14 @@ impl JitterStrategy {
     /// * `initial_delay` - The original initial delay (for decorrelated jitter)
     /// * `previous_delay` - The previous delay used (for decorrelated jitter)
     pub fn apply(&self, delay: Duration, initial_delay: Duration, previous_delay: Option<Duration>) -> Duration {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let delay_millis = delay.as_millis() as f64;
 
         let jittered_millis = match self {
             Self::None => delay_millis,
             Self::Full => {
                 if delay_millis > 0.0 {
-                    rng.random_range(0.0..delay_millis)
+                    rng.gen_range(0.0..delay_millis)
                 } else {
                     0.0
                 }
@@ -166,7 +171,7 @@ impl JitterStrategy {
             Self::Equal => {
                 let half = delay_millis / 2.0;
                 if half > 0.0 {
-                    half + rng.random_range(0.0..half)
+                    half + rng.gen_range(0.0..half)
                 } else {
                     0.0
                 }
@@ -176,14 +181,14 @@ impl JitterStrategy {
                 let prev = previous_delay.map(|d| d.as_millis() as f64).unwrap_or(base);
                 let max = (prev * 3.0).max(base);
                 if max > base {
-                    rng.random_range(base..max)
+                    rng.gen_range(base..max)
                 } else {
                     base
                 }
             }
             Self::Bounded { percentage } => {
                 let jitter_range = delay_millis * percentage;
-                delay_millis + rng.random_range(-jitter_range..jitter_range)
+                delay_millis + rng.gen_range(-jitter_range..jitter_range)
             }
         };
 
@@ -251,7 +256,6 @@ where
 /// - Delay between retries
 /// - Backoff and jitter strategies
 /// - Maximum total timeout
-#[derive(Debug, Clone)]
 pub struct RetryPolicy {
     /// Maximum number of retry attempts (0 means no retries, just the initial attempt).
     pub max_retries: u32,
@@ -276,6 +280,21 @@ pub struct RetryPolicy {
 
     /// Custom retry condition (checked before backoff calculation).
     condition: Option<Box<dyn Fn(&str, u32) -> bool + Send + Sync>>,
+}
+
+impl std::fmt::Debug for RetryPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RetryPolicy")
+            .field("max_retries", &self.max_retries)
+            .field("initial_delay", &self.initial_delay)
+            .field("max_delay", &self.max_delay)
+            .field("max_total_time", &self.max_total_time)
+            .field("backoff", &self.backoff)
+            .field("jitter", &self.jitter)
+            .field("retry_on_timeout", &self.retry_on_timeout)
+            .field("condition", &self.condition.is_some())
+            .finish()
+    }
 }
 
 impl Default for RetryPolicy {
@@ -444,7 +463,6 @@ impl RetryPolicy {
         let start_time = std::time::Instant::now();
         let mut attempt = 0;
         let mut previous_delay: Option<Duration> = None;
-        let mut last_value: Option<T> = None;
 
         loop {
             // Check total time limit
@@ -476,7 +494,6 @@ impl RetryPolicy {
                         });
                     }
 
-                    last_value = Some(result);
                 }
                 Err(e) => {
                     warn!("Attempt {} failed with error: {:?}", attempt + 1, e);
@@ -514,7 +531,7 @@ impl RetryPolicy {
 }
 
 /// Builder for constructing RetryPolicy instances.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RetryPolicyBuilder {
     policy: RetryPolicy,
 }
@@ -857,7 +874,7 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let result: Result<i32, &str> = policy
+        let result: Result<i32, RetryError<&str>> = policy
             .execute(|| {
                 let c = counter_clone.clone();
                 async move {
@@ -878,7 +895,7 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let result: Result<i32, &str> = policy
+        let result = policy
             .execute(|| {
                 let c = counter_clone.clone();
                 async move {
@@ -903,7 +920,7 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let result: Result<i32, &str> = policy
+        let result: Result<i32, RetryError<&str>> = policy
             .execute(|| {
                 let c = counter_clone.clone();
                 async move {

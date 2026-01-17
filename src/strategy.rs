@@ -593,8 +593,14 @@ impl StrategyContext {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::strategy::{StrategyPlugin, StrategyContext, StrategyResult};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::strategy::{
+///     StrategyContext, StrategyOutput, StrategyPlugin, StrategyResult, TaskRunner,
+/// };
+/// use std::sync::Arc;
 /// use async_trait::async_trait;
 ///
 /// struct RollingUpdateStrategy {
@@ -616,11 +622,14 @@ impl StrategyContext {
 ///         &self,
 ///         ctx: &StrategyContext,
 ///         hosts: &[String],
-///         task_runner: Box<dyn TaskRunner>,
+///         task_runner: Arc<dyn TaskRunner>,
 ///     ) -> StrategyResult<StrategyOutput> {
 ///         // Custom execution logic
+///         Ok(StrategyOutput::default())
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[async_trait]
 pub trait StrategyPlugin: Send + Sync {

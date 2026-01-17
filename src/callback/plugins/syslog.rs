@@ -21,8 +21,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{SyslogCallback, SyslogConfig, SyslogFacility};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{SyslogCallback, SyslogConfig, SyslogFacility};
 //!
 //! let config = SyslogConfig::builder()
 //!     .facility(SyslogFacility::Local0)
@@ -31,7 +34,9 @@
 //!     .build();
 //!
 //! let callback = SyslogCallback::new(config)?;
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -649,11 +654,16 @@ impl SyslogWriter for StderrSyslogWriter {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{SyslogCallback, SyslogConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{SyslogCallback, SyslogConfig};
 ///
 /// let callback = SyslogCallback::new(SyslogConfig::default())?;
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SyslogCallback {

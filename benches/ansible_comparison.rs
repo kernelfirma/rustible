@@ -635,7 +635,7 @@ fn bench_module_execution(c: &mut Criterion) {
 
     group.bench_function("registry/list_modules", |b| {
         b.iter(|| {
-            let modules = registry.list();
+            let modules = registry.names();
             black_box(modules)
         })
     });
@@ -779,6 +779,7 @@ fn bench_loop_performance(c: &mut Criterion) {
                     let semaphore = Arc::new(Semaphore::new(10));
                     let handles: Vec<_> = (0..o)
                         .flat_map(|outer_idx| {
+                            let semaphore = Arc::clone(&semaphore);
                             (0..i).map(move |inner_idx| {
                                 let sem = Arc::clone(&semaphore);
                                 tokio::spawn(async move {

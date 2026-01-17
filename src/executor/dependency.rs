@@ -12,7 +12,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::executor::dependency::{DependencyGraph, DependencyNode, DependencyKind};
 //!
 //! let mut graph = DependencyGraph::new();
@@ -32,6 +35,8 @@
 //!
 //! // Visualize
 //! println!("{}", graph.to_dot());
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};

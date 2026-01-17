@@ -23,7 +23,10 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::provisioning::providers::aws::AwsProvider;
 //! use rustible::provisioning::traits::{Provider, ProviderConfig};
 //!
@@ -39,6 +42,8 @@
 //!
 //! provider.configure(config).await?;
 //! let ctx = provider.context()?;
+//! # Ok(())
+//! # }
 //! ```
 
 mod credentials;
@@ -133,12 +138,17 @@ const RESOURCE_TYPES: &[&str] = &[
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::provisioning::providers::aws::AwsProvider;
 ///
 /// let provider = AwsProvider::new()
 ///     .with_region("us-west-2")
 ///     .with_default_tags(tags);
+/// # Ok(())
+/// # }
 /// ```
 pub struct AwsProvider {
     /// Provider name

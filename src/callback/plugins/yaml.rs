@@ -36,8 +36,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{YamlCallback, YamlConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{YamlCallback, YamlConfig};
 //!
 //! // Default configuration
 //! let callback = YamlCallback::new();
@@ -50,7 +53,9 @@
 //!     .build();
 //! let callback = YamlCallback::with_config(config);
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -242,8 +247,11 @@ struct HostStats {
 ///
 /// ## Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{YamlCallback, YamlConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{YamlCallback, YamlConfig};
 ///
 /// // With default settings
 /// let callback = YamlCallback::new();
@@ -254,6 +262,8 @@ struct HostStats {
 ///     .indent_size(4)
 ///     .build();
 /// let callback = YamlCallback::with_config(config);
+/// # Ok(())
+/// # }
 /// ```
 pub struct YamlCallback {
     /// Plugin configuration

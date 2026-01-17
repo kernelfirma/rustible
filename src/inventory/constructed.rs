@@ -39,8 +39,13 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::inventory::constructed::{ConstructedPlugin, ConstructedConfig};
+//! # use rustible::inventory::Inventory;
+//! # let base_inventory = Inventory::new();
 //!
 //! // Create configuration
 //! let config = ConstructedConfig::builder()
@@ -51,7 +56,9 @@
 //!
 //! // Apply to existing inventory
 //! let plugin = ConstructedPlugin::new(config)?;
-//! let enhanced_inventory = plugin.process(base_inventory).await?;
+//! let enhanced_inventory = plugin.process(base_inventory)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Expression Syntax

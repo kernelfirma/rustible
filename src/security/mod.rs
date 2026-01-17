@@ -42,10 +42,14 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::security::{
 //!     BecomeValidator, PasswordCache, AuditLogger, LeastPrivilegePolicy,
 //! };
+//! # let password = "secret";
 //!
 //! // Validate escalation request
 //! let validator = BecomeValidator::new();
@@ -53,12 +57,14 @@
 //! validator.validate_method("sudo")?;
 //!
 //! // Cache password with TTL
-//! let cache = PasswordCache::new(Duration::from_secs(300));
+//! let cache = PasswordCache::new();
 //! cache.store("host1", "root", password);
 //!
 //! // Log privileged operation
 //! let logger = AuditLogger::new();
-//! logger.log_escalation("host1", "root", "apt install nginx");
+//! logger.log_escalation_start("host1", "root", "sudo", "apt install nginx");
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod audit;
@@ -376,7 +382,7 @@ impl LeastPrivilegePolicy {
 }
 
 /// Enhanced ExecuteOptions with security features
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SecureExecuteOptions {
     /// Working directory for the command
     pub cwd: Option<String>,

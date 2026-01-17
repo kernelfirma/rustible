@@ -10,7 +10,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::metrics::{global, MetricsCollector, PrometheusExporter};
 //! use std::sync::Arc;
 //!
@@ -29,6 +32,8 @@
 //! // Export for Prometheus
 //! let exporter = PrometheusExporter::new(collector);
 //! let prometheus_output = exporter.export();
+//! # Ok(())
+//! # }
 //! ```
 
 mod collector;

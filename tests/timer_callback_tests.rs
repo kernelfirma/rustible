@@ -222,16 +222,7 @@ impl ExecutionCallback for TimerCallback {
     }
 
     async fn on_task_complete(&self, result: &ExecutionResult) {
-        let duration = if result.duration > Duration::ZERO {
-            result.duration
-        } else {
-            let key = format!("{}:{}", result.task_name, result.host);
-            self.task_starts
-                .write()
-                .remove(&key)
-                .map(|start| start.elapsed())
-                .unwrap_or(Duration::ZERO)
-        };
+        let duration = result.duration;
 
         let timing = TaskTiming {
             task_name: result.task_name.clone(),
@@ -791,7 +782,6 @@ mod timer_callback_tests {
     }
 
     #[tokio::test]
-    #[ignore = "Timer precision varies across platforms"]
     async fn test_timer_handles_zero_duration() {
         let timer = TimerCallback::new(TimerConfig {
             show_per_task: false,

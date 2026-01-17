@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use minijinja::Environment;
+use minijinja::{Environment, Value};
 use serde::Serialize;
 
 use super::error::{NotificationError, NotificationResult};
@@ -290,7 +290,7 @@ fn default_filter(value: Option<String>, default: String) -> String {
 }
 
 /// Template filter for JSON serialization.
-fn json_filter(value: serde_json::Value) -> String {
+fn json_filter(value: Value) -> String {
     serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
 }
 

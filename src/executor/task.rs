@@ -1002,7 +1002,9 @@ impl Task {
     ) -> ExecutorResult<TaskResult> {
         let max_retries = self.retries.unwrap_or(3);
         let delay_seconds = self.delay.unwrap_or(5);
-        let until_condition = self.until.as_ref().expect("until condition must be set");
+        let until_condition = self.until.as_ref().ok_or_else(|| {
+            ExecutorError::RuntimeError("Missing until condition for retry execution".to_string())
+        })?;
 
         debug!(
             "Executing with retry: max_retries={}, delay={}s, until='{}'",
@@ -1187,12 +1189,12 @@ impl Task {
                         )));
                     }
 
+                    // Convert args to ModuleParams-compatible format
+                    let module_params: std::collections::HashMap<String, serde_json::Value> =
+                        args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
                     // Execute via Python if connection is available
                     if let Some(ref connection) = ctx.connection {
-                        // Convert args to ModuleParams-compatible format
-                        let module_params: std::collections::HashMap<String, serde_json::Value> =
-                            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
                         match executor
                             .execute(
                                 connection.as_ref(),
@@ -1219,19 +1221,38 @@ impl Task {
                                 self.module, e
                             ))),
                         }
-                    } else {
-                        // No connection available - simulate for localhost or log warning
-                        if ctx.host == "localhost" || ctx.host == "127.0.0.1" {
-                            warn!(
-                                "Python module {} would need local execution (not implemented)",
-                                self.module
-                            );
-                        } else {
-                            warn!(
-                                "Python module {} requires connection to {} (not available)",
-                                self.module, ctx.host
-                            );
+                    } else if matches!(ctx.host.as_str(), "localhost" | "127.0.0.1" | "::1") {
+                        let local_conn = crate::connection::local::LocalConnection::new();
+                        match executor
+                            .execute(
+                                &local_conn,
+                                &self.module,
+                                &module_params,
+                                &ctx.python_interpreter,
+                            )
+                            .await
+                        {
+                            Ok(output) => {
+                                let msg = output.msg.clone();
+                                let mut result = if output.changed {
+                                    TaskResult::changed()
+                                } else {
+                                    TaskResult::ok()
+                                };
+                                result.msg = Some(msg);
+                                result.result = Some(output.to_result_json());
+                                Ok(result)
+                            }
+                            Err(e) => Err(ExecutorError::RuntimeError(format!(
+                                "Python module {} failed locally: {}",
+                                self.module, e
+                            ))),
                         }
+                    } else {
+                        warn!(
+                            "Python module {} requires connection to {} (not available)",
+                            self.module, ctx.host
+                        );
                         Ok(TaskResult::changed().with_msg(format!(
                             "Executed Python module: {} (simulated - no connection)",
                             self.module
@@ -2876,6 +2897,27 @@ pub trait Module: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+
+    fn setup_execution(
+        host: &str,
+    ) -> (
+        ExecutionContext,
+        Arc<RwLock<RuntimeContext>>,
+        Arc<RwLock<HashMap<String, Handler>>>,
+        Arc<Mutex<HashSet<String>>>,
+        Arc<ParallelizationManager>,
+        Arc<ModuleRegistry>,
+    ) {
+        (
+            ExecutionContext::new(host),
+            Arc::new(RwLock::new(RuntimeContext::new())),
+            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(Mutex::new(HashSet::new())),
+            Arc::new(ParallelizationManager::new()),
+            Arc::new(ModuleRegistry::new()),
+        )
+    }
 
     #[test]
     fn test_task_builder() {
@@ -3129,5 +3171,183 @@ mod tests {
 
         // Custom field should be in data
         assert!(registered.data.contains_key("custom_data"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_skips_when_condition_false() {
+        let task = Task::new("conditional", "debug").when("false");
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Skipped);
+        assert_eq!(
+            result.msg,
+            Some("Skipped: condition 'false' was false".to_string())
+        );
+        assert!(notified.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_ignore_errors_on_failure() {
+        let mut task = Task::new("fail", "fail").arg("msg", "boom");
+        task.ignore_errors = true;
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Ok);
+        assert_eq!(result.msg, Some("Ignored error: boom".to_string()));
+        assert!(!result.changed);
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_retry_exhausts_retries() {
+        let mut task = Task::new("retry", "debug").arg("msg", "retry");
+        task.until = Some("false".to_string());
+        task.retries = Some(1);
+        task.delay = Some(0);
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Failed);
+        assert_eq!(
+            result.msg,
+            Some("Retries exhausted (1). Until condition 'false' never met".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_loop_registers_results_and_clears_vars() {
+        let mut task = Task::new("loop debug", "debug")
+            .arg("msg", "hello")
+            .loop_over(vec![serde_json::json!(1), serde_json::json!(2)])
+            .register("loop_out");
+        task.loop_control = Some(LoopControl {
+            loop_var: "item".to_string(),
+            index_var: Some("idx".to_string()),
+            label: None,
+            pause: None,
+            extended: false,
+        });
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Ok);
+        assert_eq!(result.msg, Some("Completed 2 loop iterations".to_string()));
+
+        let rt = runtime.read().await;
+        let registered = rt
+            .get_registered(&ctx.host, "loop_out")
+            .expect("registered result");
+        let results = registered.results.as_ref().expect("loop results");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].data.get("item"), Some(&serde_json::json!(1)));
+        assert_eq!(results[1].data.get("item"), Some(&serde_json::json!(2)));
+        assert!(rt.get_var("item", None).is_none());
+        assert!(rt.get_var("ansible_loop", None).is_none());
+        assert!(rt.get_var("idx", None).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execute_set_fact_delegation_respects_delegate_facts() {
+        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(42));
+        task.delegate_to = Some("delegate".to_string());
+        task.delegate_facts = Some(true);
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("origin");
+
+        task.execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization_manager,
+            &module_registry,
+        )
+        .await
+        .unwrap();
+
+        let rt = runtime.read().await;
+        assert_eq!(
+            rt.get_host_fact("delegate", "answer"),
+            Some(serde_json::json!(42))
+        );
+        assert_eq!(rt.get_host_fact("origin", "answer"), None);
+    }
+
+    #[tokio::test]
+    async fn test_execute_set_fact_delegation_defaults_to_origin_host() {
+        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(7));
+        task.delegate_to = Some("delegate".to_string());
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("origin");
+
+        task.execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization_manager,
+            &module_registry,
+        )
+        .await
+        .unwrap();
+
+        let rt = runtime.read().await;
+        assert_eq!(
+            rt.get_host_fact("origin", "answer"),
+            Some(serde_json::json!(7))
+        );
+        assert_eq!(rt.get_host_fact("delegate", "answer"), None);
     }
 }

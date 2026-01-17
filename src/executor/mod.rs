@@ -23,7 +23,16 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::Playbook;
+//! # let playbook = Playbook::parse(r#"- hosts: all
+//! #   tasks:
+//! #     - name: Ping
+//! #       ping: {}
+//! # "#, None)?;
 //! use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy};
 //!
 //! // Configure the executor
@@ -42,6 +51,8 @@
 //! // Get summary statistics
 //! let stats = Executor::summarize_results(&results);
 //! println!("OK: {}, Changed: {}, Failed: {}", stats.ok, stats.changed, stats.failed);
+//! # Ok(())
+//! # }
 //! ```
 
 /// Include handler for dynamic task inclusion.

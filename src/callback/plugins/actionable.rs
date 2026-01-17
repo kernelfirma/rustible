@@ -22,8 +22,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::actionable::{ActionableCallback, ActionableConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{ActionableCallback, ActionableConfig};
 //!
 //! // Basic usage with defaults
 //! let callback = ActionableCallback::new();
@@ -35,7 +38,9 @@
 //!     ..Default::default()
 //! });
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Output
@@ -205,11 +210,16 @@ impl HostStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::actionable::ActionableCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ActionableCallback;
 ///
 /// let callback = ActionableCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ActionableCallback {
@@ -234,8 +244,13 @@ impl ActionableCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = ActionableCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -246,12 +261,17 @@ impl ActionableCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = ActionableConfig {
     ///     show_duration: true,
     ///     ..Default::default()
     /// };
     /// let callback = ActionableCallback::with_config(config);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_config(config: ActionableConfig) -> Self {

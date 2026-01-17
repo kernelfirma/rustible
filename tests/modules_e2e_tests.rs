@@ -36,6 +36,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Once;
 
 use tempfile::TempDir;
 
@@ -117,6 +118,16 @@ impl E2ETestConfig {
 // Helper Functions
 // ============================================================================
 
+fn init_e2e_logging() {
+    static INIT: Once = Once::new();
+    let enable = env::var("RUSTIBLE_E2E_LOG")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if enable {
+        INIT.call_once(|| rustible::logging::init_logging());
+    }
+}
+
 fn get_playbook_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/integration/playbooks/modules_e2e.yml")
@@ -157,21 +168,19 @@ fn create_local_executor(temp_dir: &TempDir) -> Executor {
         }),
     );
 
-    // Set test-specific vars
-    runtime.set_host_var(
-        "localhost",
-        "test_dir".to_string(),
-        serde_json::json!(temp_dir
-            .path()
-            .join("e2e_test")
-            .to_string_lossy()
-            .to_string()),
-    );
+    let test_dir = temp_dir
+        .path()
+        .join("e2e_test")
+        .to_string_lossy()
+        .to_string();
+    let mut extra_vars = HashMap::new();
+    extra_vars.insert("test_dir".to_string(), serde_json::json!(test_dir));
 
     let config = ExecutorConfig {
         forks: 1,
         check_mode: false,
         gather_facts: false, // We manually set facts
+        extra_vars,
         verbosity: env::var("RUSTIBLE_TEST_VERBOSE")
             .map(|v| v.parse().unwrap_or(0))
             .unwrap_or(0),
@@ -353,6 +362,7 @@ fn verify_test_artifacts(temp_dir: &TempDir) {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_local() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         eprintln!("Skipping local E2E test");
@@ -419,6 +429,7 @@ async fn test_e2e_modules_ssh() {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_check_mode() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         return;
@@ -446,11 +457,22 @@ async fn test_e2e_modules_check_mode() {
             .to_string()),
     );
 
+    let mut extra_vars = HashMap::new();
+    extra_vars.insert(
+        "test_dir".to_string(),
+        serde_json::json!(temp_dir
+            .path()
+            .join("e2e_test_check")
+            .to_string_lossy()
+            .to_string()),
+    );
+
     let executor_config = ExecutorConfig {
         forks: 1,
         check_mode: true, // Enable check mode
         diff_mode: true,
         gather_facts: false,
+        extra_vars,
         ..Default::default()
     };
 
@@ -484,6 +506,7 @@ async fn test_e2e_modules_check_mode() {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_idempotency() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         return;
@@ -537,6 +560,7 @@ async fn test_e2e_modules_idempotency() {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_individual_modules() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         return;
@@ -655,6 +679,7 @@ async fn test_e2e_individual_modules() {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_performance() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         return;
@@ -693,6 +718,7 @@ async fn test_e2e_modules_performance() {
 #[tokio::test]
 #[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_with_variables() {
+    init_e2e_logging();
     let config = E2ETestConfig::from_env();
     if !config.should_run_local() {
         return;
@@ -706,20 +732,11 @@ async fn test_e2e_modules_with_variables() {
     let mut runtime = RuntimeContext::new();
     runtime.add_host("localhost".to_string(), None);
 
-    // Override variables
-    runtime.set_host_var(
-        "localhost",
-        "app_name".to_string(),
-        serde_json::json!("custom_app"),
-    );
-    runtime.set_host_var(
-        "localhost",
-        "app_version".to_string(),
-        serde_json::json!("2.0.0"),
-    );
-    runtime.set_host_var("localhost", "app_port".to_string(), serde_json::json!(9000));
-    runtime.set_host_var(
-        "localhost",
+    let mut extra_vars = HashMap::new();
+    extra_vars.insert("app_name".to_string(), serde_json::json!("custom_app"));
+    extra_vars.insert("app_version".to_string(), serde_json::json!("2.0.0"));
+    extra_vars.insert("app_port".to_string(), serde_json::json!(9000));
+    extra_vars.insert(
         "test_dir".to_string(),
         serde_json::json!(temp_dir
             .path()
@@ -731,6 +748,7 @@ async fn test_e2e_modules_with_variables() {
     let executor_config = ExecutorConfig {
         forks: 1,
         gather_facts: false,
+        extra_vars,
         ..Default::default()
     };
 

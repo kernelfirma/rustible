@@ -400,7 +400,7 @@ impl CopyModule {
     }
 
     /// Execute remote copy using the connection from context
-    /// Uses tokio::runtime::Handle::current().block_on() as a sync->async bridge
+    /// Uses a dedicated runtime to avoid blocking single-threaded executors
     fn execute_remote(
         connection: Arc<dyn Connection + Send + Sync>,
         dest: &str,
@@ -414,28 +414,37 @@ impl CopyModule {
         check_mode: bool,
         diff_mode: bool,
     ) -> ModuleResult<ModuleOutput> {
-        // Use the current tokio runtime handle to execute async operations
-        // This allows us to bridge from the sync Module trait to async connection operations
-        // We use std::thread::scope to spawn on a separate thread, avoiding runtime nesting
-        let handle = tokio::runtime::Handle::current();
-        std::thread::scope(|s| {
-            s.spawn(|| {
-                handle.block_on(Self::execute_remote_async(
-                    connection,
-                    dest,
-                    src,
-                    content,
-                    mode,
-                    owner,
-                    group,
-                    backup,
-                    backup_suffix,
-                    check_mode,
-                    diff_mode,
-                ))
-            })
-            .join()
-            .unwrap()
+        // Use a dedicated runtime on a separate thread to avoid blocking
+        // single-threaded executors (e.g., tokio::test current_thread flavor).
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!(
+                                "Failed to create runtime: {}",
+                                e
+                            ))
+                        })?;
+
+                    rt.block_on(Self::execute_remote_async(
+                        connection,
+                        dest,
+                        src,
+                        content,
+                        mode,
+                        owner,
+                        group,
+                        backup,
+                        backup_suffix,
+                        check_mode,
+                        diff_mode,
+                    ))
+                })
+                .join()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
         })
     }
 

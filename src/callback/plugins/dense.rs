@@ -28,12 +28,17 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::DenseCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::DenseCallback;
 //! use std::sync::Arc;
 //!
 //! let callback = Arc::new(DenseCallback::new());
-//! executor.add_callback(callback);
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;

@@ -26,15 +26,23 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::secrets::{VaultBackend, VaultConfig, VaultAuthMethod};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::secrets::{SecretBackend, VaultAuthMethod, VaultBackend, VaultConfig};
 //!
 //! // Token authentication
-//! let config = VaultConfig::new("https://vault.example.com:8200")
-//!     .with_token("hvs.example_token")
-//!     .with_namespace("my-namespace");
+//! let config = VaultConfig {
+//!     address: "https://vault.example.com:8200".to_string(),
+//!     auth: VaultAuthMethod::Token {
+//!         token: "hvs.example_token".to_string(),
+//!     },
+//!     namespace: Some("my-namespace".to_string()),
+//!     ..VaultConfig::default()
+//! };
 //!
-//! let vault = VaultBackend::new(config).await?;
+//! let vault = VaultBackend::new(config.into()).await?;
 //!
 //! // KV v2 secret access
 //! let secret = vault.get_secret("secret/data/myapp/database").await?;
@@ -45,17 +53,19 @@
 //!
 //! // Dynamic database credentials
 //! let creds = vault.generate_database_credentials("my-role").await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use reqwest::{header, Client, StatusCode};
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::backend::{BackendCapabilities, BackendCapability, SecretBackend, SecretBackendType};
 use super::error::{SecretError, SecretResult};
@@ -193,6 +203,57 @@ impl Default for VaultAuthMethod {
     }
 }
 
+impl From<super::config::VaultAuthMethod> for VaultAuthMethod {
+    fn from(auth: super::config::VaultAuthMethod) -> Self {
+        match auth {
+            super::config::VaultAuthMethod::Token { token } => VaultAuthMethod::Token { token },
+            super::config::VaultAuthMethod::AppRole {
+                role_id,
+                secret_id,
+                mount_path,
+            } => VaultAuthMethod::AppRole {
+                role_id,
+                secret_id,
+                mount_path,
+            },
+            super::config::VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path,
+                mount_path,
+            } => VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path: jwt_path.to_string_lossy().to_string(),
+                mount_path,
+            },
+            super::config::VaultAuthMethod::AwsIam { role, mount_path } => {
+                VaultAuthMethod::AwsIam {
+                    role,
+                    region: None,
+                    mount_path,
+                }
+            }
+            super::config::VaultAuthMethod::Ldap {
+                username,
+                password,
+                mount_path,
+            } => VaultAuthMethod::Ldap {
+                username,
+                password,
+                mount_path,
+            },
+            super::config::VaultAuthMethod::Userpass {
+                username,
+                password,
+                mount_path,
+            } => VaultAuthMethod::Userpass {
+                username,
+                password,
+                mount_path,
+            },
+        }
+    }
+}
+
 /// Configuration for the HashiCorp Vault backend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
@@ -238,6 +299,24 @@ pub struct VaultConfig {
     /// Default KV engine version (1 or 2)
     #[serde(default = "default_kv_version")]
     pub default_kv_version: u8,
+}
+
+impl From<super::config::VaultConfig> for VaultConfig {
+    fn from(config: super::config::VaultConfig) -> Self {
+        Self {
+            address: config.address,
+            auth: config.auth.into(),
+            namespace: config.namespace,
+            timeout_secs: DEFAULT_TIMEOUT_SECS,
+            tls_verify: !config.skip_verify,
+            ca_cert_path: config.ca_cert.map(|path| path.to_string_lossy().to_string()),
+            client_cert_path: None,
+            client_key_path: None,
+            max_retries: default_max_retries(),
+            retry_delay_ms: default_retry_delay_ms(),
+            default_kv_version: config.kv_version,
+        }
+    }
 }
 
 fn default_vault_addr() -> String {

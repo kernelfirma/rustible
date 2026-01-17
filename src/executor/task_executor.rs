@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
 use crate::executor::runtime::ExecutionContext;
+use crate::modules::ModuleClassification;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 use super::results::update_stats;
@@ -24,29 +25,42 @@ impl Executor {
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, TaskResult>> {
         debug!("Running task '{}' on {} hosts", task.name, hosts.len());
+        let requires_connection = self
+            .module_registry
+            .get(&task.module)
+            .map(|module| !matches!(module.classification(), ModuleClassification::LocalLogic))
+            .unwrap_or(true);
 
         // OPTIMIZATION: Fast path for single host - avoid Arc overhead and tokio::spawn
         if hosts.len() == 1 {
             let host = &hosts[0];
             let _permit = self.semaphore.acquire().await.unwrap();
-            let connection = match self.get_connection_for_host(host).await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    let mut results = HashMap::with_capacity(1);
-                    results.insert(
-                        host.clone(),
-                        TaskResult {
-                            status: TaskStatus::Unreachable,
-                            changed: false,
-                            msg: Some(e.to_string()),
-                            result: None,
-                            diff: None,
-                        },
-                    );
-                    return Ok(results);
+            let connection = if requires_connection {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => Some(conn),
+                    Err(e) => {
+                        let mut results = HashMap::with_capacity(1);
+                        results.insert(
+                            host.clone(),
+                            TaskResult {
+                                status: TaskStatus::Unreachable,
+                                changed: false,
+                                msg: Some(e.to_string()),
+                                result: None,
+                                diff: None,
+                            },
+                        );
+                        return Ok(results);
+                    }
                 }
+            } else {
+                None
             };
-            let python_interpreter = self.get_python_interpreter(host).await;
+            let python_interpreter = if requires_connection {
+                self.get_python_interpreter(host).await
+            } else {
+                "/usr/bin/python3".to_string()
+            };
 
             // Apply become precedence: task > config
             let effective_become = task.r#become || self.config.r#become;
@@ -55,16 +69,18 @@ impl Executor {
                 .clone()
                 .unwrap_or_else(|| self.config.r#become_user.clone());
 
-            let ctx = ExecutionContext::new(host.clone())
+            let mut ctx = ExecutionContext::new(host.clone())
                 .with_check_mode(self.config.check_mode)
                 .with_diff_mode(self.config.diff_mode)
                 .with_verbosity(self.config.verbosity)
-                .with_connection(connection)
                 .with_python_interpreter(python_interpreter)
                 .with_become(effective_become)
                 .with_become_method(self.config.r#become_method.clone())
                 .with_become_user(effective_become_user)
                 .with_become_password(self.config.r#become_password.clone());
+            if let Some(conn) = connection {
+                ctx = ctx.with_connection(conn);
+            }
 
             let result = task
                 .execute(
@@ -119,24 +135,26 @@ impl Executor {
         let mut connections = HashMap::with_capacity(hosts.len());
         let mut python_interpreters = HashMap::with_capacity(hosts.len());
 
-        for host in hosts {
-            match self.get_connection_for_host(host).await {
-                Ok(conn) => {
-                    connections.insert(host.clone(), conn);
-                    python_interpreters
-                        .insert(host.clone(), self.get_python_interpreter(host).await);
-                }
-                Err(e) => {
-                    results.insert(
-                        host.clone(),
-                        TaskResult {
-                            status: TaskStatus::Unreachable,
-                            changed: false,
-                            msg: Some(e.to_string()),
-                            result: None,
-                            diff: None,
-                        },
-                    );
+        if requires_connection {
+            for host in hosts {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => {
+                        connections.insert(host.clone(), conn);
+                        python_interpreters
+                            .insert(host.clone(), self.get_python_interpreter(host).await);
+                    }
+                    Err(e) => {
+                        results.insert(
+                            host.clone(),
+                            TaskResult {
+                                status: TaskStatus::Unreachable,
+                                changed: false,
+                                msg: Some(e.to_string()),
+                                result: None,
+                                diff: None,
+                            },
+                        );
+                    }
                 }
             }
         }

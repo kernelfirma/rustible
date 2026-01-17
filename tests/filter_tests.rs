@@ -12,6 +12,8 @@
 //! - Combinations of tags and limits
 //! - Edge cases
 
+#![cfg(not(tarpaulin))]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::io::Write;

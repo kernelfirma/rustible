@@ -139,15 +139,16 @@ impl InputValidator {
 
 /// Sanitize a string for safe use as a shell argument.
 ///
-/// This function wraps the input in single quotes and escapes any
-/// embedded single quotes, making it safe to pass to shell commands.
+/// This function wraps the input in single quotes when needed and escapes any
+/// embedded single quotes, making it safe to pass to shell commands. Inputs
+/// that only contain safe characters are returned as-is.
 ///
 /// # Examples
 ///
 /// ```
 /// use rustible::security::sanitize_shell_arg;
 ///
-/// assert_eq!(sanitize_shell_arg("hello"), "'hello'");
+/// assert_eq!(sanitize_shell_arg("hello"), "hello");
 /// assert_eq!(sanitize_shell_arg("it's"), "'it'\\''s'");
 /// assert_eq!(sanitize_shell_arg("$(whoami)"), "'$(whoami)'");
 /// ```

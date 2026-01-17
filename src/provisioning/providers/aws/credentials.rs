@@ -8,7 +8,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use serde_json::json;
 //! use rustible::provisioning::providers::aws::credentials::resolve_credentials;
 //!
@@ -22,6 +25,8 @@
 //! // Using default credential chain
 //! let config = json!({});
 //! let creds = resolve_credentials(&config).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -586,7 +591,10 @@ fn mask_access_key(key: &str) -> String {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use serde_json::json;
 ///
 /// // Explicit credentials
@@ -605,6 +613,8 @@ fn mask_access_key(key: &str) -> String {
 /// // Default chain (env vars, then credentials file, then IMDS)
 /// let config = json!({});
 /// let creds = resolve_credentials(&config).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub async fn resolve_credentials(config: &Value) -> ProvisioningResult<AwsCredentials> {
     let chain = AwsCredentialChain::new(config);

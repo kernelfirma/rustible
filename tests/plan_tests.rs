@@ -5,7 +5,6 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
-#[ignore = "Known issue with plan flag execution"]
 fn test_plan_flag_shows_execution_plan() {
     let temp = TempDir::new().unwrap();
     let playbook_path = temp.path().join("test.yml");
@@ -46,7 +45,9 @@ fn test_plan_flag_shows_execution_plan() {
         .stdout(predicate::str::contains("Install nginx"))
         .stdout(predicate::str::contains("will install package: nginx"))
         .stdout(predicate::str::contains("Start nginx service"))
-        .stdout(predicate::str::contains("will started service: nginx"))
+        .stdout(predicate::str::contains(
+            "will ensure service nginx is started",
+        ))
         .stdout(predicate::str::contains("PLAN SUMMARY"))
         .stdout(predicate::str::contains(
             "To execute this plan, run the same command without --plan",

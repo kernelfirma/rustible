@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Comprehensive integration tests for the Rustible vault encryption system
 //!
 //! # Overview

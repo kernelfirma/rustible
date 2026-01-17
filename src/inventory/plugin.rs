@@ -17,16 +17,20 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::inventory::plugin::{InventoryPluginFactory, InventoryPluginConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::inventory::plugin::{InventoryPlugin, InventoryPluginFactory, InventoryPluginConfig};
 //!
 //! // Create a plugin with configuration
 //! let config = InventoryPluginConfig::new()
 //!     .with_option("region", "us-east-1")
-//!     .with_cache_ttl(Duration::from_secs(300));
+//!     .with_cache_ttl(std::time::Duration::from_secs(300));
 //!
 //! let plugin = InventoryPluginFactory::create("aws_ec2", config)?;
-//! let inventory = plugin.get_inventory().await?;
+//! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;

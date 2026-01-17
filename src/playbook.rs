@@ -140,8 +140,20 @@ impl Playbook {
 
     /// Parses a playbook from a YAML string.
     pub fn from_yaml(yaml: &str, source_path: Option<std::path::PathBuf>) -> Result<Self> {
-        // Playbooks are a list of plays at the top level
-        let plays: Vec<Play> = serde_yaml::from_str(yaml).map_err(|e| {
+        let value: serde_yaml::Value = serde_yaml::from_str(yaml).map_err(|e| {
+            Error::playbook_parse(
+                source_path
+                    .as_ref()
+                    .map_or("<string>".into(), |p| p.clone()),
+                e.to_string(),
+                None,
+            )
+        })?;
+
+        let value = resolve_merge_keys(value);
+
+        // Playbooks are a list of plays at the top level.
+        let plays: Vec<Play> = serde_yaml::from_value(value).map_err(|e| {
             Error::playbook_parse(
                 source_path
                     .as_ref()
@@ -247,7 +259,11 @@ pub struct Play {
     pub handlers: Vec<Handler>,
 
     /// Become configuration
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_bool_flexible"
+    )]
     pub r#become: Option<bool>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,11 +297,11 @@ pub struct Play {
     pub max_fail_percentage: Option<u8>,
 
     /// Whether to run handlers on failure
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_flexible")]
     pub force_handlers: bool,
 
     /// Whether to ignore unreachable hosts
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_flexible")]
     pub ignore_unreachable: bool,
 
     /// Module defaults
@@ -376,6 +392,58 @@ where
     }
 
     deserializer.deserialize_option(OptionBoolVisitor)
+}
+
+fn resolve_merge_keys(value: serde_yaml::Value) -> serde_yaml::Value {
+    match value {
+        serde_yaml::Value::Mapping(mapping) => {
+            let mut merged = serde_yaml::Mapping::new();
+            let mut explicit = Vec::new();
+
+            for (key, value) in mapping {
+                if matches!(&key, serde_yaml::Value::String(s) if s == "<<") {
+                    match value {
+                        serde_yaml::Value::Mapping(_) => {
+                            if let serde_yaml::Value::Mapping(source) = resolve_merge_keys(value) {
+                                for (k, v) in source {
+                                    merged.insert(k, v);
+                                }
+                            }
+                        }
+                        serde_yaml::Value::Sequence(seq) => {
+                            for item in seq {
+                                if let serde_yaml::Value::Mapping(source) =
+                                    resolve_merge_keys(item)
+                                {
+                                    for (k, v) in source {
+                                        merged.insert(k, v);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                } else {
+                    explicit.push((key, value));
+                }
+            }
+
+            for (key, value) in explicit {
+                merged.insert(key, resolve_merge_keys(value));
+            }
+
+            serde_yaml::Value::Mapping(merged)
+        }
+        serde_yaml::Value::Sequence(seq) => serde_yaml::Value::Sequence(
+            seq.into_iter().map(resolve_merge_keys).collect(),
+        ),
+        serde_yaml::Value::Tagged(tagged) => {
+            let mut tagged = *tagged;
+            tagged.value = resolve_merge_keys(tagged.value);
+            serde_yaml::Value::Tagged(Box::new(tagged))
+        }
+        other => other,
+    }
 }
 
 impl Play {

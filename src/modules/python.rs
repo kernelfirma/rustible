@@ -15,7 +15,7 @@ use crate::connection::{CommandResult, Connection, ExecuteOptions};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
@@ -99,7 +99,7 @@ impl PythonModuleExecutor {
 
     /// Add a custom module search path
     pub fn add_module_path(&mut self, path: impl Into<PathBuf>) {
-        self.module_paths.insert(0, path.into());
+        self.module_paths.push(path.into());
     }
 
     /// Find an Ansible module by name
@@ -230,23 +230,56 @@ impl PythonModuleExecutor {
     /// Get all collection root directories
     fn get_collection_roots(&self) -> Vec<PathBuf> {
         let mut roots = Vec::new();
+        let mut seen = HashSet::new();
+
+        let mut push_root = |path: PathBuf| {
+            let normalized = if path
+                .file_name()
+                .map(|name| name == "ansible_collections")
+                .unwrap_or(false)
+            {
+                path.parent().unwrap_or(&path).to_path_buf()
+            } else {
+                path
+            };
+
+            if seen.insert(normalized.clone()) {
+                roots.push(normalized);
+            }
+        };
+
+        for path in &self.module_paths {
+            let normalized = if path
+                .file_name()
+                .map(|name| name == "ansible_collections")
+                .unwrap_or(false)
+            {
+                path.parent().unwrap_or(path).to_path_buf()
+            } else {
+                path.clone()
+            };
+
+            if normalized.join("ansible_collections").is_dir() {
+                push_root(normalized);
+            }
+        }
 
         // User collections
         if let Some(home) = std::env::var_os("HOME") {
             let home = PathBuf::from(home);
-            roots.push(home.join(".ansible/collections"));
+            push_root(home.join(".ansible/collections"));
         }
 
         // ANSIBLE_COLLECTIONS_PATH environment variable
         if let Some(collections_path) = std::env::var_os("ANSIBLE_COLLECTIONS_PATH") {
             for path in std::env::split_paths(&collections_path) {
-                roots.push(path);
+                push_root(path);
             }
         }
 
         // System-wide collections
-        roots.push(PathBuf::from("/usr/share/ansible/collections"));
-        roots.push(PathBuf::from("/etc/ansible/collections"));
+        push_root(PathBuf::from("/usr/share/ansible/collections"));
+        push_root(PathBuf::from("/etc/ansible/collections"));
 
         roots
     }
@@ -274,6 +307,11 @@ impl PythonModuleExecutor {
         let ansible_lib = self.find_ansible_library()
             .ok_or_else(|| ModuleError::ExecutionFailed("Could not find Ansible library locally to bundle. Please ensure 'ansible' is installed on the controller machine.".to_string()))?;
 
+        let args_json = serde_json::to_string(args).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to serialize module arguments: {}", e))
+        })?;
+        let args_b64 = BASE64.encode(args_json.as_bytes());
+
         // Prepare in-memory zip
         let mut buffer = Vec::new();
         {
@@ -283,10 +321,6 @@ impl PythonModuleExecutor {
                 .unix_permissions(0o755);
 
             // 1. Prepare module Injector as __main__.py
-            let args_json = serde_json::to_string(args).map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to serialize module arguments: {}", e))
-            })?;
-
             let module_source = std::fs::read_to_string(module_path).map_err(|e| {
                 ModuleError::ExecutionFailed(format!(
                     "Failed to read module {}: {}",
@@ -314,7 +348,7 @@ if sys.path[0] != os.path.dirname(__file__):
     sys.path.insert(0, os.path.dirname(__file__))
 
 "#,
-                BASE64.encode(args_json.as_bytes())
+                args_b64.as_str()
             );
 
             let final_main = format!("{}\n{}", injection_header, module_source);
@@ -393,6 +427,10 @@ import runpy
 
 # The Zipapp payload (Ansible module + modules_utils)
 PAYLOAD = '{zip_b64}'
+ARGS_B64 = '{args_b64}'
+
+# Provide module args for debugging/compatibility (also set inside the zip)
+os.environ['ANSIBLE_MODULE_ARGS'] = base64.b64decode(ARGS_B64).decode('utf-8')
 
 def main():
     # Create temp file for the zipapp

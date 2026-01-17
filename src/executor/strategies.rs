@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::executor::runtime::ExecutionContext;
+use crate::modules::ModuleClassification;
 use crate::recovery::TransactionId;
 
 use super::results::update_stats;
@@ -221,6 +222,13 @@ impl Executor {
         tasks: &[Task],
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        let requires_connection = tasks.iter().any(|task| {
+            self.module_registry
+                .get(&task.module)
+                .map(|module| !matches!(module.classification(), ModuleClassification::LocalLogic))
+                .unwrap_or(true)
+        });
+
         // OPTIMIZATION: Fast path for single host
         if hosts.len() == 1 {
             let host = &hosts[0];
@@ -231,6 +239,21 @@ impl Executor {
                 stats: ExecutionStats::default(),
                 failed: false,
                 unreachable: false,
+            };
+            let (connection, python_interpreter) = if requires_connection {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => (Some(conn), self.get_python_interpreter(host).await),
+                    Err(e) => {
+                        host_result.stats.unreachable = 1;
+                        host_result.unreachable = true;
+                        warn!("Host unreachable: {} ({})", host, e);
+                        let mut results = HashMap::with_capacity(1);
+                        results.insert(host.clone(), host_result);
+                        return Ok(results);
+                    }
+                }
+            } else {
+                (None, "/usr/bin/python3".to_string())
             };
 
             for task in tasks {
@@ -253,6 +276,12 @@ impl Executor {
                     .with_become_method(self.config.r#become_method.clone())
                     .with_become_user(effective_become_user)
                     .with_become_password(self.config.r#become_password.clone());
+                let mut ctx = if let Some(conn) = connection.clone() {
+                    ctx.with_connection(conn)
+                } else {
+                    ctx
+                };
+                ctx = ctx.with_python_interpreter(python_interpreter.clone());
 
                 let task_result = task
                     .execute(
@@ -305,27 +334,29 @@ impl Executor {
         let mut connections = HashMap::with_capacity(hosts.len());
         let mut python_interpreters = HashMap::with_capacity(hosts.len());
 
-        for host in hosts {
-            match self.get_connection_for_host(host).await {
-                Ok(conn) => {
-                    connections.insert(host.clone(), conn);
-                    python_interpreters
-                        .insert(host.clone(), self.get_python_interpreter(host).await);
-                }
-                Err(e) => {
-                    base_results.insert(
-                        host.clone(),
-                        HostResult {
-                            host: host.clone(),
-                            stats: ExecutionStats {
-                                unreachable: 1,
-                                ..Default::default()
+        if requires_connection {
+            for host in hosts {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => {
+                        connections.insert(host.clone(), conn);
+                        python_interpreters
+                            .insert(host.clone(), self.get_python_interpreter(host).await);
+                    }
+                    Err(e) => {
+                        base_results.insert(
+                            host.clone(),
+                            HostResult {
+                                host: host.clone(),
+                                stats: ExecutionStats {
+                                    unreachable: 1,
+                                    ..Default::default()
+                                },
+                                failed: false,
+                                unreachable: true,
                             },
-                            failed: false,
-                            unreachable: true,
-                        },
-                    );
-                    warn!("Host unreachable: {} ({})", host, e);
+                        );
+                        warn!("Host unreachable: {} ({})", host, e);
+                    }
                 }
             }
         }
@@ -336,7 +367,7 @@ impl Executor {
 
         let handles: Vec<_> = hosts
             .iter()
-            .filter(|host| connections.contains_key(*host))
+            .filter(|host| !requires_connection || connections.contains_key(*host))
             .map(|host| {
                 let host = host.clone();
                 let tasks = Arc::clone(&tasks);

@@ -706,7 +706,13 @@ impl fmt::Display for ModuleCategory {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// # use rustible::modules::{apt, command, shell, yum, ModuleCategory, ModuleRegistry};
+/// use std::sync::Arc;
+/// # use rustible::register_modules;
+/// # let mut registry = ModuleRegistry::new();
 /// register_modules!(registry,
 ///     Commands: [
 ///         command::CommandModule,
@@ -717,7 +723,10 @@ impl fmt::Display for ModuleCategory {
 ///         yum::YumModule,
 ///     ],
 /// );
+/// # Ok(())
+/// # }
 /// ```
+#[macro_export]
 macro_rules! register_modules {
     ($registry:expr, $($category:ident: [$($module:expr),* $(,)?]),* $(,)?) => {
         $(
@@ -1294,6 +1303,13 @@ pub trait Module: Send + Sync {
         &[]
     }
 
+    /// Returns the list of optional parameters and default values.
+    ///
+    /// Modules can override to document optional params in help/output layers.
+    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
+        HashMap::new()
+    }
+
     /// Check what would change without making changes (check mode).
     ///
     /// This is a convenience method that calls execute() with check_mode=true.
@@ -1305,6 +1321,13 @@ pub trait Module: Send + Sync {
             ..context.clone()
         };
         self.execute(params, &check_context)
+    }
+
+    /// Return a diff for the module without executing changes.
+    ///
+    /// Default is no diff; modules can override to provide a preview.
+    fn diff(&self, _params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
+        Ok(None)
     }
 }
 

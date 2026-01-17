@@ -663,6 +663,7 @@ fn cef_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use std::path::PathBuf;
 
     #[test]
     fn test_file_logger() {
@@ -724,5 +725,22 @@ mod tests {
     #[test]
     fn test_cef_escape() {
         assert_eq!(cef_escape("a|b=c\\d"), "a\\|b\\=c\\\\d");
+    }
+
+    #[test]
+    fn test_file_logger_rotation() {
+        let temp = TempDir::new().unwrap();
+        let log_path = temp.path().join("audit.log");
+
+        std::fs::write(&log_path, "x".repeat(64)).unwrap();
+
+        let logger = FileLogger::with_options(&log_path, AuditFormat::Text, Some(10), 3).unwrap();
+        let event = AuditEvent::command_execution("echo test").success();
+        logger.log(&event).unwrap();
+        logger.flush().unwrap();
+
+        let rotated = PathBuf::from(format!("{}.1", log_path.display()));
+        assert!(rotated.exists());
+        assert!(log_path.exists());
     }
 }

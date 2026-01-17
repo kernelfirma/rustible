@@ -9,19 +9,33 @@
 //!
 //! # Type-Safe Result Access
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::runtime::RegisteredResult;
+//! # use rustible::executor::RegisteredResultExt;
+//! # let result = RegisteredResult::default();
 //! // Instead of raw JSON access:
 //! let rc = result.data.get("rc").and_then(|v| v.as_i64());
 //!
 //! // Use type-safe accessors:
 //! let rc = result.rc();
 //! let stdout = result.stdout_str();
-//! let lines = result.stdout_lines_vec();
+//! let lines = result.stdout_lines_slice();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Loop Results
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::runtime::RegisteredResult;
+//! # use rustible::executor::register::LoopResultsExt;
+//! # let result = RegisteredResult::default();
 //! // Access loop results with type safety:
 //! let loop_results = result.loop_results();
 //! for item in loop_results.iter() {
@@ -29,19 +43,31 @@
 //!         println!("Item changed: {:?}", item.item());
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Failed Task Info
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::runtime::RegisteredResult;
+//! # use rustible::executor::FailedTaskInfo;
+//! # let mut result = RegisteredResult::default();
+//! # result.failed = true;
+//! # result.msg = Some("Connection lost".to_string());
 //! // Get detailed failure information:
-//! if let Some(failure) = result.failure_info() {
-//!     println!("Task failed at: {}", failure.timestamp);
+//! if let Some(failure) = FailedTaskInfo::from_result(&result, "host1", "Run task", "command") {
+//!     println!("Task failed at: {:?}", failure.timestamp);
 //!     println!("Error: {}", failure.error_message);
 //!     if let Some(rc) = failure.exit_code {
 //!         println!("Exit code: {}", rc);
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

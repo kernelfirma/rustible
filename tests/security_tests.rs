@@ -2211,8 +2211,8 @@ mod shell_command_injection {
         assert!(validate_path_param("/tmp/marker.txt", "creates").is_ok());
         assert!(validate_path_param("/var/log/app.log", "removes").is_ok());
 
-        // Relative paths (these are valid for creates/removes)
-        assert!(validate_path_param("../relative/path", "creates").is_ok());
+        // Relative paths without parent traversal
+        assert!(validate_path_param("../relative/path", "creates").is_err());
         assert!(validate_path_param("./local/file", "removes").is_ok());
 
         // Paths with spaces

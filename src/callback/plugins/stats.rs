@@ -43,8 +43,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::stats::{StatsCallback, StatsConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{StatsCallback, StatsConfig};
 //!
 //! // Create with default config
 //! let callback = StatsCallback::new();
@@ -61,6 +64,8 @@
 //! // After execution, export stats
 //! let json = callback.export_json();
 //! let prometheus = callback.export_prometheus();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

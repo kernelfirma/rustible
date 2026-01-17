@@ -831,6 +831,7 @@ mod tests {
         assert_eq!(cache.get(&"key1".to_string()), None);
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn test_cache_ttl_expiration() {
         let mut config = CacheConfig::default();

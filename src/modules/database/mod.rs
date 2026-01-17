@@ -279,6 +279,7 @@ pub fn extract_connection_params(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "database")]
     use super::*;
 
     #[cfg(feature = "database")]

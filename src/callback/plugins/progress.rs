@@ -132,8 +132,11 @@ struct TaskState {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::ProgressCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ProgressCallback;
 ///
 /// // Create with default configuration
 /// let callback = ProgressCallback::new();
@@ -145,7 +148,9 @@ struct TaskState {
 /// };
 /// let callback = ProgressCallback::with_config(config);
 ///
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ProgressCallback {

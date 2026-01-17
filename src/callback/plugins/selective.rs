@@ -17,8 +17,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::SelectiveCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::SelectiveCallback;
 //!
 //! // Show only failures from specific hosts
 //! let callback = SelectiveCallback::builder()
@@ -28,13 +31,15 @@
 //!
 //! // Show tasks matching a regex pattern
 //! let callback = SelectiveCallback::builder()
-//!     .task_pattern(r"(?i)install.*nginx")
+//!     .task_pattern(r"(?i)install.*nginx")?
 //!     .build();
 //!
 //! // Filter by tags
 //! let callback = SelectiveCallback::builder()
 //!     .tags(&["deploy", "config"])
 //!     .build();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Output
@@ -243,8 +248,11 @@ struct HostStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{SelectiveCallback, SelectiveBuilder};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{SelectiveCallback, SelectiveBuilder};
 ///
 /// let callback = SelectiveCallback::builder()
 ///     .hosts(&["prod-web-*"])
@@ -252,7 +260,9 @@ struct HostStats {
 ///     .verbose()
 ///     .build();
 ///
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SelectiveCallback {

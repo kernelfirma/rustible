@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{EscalationMethod, SecurityResult};
+use super::SecurityResult;
 
 /// Severity level for audit entries
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -133,7 +133,7 @@ impl AuditEntry {
             event_type,
             severity,
             host: host.to_string(),
-            source_user: whoami::username(),
+            source_user: current_username(),
             target_user: None,
             method: None,
             command: None,
@@ -230,6 +230,12 @@ impl AuditEntry {
 
         parts.join(" ")
     }
+}
+
+fn current_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 /// Sanitize a command for logging (remove sensitive data)

@@ -55,8 +55,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{LogstashCallback, LogstashConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::plugins::{LogstashCallback, LogstashConfig, LogstashProtocol};
 //!
 //! // From environment variables
 //! let callback = LogstashCallback::from_env()?;
@@ -68,6 +71,8 @@
 //!     .protocol(LogstashProtocol::Tcp)
 //!     .build();
 //! let callback = LogstashCallback::new(config)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

@@ -57,7 +57,10 @@ type ModuleFactory = fn() -> Arc<dyn Module>;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::startup::LazyModuleRegistry;
 ///
 /// let registry = LazyModuleRegistry::new();
@@ -72,6 +75,8 @@ type ModuleFactory = fn() -> Arc<dyn Module>;
 /// // Second access returns cached instance
 /// let debug2 = registry.get("debug").unwrap();
 /// assert_eq!(registry.instantiated_count(), 1);
+/// # Ok(())
+/// # }
 /// ```
 pub struct LazyModuleRegistry {
     /// Factory functions for creating modules

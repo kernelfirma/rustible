@@ -5,6 +5,8 @@
 //! - Variable merging
 //! - Vault-like secret handling
 
+pub mod scope;
+
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,

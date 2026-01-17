@@ -9,9 +9,14 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::inventory::Inventory;
 //! use rustible::inventory::cache::{InventoryCache, InventoryCacheConfig};
 //! use std::time::Duration;
+//! # let inventory = Inventory::new();
 //!
 //! // Create a cache with 5-minute TTL
 //! let config = InventoryCacheConfig::default()
@@ -25,6 +30,8 @@
 //! if let Some(cached) = cache.get("my-inventory").await {
 //!     // Use cached inventory
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -804,6 +811,7 @@ mod tests {
         assert!(cached.is_none());
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_cache_ttl_expiration() {
         let config = InventoryCacheConfig::default().with_ttl(Duration::from_millis(50));

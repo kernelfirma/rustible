@@ -1359,18 +1359,23 @@ impl Module for ServiceModule {
             )
         })?;
 
-        // Use tokio runtime to execute async code
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?;
-
         // Spawn blocking task on a separate thread to avoid runtime nesting issues
         let params = params.clone();
         let context = context.clone();
         let module = self;
         std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.execute_async(&params, &context, connection)))
-                .join()
-                .unwrap()
+            s.spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| {
+                        ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
+                    })?;
+
+                rt.block_on(module.execute_async(&params, &context, connection))
+            })
+            .join()
+            .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
         })
     }
 }

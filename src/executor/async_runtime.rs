@@ -16,7 +16,9 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::executor::async_runtime::{RuntimeBuilder, RuntimeConfig};
 //!
 //! let config = RuntimeConfig::for_io_bound();
@@ -27,7 +29,9 @@
 //! });
 //!
 //! // Graceful shutdown with timeout
-//! runtime.shutdown_graceful(Duration::from_secs(30)).await;
+//! runtime.shutdown_timeout(std::time::Duration::from_secs(30));
+//! # Ok(())
+//! # }
 //! ```
 
 use std::future::Future;

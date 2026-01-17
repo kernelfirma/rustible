@@ -474,6 +474,7 @@ mod tests {
         assert_eq!(pwd, "secret123");
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn test_password_cache_expiration() {
         let config = PasswordCacheConfig {

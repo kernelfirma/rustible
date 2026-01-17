@@ -40,13 +40,18 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::JUnitCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::JUnitCallback;
 //!
 //! let callback = JUnitCallback::new("test-results.xml");
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
 //!
 //! // After playbook execution, the XML file is written automatically
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -159,11 +164,16 @@ struct SuiteStats {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::JUnitCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::JUnitCallback;
 ///
 /// let callback = JUnitCallback::new("test-results/playbook.xml");
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct JUnitCallback {
@@ -192,8 +202,13 @@ impl JUnitCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = JUnitCallback::new("test-results/playbook.xml");
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new(output_path: impl AsRef<Path>) -> Self {

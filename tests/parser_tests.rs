@@ -450,7 +450,6 @@ fn test_parse_multiple_handlers() {
 // ============================================================================
 
 #[test]
-#[ignore = "Known issue with comment syntax detection in is_template"]
 fn test_template_detection() {
     // Jinja2 variable syntax
     assert!(TemplateEngine::is_template("{{ variable }}"));

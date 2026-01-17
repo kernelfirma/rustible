@@ -150,10 +150,15 @@ impl JwtAuth {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// async fn protected_route(user: AuthenticatedUser) -> impl IntoResponse {
 ///     format!("Hello, {}!", user.claims.sub)
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct AuthenticatedUser {
     /// The validated JWT claims

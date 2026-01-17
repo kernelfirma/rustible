@@ -773,9 +773,7 @@ impl Module for UriModule {
             .unwrap_or(DEFAULT_RETRY_DELAY_SECS);
 
         // Execute the async request using tokio runtime
-        let result = tokio::runtime::Handle::try_current()
-            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?
-            .block_on(Self::execute_async(
+        let fut = Self::execute_async(
                 url,
                 method,
                 headers,
@@ -798,7 +796,30 @@ impl Module for UriModule {
                 retries,
                 retry_delay_secs,
                 false, // check_mode already handled above
-            ));
+            );
+
+        let result = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            std::thread::scope(|s| {
+                s.spawn(move || handle.block_on(fut))
+                    .join()
+                    .unwrap_or_else(|_| {
+                        Err(ModuleError::ExecutionFailed(
+                            "Tokio runtime thread panicked".to_string(),
+                        ))
+                    })
+            })
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to create tokio runtime: {}",
+                        e
+                    ))
+                })?;
+            rt.block_on(fut)
+        };
 
         result
     }

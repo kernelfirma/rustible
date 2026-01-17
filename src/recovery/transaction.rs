@@ -17,8 +17,11 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
-//! use rustible::recovery::transaction::{TransactionManager, TransactionConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::recovery::transaction::{TaskOutcome, TransactionConfig, TransactionManager};
 //!
 //! let config = TransactionConfig::default();
 //! let manager = TransactionManager::new(config)?;
@@ -30,13 +33,17 @@
 //! let sp = manager.savepoint(&tx_id, "before_database_changes").await?;
 //!
 //! // Execute tasks...
-//! manager.record_task(&tx_id, "host1", "restart_db", TaskOutcome::Success)?;
+//! manager
+//!     .record_task(&tx_id, "host1", "restart_db", 0, 0, TaskOutcome::Success, None)
+//!     .await?;
 //!
 //! // If something fails, rollback to savepoint
 //! // manager.rollback_to_savepoint(&sp).await?;
 //!
 //! // Or commit the entire transaction
 //! manager.commit(&tx_id).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

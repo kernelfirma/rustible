@@ -10,7 +10,6 @@ use super::{
 use crate::playbook::{Play, Playbook, Task};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// Type of security vulnerability
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -211,7 +210,7 @@ impl SecurityAnalyzer {
     ) -> AnalysisResult<Vec<AnalysisFinding>> {
         let mut findings = Vec::new();
 
-        for (var_name, var_value) in &play.vars {
+        for (var_name, var_value) in play.vars.as_map() {
             let location = SourceLocation::new().with_play(play_idx, &play.name);
             let location = if let Some(f) = source_file {
                 location.with_file(f.clone())
@@ -327,7 +326,7 @@ impl SecurityAnalyzer {
         }
 
         // Check for no_log on sensitive tasks
-        if self.is_sensitive_task(task) && !task.no_log {
+        if self.is_sensitive_task(task) && !self.task_has_no_log(task) {
             findings.push(
                 AnalysisFinding::new(
                     "SEC004",
@@ -344,7 +343,7 @@ impl SecurityAnalyzer {
         }
 
         // Check task variables
-        for (var_name, var_value) in &task.vars {
+        for (var_name, var_value) in task.vars.as_map() {
             if self.is_sensitive_variable_name(var_name) {
                 if let Some(value_str) = var_value.as_str() {
                     if self.looks_like_secret(value_str) {
@@ -474,18 +473,18 @@ impl SecurityAnalyzer {
             return false;
         }
 
+        // Check against secret patterns
+        for pattern in &self.secret_patterns {
+            if pattern.is_match(value) {
+                return true;
+            }
+        }
+
         // Skip if it's a common placeholder
         let placeholders = ["changeme", "CHANGEME", "TODO", "FIXME", "placeholder", "example"];
         for placeholder in &placeholders {
             if value.to_lowercase().contains(&placeholder.to_lowercase()) {
                 return false;
-            }
-        }
-
-        // Check against secret patterns
-        for pattern in &self.secret_patterns {
-            if pattern.is_match(value) {
-                return true;
             }
         }
 
@@ -536,6 +535,15 @@ impl SecurityAnalyzer {
         }
 
         false
+    }
+
+    fn task_has_no_log(&self, task: &Task) -> bool {
+        task.module
+            .args
+            .as_object()
+            .and_then(|obj| obj.get("no_log"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
     }
 }
 

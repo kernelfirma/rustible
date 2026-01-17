@@ -13,7 +13,8 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! use rustible::prelude::*;
 //! use rustible::api::{ApiServer, ApiConfig};
 //!
 //! #[tokio::main]

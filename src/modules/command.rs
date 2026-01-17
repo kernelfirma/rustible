@@ -20,9 +20,19 @@ use std::sync::Arc;
 pub struct CommandModule;
 
 impl CommandModule {
+    fn get_cmd_param(&self, params: &ModuleParams) -> ModuleResult<Option<String>> {
+        if let Some(cmd) = params.get_string("cmd")? {
+            return Ok(Some(cmd));
+        }
+        if let Some(cmd) = params.get_string("_raw_params")? {
+            return Ok(Some(cmd));
+        }
+        Ok(None)
+    }
+
     /// Build the command string from params (for display and remote execution)
     fn get_command_string(&self, params: &ModuleParams) -> ModuleResult<String> {
-        let cmd = params.get_string("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
         let argv = params.get_vec_string("argv")?;
         let shell_type = params
             .get_string("shell_type")?
@@ -67,7 +77,7 @@ impl CommandModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<Command> {
-        let cmd = params.get_string("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
         let argv = params.get_vec_string("argv")?;
 
         let mut command = if let Some(argv) = argv {
@@ -252,7 +262,8 @@ impl CommandModule {
         // In check mode, return what would happen
         if context.check_mode {
             let cmd = self.get_command_string(params)?;
-            return Ok(ModuleOutput::changed(format!("Would execute: {}", cmd)));
+            return Ok(ModuleOutput::changed(format!("Would execute: {}", cmd))
+                .with_command_output(Some(String::new()), Some(String::new()), Some(0)));
         }
 
         let mut command = self.build_command(params, context)?;
@@ -330,7 +341,12 @@ impl CommandModule {
                             return Ok(ModuleOutput::changed(format!(
                                 "Would execute: {}",
                                 cmd_display
-                            )));
+                            ))
+                            .with_command_output(
+                                Some(String::new()),
+                                Some(String::new()),
+                                Some(0),
+                            ));
                         }
 
                         // Execute via connection
@@ -401,7 +417,10 @@ impl Module for CommandModule {
 
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Must have either cmd or argv
-        if params.get("cmd").is_none() && params.get("argv").is_none() {
+        if params.get("cmd").is_none()
+            && params.get("_raw_params").is_none()
+            && params.get("argv").is_none()
+        {
             return Err(ModuleError::MissingParameter(
                 "Either 'cmd' or 'argv' must be provided".to_string(),
             ));
@@ -456,6 +475,19 @@ mod tests {
 
         assert!(result.changed);
         assert!(result.stdout.as_ref().unwrap().contains("hello world"));
+    }
+
+    #[test]
+    fn test_command_with_raw_params() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("_raw_params".to_string(), serde_json::json!("echo hello"));
+
+        let context = ModuleContext::default();
+        let result = module.execute(&params, &context).unwrap();
+
+        assert!(result.changed);
+        assert!(result.stdout.as_ref().unwrap().contains("hello"));
     }
 
     #[test]

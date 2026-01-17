@@ -150,7 +150,16 @@ impl Default for ExecutorConfig {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use rustible::executor::Playbook;
+/// # let playbook = Playbook::parse(r#"- hosts: all
+/// #   tasks:
+/// #     - name: Ping
+/// #       ping: {}
+/// # "#, None)?;
 /// use rustible::executor::{Executor, ExecutorConfig};
 ///
 /// let executor = Executor::new(ExecutorConfig::default());
@@ -159,6 +168,8 @@ impl Default for ExecutorConfig {
 /// for (host, result) in &results {
 ///     println!("{}: OK={}, Changed={}", host, result.stats.ok, result.stats.changed);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct Executor {
     pub(super) config: ExecutorConfig,
@@ -265,7 +276,7 @@ impl Executor {
                 }
                 // Add extra vars (highest precedence)
                 for (key, value) in &self.config.extra_vars {
-                    runtime.set_global_var(key.clone(), value.clone());
+                    runtime.set_extra_var(key.clone(), value.clone());
                 }
                 // Set playbook_dir magic variable for include/import path resolution
                 if let Some(playbook_dir) = playbook.get_playbook_dir() {

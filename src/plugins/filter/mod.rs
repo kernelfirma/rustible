@@ -11,12 +11,17 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::plugins::filter::FilterRegistry;
 //! use minijinja::Environment;
 //!
 //! let mut env = Environment::new();
 //! FilterRegistry::register_all(&mut env);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Ansible Compatibility
@@ -46,12 +51,17 @@ impl FilterRegistry {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
     /// use minijinja::Environment;
     /// use rustible::plugins::filter::FilterRegistry;
     ///
     /// let mut env = Environment::new();
     /// FilterRegistry::register_all(&mut env);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn register_all(env: &mut Environment<'static>) {
         regex::register_filters(env);
@@ -100,7 +110,7 @@ mod tests {
 
     #[test]
     fn test_register_all_filters() {
-        let env = create_env_with_all_filters();
+        let mut env = create_env_with_all_filters();
 
         // Test that regex filters are registered
         env.add_template("regex_test", "{{ 'hello123' | regex_search('[0-9]+') }}")

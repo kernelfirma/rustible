@@ -34,20 +34,24 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::recovery::{RecoveryManager, RetryPolicy, CheckpointConfig};
 //!
 //! // Configure recovery with retry and checkpointing
 //! let recovery = RecoveryManager::builder()
-//!     .retry_policy(RetryPolicy::exponential_backoff(3, Duration::from_secs(1)))
+//!     .retry_policy(RetryPolicy::exponential_backoff(3, std::time::Duration::from_secs(1)))
 //!     .checkpoint_dir("/var/lib/rustible/checkpoints")
 //!     .enable_rollback(true)
 //!     .build();
 //!
 //! // Execute with recovery support
-//! let result = recovery.execute_with_recovery(|| {
-//!     // Your operation here
-//! }).await?;
+//! let result = recovery
+//!     .with_retry("deploy", || Ok::<_, std::io::Error>(()))
+//!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod checkpoint;

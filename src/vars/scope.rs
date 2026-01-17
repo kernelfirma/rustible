@@ -393,7 +393,7 @@ impl ScopedVarStore {
     /// Enter a new scope
     pub fn enter_scope(&mut self, config: ScopeConfig) -> u64 {
         let parent_id = self.current_scope_id;
-        let mut scope = LexicalScope::new(config.with_parent(parent_id));
+        let scope = LexicalScope::new(config.with_parent(parent_id));
         let scope_id = scope.id;
 
         // Update parent's children
@@ -595,10 +595,8 @@ impl ScopedVarStore {
 
     /// Get all variables visible from current scope
     pub fn all(&mut self) -> IndexMap<String, serde_yaml::Value> {
-        let mut result = IndexMap::new();
-
         // Start with VarStore's merged variables
-        result = self.var_store.all().clone();
+        let mut result = self.var_store.all().clone();
 
         // Walk up scope chain and overlay variables
         let mut scope_ids: Vec<u64> = Vec::new();

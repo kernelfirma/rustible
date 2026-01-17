@@ -404,7 +404,11 @@ impl RetryConfig {
     /// Calculate delay for a given retry attempt
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         if self.exponential_backoff {
-            let delay = self.retry_delay * 2u32.pow(attempt.min(10));
+            let factor = 2u32.checked_pow(attempt).unwrap_or(u32::MAX);
+            let delay = self
+                .retry_delay
+                .checked_mul(factor)
+                .unwrap_or(self.max_delay);
             delay.min(self.max_delay)
         } else {
             self.retry_delay

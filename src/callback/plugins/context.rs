@@ -200,11 +200,16 @@ struct TaskContext {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::ContextCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ContextCallback;
 ///
 /// let callback = ContextCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ContextCallback {
@@ -229,8 +234,13 @@ impl ContextCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = ContextCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -241,13 +251,18 @@ impl ContextCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = ContextCallbackConfig {
     ///     verbosity: ContextVerbosity::Verbose,
     ///     show_facts: true,
     ///     ..Default::default()
     /// };
     /// let callback = ContextCallback::with_config(config);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_config(config: ContextCallbackConfig) -> Self {

@@ -6,7 +6,7 @@
 use super::{
     helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
 };
-use crate::playbook::{Play, Playbook, Task, When};
+use crate::playbook::{Playbook, Task, When};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

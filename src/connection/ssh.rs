@@ -15,6 +15,8 @@ use std::time::Duration;
 use tokio::task;
 use tracing::{debug, trace};
 
+use crate::security::BecomeValidator;
+
 use super::config::{ConnectionConfig, HostConfig};
 use super::ssh_common;
 use super::{
@@ -277,7 +279,7 @@ impl SshConnection {
         })?;
 
         // Build the full command with options
-        let full_command = Self::build_command(command, options);
+        let full_command = Self::build_command(command, options)?;
 
         trace!(command = %full_command, "Executing remote command");
 
@@ -327,7 +329,7 @@ impl SshConnection {
     }
 
     /// Build command string with options
-    fn build_command(command: &str, options: &ExecuteOptions) -> String {
+    fn build_command(command: &str, options: &ExecuteOptions) -> ConnectionResult<String> {
         let mut parts = Vec::new();
 
         // Add working directory
@@ -339,6 +341,13 @@ impl SshConnection {
         if options.escalate {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
+
+            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
+                ConnectionError::InvalidConfig(format!(
+                    "Invalid escalation user '{}': {}",
+                    escalate_user, e
+                ))
+            })?;
 
             match escalate_method {
                 "sudo" => {
@@ -361,7 +370,7 @@ impl SshConnection {
         }
 
         parts.push(command.to_string());
-        parts.concat()
+        Ok(parts.concat())
     }
 
     /// Get SFTP session
@@ -879,21 +888,21 @@ mod tests {
     #[test]
     fn test_build_command_basic() {
         let options = ExecuteOptions::default();
-        let cmd = SshConnection::build_command("echo hello", &options);
+        let cmd = SshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "echo hello");
     }
 
     #[test]
     fn test_build_command_with_cwd() {
         let options = ExecuteOptions::new().with_cwd("/tmp");
-        let cmd = SshConnection::build_command("echo hello", &options);
+        let cmd = SshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "cd /tmp && echo hello");
     }
 
     #[test]
     fn test_build_command_with_escalation() {
         let options = ExecuteOptions::new().with_escalation(Some("admin".to_string()));
-        let cmd = SshConnection::build_command("echo hello", &options);
+        let cmd = SshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "sudo -u admin -- echo hello");
     }
 
@@ -902,8 +911,16 @@ mod tests {
         let options = ExecuteOptions::new()
             .with_cwd("/var/log")
             .with_escalation(None);
-        let cmd = SshConnection::build_command("cat syslog", &options);
+        let cmd = SshConnection::build_command("cat syslog", &options).unwrap();
         assert_eq!(cmd, "cd /var/log && sudo -u root -- cat syslog");
+    }
+
+    #[test]
+    fn test_build_command_rejects_invalid_user() {
+        let options =
+            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let result = SshConnection::build_command("echo hello", &options);
+        assert!(result.is_err());
     }
 
     #[test]

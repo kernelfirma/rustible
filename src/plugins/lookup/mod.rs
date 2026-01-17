@@ -14,7 +14,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::plugins::lookup::prelude::*;
 //!
 //! // Create registry with built-in lookups
@@ -31,13 +34,18 @@
 //! let options = LookupOptions::new()
 //!     .with_option("default", "fallback_value");
 //! let value = registry.lookup_with_options("env", &["MAYBE_SET"], &options, &context)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Creating Custom Lookups
 //!
 //! Implement [`LookupPlugin`] to create custom lookups:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::plugins::lookup::prelude::*;
 //!
 //! #[derive(Debug, Default)]
@@ -62,6 +70,8 @@
 //!         Ok(terms.iter().map(|t| serde_json::json!(t.to_uppercase())).collect())
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use serde::{Deserialize, Serialize};

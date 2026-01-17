@@ -32,7 +32,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::secrets::{SecretManager, VaultBackend, SecretConfig};
 //!
 //! // Create a secret manager with Vault backend
@@ -48,6 +51,8 @@
 //!
 //! // Access secret values with no_log protection
 //! let password = secret.get_sensitive("password")?;
+//! # Ok(())
+//! # }
 //! ```
 
 mod backend;
@@ -97,7 +102,10 @@ use tokio::sync::RwLock;
 ///
 /// ## Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::secrets::{SecretManager, SecretConfig};
 ///
 /// let config = SecretConfig::vault()
@@ -110,6 +118,8 @@ use tokio::sync::RwLock;
 /// // Fetch a secret (cached automatically)
 /// let db_secret = manager.get("secret/data/database").await?;
 /// let password = db_secret.get_sensitive("password")?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct SecretManager {
     /// The secret backend (Vault, AWS, etc.)
@@ -147,7 +157,7 @@ impl SecretManager {
                     .vault
                     .as_ref()
                     .ok_or_else(|| SecretError::Configuration("Vault config required".into()))?;
-                Arc::new(VaultBackend::new(vault_config.clone()).await?)
+                Arc::new(VaultBackend::new(vault_config.clone().into()).await?)
             }
             SecretBackendType::AwsSecretsManager => {
                 let aws_config = config

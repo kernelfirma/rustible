@@ -10,7 +10,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::diagnostics::{DebugConfig, DebugContext, Breakpoint};
 //!
 //! let config = DebugConfig::builder()
@@ -23,9 +26,10 @@
 //! debug_ctx.add_breakpoint(Breakpoint::on_task("Install nginx"));
 //! debug_ctx.add_breakpoint(Breakpoint::on_failure());
 //!
-//! // Execute with debugging
-//! let executor = Executor::new(ExecutorConfig::default())
-//!     .with_debug_context(debug_ctx);
+//! // Pass debug_ctx to your executor integration
+//! let _ = debug_ctx;
+//! # Ok(())
+//! # }
 //! ```
 
 mod breakpoint;

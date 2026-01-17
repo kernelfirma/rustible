@@ -610,6 +610,37 @@ impl WebhookConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvGuard {
+        saved: Vec<(String, Option<String>)>,
+    }
+
+    impl EnvGuard {
+        fn new() -> Self {
+            Self { saved: Vec::new() }
+        }
+
+        fn set(&mut self, key: &str, value: &str) {
+            let prev = env::var(key).ok();
+            self.saved.push((key.to_string(), prev));
+            env::set_var(key, value);
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                if let Some(val) = value {
+                    env::set_var(key, val);
+                } else {
+                    env::remove_var(key);
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_notification_config_builder() {
@@ -674,5 +705,37 @@ mod tests {
         assert!(backends.contains(&"Slack"));
         assert!(backends.contains(&"Webhook"));
         assert!(!backends.contains(&"Email"));
+    }
+
+    #[test]
+    fn test_notification_config_from_env() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mut guard = EnvGuard::new();
+
+        guard.set(
+            "RUSTIBLE_SLACK_WEBHOOK_URL",
+            "https://hooks.slack.com/services/test",
+        );
+        guard.set("RUSTIBLE_SMTP_HOST", "smtp.example.com");
+        guard.set("RUSTIBLE_SMTP_FROM", "from@example.com");
+        guard.set("RUSTIBLE_SMTP_TO", "to@example.com");
+        guard.set("RUSTIBLE_WEBHOOK_URL", "https://example.com/hook");
+        guard.set("RUSTIBLE_NOTIFY_ON_SUCCESS", "true");
+        guard.set("RUSTIBLE_NOTIFY_ON_FAILURE", "0");
+        guard.set("RUSTIBLE_NOTIFY_TEMPLATE", "/tmp/template");
+        guard.set("RUSTIBLE_NOTIFY_TIMEOUT", "45");
+        guard.set("RUSTIBLE_NOTIFY_RETRIES", "5");
+        guard.set("RUSTIBLE_NOTIFY_RETRY_DELAY", "2");
+
+        let config = NotificationConfig::from_env();
+        assert!(config.slack.is_some());
+        assert!(config.email.is_some());
+        assert!(config.webhook.is_some());
+        assert!(config.notify_on_success);
+        assert!(!config.notify_on_failure);
+        assert_eq!(config.template_path.as_deref(), Some("/tmp/template"));
+        assert_eq!(config.timeout, Duration::from_secs(45));
+        assert_eq!(config.retries, 5);
+        assert_eq!(config.retry_delay, Duration::from_secs(2));
     }
 }

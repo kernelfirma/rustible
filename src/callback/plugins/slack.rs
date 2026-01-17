@@ -45,7 +45,10 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::plugins::{SlackCallback, SlackCallbackConfig};
 //!
 //! // From environment variables
@@ -58,6 +61,8 @@
 //!     .notify_on_start(true)
 //!     .build();
 //! let callback = SlackCallback::new(config)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

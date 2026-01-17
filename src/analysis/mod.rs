@@ -14,8 +14,17 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::analysis::{StaticAnalyzer, AnalysisConfig};
+//! # use rustible::playbook::Playbook;
+//! # let playbook = Playbook::from_yaml(r#"- hosts: all
+//! #   tasks:
+//! #     - name: Ping
+//! #       ping: {}
+//! # "#, None)?;
 //!
 //! let analyzer = StaticAnalyzer::new(AnalysisConfig::default());
 //! let report = analyzer.analyze(&playbook)?;
@@ -24,6 +33,8 @@
 //! for issue in report.issues() {
 //!     println!("{}: {}", issue.severity, issue.message);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod complexity;

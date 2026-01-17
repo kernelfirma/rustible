@@ -17,17 +17,22 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
-//! use rustible::compliance::{ComplianceScanner, CisScanner, ComplianceContext};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::compliance::{ComplianceContext, ComplianceScanner, CisScanner};
+//! # let connection = std::sync::Arc::new(rustible::connection::local::LocalConnection::new());
 //!
 //! let scanner = CisScanner::new();
 //! let context = ComplianceContext::new(connection);
-//! let report = scanner.scan(&context).await?;
+//! let findings = scanner.scan(&context).await?;
 //!
-//! println!("Compliance Score: {:.1}%", report.compliance_score());
-//! for finding in report.findings() {
+//! println!("Findings: {}", findings.len());
+//! for finding in &findings {
 //!     println!("{}: {}", finding.severity, finding.description);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod checks;

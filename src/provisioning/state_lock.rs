@@ -14,7 +14,10 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::provisioning::state_lock::{StateLockManager, FileLock, LockInfo};
 //! use std::time::Duration;
 //!
@@ -28,8 +31,11 @@
 //! // Perform state modifications...
 //!
 //! // Lock is automatically released when guard is dropped
+//! # Ok(())
+//! # }
 //! ```
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -403,16 +409,22 @@ pub struct DynamoDbLock {
     pub table_name: String,
     /// State file identifier (used as partition key)
     pub state_id: String,
-    // AWS client would be added here
+    /// DynamoDB client
+    client: aws_sdk_dynamodb::Client,
 }
 
 #[cfg(feature = "aws")]
 impl DynamoDbLock {
     /// Create a new DynamoDB lock
-    pub fn new(table_name: impl Into<String>, state_id: impl Into<String>) -> Self {
+    pub fn new(
+        table_name: impl Into<String>,
+        state_id: impl Into<String>,
+        client: aws_sdk_dynamodb::Client,
+    ) -> Self {
         Self {
             table_name: table_name.into(),
             state_id: state_id.into(),
+            client,
         }
     }
 }
@@ -420,38 +432,198 @@ impl DynamoDbLock {
 #[cfg(feature = "aws")]
 #[async_trait]
 impl LockBackend for DynamoDbLock {
-    async fn acquire(&self, _info: &LockInfo, _timeout: Duration) -> ProvisioningResult<bool> {
-        // TODO: Implement DynamoDB conditional put
-        // This would use AWS SDK to perform a conditional PutItem
-        // with a condition expression that the item doesn't exist
-        Err(ProvisioningError::ConcurrencyError(
-            "DynamoDB lock not yet implemented".to_string(),
-        ))
+    async fn acquire(&self, info: &LockInfo, timeout: Duration) -> ProvisioningResult<bool> {
+        let start = std::time::Instant::now();
+        let retry_interval = Duration::from_millis(200);
+
+        loop {
+            match self.try_acquire(info).await? {
+                true => return Ok(true),
+                false => {
+                    if start.elapsed() >= timeout {
+                        return Ok(false);
+                    }
+                }
+            }
+
+            tokio::time::sleep(retry_interval).await;
+        }
     }
 
-    async fn release(&self, _lock_id: &str) -> ProvisioningResult<bool> {
-        // TODO: Implement DynamoDB conditional delete
-        Err(ProvisioningError::ConcurrencyError(
-            "DynamoDB lock not yet implemented".to_string(),
-        ))
+    async fn release(&self, lock_id: &str) -> ProvisioningResult<bool> {
+        let mut key = HashMap::new();
+        key.insert(
+            "LockID".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(self.state_id.clone()),
+        );
+
+        let result = self
+            .client
+            .delete_item()
+            .table_name(&self.table_name)
+            .set_key(Some(key))
+            .condition_expression("#lock_id = :lock_id")
+            .expression_attribute_names("#lock_id", "LockId")
+            .expression_attribute_values(
+                ":lock_id",
+                aws_sdk_dynamodb::types::AttributeValue::S(lock_id.to_string()),
+            )
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("ConditionalCheckFailed") {
+                    Ok(false)
+                } else {
+                    Err(ProvisioningError::CloudApiError(format!(
+                        "Failed to release DynamoDB lock: {}",
+                        e
+                    )))
+                }
+            }
+        }
     }
 
     async fn get_lock(&self) -> ProvisioningResult<Option<LockInfo>> {
-        // TODO: Implement DynamoDB GetItem
-        Err(ProvisioningError::ConcurrencyError(
-            "DynamoDB lock not yet implemented".to_string(),
-        ))
+        let mut key = HashMap::new();
+        key.insert(
+            "LockID".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(self.state_id.clone()),
+        );
+
+        let result = self
+            .client
+            .get_item()
+            .table_name(&self.table_name)
+            .set_key(Some(key))
+            .consistent_read(true)
+            .send()
+            .await
+            .map_err(|e| {
+                ProvisioningError::CloudApiError(format!(
+                    "Failed to get DynamoDB lock: {}",
+                    e
+                ))
+            })?;
+
+        let Some(item) = result.item else {
+            return Ok(None);
+        };
+
+        let info_value = item
+            .get("Info")
+            .and_then(|value| value.as_s().ok())
+            .ok_or_else(|| {
+                ProvisioningError::StatePersistenceError(
+                    "DynamoDB lock item missing Info attribute".to_string(),
+                )
+            })?;
+
+        let info: LockInfo = serde_json::from_str(info_value).map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!(
+                "Failed to parse DynamoDB lock info: {}",
+                e
+            ))
+        })?;
+
+        Ok(Some(info))
     }
 
     async fn force_unlock(&self, _lock_id: &str) -> ProvisioningResult<()> {
-        // TODO: Implement DynamoDB unconditional delete
-        Err(ProvisioningError::ConcurrencyError(
-            "DynamoDB lock not yet implemented".to_string(),
-        ))
+        let mut key = HashMap::new();
+        key.insert(
+            "LockID".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(self.state_id.clone()),
+        );
+
+        self.client
+            .delete_item()
+            .table_name(&self.table_name)
+            .set_key(Some(key))
+            .send()
+            .await
+            .map_err(|e| {
+                ProvisioningError::CloudApiError(format!(
+                    "Failed to force unlock DynamoDB lock: {}",
+                    e
+                ))
+            })?;
+
+        Ok(())
     }
 
     fn backend_name(&self) -> &str {
         "dynamodb"
+    }
+}
+
+#[cfg(feature = "aws")]
+impl DynamoDbLock {
+    async fn try_acquire(&self, info: &LockInfo) -> ProvisioningResult<bool> {
+        let info_json = serde_json::to_string(info).map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!(
+                "Failed to serialize lock info: {}",
+                e
+            ))
+        })?;
+
+        let mut item = HashMap::new();
+        item.insert(
+            "LockID".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(self.state_id.clone()),
+        );
+        item.insert(
+            "LockId".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(info.id.clone()),
+        );
+        item.insert(
+            "Info".to_string(),
+            aws_sdk_dynamodb::types::AttributeValue::S(info_json),
+        );
+
+        if let Some(expires_at) = info.expires_at.as_ref() {
+            item.insert(
+                "ExpiresAt".to_string(),
+                aws_sdk_dynamodb::types::AttributeValue::N(expires_at.timestamp().to_string()),
+            );
+        }
+
+        let now = Utc::now().timestamp();
+        let result = self
+            .client
+            .put_item()
+            .table_name(&self.table_name)
+            .set_item(Some(item))
+            .condition_expression(
+                "attribute_not_exists(#lock_key) OR \
+                 (attribute_exists(#expires_at) AND #expires_at < :now)",
+            )
+            .expression_attribute_names("#lock_key", "LockID")
+            .expression_attribute_names("#expires_at", "ExpiresAt")
+            .expression_attribute_values(
+                ":now",
+                aws_sdk_dynamodb::types::AttributeValue::N(now.to_string()),
+            )
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("ConditionalCheckFailed") {
+                    Ok(false)
+                } else {
+                    Err(ProvisioningError::CloudApiError(format!(
+                        "Failed to acquire DynamoDB lock: {}",
+                        e
+                    )))
+                }
+            }
+        }
     }
 }
 

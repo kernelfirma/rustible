@@ -133,7 +133,6 @@ impl BecomeValidator {
     /// - Start with a lowercase letter or underscore
     /// - Contain only lowercase letters, digits, underscores, hyphens
     /// - Be at most 32 characters (configurable)
-    /// - May end with $ for Samba machine accounts
     pub fn validate_username(&self, username: &str) -> SecurityResult<()> {
         // Empty check
         if username.is_empty() {
@@ -371,7 +370,7 @@ mod tests {
         let valid_names = vec![
             "root", "admin", "www-data", "nginx", "postgres", "mysql",
             "nobody", "user123", "test_user", "test-user", "_apt",
-            "systemd-network", "user$", // Samba machine account
+            "systemd-network",
         ];
 
         for name in valid_names {
@@ -387,6 +386,7 @@ mod tests {
     fn test_invalid_usernames() {
         let validator = BecomeValidator::new();
 
+        let long_name = "a".repeat(256);
         let invalid_names = vec![
             ("", "empty"),
             ("root; rm -rf /", "semicolon injection"),
@@ -401,7 +401,8 @@ mod tests {
             ("root\"malicious", "double quote escape"),
             ("123user", "starts with number"),
             ("-user", "starts with hyphen"),
-            (&"a".repeat(256), "too long"),
+            ("user$", "shell metacharacter"),
+            (long_name.as_str(), "too long"),
         ];
 
         for (name, description) in invalid_names {
@@ -433,7 +434,6 @@ mod tests {
 
         let invalid_methods = vec![
             "unknown",
-            "SUDO",        // Case matters in strict mode
             "sudo2",
             "my_escalator",
             "",

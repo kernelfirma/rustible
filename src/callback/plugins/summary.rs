@@ -24,8 +24,12 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::summary::{SummaryCallback, SummaryConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{LogFileCallback, LogFileConfig, SummaryCallback, SummaryConfig};
+//! use rustible::callback::manager::{CallbackManager, PluginPriority};
 //!
 //! // Basic usage with defaults
 //! let callback = SummaryCallback::new();
@@ -37,15 +41,23 @@
 //!     show_exit_code_hint: true,
 //!     compact_mode: false,
 //!     use_colors: true,
+//!     ..Default::default()
 //! });
 //!
 //! // Use with executor
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
 //!
 //! // Combine with log file callback
 //! let manager = CallbackManager::new();
-//! manager.register(Arc::new(SummaryCallback::new()));
-//! manager.register(Arc::new(LogFileCallback::new("/var/log/rustible.log")));
+//! let logfile = LogFileCallback::new(LogFileConfig::default())?;
+//! manager
+//!     .register("summary", Arc::new(SummaryCallback::new()), PluginPriority::NORMAL)
+//!     .await;
+//! manager
+//!     .register("logfile", Arc::new(logfile), PluginPriority::LOGGING)
+//!     .await;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Output
@@ -306,13 +318,18 @@ impl SummaryState {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::summary::SummaryCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::SummaryCallback;
 ///
 /// let callback = SummaryCallback::new();
 ///
 /// // After playbook execution, the summary will be printed automatically
 /// // No output occurs during task execution
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SummaryCallback {

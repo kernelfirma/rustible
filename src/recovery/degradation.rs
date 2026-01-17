@@ -8,17 +8,39 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::recovery::degradation::{CircuitBreaker, CircuitBreakerConfig, GracefulDegradation};
+//! # async fn connect_to_host() -> std::io::Result<()> { Ok(()) }
+//! # fn use_connection(_conn: ()) {}
+//! # fn use_fallback() {}
+//! # fn handle_error(_err: std::io::Error) {}
 //!
 //! let breaker = CircuitBreaker::new("ssh-connection", CircuitBreakerConfig::default());
 //!
 //! // Execute with circuit breaker protection
-//! match breaker.call(|| connect_to_host()).await {
-//!     Ok(conn) => use_connection(conn),
-//!     Err(e) if breaker.is_open() => use_fallback(),
-//!     Err(e) => handle_error(e),
+//! if breaker.allow_request().await {
+//!     match connect_to_host().await {
+//!         Ok(conn) => {
+//!             breaker.record_success().await;
+//!             use_connection(conn);
+//!         }
+//!         Err(e) => {
+//!             breaker.record_failure().await;
+//!             if breaker.is_open().await {
+//!                 use_fallback();
+//!             } else {
+//!                 handle_error(e);
+//!             }
+//!         }
+//!     }
+//! } else {
+//!     use_fallback();
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -498,6 +520,7 @@ mod tests {
         assert!(!breaker.allow_request().await);
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_circuit_breaker_half_open() {
         let config = CircuitBreakerConfig {

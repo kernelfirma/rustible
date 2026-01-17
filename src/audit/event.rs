@@ -495,6 +495,7 @@ mod system_time_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
 
     #[test]
     fn test_command_execution_event() {
@@ -550,9 +551,56 @@ mod tests {
             .with_metadata("size", serde_json::json!(1024));
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("FILE_MODIFICATION"));
+        assert!(json.contains("\"category\":\"file_modification\""));
 
         let deserialized: AuditEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.category, AuditCategory::FileModification);
+    }
+
+    #[test]
+    fn test_truncate_string() {
+        let short = "short";
+        assert_eq!(truncate_string(short, 10), "short");
+
+        let long = "abcdefghijklmnopqrstuvwxyz";
+        assert_eq!(truncate_string(long, 10), "abcdefg...");
+    }
+
+    #[test]
+    fn test_format_timestamp_epoch() {
+        let formatted = format_timestamp(&UNIX_EPOCH);
+        assert_eq!(formatted, "1970-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_format_timestamp_offset() {
+        let time = UNIX_EPOCH + Duration::from_secs(3661);
+        let formatted = format_timestamp(&time);
+        assert!(formatted.contains("T01:01:01.000Z"));
+    }
+
+    #[test]
+    fn test_days_to_ymd_basic() {
+        assert_eq!(days_to_ymd(0), (1970, 1, 1));
+        assert_eq!(days_to_ymd(365), (1971, 1, 1));
+    }
+
+    #[test]
+    fn test_is_leap_year_rules() {
+        assert!(is_leap_year(2000));
+        assert!(!is_leap_year(1900));
+        assert!(is_leap_year(2024));
+    }
+
+    #[test]
+    fn test_log_line_privileged_marker() {
+        let event = AuditEvent::command_execution("echo hello")
+            .with_host("server1")
+            .with_module("command")
+            .with_privilege("sudo", Some("root".to_string()))
+            .success();
+
+        let line = event.to_log_line();
+        assert!(line.contains("PRIVILEGED"));
     }
 }

@@ -8,7 +8,6 @@
 
 use super::types::{LintConfig, LintIssue, LintResult, Location, RuleCategory, Severity};
 use regex::Regex;
-use std::collections::HashSet;
 use std::path::Path;
 
 /// Best practices checker.

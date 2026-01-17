@@ -158,7 +158,6 @@ impl ExecutionCallback for HeavyweightCallback {
 }
 
 /// Composite callback that dispatches to multiple callbacks
-#[derive(Debug)]
 struct CompositeCallback {
     callbacks: Vec<Arc<dyn ExecutionCallback>>,
 }
@@ -734,8 +733,9 @@ fn bench_playbook_simulation(c: &mut Criterion) {
         let num_tasks = 10;
 
         b.to_async(&rt).iter(|| {
+            let callback = &callback;
             let hosts = hosts.clone();
-            async {
+            async move {
                 callback.on_playbook_start("test_playbook").await;
                 callback.on_play_start("test_play", &hosts).await;
 
@@ -761,8 +761,9 @@ fn bench_playbook_simulation(c: &mut Criterion) {
         let num_tasks = 10;
 
         b.to_async(&rt).iter(|| {
+            let callback = &callback;
             let hosts = hosts.clone();
-            async {
+            async move {
                 callback.on_playbook_start("test_playbook").await;
                 callback.on_play_start("test_play", &hosts).await;
 
@@ -793,8 +794,9 @@ fn bench_playbook_simulation(c: &mut Criterion) {
         let num_tasks = 25;
 
         b.to_async(&rt).iter(|| {
+            let composite = &composite;
             let hosts = hosts.clone();
-            async {
+            async move {
                 composite.on_playbook_start("test_playbook").await;
                 composite.on_play_start("test_play", &hosts).await;
 
@@ -832,8 +834,9 @@ fn bench_large_scale(c: &mut Criterion) {
         let callback = CountingCallback::new();
 
         b.to_async(&rt).iter(|| {
+            let callback = &callback;
             let hosts = hosts.clone();
-            async {
+            async move {
                 callback.on_playbook_start("large_playbook").await;
                 callback.on_play_start("large_play", &hosts).await;
 
@@ -887,8 +890,9 @@ fn bench_large_scale(c: &mut Criterion) {
         let callback = HeavyweightCallback::new();
 
         b.to_async(&rt).iter(|| {
+            let callback = &callback;
             let hosts = hosts.clone();
-            async {
+            async move {
                 callback.on_playbook_start("heavyweight_book").await;
                 callback.on_play_start("heavyweight_play", &hosts).await;
 

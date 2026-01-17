@@ -21,6 +21,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
 
+use crate::security::BecomeValidator;
+
 /// Threshold for using streaming uploads (1MB)
 const STREAM_THRESHOLD: u64 = 1024 * 1024;
 
@@ -663,7 +665,7 @@ pub struct ConnectionMetrics {
 
 impl RusshConnection {
     /// Build command string with options (no environment variables)
-    fn build_command(command: &str, options: &ExecuteOptions) -> String {
+    fn build_command(command: &str, options: &ExecuteOptions) -> ConnectionResult<String> {
         let mut parts = Vec::new();
 
         // Add working directory
@@ -675,6 +677,13 @@ impl RusshConnection {
         if options.escalate {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
+
+            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
+                ConnectionError::InvalidConfig(format!(
+                    "Invalid escalation user '{}': {}",
+                    escalate_user, e
+                ))
+            })?;
 
             match escalate_method {
                 "sudo" => {
@@ -697,14 +706,14 @@ impl RusshConnection {
         }
 
         parts.push(command.to_string());
-        parts.concat()
+        Ok(parts.concat())
     }
 
     /// Build command string with options, including environment variables
     ///
     /// Since russh doesn't support the SSH request_env protocol, we prepend
     /// environment variable exports to the command.
-    fn build_command_with_env(command: &str, options: &ExecuteOptions) -> String {
+    fn build_command_with_env(command: &str, options: &ExecuteOptions) -> ConnectionResult<String> {
         let mut parts = Vec::new();
 
         // Prepend environment variables as exports
@@ -718,8 +727,8 @@ impl RusshConnection {
         }
 
         // Add the rest of the command using the base build_command
-        parts.push(Self::build_command(command, options));
-        parts.concat()
+        parts.push(Self::build_command(command, options)?);
+        Ok(parts.concat())
     }
 
     /// Open an SFTP session
@@ -1200,7 +1209,7 @@ impl Connection for RusshConnection {
 
         // Build the full command with options
         // Prepend environment variables to the command since russh doesn't have request_env
-        let full_command = Self::build_command_with_env(command, &options);
+        let full_command = Self::build_command_with_env(command, &options)?;
 
         trace!(command = %full_command, "Executing remote command");
 
@@ -1778,19 +1787,22 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let commands = vec![
-    ///     "hostname".to_string(),
-    ///     "uptime".to_string(),
-    ///     "date".to_string(),
-    /// ];
-    /// let results = conn.execute_batch_internal(&commands, None).await;
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # use rustible::connection::Connection;
+    /// # let conn = rustible::connection::RusshConnectionBuilder::new("localhost").connect().await?;
+    /// let commands = vec!["hostname", "uptime", "date"];
+    /// let results = conn.execute_batch(&commands, None).await;
     /// for (cmd, result) in commands.iter().zip(results.iter()) {
     ///     match result {
     ///         Ok(r) => println!("{}: {}", cmd, r.stdout),
     ///         Err(e) => eprintln!("{}: error: {}", cmd, e),
     ///     }
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     async fn execute_batch_internal(
         &self,
@@ -1821,11 +1833,23 @@ impl RusshConnection {
         let handle_arc = self.handle.clone();
 
         // Prepare all command strings upfront
-        let prepared_commands: Vec<(usize, String)> = commands
+        let prepared_commands: Vec<(usize, String)> = match commands
             .iter()
             .enumerate()
-            .map(|(idx, cmd)| (idx, Self::build_command_with_env(cmd, &options)))
-            .collect();
+            .map(|(idx, cmd)| {
+                Self::build_command_with_env(cmd, &options).map(|full| (idx, full))
+            })
+            .collect::<ConnectionResult<Vec<_>>>()
+        {
+            Ok(prepared) => prepared,
+            Err(e) => {
+                let err_msg = e.to_string();
+                return commands
+                    .iter()
+                    .map(|_| Err(ConnectionError::InvalidConfig(err_msg.clone())))
+                    .collect();
+            }
+        };
 
         // Use semaphore to limit concurrent channels
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CHANNELS));
@@ -2162,10 +2186,13 @@ impl PendingCommand {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use rustible::connection::russh::{RusshConnection, PipelinedExecutor};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::connection::{PipelinedExecutor, RusshConnectionBuilder};
 ///
-/// let conn = RusshConnection::connect(...).await?;
+/// # let conn = RusshConnectionBuilder::new("localhost").connect().await?;
 /// let mut pipeline = conn.pipeline();
 ///
 /// // Queue commands - these don't execute yet
@@ -2178,6 +2205,8 @@ impl PendingCommand {
 /// for result in results {
 ///     println!("{:?}", result);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Memory Usage
@@ -2364,8 +2393,17 @@ impl<'a> PipelinedExecutor<'a> {
             }
 
             if let Some(Some(channel)) = channels.get_mut(idx) {
-                let full_command =
-                    RusshConnection::build_command_with_env(&cmd.command, &cmd.options);
+                let full_command = match RusshConnection::build_command_with_env(
+                    &cmd.command,
+                    &cmd.options,
+                ) {
+                    Ok(full_command) => full_command,
+                    Err(e) => {
+                        channels[idx] = None;
+                        channel_errors[idx] = Some(e);
+                        continue;
+                    }
+                };
 
                 if let Err(e) = channel.exec(true, full_command).await {
                     // Mark this channel as failed
@@ -2543,12 +2581,18 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let mut pipeline = connection.pipeline();
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
+/// let mut pipeline = connection.pipeline();
     /// pipeline.queue("ls -la", None);
     /// pipeline.queue("df -h", None);
     /// pipeline.queue("free -m", None);
     /// let results = pipeline.flush().await;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn pipeline(&self) -> PipelinedExecutor<'_> {
         PipelinedExecutor::new(self)
@@ -2575,12 +2619,18 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let results = connection.execute_pipelined(&[
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
+    /// let results = connection.execute_pipelined([
     ///     "echo hello",
     ///     "echo world",
     ///     "date",
     /// ]).await;
+    /// # Ok(())
+    /// # }
     /// ```
     pub async fn execute_pipelined<I, S>(&self, commands: I) -> Vec<ConnectionResult<CommandResult>>
     where
@@ -3264,8 +3314,11 @@ impl RusshConnection {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use rustible::connection::russh::HighPerformanceConnectionFactory;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::connection::{ConnectionConfig, HighPerformanceConnectionFactory};
 ///
 /// let factory = HighPerformanceConnectionFactory::new();
 ///
@@ -3276,7 +3329,10 @@ impl RusshConnection {
 ///     ("host3.example.com", 22, "user"),
 /// ];
 ///
+/// let config = ConnectionConfig::default();
 /// let connections = factory.connect_parallel(&hosts, &config).await;
+/// # Ok(())
+/// # }
 /// ```
 pub struct HighPerformanceConnectionFactory {
     /// Maximum concurrent connection attempts
@@ -3637,21 +3693,21 @@ mod tests {
     #[test]
     fn test_build_command_basic() {
         let options = ExecuteOptions::default();
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "echo hello");
     }
 
     #[test]
     fn test_build_command_with_cwd() {
         let options = ExecuteOptions::new().with_cwd("/tmp");
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "cd /tmp && echo hello");
     }
 
     #[test]
     fn test_build_command_with_escalation() {
         let options = ExecuteOptions::new().with_escalation(Some("admin".to_string()));
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "sudo -u admin -- echo hello");
     }
 
@@ -3660,8 +3716,16 @@ mod tests {
         let options = ExecuteOptions::new()
             .with_cwd("/var/log")
             .with_escalation(None);
-        let cmd = RusshConnection::build_command("cat syslog", &options);
+        let cmd = RusshConnection::build_command("cat syslog", &options).unwrap();
         assert_eq!(cmd, "cd /var/log && sudo -u root -- cat syslog");
+    }
+
+    #[test]
+    fn test_build_command_rejects_invalid_user() {
+        let options =
+            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let result = RusshConnection::build_command("echo hello", &options);
+        assert!(result.is_err());
     }
 
     #[test]

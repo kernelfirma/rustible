@@ -425,4 +425,59 @@ mod tests {
         assert!(msg.contains("abc123"));
         assert!(msg.contains("def456"));
     }
+
+    #[test]
+    fn test_error_cache_and_offline_flags() {
+        let cache_err = GalaxyError::CacheWriteError {
+            message: "no space".to_string(),
+        };
+        assert!(cache_err.is_cache_error());
+
+        let offline_err = GalaxyError::NoCachedVersion {
+            name: "community.general".to_string(),
+        };
+        assert!(offline_err.is_offline_error());
+
+        let other_err = GalaxyError::CollectionNotFound {
+            name: "community.general".to_string(),
+        };
+        assert!(!other_err.is_cache_error());
+        assert!(!other_err.is_offline_error());
+    }
+
+    #[test]
+    fn test_error_hints_variants() {
+        let collection_hint = GalaxyError::collection_not_found("community.general").hint();
+        assert!(collection_hint.contains("rustible-galaxy search community"));
+
+        let role_hint = GalaxyError::role_not_found("geerlingguy.nginx").hint();
+        assert!(role_hint.contains("rustible-galaxy search geerlingguy.nginx"));
+
+        let invalid_name = GalaxyError::InvalidCollectionName {
+            name: "bad".to_string(),
+            reason: "missing dot".to_string(),
+        };
+        assert!(invalid_name.hint().contains("namespace.name"));
+
+        let parse_err = GalaxyError::RequirementsParseError {
+            path: PathBuf::from("/tmp/requirements.yml"),
+            message: "bad yaml".to_string(),
+        };
+        assert!(parse_err.hint().contains("requirements.yml"));
+    }
+
+    #[test]
+    fn test_http_error_with_source() {
+        let err = GalaxyError::http_error_with_source(
+            "request failed",
+            std::io::Error::new(std::io::ErrorKind::Other, "boom"),
+        );
+        assert!(matches!(
+            err,
+            GalaxyError::HttpError {
+                source: Some(_),
+                ..
+            }
+        ));
+    }
 }

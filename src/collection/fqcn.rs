@@ -83,13 +83,18 @@ impl Fqcn {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
     /// use rustible::collection::Fqcn;
     ///
     /// let fqcn = Fqcn::parse("ansible.builtin.copy")?;
     /// assert_eq!(fqcn.namespace, "ansible");
     /// assert_eq!(fqcn.collection, "builtin");
     /// assert_eq!(fqcn.resource, "copy");
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn parse(s: &str) -> Result<Self, FqcnParseError> {
         s.parse()
@@ -126,11 +131,16 @@ impl Fqcn {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
     /// use rustible::collection::Fqcn;
     ///
     /// let fqcn = Fqcn::from_short_name("copy");
     /// assert_eq!(fqcn.full(), "ansible.builtin.copy");
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn from_short_name(name: &str) -> Self {
         Self::new("ansible", "builtin", name)

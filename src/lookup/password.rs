@@ -30,7 +30,6 @@
 //! - `encrypt` (string): Encryption type for storing (not implemented yet)
 
 use super::{Lookup, LookupContext, LookupError, LookupResult};
-use rand::seq::SliceRandom;
 use rand::Rng;
 use std::fs;
 use std::path::PathBuf;

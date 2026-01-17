@@ -169,8 +169,11 @@ enum TaskHostStatus {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::SkippyCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::SkippyCallback;
 ///
 /// // Default: hide all skipped tasks
 /// let callback = SkippyCallback::new();
@@ -185,6 +188,8 @@ enum TaskHostStatus {
 ///     ..Default::default()
 /// };
 /// let callback = SkippyCallback::with_config(config);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SkippyCallback {

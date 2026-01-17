@@ -26,7 +26,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::connection::{ConnectionBuilder, ExecuteOptions};
 //!
 //! // Create a connection to a remote host
@@ -45,6 +48,8 @@
 //!     .with_cwd("/opt/app")
 //!     .with_escalation(Some("root".into()));
 //! let result = conn.execute("systemctl restart myservice", Some(opts)).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 /// Connection configuration types.

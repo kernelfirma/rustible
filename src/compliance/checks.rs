@@ -3,11 +3,9 @@
 //! This module provides reusable check implementations and utilities
 //! that can be used across different compliance frameworks.
 
-use super::{CheckStatus, ComplianceContext, ComplianceError, ComplianceResult, Finding, Severity};
-use crate::connection::ExecuteOptions;
+use super::{CheckStatus, ComplianceContext, ComplianceError, ComplianceResult, Severity};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Category for grouping related checks
@@ -1022,6 +1020,113 @@ pub async fn service_running(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::{
+        CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
+        TransferOptions,
+    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    struct MockConnection {
+        id: String,
+        commands: HashMap<String, CommandResult>,
+        paths: HashMap<String, bool>,
+    }
+
+    impl MockConnection {
+        fn new() -> Self {
+            Self {
+                id: "mock".to_string(),
+                commands: HashMap::new(),
+                paths: HashMap::new(),
+            }
+        }
+
+        fn with_command(mut self, command: impl Into<String>, result: CommandResult) -> Self {
+            self.commands.insert(command.into(), result);
+            self
+        }
+
+        fn with_path(mut self, path: impl Into<String>, exists: bool) -> Self {
+            self.paths.insert(path.into(), exists);
+            self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Connection for MockConnection {
+        fn identifier(&self) -> &str {
+            &self.id
+        }
+
+        async fn is_alive(&self) -> bool {
+            true
+        }
+
+        async fn execute(
+            &self,
+            command: &str,
+            _options: Option<ExecuteOptions>,
+        ) -> ConnectionResult<CommandResult> {
+            self.commands
+                .get(command)
+                .cloned()
+                .ok_or_else(|| ConnectionError::ExecutionFailed(format!("unexpected command: {}", command)))
+        }
+
+        async fn upload(
+            &self,
+            _local_path: &Path,
+            _remote_path: &Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn upload_content(
+            &self,
+            _content: &[u8],
+            _remote_path: &Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download(&self, _remote_path: &Path, _local_path: &Path) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download_content(&self, _remote_path: &Path) -> ConnectionResult<Vec<u8>> {
+            Ok(Vec::new())
+        }
+
+        async fn path_exists(&self, path: &Path) -> ConnectionResult<bool> {
+            Ok(*self.paths.get(&path.display().to_string()).unwrap_or(&false))
+        }
+
+        async fn is_directory(&self, _path: &Path) -> ConnectionResult<bool> {
+            Ok(false)
+        }
+
+        async fn stat(&self, _path: &Path) -> ConnectionResult<FileStat> {
+            Ok(FileStat {
+                size: 0,
+                mode: 0,
+                uid: 0,
+                gid: 0,
+                atime: 0,
+                mtime: 0,
+                is_dir: false,
+                is_file: true,
+                is_symlink: false,
+            })
+        }
+
+        async fn close(&self) -> ConnectionResult<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_check_result_builders() {
@@ -1051,5 +1156,178 @@ mod tests {
     fn test_check_category_display() {
         assert_eq!(format!("{}", CheckCategory::Ssh), "SSH");
         assert_eq!(format!("{}", CheckCategory::Filesystem), "Filesystem");
+    }
+
+    #[tokio::test]
+    async fn test_file_check_execute_pass() {
+        let path = "/etc/secure.conf";
+        let stat_cmd = "stat -c '%U %G %a' '/etc/secure.conf'";
+        let cat_cmd = "cat '/etc/secure.conf'";
+
+        let conn = MockConnection::new()
+            .with_path(path, true)
+            .with_command(
+                stat_cmd,
+                CommandResult::success("root root 0644".to_string(), String::new()),
+            )
+            .with_command(
+                cat_cmd,
+                CommandResult::success("ALLOW=1".to_string(), String::new()),
+            );
+        let context = ComplianceContext::new(Arc::new(conn));
+
+        let check = FileCheck::new("file.check", "Secure file", path)
+            .with_owner("root")
+            .with_group("root")
+            .with_mode("0644")
+            .with_content_pattern("ALLOW=\\d");
+
+        let result = check.execute(&context).await.unwrap();
+        assert!(matches!(result.status, CheckStatus::Pass));
+        assert!(result
+            .observed
+            .unwrap_or_default()
+            .contains("owner=root"));
+    }
+
+    #[tokio::test]
+    async fn test_file_check_execute_failures() {
+        let path = "/etc/secure.conf";
+        let stat_cmd = "stat -c '%U %G %a' '/etc/secure.conf'";
+        let cat_cmd = "cat '/etc/secure.conf'";
+
+        let conn = MockConnection::new()
+            .with_path(path, true)
+            .with_command(
+                stat_cmd,
+                CommandResult::success("root root 0600".to_string(), String::new()),
+            )
+            .with_command(
+                cat_cmd,
+                CommandResult::success("DENY=1".to_string(), String::new()),
+            );
+        let context = ComplianceContext::new(Arc::new(conn));
+
+        let check = FileCheck::new("file.check", "Secure file", path)
+            .with_mode("0644")
+            .with_content_pattern("ALLOW=\\d");
+
+        let result = check.execute(&context).await.unwrap();
+        assert!(matches!(result.status, CheckStatus::Fail));
+        assert!(result.details.unwrap_or_default().contains("mode is"));
+    }
+
+    #[tokio::test]
+    async fn test_sysctl_check_execute() {
+        let conn = MockConnection::new().with_command(
+            "sysctl -n net.ipv4.ip_forward",
+            CommandResult::success("0\n".to_string(), String::new()),
+        );
+        let context = ComplianceContext::new(Arc::new(conn));
+        let check = SysctlCheck::new(
+            "sysctl.check",
+            "IP forward",
+            "net.ipv4.ip_forward",
+            "1",
+        );
+
+        let result = check.execute(&context).await.unwrap();
+        assert!(matches!(result.status, CheckStatus::Fail));
+    }
+
+    #[tokio::test]
+    async fn test_service_check_execute() {
+        let conn = MockConnection::new()
+            .with_command(
+                "systemctl list-unit-files sshd 2>/dev/null | grep -q sshd",
+                CommandResult::success(String::new(), String::new()),
+            )
+            .with_command(
+                "systemctl is-enabled sshd 2>/dev/null",
+                CommandResult::success("disabled\n".to_string(), String::new()),
+            )
+            .with_command(
+                "systemctl is-active sshd 2>/dev/null",
+                CommandResult::success("active\n".to_string(), String::new()),
+            );
+        let context = ComplianceContext::new(Arc::new(conn));
+
+        let check = ServiceCheck::new("service.check", "SSH", "sshd")
+            .should_be_enabled(true)
+            .should_be_running(false);
+
+        let result = check.execute(&context).await.unwrap();
+        assert!(matches!(result.status, CheckStatus::Fail));
+        assert!(result
+            .details
+            .unwrap_or_default()
+            .contains("should be enabled"));
+    }
+
+    #[tokio::test]
+    async fn test_command_check_execute() {
+        let conn = MockConnection::new().with_command(
+            "echo ok",
+            CommandResult::success("hello".to_string(), String::new()),
+        );
+        let context = ComplianceContext::new(Arc::new(conn));
+
+        let check = CommandCheck::new("cmd.check", "Echo", "echo ok")
+            .with_expected_pattern("hello")
+            .with_expected_exit_code(0)
+            .with_not_expected_pattern("ERROR");
+
+        let result = check.execute(&context).await.unwrap();
+        assert!(matches!(result.status, CheckStatus::Pass));
+    }
+
+    #[tokio::test]
+    async fn test_helper_functions() {
+        let conn = MockConnection::new()
+            .with_path("/tmp/test.txt", true)
+            .with_command(
+                "cat '/tmp/test.txt'",
+                CommandResult::success("hello".to_string(), String::new()),
+            )
+            .with_command(
+                "grep -qE 'hello' '/tmp/test.txt' 2>/dev/null",
+                CommandResult::success(String::new(), String::new()),
+            )
+            .with_command(
+                "sysctl -n net.ipv4.ip_forward",
+                CommandResult::success("1\n".to_string(), String::new()),
+            )
+            .with_command(
+                "dpkg -l openssl 2>/dev/null | grep -q '^ii'",
+                CommandResult::failure(1, String::new(), String::new()),
+            )
+            .with_command(
+                "rpm -q openssl 2>/dev/null",
+                CommandResult::success("openssl".to_string(), String::new()),
+            )
+            .with_command(
+                "systemctl is-enabled sshd 2>/dev/null",
+                CommandResult::success("enabled\n".to_string(), String::new()),
+            )
+            .with_command(
+                "systemctl is-active sshd 2>/dev/null",
+                CommandResult::success("active\n".to_string(), String::new()),
+            );
+        let context = ComplianceContext::new(Arc::new(conn));
+
+        assert!(file_exists(&context, "/tmp/test.txt").await.unwrap());
+        assert_eq!(read_file(&context, "/tmp/test.txt").await.unwrap(), "hello");
+        assert!(file_contains(&context, "/tmp/test.txt", "hello")
+            .await
+            .unwrap());
+        assert_eq!(
+            get_sysctl(&context, "net.ipv4.ip_forward")
+                .await
+                .unwrap(),
+            "1"
+        );
+        assert!(package_installed(&context, "openssl").await.unwrap());
+        assert!(service_enabled(&context, "sshd").await.unwrap());
+        assert!(service_running(&context, "sshd").await.unwrap());
     }
 }

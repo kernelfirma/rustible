@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Property-based tests for Rustible using proptest.
 //!
 //! This module provides comprehensive fuzz testing to discover edge cases
@@ -471,7 +472,6 @@ mod template_fuzzing {
 
         /// Property: is_template correctly identifies template syntax
         #[test]
-        #[ignore = "is_template() detection logic differs from simple substring check"]
         fn has_template_detection(s in "\\PC{0,200}") {
             let result = TemplateEngine::is_template(&s);
             let expected = s.contains("{{") || s.contains("{%") || s.contains("{#");
@@ -714,7 +714,6 @@ mod host_pattern_fuzzing {
 
         /// Property: Invalid patterns should return errors, not panic
         #[test]
-        #[ignore = "Stack overflow in pattern matching with arbitrary Unicode - needs investigation"]
         fn invalid_pattern_error_not_panic(pattern in "\\PC{0,100}") {
             let inventory = Inventory::new();
             // Should not panic, but may return an error

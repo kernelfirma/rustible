@@ -14,7 +14,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::executor::resource_graph::{Resource, ResourceGraph, ResourceLifecycle};
 //!
 //! let mut graph = ResourceGraph::new();
@@ -29,6 +32,8 @@
 //!
 //! let dag = graph.build_dag()?;
 //! let plan = graph.plan()?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! See the architecture document at `docs/architecture/resource-graph-model.md`

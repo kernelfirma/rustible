@@ -36,7 +36,10 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::plugins::{SplunkCallback, SplunkConfig};
 //!
 //! // From environment variables
@@ -49,6 +52,8 @@
 //!     .index("automation")
 //!     .build();
 //! let callback = SplunkCallback::new(config)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

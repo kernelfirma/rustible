@@ -109,10 +109,28 @@ impl MountModule {
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
         let options = Self::get_exec_options(context);
+        let connection = connection.clone();
+        let command = command.to_string();
+        let fut = async move { connection.execute(&command, Some(options)).await };
 
-        let result = Handle::current()
-            .block_on(async { connection.execute(command, Some(options)).await })
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
+        let result = if let Ok(handle) = Handle::try_current() {
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join())
+                .map_err(|_| {
+                    ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+                })?
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to create tokio runtime: {}",
+                        e
+                    ))
+                })?;
+            rt.block_on(fut)
+        }
+        .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
 
         Ok((result.success, result.stdout, result.stderr))
     }

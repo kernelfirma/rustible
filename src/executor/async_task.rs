@@ -160,6 +160,13 @@ pub struct AsyncJobInfo {
 }
 
 impl AsyncJobInfo {
+    fn unix_timestamp() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
     /// Create a new pending job
     pub fn new(
         jid: String,
@@ -176,10 +183,7 @@ impl AsyncJobInfo {
             status: AsyncJobStatus::Pending,
             finished: false,
             result: None,
-            started: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            started: Self::unix_timestamp(),
             ended: None,
             async_timeout,
             msg: Some("Job pending".to_string()),
@@ -200,12 +204,7 @@ impl AsyncJobInfo {
     pub fn mark_finished(&mut self, result: TaskResult) {
         self.status = AsyncJobStatus::Finished;
         self.finished = true;
-        self.ended = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        );
+        self.ended = Some(Self::unix_timestamp());
         self.changed = result.changed;
         self.msg = result.msg.clone().or(Some("Job finished".to_string()));
 
@@ -229,12 +228,7 @@ impl AsyncJobInfo {
     pub fn mark_failed(&mut self, error_msg: String) {
         self.status = AsyncJobStatus::Failed;
         self.finished = true;
-        self.ended = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        );
+        self.ended = Some(Self::unix_timestamp());
         self.msg = Some(error_msg);
         self.result = Some(TaskResult::failed(self.msg.clone().unwrap_or_default()));
     }
@@ -243,12 +237,7 @@ impl AsyncJobInfo {
     pub fn mark_timed_out(&mut self) {
         self.status = AsyncJobStatus::TimedOut;
         self.finished = true;
-        self.ended = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        );
+        self.ended = Some(Self::unix_timestamp());
         self.msg = Some(format!(
             "Job timed out after {} seconds",
             self.async_timeout
@@ -260,12 +249,7 @@ impl AsyncJobInfo {
     pub fn mark_cancelled(&mut self) {
         self.status = AsyncJobStatus::Cancelled;
         self.finished = true;
-        self.ended = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        );
+        self.ended = Some(Self::unix_timestamp());
         self.msg = Some("Job cancelled".to_string());
         self.result = Some(TaskResult::failed("Job cancelled"));
     }

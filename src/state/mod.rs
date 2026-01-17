@@ -41,8 +41,13 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
-//! use rustible::state::{StateManager, StateConfig, PersistenceBackend};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::state::{
+//!     PersistenceBackend, StateConfig, StateManager, TaskStateRecord, TaskStatus,
+//! };
 //!
 //! // Create a state manager with SQLite persistence
 //! let config = StateConfig::builder()
@@ -60,8 +65,8 @@
 //!     task_id: "install_nginx".to_string(),
 //!     host: "web1".to_string(),
 //!     status: TaskStatus::Changed,
-//!     before_state: Some(json!({"installed": false})),
-//!     after_state: Some(json!({"installed": true})),
+//!     before_state: Some(serde_json::json!({"installed": false})),
+//!     after_state: Some(serde_json::json!({"installed": true})),
 //!     ..Default::default()
 //! })?;
 //!
@@ -71,6 +76,8 @@
 //!
 //! // Generate rollback plan
 //! let rollback = state_manager.create_rollback_plan(&session)?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod dependencies;

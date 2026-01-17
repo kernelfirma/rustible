@@ -14,51 +14,80 @@
 //! Host key pinning provides defense against MITM attacks by requiring
 //! SSH servers to present a pre-approved public key fingerprint.
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let policy = HostKeyPolicy::new()
 //!     .with_pin("server.example.com", "SHA256:abc123...")
-//!     .with_strict_checking(true);
+//!     .with_mode(HostKeyVerificationMode::PinnedOnly);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Jump Hosts (Bastion Servers)
 //!
 //! Configure multi-hop SSH connections through bastion hosts:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let jump_config = JumpHostConfig::new("bastion.example.com")
-//!     .with_port(22)
-//!     .with_user("jump_user");
+//!     .port(22)
+//!     .user("jump_user");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Network Isolation
 //!
 //! Restrict module execution to specific networks and ports:
 //!
-//! ```rust,ignore
-//! let isolation = NetworkIsolation::new()
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
+//! let isolation = NetworkIsolation::restrictive()
 //!     .allow_host("192.168.1.0/24")
-//!     .allow_port(22)
-//!     .deny_all_outbound();
+//!     .allow_port(22);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## TLS Validation
 //!
 //! Configure TLS certificate validation for HTTPS connections:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let tls_config = TlsValidationConfig::new()
-//!     .require_valid_cert(true)
+//!     .with_require_valid_cert(true)
 //!     .with_ca_bundle("/etc/ssl/certs/ca-certificates.crt")
 //!     .with_min_tls_version(TlsVersion::Tls12);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Encryption Audit Logging
 //!
 //! Log all encryption-related events for security auditing:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let audit_log = EncryptionAuditLog::new("/var/log/rustible/encryption.log")
-//!     .with_log_level(AuditLevel::Verbose);
+//!     .with_level(AuditLevel::Verbose);
+//! # Ok(())
+//! # }
 //! ```
 
 use chrono::{DateTime, Utc};

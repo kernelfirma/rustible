@@ -24,8 +24,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{MailCallback, MailConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{MailCallback, MailConfig, TlsMode};
 //!
 //! // Using environment variables
 //! let callback = MailCallback::from_env()?;
@@ -44,6 +47,8 @@
 //!     timeout_secs: 30,
 //! };
 //! let callback = MailCallback::new(config);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Email
@@ -464,8 +469,11 @@ impl ExecutionState {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{MailCallback, MailConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{MailCallback, MailConfig};
 ///
 /// // Create from environment variables
 /// let callback = MailCallback::from_env()?;
@@ -479,6 +487,8 @@ impl ExecutionState {
 ///     .on_failure_only(true)
 ///     .build()?;
 /// let callback = MailCallback::new(config);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct MailCallback {
@@ -497,7 +507,10 @@ impl MailCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = MailConfig::builder()
     ///     .smtp_host("smtp.example.com")
     ///     .smtp_port(587)
@@ -505,6 +518,8 @@ impl MailCallback {
     ///     .add_recipient("admin@example.com")
     ///     .build()?;
     /// let callback = MailCallback::new(config);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new(config: MailConfig) -> Self {
@@ -522,13 +537,18 @@ impl MailCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// // Set environment variables first:
     /// // RUSTIBLE_SMTP_HOST=smtp.example.com
     /// // RUSTIBLE_SMTP_FROM=rustible@example.com
     /// // RUSTIBLE_MAIL_RECIPIENTS=admin@example.com
     ///
     /// let callback = MailCallback::from_env()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn from_env() -> Result<Self> {
         let config = MailConfig::from_env()?;

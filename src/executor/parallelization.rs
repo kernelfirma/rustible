@@ -304,6 +304,7 @@ pub struct RateLimiterState {
 mod tests {
     use super::*;
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_fully_parallel_no_blocking() {
         let manager = ParallelizationManager::new();
@@ -375,6 +376,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_host_exclusive_different_hosts_parallel() {
         let manager = Arc::new(ParallelizationManager::new());

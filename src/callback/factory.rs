@@ -13,7 +13,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::factory::{PluginFactory, PluginRegistry};
 //! use rustible::callback::config::CallbackConfig;
 //!
@@ -28,6 +31,8 @@
 //! for info in PluginFactory::available_plugins() {
 //!     println!("{}: {}", info.name, info.description);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -200,8 +205,15 @@ impl PluginFactory {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
+    /// # use rustible::callback::config::CallbackConfig;
+    /// # use rustible::callback::factory::PluginFactory;
     /// let plugin = PluginFactory::create("minimal", &CallbackConfig::default())?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn create(name: &str, config: &CallbackConfig) -> PluginResult<Arc<dyn ExecutionCallback>> {
         let name_lower = name.to_lowercase();
@@ -596,17 +608,24 @@ impl PluginFactory {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::factory::PluginRegistry;
-/// use std::sync::Arc;
-///
-/// let mut registry = PluginRegistry::new();
-///
-/// registry.register("my_plugin", |config| {
-///     Ok(Arc::new(MyCustomCallback::new(config)))
-/// });
-///
-/// let plugin = registry.create("my_plugin", &CallbackConfig::default())?;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
+    /// use rustible::callback::config::CallbackConfig;
+    /// use rustible::callback::factory::PluginRegistry;
+    /// use std::sync::Arc;
+    ///
+    /// let mut registry = PluginRegistry::new();
+    ///
+    /// registry.register("my_plugin", |config| {
+    ///     let _ = config;
+    ///     Ok(Arc::new(MinimalCallback::new()))
+    /// });
+    ///
+    /// let plugin = registry.create("my_plugin", &CallbackConfig::default())?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct PluginRegistry {
     /// Registered plugin factories

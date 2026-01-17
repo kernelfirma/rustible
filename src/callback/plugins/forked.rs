@@ -143,11 +143,16 @@ impl Default for ForkedConfig {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::ForkedCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ForkedCallback;
 ///
 /// let callback = ForkedCallback::new(5); // 5 parallel forks
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ForkedCallback {
@@ -184,8 +189,13 @@ impl ForkedCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = ForkedCallback::new(5);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new(forks: usize) -> Self {

@@ -11,6 +11,19 @@ Safe and fast async configuration management tool written in Rust. Drop-in repla
 - **Type Safety**: Compile-time configuration validation with superior error messages
 - **Parallel Execution**: Concurrent task execution by default
 
+## Alpha Status
+
+Rustible is currently in alpha. Expect breaking changes, incomplete features, and evolving
+performance/security characteristics.
+
+- Terraform-like provisioning is experimental and limited in scope; Terraform integration
+  focuses on state inventory and workflow bridging, not full replacement.
+- Several feature flags remain stubbed or partial and require explicit
+  `experimental` opt-in (see `Cargo.toml`).
+- Security hardening and coverage gaps are tracked in `docs/ALPHA_READINESS_ISSUES.md`.
+- Maintainers can track release tasks in `docs/ALPHA_LAUNCH_CHECKLIST.md`.
+- Use in production environments only after validating against your own risk model.
+
 ## Quick Start
 
 Install and run your first playbook:
@@ -134,6 +147,7 @@ cargo build --features docker,kubernetes,aws
 | `docker` | Docker container support |
 | `kubernetes` | Kubernetes pod execution |
 | `aws` | AWS cloud modules |
+| `experimental` | Required opt-in for stubbed features (azure, gcp, database, winrm, reqwest) |
 
 ## Performance
 
@@ -162,6 +176,9 @@ cargo clippy --all-features  # Lint code
 ```
 
 All contributions should include tests and pass CI checks.
+
+See `CONTRIBUTING.md` for guidelines and `CODE_OF_CONDUCT.md` for community expectations.
+For security issues, see `SECURITY.md`.
 
 ## License
 

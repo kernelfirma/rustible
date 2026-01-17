@@ -69,19 +69,29 @@ impl UserModule {
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
         let options = Self::get_exec_options(context);
+        let connection = connection.clone();
+        let command = command.to_string();
+        let fut = async move { connection.execute(&command, Some(options)).await };
 
         // Use tokio runtime to execute async command
         // Use thread::scope to avoid nested runtime issues when called from async context
-        let handle = Handle::try_current()
-            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?;
-
-        let connection = connection.clone();
-        let command = command.to_string();
-        let result = std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(async { connection.execute(&command, Some(options)).await }))
-                .join()
-                .unwrap()
-        })
+        let result = if let Ok(handle) = Handle::try_current() {
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join())
+                .map_err(|_| {
+                    ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+                })?
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to create tokio runtime: {}",
+                        e
+                    ))
+                })?;
+            rt.block_on(fut)
+        }
         .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
 
         Ok((result.success, result.stdout, result.stderr))

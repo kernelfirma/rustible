@@ -10,7 +10,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::connection::jump_host::{JumpHostConfig, JumpHostChain};
 //!
 //! // Single jump host
@@ -22,6 +25,8 @@
 //! let chain = JumpHostChain::new()
 //!     .add_jump(JumpHostConfig::new("jump1.example.com"))
 //!     .add_jump(JumpHostConfig::new("jump2.example.com"));
+//! # Ok(())
+//! # }
 //! ```
 
 use serde::{Deserialize, Serialize};
