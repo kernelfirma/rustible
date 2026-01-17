@@ -333,7 +333,7 @@ impl BecomeValidator {
 
     /// Escape a string for safe shell usage
     pub fn shell_escape(&self, s: &str) -> String {
-        shell_escape(s)
+        shell_escape(s).into_owned()
     }
 
     /// Validate become flags

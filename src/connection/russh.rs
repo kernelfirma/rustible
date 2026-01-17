@@ -1359,7 +1359,9 @@ impl Connection for RusshConnection {
         // Use open() with explicit flags and attributes to set mode atomically if provided
         let remote_path_str = remote_path.to_string_lossy().to_string();
 
-        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let flags = russh_sftp::protocol::OpenFlags::WRITE
+            | russh_sftp::protocol::OpenFlags::CREATE
+            | russh_sftp::protocol::OpenFlags::TRUNCATE;
         let mut attrs = russh_sftp::protocol::FileAttributes::default();
 
         if let Some(mode) = options.mode {
@@ -1444,7 +1446,9 @@ impl Connection for RusshConnection {
         // Create/open remote file for writing
         let remote_path_str = remote_path.to_string_lossy().to_string();
 
-        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let flags = russh_sftp::protocol::OpenFlags::WRITE
+            | russh_sftp::protocol::OpenFlags::CREATE
+            | russh_sftp::protocol::OpenFlags::TRUNCATE;
         let mut attrs = russh_sftp::protocol::FileAttributes::default();
 
         if let Some(mode) = options.mode {
