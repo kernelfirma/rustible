@@ -246,34 +246,56 @@ pub async fn list_playbooks(
 
 /// Find a playbook file in the search paths.
 fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
-    // If it's an absolute path, check if it exists
     let playbook_path = Path::new(playbook);
-    if playbook_path.is_absolute() && playbook_path.exists() {
-        return Ok(playbook.to_string());
-    }
+
+    // Helper to check if a path is safe (within base path)
+    let is_safe_path = |full_path: &Path, base_path: &Path| -> bool {
+        if let (Ok(canonical_full), Ok(canonical_base)) =
+            (full_path.canonicalize(), base_path.canonicalize())
+        {
+            canonical_full.starts_with(canonical_base)
+        } else {
+            false
+        }
+    };
 
     // Search in configured paths
-    for base_path in search_paths {
-        let full_path = Path::new(base_path).join(playbook);
-        if full_path.exists() {
+    for base_path_str in search_paths {
+        let base_path = Path::new(base_path_str);
+
+        // Construct potential full path
+        let full_path = base_path.join(playbook_path);
+
+        // Check exact match
+        if full_path.exists() && is_safe_path(&full_path, base_path) {
             return Ok(full_path.to_string_lossy().to_string());
         }
 
         // Try with .yml extension
         let with_yml = full_path.with_extension("yml");
-        if with_yml.exists() {
+        if with_yml.exists() && is_safe_path(&with_yml, base_path) {
             return Ok(with_yml.to_string_lossy().to_string());
         }
 
         // Try with .yaml extension
         let with_yaml = full_path.with_extension("yaml");
-        if with_yaml.exists() {
+        if with_yaml.exists() && is_safe_path(&with_yaml, base_path) {
             return Ok(with_yaml.to_string_lossy().to_string());
         }
     }
 
+    // If it's an absolute path, check if it's within any allowed search path
+    if playbook_path.is_absolute() && playbook_path.exists() {
+        for base_path_str in search_paths {
+            let base_path = Path::new(base_path_str);
+            if is_safe_path(playbook_path, base_path) {
+                return Ok(playbook_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
     Err(ApiError::NotFound(format!(
-        "Playbook not found: {}",
+        "Playbook not found or access denied: {}",
         playbook
     )))
 }
@@ -329,7 +351,11 @@ async fn run_playbook_job(
         format!(
             "Playbook: {} plays, {} tasks",
             playbook.plays.len(),
-            playbook.plays.iter().map(|p| p.pre_tasks.len() + p.tasks.len() + p.post_tasks.len()).sum::<usize>()
+            playbook
+                .plays
+                .iter()
+                .map(|p| p.pre_tasks.len() + p.tasks.len() + p.post_tasks.len())
+                .sum::<usize>()
         ),
         "stdout",
     );
@@ -680,5 +706,57 @@ fn host_to_response(host: &Host) -> HostResponse {
         connection: connection_type.to_string(),
         port: host.connection.ssh.port,
         user: host.connection.ssh.user.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_find_playbook_traversal() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let safe_dir = root.join("playbooks");
+        let secret_dir = root.join("secret");
+
+        fs::create_dir(&safe_dir).unwrap();
+        fs::create_dir(&secret_dir).unwrap();
+
+        let safe_playbook = safe_dir.join("deploy.yml");
+        let secret_playbook = secret_dir.join("pwn.yml");
+
+        fs::write(&safe_playbook, "- hosts: all").unwrap();
+        fs::write(&secret_playbook, "- hosts: all").unwrap();
+
+        let search_paths = vec![safe_dir.to_str().unwrap().to_string()];
+
+        // 1. Test Absolute Path Bypass (Fixed)
+        // Should be denied because it is not inside any search path
+        let result = find_playbook(&search_paths, secret_playbook.to_str().unwrap());
+        assert!(
+            result.is_err(),
+            "Security: Absolute path outside search path should be denied"
+        );
+
+        // 2. Test Path Traversal (Fixed)
+        // "../secret/pwn.yml"
+        let traversal = "../secret/pwn.yml";
+        let result = find_playbook(&search_paths, traversal);
+        assert!(result.is_err(), "Security: Path traversal should be denied");
+
+        // 3. Test Valid Path
+        let valid = "deploy.yml";
+        let result = find_playbook(&search_paths, valid);
+        assert!(result.is_ok(), "Valid path should be allowed");
+
+        // 4. Test Valid Absolute Path (if within search path)
+        let result = find_playbook(&search_paths, safe_playbook.to_str().unwrap());
+        assert!(
+            result.is_ok(),
+            "Valid absolute path inside search path should be allowed"
+        );
     }
 }

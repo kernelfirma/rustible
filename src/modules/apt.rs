@@ -396,7 +396,8 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> =
+            packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let only_upgrade_flag = if apt_params.only_upgrade {
@@ -433,7 +434,8 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> =
+            packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let purge_flag = if apt_params.purge { "--purge" } else { "" };
@@ -466,7 +468,8 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> =
+            packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(
@@ -496,7 +499,8 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> =
+            packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(

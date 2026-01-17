@@ -474,9 +474,7 @@ mod tests {
     #[test]
     fn test_duplicate_resource_error() {
         let mut graph = ResourceGraph::new();
-        graph
-            .add_resource(Resource::new("test", "type1"))
-            .unwrap();
+        graph.add_resource(Resource::new("test", "type1")).unwrap();
 
         let result = graph.add_resource(Resource::new("test", "type2"));
         assert!(matches!(
@@ -566,8 +564,10 @@ mod tests {
 
     #[test]
     fn test_resource_output() {
-        let output = ResourceOutput::new("web_server")
-            .with_value("public_ip", serde_yaml::Value::String("1.2.3.4".to_string()));
+        let output = ResourceOutput::new("web_server").with_value(
+            "public_ip",
+            serde_yaml::Value::String("1.2.3.4".to_string()),
+        );
 
         assert_eq!(output.resource_id, "web_server");
         assert!(output.values.contains_key("public_ip"));

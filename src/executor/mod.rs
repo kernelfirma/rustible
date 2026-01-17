@@ -119,12 +119,12 @@ pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
 pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
 pub use playbook::{Play, Playbook};
 pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
-pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
-pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
 pub use resource_graph::{
     AttributeChange, GraphNode, Resource, ResourceAction, ResourceGraph, ResourceGraphError,
     ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput, ResourcePlan,
 };
+pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
+pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
 
 pub use core::{EventCallback, ExecutionEvent, Executor, ExecutorConfig};
 pub use dependency_graph::DependencyGraph;

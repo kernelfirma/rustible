@@ -130,13 +130,17 @@ impl RunArgs {
         let task_start_clone = current_task_start.clone();
 
         let callback = std::sync::Arc::new(move |event: rustible::executor::ExecutionEvent| {
-            use rustible::executor::ExecutionEvent;
-            use rustible::executor::task::TaskStatus as ExecutorTaskStatus;
             use crate::cli::output::TaskStatus as CliTaskStatus;
+            use rustible::executor::task::TaskStatus as ExecutorTaskStatus;
+            use rustible::executor::ExecutionEvent;
 
             match event {
                 ExecutionEvent::PlayStart(name) => {
-                    let play_name = if name.is_empty() { "Unnamed play" } else { &name };
+                    let play_name = if name.is_empty() {
+                        "Unnamed play"
+                    } else {
+                        &name
+                    };
                     output.play_header(play_name);
                 }
                 ExecutionEvent::TaskStart(name) => {
@@ -257,8 +261,8 @@ impl RunArgs {
         };
 
         // Create executor with runtime context and event callback
-        let executor = Executor::with_runtime(executor_config, runtime)
-            .with_event_callback(callback);
+        let executor =
+            Executor::with_runtime(executor_config, runtime).with_event_callback(callback);
 
         // Run playbook using executor
         ctx.output

@@ -324,8 +324,8 @@ impl Connection for LocalConnection {
         // Use OpenOptions to set mode atomically at creation
         #[cfg(unix)]
         {
-            use std::os::unix::fs::OpenOptionsExt;
             use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
 
             let mut open_options = fs::OpenOptions::new();
             open_options.write(true).create(true).truncate(true);

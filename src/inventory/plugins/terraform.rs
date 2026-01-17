@@ -2315,10 +2315,7 @@ mod tests {
     fn test_terraform_plugin_config() {
         let config = TerraformPluginConfig::default();
         assert_eq!(config.backend, TerraformBackendType::Local);
-        assert_eq!(
-            config.state_path,
-            Some(PathBuf::from("terraform.tfstate"))
-        );
+        assert_eq!(config.state_path, Some(PathBuf::from("terraform.tfstate")));
         assert!(config.export_outputs);
         assert!(config.resource_mappings.is_empty());
 

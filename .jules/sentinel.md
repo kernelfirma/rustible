@@ -22,3 +22,8 @@
 **Vulnerability:** The `user` module was setting passwords using `echo 'user:pass' | chpasswd`. This exposes the plaintext password in the system's process list (e.g., via `ps aux`) to all users on the machine during the execution window.
 **Learning:** Passing secrets as command line arguments or via pipe from `echo` is insecure because the arguments are visible to other processes.
 **Prevention:** Pass secrets via standard input directly if supported, or write them to a temporary file with restricted permissions (0600) and redirect input from that file. Always clean up temporary files immediately.
+
+## 2024-05-26 - Path Traversal in API Playbook Execution
+**Vulnerability:** The `find_playbook` function in the API allowed execution of playbooks outside the configured `playbook_paths` if an absolute path was provided or via directory traversal (e.g., `../secret.yml`).
+**Learning:** Checking for file existence (`exists()`) is not a security check. Canonicalization (`canonicalize()`) is essential when validating paths against a whitelist/base directory to resolve symlinks and traversal sequences (`..`).
+**Prevention:** Always canonicalize untrusted paths and the base path, then check if the canonical untrusted path starts with the canonical base path. Reject absolute paths that don't satisfy this condition.

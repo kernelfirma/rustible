@@ -573,8 +573,14 @@ mod tests {
 
     #[test]
     fn test_awx_job_status_conversion() {
-        assert_eq!(AwxJobStatus::from(JobStatus::Pending), AwxJobStatus::Pending);
-        assert_eq!(AwxJobStatus::from(JobStatus::Running), AwxJobStatus::Running);
+        assert_eq!(
+            AwxJobStatus::from(JobStatus::Pending),
+            AwxJobStatus::Pending
+        );
+        assert_eq!(
+            AwxJobStatus::from(JobStatus::Running),
+            AwxJobStatus::Running
+        );
         assert_eq!(
             AwxJobStatus::from(JobStatus::Success),
             AwxJobStatus::Successful

@@ -469,18 +469,20 @@ impl Connection for SshConnection {
             let mode = options.mode.unwrap_or(0o644);
             // Use open_mode to set permissions atomically at creation time
             // This prevents the race condition where file is created with 644 and then chmodded
-            let mut remote_file = sftp.open_mode(
-                &remote_path,
-                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
-                mode as i32,
-                ssh2::OpenType::File,
-            ).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create remote file {}: {}",
-                    remote_path.display(),
-                    e
-                ))
-            })?;
+            let mut remote_file = sftp
+                .open_mode(
+                    &remote_path,
+                    ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                    mode as i32,
+                    ssh2::OpenType::File,
+                )
+                .map_err(|e| {
+                    ConnectionError::TransferFailed(format!(
+                        "Failed to create remote file {}: {}",
+                        remote_path.display(),
+                        e
+                    ))
+                })?;
 
             remote_file.write_all(&content).map_err(|e| {
                 ConnectionError::TransferFailed(format!("Failed to write to remote file: {}", e))
@@ -544,18 +546,20 @@ impl Connection for SshConnection {
             // Write to remote file
             let mode = options.mode.unwrap_or(0o644);
             // Use open_mode to set permissions atomically at creation time
-            let mut remote_file = sftp.open_mode(
-                &remote_path,
-                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
-                mode as i32,
-                ssh2::OpenType::File,
-            ).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create remote file {}: {}",
-                    remote_path.display(),
-                    e
-                ))
-            })?;
+            let mut remote_file = sftp
+                .open_mode(
+                    &remote_path,
+                    ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                    mode as i32,
+                    ssh2::OpenType::File,
+                )
+                .map_err(|e| {
+                    ConnectionError::TransferFailed(format!(
+                        "Failed to create remote file {}: {}",
+                        remote_path.display(),
+                        e
+                    ))
+                })?;
 
             remote_file.write_all(&content).map_err(|e| {
                 ConnectionError::TransferFailed(format!("Failed to write to remote file: {}", e))
