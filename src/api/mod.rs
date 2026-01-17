@@ -44,6 +44,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
+use uuid::Uuid;
 
 pub use auth::{AuthConfig, Claims, JwtAuth};
 pub use error::{ApiError, ApiResult};
@@ -73,7 +74,7 @@ impl Default for ApiConfig {
     fn default() -> Self {
         Self {
             bind_address: "127.0.0.1:8080".parse().unwrap(),
-            jwt_secret: "rustible-secret-key-change-in-production".to_string(),
+            jwt_secret: Uuid::new_v4().to_string(),
             token_expiration_secs: 3600, // 1 hour
             enable_cors: true,
             max_body_size: 10 * 1024 * 1024, // 10MB
@@ -203,5 +204,19 @@ mod tests {
             config.inventory_path,
             Some("/etc/rustible/inventory".to_string())
         );
+    }
+
+    #[test]
+    fn test_default_config_has_random_secret() {
+        let config1 = ApiConfig::default();
+        let config2 = ApiConfig::default();
+
+        // Should not be the old hardcoded value
+        assert_ne!(
+            config1.jwt_secret,
+            "rustible-secret-key-change-in-production"
+        );
+        // Should be random (different each time)
+        assert_ne!(config1.jwt_secret, config2.jwt_secret);
     }
 }

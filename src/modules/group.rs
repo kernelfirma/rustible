@@ -146,7 +146,7 @@ impl GroupModule {
             cmd_parts.push("-o".to_string());
         }
 
-        cmd_parts.push(shell_escape(name));
+        cmd_parts.push(shell_escape(name).into_owned());
 
         let command = cmd_parts.join(" ");
         let (success, _, stderr) = Self::execute_command(connection, &command, context)?;
@@ -189,7 +189,7 @@ impl GroupModule {
             return Ok(false);
         }
 
-        cmd_parts.push(shell_escape(name));
+        cmd_parts.push(shell_escape(name).into_owned());
 
         let command = cmd_parts.join(" ");
         let (success, _, stderr) = Self::execute_command(connection, &command, context)?;

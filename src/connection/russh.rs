@@ -1356,8 +1356,17 @@ impl Connection for RusshConnection {
         })?;
 
         // Create/open remote file for writing
+        // Use open() with explicit flags and attributes to set mode atomically if provided
         let remote_path_str = remote_path.to_string_lossy().to_string();
-        let mut remote_file = sftp.create(&remote_path_str).await.map_err(|e| {
+
+        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let mut attrs = russh_sftp::protocol::FileAttributes::default();
+
+        if let Some(mode) = options.mode {
+            attrs.permissions = Some(mode);
+        }
+
+        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
             ConnectionError::TransferFailed(format!(
                 "Failed to create remote file {}: {}",
                 remote_path.display(),
@@ -1372,20 +1381,6 @@ impl Connection for RusshConnection {
 
         // Close the file
         drop(remote_file);
-
-        // Set permissions using setstat
-        if let Some(mode) = options.mode {
-            let mut attrs = russh_sftp::protocol::FileAttributes::default();
-            attrs.permissions = Some(mode);
-            sftp.set_metadata(&remote_path_str, attrs)
-                .await
-                .map_err(|e| {
-                    ConnectionError::TransferFailed(format!(
-                        "Failed to set file permissions: {}",
-                        e
-                    ))
-                })?;
-        }
 
         // Drop the SFTP session before using execute()
         drop(sftp);
@@ -1448,7 +1443,15 @@ impl Connection for RusshConnection {
 
         // Create/open remote file for writing
         let remote_path_str = remote_path.to_string_lossy().to_string();
-        let mut remote_file = sftp.create(&remote_path_str).await.map_err(|e| {
+
+        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let mut attrs = russh_sftp::protocol::FileAttributes::default();
+
+        if let Some(mode) = options.mode {
+            attrs.permissions = Some(mode);
+        }
+
+        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
             ConnectionError::TransferFailed(format!(
                 "Failed to create remote file {}: {}",
                 remote_path.display(),
@@ -1463,20 +1466,6 @@ impl Connection for RusshConnection {
 
         // Close the file
         drop(remote_file);
-
-        // Set permissions using setstat
-        if let Some(mode) = options.mode {
-            let mut attrs = russh_sftp::protocol::FileAttributes::default();
-            attrs.permissions = Some(mode);
-            sftp.set_metadata(&remote_path_str, attrs)
-                .await
-                .map_err(|e| {
-                    ConnectionError::TransferFailed(format!(
-                        "Failed to set file permissions: {}",
-                        e
-                    ))
-                })?;
-        }
 
         // Drop the SFTP session before using execute()
         drop(sftp);

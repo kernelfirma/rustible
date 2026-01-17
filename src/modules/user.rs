@@ -188,7 +188,7 @@ impl UserModule {
 
         if let Some(group) = group {
             cmd_parts.push("-g".to_string());
-            cmd_parts.push(shell_escape(group));
+            cmd_parts.push(shell_escape(group).into_owned());
         }
 
         if let Some(groups) = groups {
@@ -200,12 +200,12 @@ impl UserModule {
 
         if let Some(home) = home {
             cmd_parts.push("-d".to_string());
-            cmd_parts.push(shell_escape(home));
+            cmd_parts.push(shell_escape(home).into_owned());
         }
 
         if let Some(shell) = shell {
             cmd_parts.push("-s".to_string());
-            cmd_parts.push(shell_escape(shell));
+            cmd_parts.push(shell_escape(shell).into_owned());
         }
 
         if let Some(comment) = comment {
@@ -225,10 +225,10 @@ impl UserModule {
 
         if let Some(expires) = expires {
             cmd_parts.push("-e".to_string());
-            cmd_parts.push(shell_escape(expires));
+            cmd_parts.push(shell_escape(expires).into_owned());
         }
 
-        cmd_parts.push(shell_escape(name));
+        cmd_parts.push(shell_escape(name).into_owned());
 
         let command = cmd_parts.join(" ");
         let (success, _, stderr) = Self::execute_command(connection, &command, context)?;
@@ -273,7 +273,7 @@ impl UserModule {
 
         if let Some(group) = group {
             cmd_parts.push("-g".to_string());
-            cmd_parts.push(shell_escape(group));
+            cmd_parts.push(shell_escape(group).into_owned());
             needs_change = true;
         }
 
@@ -295,7 +295,7 @@ impl UserModule {
         if let Some(home) = home {
             if current.home != home {
                 cmd_parts.push("-d".to_string());
-                cmd_parts.push(shell_escape(home));
+                cmd_parts.push(shell_escape(home).into_owned());
                 if move_home {
                     cmd_parts.push("-m".to_string());
                 }
@@ -306,7 +306,7 @@ impl UserModule {
         if let Some(shell) = shell {
             if current.shell != shell {
                 cmd_parts.push("-s".to_string());
-                cmd_parts.push(shell_escape(shell));
+                cmd_parts.push(shell_escape(shell).into_owned());
                 needs_change = true;
             }
         }
@@ -321,7 +321,7 @@ impl UserModule {
 
         if let Some(expires) = expires {
             cmd_parts.push("-e".to_string());
-            cmd_parts.push(shell_escape(expires));
+            cmd_parts.push(shell_escape(expires).into_owned());
             needs_change = true;
         }
 
@@ -329,7 +329,7 @@ impl UserModule {
             return Ok(false);
         }
 
-        cmd_parts.push(shell_escape(name));
+        cmd_parts.push(shell_escape(name).into_owned());
 
         let command = cmd_parts.join(" ");
         let (success, _, stderr) = Self::execute_command(connection, &command, context)?;
@@ -361,7 +361,7 @@ impl UserModule {
             cmd_parts.push("-f".to_string());
         }
 
-        cmd_parts.push(shell_escape(name));
+        cmd_parts.push(shell_escape(name).into_owned());
 
         let command = cmd_parts.join(" ");
         let (success, _, stderr) = Self::execute_command(connection, &command, context)?;

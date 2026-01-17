@@ -650,7 +650,7 @@ impl UfwModule {
                 parts.push(format!("to any port {}", shell_escape(port)));
             } else {
                 // Standalone port
-                parts.push(shell_escape(port));
+                parts.push(shell_escape(port).into_owned());
             }
         }
 

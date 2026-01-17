@@ -476,7 +476,14 @@ impl Connection for SshConnection {
 
             // Write to remote file
             let mode = options.mode.unwrap_or(0o644);
-            let mut remote_file = sftp.create(&remote_path).map_err(|e| {
+            // Use open_mode to set permissions atomically at creation time
+            // This prevents the race condition where file is created with 644 and then chmodded
+            let mut remote_file = sftp.open_mode(
+                &remote_path,
+                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                mode as i32,
+                ssh2::OpenType::File,
+            ).map_err(|e| {
                 ConnectionError::TransferFailed(format!(
                     "Failed to create remote file {}: {}",
                     remote_path.display(),
@@ -488,18 +495,9 @@ impl Connection for SshConnection {
                 ConnectionError::TransferFailed(format!("Failed to write to remote file: {}", e))
             })?;
 
-            // Set permissions using chmod via SFTP
-            // Note: sftp.stat and chmod aren't directly available, so we'll use exec
+            // Close file and sftp session
             drop(remote_file);
             drop(sftp);
-
-            // Set mode via command
-            let chmod_cmd = format!("chmod {:o} {}", mode, remote_path.display());
-            let mut channel = session.channel_session().map_err(|e| {
-                ConnectionError::TransferFailed(format!("Failed to open channel: {}", e))
-            })?;
-            channel.exec(&chmod_cmd).ok();
-            channel.wait_close().ok();
 
             // Set owner/group if specified
             if options.owner.is_some() || options.group.is_some() {
@@ -554,7 +552,13 @@ impl Connection for SshConnection {
 
             // Write to remote file
             let mode = options.mode.unwrap_or(0o644);
-            let mut remote_file = sftp.create(&remote_path).map_err(|e| {
+            // Use open_mode to set permissions atomically at creation time
+            let mut remote_file = sftp.open_mode(
+                &remote_path,
+                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                mode as i32,
+                ssh2::OpenType::File,
+            ).map_err(|e| {
                 ConnectionError::TransferFailed(format!(
                     "Failed to create remote file {}: {}",
                     remote_path.display(),
@@ -568,14 +572,6 @@ impl Connection for SshConnection {
 
             drop(remote_file);
             drop(sftp);
-
-            // Set mode via command
-            let chmod_cmd = format!("chmod {:o} {}", mode, remote_path.display());
-            let mut channel = session.channel_session().map_err(|e| {
-                ConnectionError::TransferFailed(format!("Failed to open channel: {}", e))
-            })?;
-            channel.exec(&chmod_cmd).ok();
-            channel.wait_close().ok();
 
             // Set owner/group if specified
             if options.owner.is_some() || options.group.is_some() {

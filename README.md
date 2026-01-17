@@ -1,14 +1,14 @@
 # Rustible
 
-Safe and fast async configuration management tool written in Rust. Drop-in replacement for Ansible delivering performance improvements.
+Safe and fast async configuration management tool.
 
-**Acknowledgment**: Rustible is inspired by Ansible's excellent design and playbook syntax. This project builds upon those proven concepts while leveraging Rust's performance and safety advantages.
+**Acknowledgment**: Rustible is inspired by Ansible and Terraform. This project builds upon those proven concepts while improving safety, reliability and speed.
 
 ## Why Rustible?
 
-- **High Performance**: Compiled Rust binary with connection pooling (Much faster than Ansible)
-- **Full Compatibility**: Identical YAML playbook syntax to Ansible
 - **Type Safety**: Compile-time configuration validation with superior error messages
+- **Full Compatibility**: Identical YAML playbook syntax to Ansible
+- **High Performance**: Compiled binary with connection pooling (Much faster than Ansible)
 - **Parallel Execution**: Concurrent task execution by default
 
 ## Alpha Status
@@ -97,7 +97,7 @@ rustible init <PATH>          # Initialize new project
 
 ### Connection Methods
 
-- **SSH** (default): Pure Rust implementation via russh
+- **SSH** (default): Via russh
 - **Local**: Direct local execution
 - **Docker**: Container-based execution
 - **Kubernetes**: Pod execution (feature flag)
@@ -167,15 +167,7 @@ Benchmarks demonstrate significant performance improvements:
 
 ## Contributing
 
-Development workflow:
-
-```bash
-cargo build              # Build project
-cargo test               # Run tests
-cargo clippy --all-features  # Lint code
-```
-
-All contributions should include tests and pass CI checks.
+All contributions are welcome.
 
 See `CONTRIBUTING.md` for guidelines and `CODE_OF_CONDUCT.md` for community expectations.
 For security issues, see `SECURITY.md`.

@@ -224,19 +224,71 @@ impl Connection for LocalConnection {
             })?;
         }
 
-        // Copy the file
-        fs::copy(local_path, remote_path).map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to copy {} to {}: {}",
-                local_path.display(),
-                remote_path.display(),
-                e
-            ))
-        })?;
-
-        // Set permissions if specified
+        // Use OpenOptions to set mode atomically at creation if possible
+        // This avoids race conditions where the file is created with default permissions
+        // and then chmodded, leaving a window of exposure.
+        #[cfg(unix)]
         if let Some(mode) = options.mode {
-            self.set_mode(remote_path, mode)?;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut open_options = fs::OpenOptions::new();
+            open_options.write(true).create(true).truncate(true);
+            open_options.mode(mode);
+
+            // Open destination file with correct mode
+            let mut dest_file = open_options.open(remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open/create destination {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            // Open source file
+            let mut src_file = fs::File::open(local_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open source {}: {}",
+                    local_path.display(),
+                    e
+                ))
+            })?;
+
+            // Copy content
+            std::io::copy(&mut src_file, &mut dest_file).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy content to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        } else {
+            // Fallback for non-Unix or when mode is not specified (preserves source perms via fs::copy)
+            fs::copy(local_path, remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy {} to {}: {}",
+                    local_path.display(),
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        }
+
+        #[cfg(not(unix))]
+        if let Some(_) = options.mode {
+            // Fallback for non-Unix where OpenOptionsExt is not available
+            // We still copy first then set mode, accepting the race condition
+            // as Windows permissions are different anyway.
+            fs::copy(local_path, remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy {} to {}: {}",
+                    local_path.display(),
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            if let Some(mode) = options.mode {
+                self.set_mode(remote_path, mode)?;
+            }
         }
 
         // Set owner/group if specified
@@ -282,18 +334,52 @@ impl Connection for LocalConnection {
             })?;
         }
 
-        // Write the content
-        fs::write(remote_path, content).map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to write to {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        // Use OpenOptions to set mode atomically at creation
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            use std::io::Write;
 
-        // Set permissions if specified
-        if let Some(mode) = options.mode {
-            self.set_mode(remote_path, mode)?;
+            let mut open_options = fs::OpenOptions::new();
+            open_options.write(true).create(true).truncate(true);
+
+            if let Some(mode) = options.mode {
+                open_options.mode(mode);
+            }
+
+            // Open/create file and write content
+            let mut file = open_options.open(remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open/create {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            file.write_all(content).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to write to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Write the content
+            fs::write(remote_path, content).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to write to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            // Set permissions if specified
+            if let Some(mode) = options.mode {
+                self.set_mode(remote_path, mode)?;
+            }
         }
 
         // Set owner/group if specified

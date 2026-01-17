@@ -124,31 +124,47 @@ impl RunArgs {
             }
         };
 
-        // Best-effort progress output: show plays and tasks (no-op in JSON mode).
-        // NOTE: The executor currently doesn't stream per-task events to the CLI, so this
-        // provides minimal Ansible-like headers without needing deep wiring.
-        for play in &playbook.plays {
-            let play_name = if play.name.is_empty() {
-                "Unnamed play"
-            } else {
-                play.name.as_str()
-            };
-            ctx.output.play_header(play_name);
+        // Setup event callback for real-time output
+        let output = ctx.output.clone();
+        let current_task_start = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let task_start_clone = current_task_start.clone();
 
-            for task in play
-                .pre_tasks
-                .iter()
-                .chain(play.tasks.iter())
-                .chain(play.post_tasks.iter())
-            {
-                let task_name = if task.name.is_empty() {
-                    task.module.as_str()
-                } else {
-                    task.name.as_str()
-                };
-                ctx.output.task_header(task_name);
+        let callback = std::sync::Arc::new(move |event: rustible::executor::ExecutionEvent| {
+            use rustible::executor::ExecutionEvent;
+            use rustible::executor::task::TaskStatus as ExecutorTaskStatus;
+            use crate::cli::output::TaskStatus as CliTaskStatus;
+
+            match event {
+                ExecutionEvent::PlayStart(name) => {
+                    let play_name = if name.is_empty() { "Unnamed play" } else { &name };
+                    output.play_header(play_name);
+                }
+                ExecutionEvent::TaskStart(name) => {
+                    output.task_header(&name);
+                    if let Ok(mut start) = task_start_clone.lock() {
+                        *start = Some(std::time::Instant::now());
+                    }
+                }
+                ExecutionEvent::HostTaskComplete(host, _, result) => {
+                    let status = match result.status {
+                        ExecutorTaskStatus::Ok => CliTaskStatus::Ok,
+                        ExecutorTaskStatus::Changed => CliTaskStatus::Changed,
+                        ExecutorTaskStatus::Failed => CliTaskStatus::Failed,
+                        ExecutorTaskStatus::Skipped => CliTaskStatus::Skipped,
+                        ExecutorTaskStatus::Unreachable => CliTaskStatus::Unreachable,
+                    };
+
+                    let duration = if let Ok(start) = task_start_clone.lock() {
+                        start.map(|s| s.elapsed())
+                    } else {
+                        None
+                    };
+
+                    output.task_result(&host, status, result.msg.as_deref(), duration);
+                }
+                _ => {}
             }
-        }
+        });
 
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
@@ -240,8 +256,9 @@ impl RunArgs {
             become_password: None, // TODO: Implement --ask-become-pass
         };
 
-        // Create executor with runtime context
-        let executor = Executor::with_runtime(executor_config, runtime);
+        // Create executor with runtime context and event callback
+        let executor = Executor::with_runtime(executor_config, runtime)
+            .with_event_callback(callback);
 
         // Run playbook using executor
         ctx.output
