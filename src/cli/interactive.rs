@@ -68,15 +68,15 @@ impl InteractiveSession {
     /// Prompt for main menu action
     pub fn main_menu(&self) -> Result<MainMenuAction> {
         let items = vec![
-            "Run a playbook",
-            "Check playbook (dry-run)",
-            "List hosts",
-            "List tasks",
-            "Vault operations",
-            "Initialize project",
-            "Validate playbook",
-            "Settings",
-            "Exit",
+            "🚀 Run a playbook",
+            "🔍 Check playbook (dry-run)",
+            "📋 List hosts",
+            "📝 List tasks",
+            "🔐 Vault operations",
+            "✨ Initialize project",
+            "✅ Validate playbook",
+            "⚙️ Settings",
+            "🚪 Exit",
         ];
 
         let selection = Select::with_theme(&self.theme)
@@ -134,8 +134,8 @@ impl InteractiveSession {
             .iter()
             .map(|p| p.display().to_string())
             .collect();
-        items.push("Enter custom path...".to_string());
-        items.push("Use localhost (no inventory)".to_string());
+        items.push("✏️ Enter custom path...".to_string());
+        items.push("🏠 Use localhost (no inventory)".to_string());
 
         let selection = Select::with_theme(&self.theme)
             .with_prompt("Select inventory")
@@ -229,11 +229,11 @@ impl InteractiveSession {
             .interact_on(&self.term)?;
 
         let verbosity_items = vec![
-            "Normal (no extra verbosity)",
-            "Verbose (-v)",
-            "More verbose (-vv)",
-            "Debug (-vvv)",
-            "Connection debug (-vvvv)",
+            "🔉 Normal (no extra verbosity)",
+            "🔊 Verbose (-v)",
+            "📢 More verbose (-vv)",
+            "🐛 Debug (-vvv)",
+            "🔌 Connection debug (-vvvv)",
         ];
 
         let verbosity = Select::with_theme(&self.theme)
@@ -258,14 +258,14 @@ impl InteractiveSession {
     /// Prompt for vault action
     pub fn vault_menu(&self) -> Result<VaultAction> {
         let items = vec![
-            "Encrypt a file",
-            "Decrypt a file",
-            "View encrypted file",
-            "Edit encrypted file",
-            "Create new encrypted file",
-            "Rekey (change password)",
-            "Encrypt a string",
-            "Back to main menu",
+            "🔒 Encrypt a file",
+            "🔓 Decrypt a file",
+            "👁️ View encrypted file",
+            "✏️ Edit encrypted file",
+            "✨ Create new encrypted file",
+            "🔑 Rekey (change password)",
+            "🔏 Encrypt a string",
+            "🔙 Back to main menu",
         ];
 
         let selection = Select::with_theme(&self.theme)
