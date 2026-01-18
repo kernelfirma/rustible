@@ -35,6 +35,7 @@ pub mod network;
 pub mod package;
 pub mod pause;
 pub mod pip;
+pub mod proxmox_vm;
 pub mod python;
 pub mod raw;
 pub mod script;
@@ -1569,6 +1570,10 @@ impl ModuleRegistry {
                 uri::UriModule,
                 known_hosts::KnownHostsModule,
                 authorized_key::AuthorizedKeyModule,
+            ],
+            // Cloud provider modules
+            Cloud: [
+                proxmox_vm::ProxmoxVmModule,
             ],
             // Security modules
             Security: [
