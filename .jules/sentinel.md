@@ -22,3 +22,8 @@
 **Vulnerability:** The `user` module was setting passwords using `echo 'user:pass' | chpasswd`. This exposes the plaintext password in the system's process list (e.g., via `ps aux`) to all users on the machine during the execution window.
 **Learning:** Passing secrets as command line arguments or via pipe from `echo` is insecure because the arguments are visible to other processes.
 **Prevention:** Pass secrets via standard input directly if supported, or write them to a temporary file with restricted permissions (0600) and redirect input from that file. Always clean up temporary files immediately.
+
+## 2024-05-26 - API Path Traversal in Playbook Lookup
+**Vulnerability:** The `find_playbook` API handler allowed absolute paths and relative path traversal (`../`) without validating they remained within the configured `playbook_paths`. This could allow authenticated users to trigger execution of arbitrary files on the server or probe for file existence.
+**Learning:** `Path::join` resolves absolute paths by replacing the base, and `canonicalize` resolves `..` but doesn't check boundaries. Explicit validation of the resolved path against allowed prefixes is required.
+**Prevention:** Always canonicalize both the base path and the target path, then verify `target.starts_with(base)`. Reject absolute paths in user input unless explicitly validated against an allowlist.
