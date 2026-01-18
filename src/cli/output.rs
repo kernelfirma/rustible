@@ -303,9 +303,23 @@ impl OutputFormatter {
             println!("\n{} {}", header, stars);
         }
 
-        for (host, host_stats) in &stats.hosts {
+        // Calculate max host length for alignment (min 30)
+        let max_host_len = stats
+            .hosts
+            .keys()
+            .map(|h| h.len())
+            .max()
+            .unwrap_or(0)
+            .max(30);
+
+        // Sort hosts alphabetically
+        let mut sorted_hosts: Vec<_> = stats.hosts.keys().collect();
+        sorted_hosts.sort();
+
+        for host in sorted_hosts {
+            let host_stats = &stats.hosts[host];
             let line = format!(
-                "{:<30} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
+                "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
                 host,
                 host_stats.ok,
                 host_stats.changed,
@@ -313,7 +327,8 @@ impl OutputFormatter {
                 host_stats.failed,
                 host_stats.skipped,
                 host_stats.rescued,
-                host_stats.ignored
+                host_stats.ignored,
+                width = max_host_len
             );
 
             if self.use_color {
@@ -334,7 +349,9 @@ impl OutputFormatter {
                     }
                 };
 
-                print!("{:<30} : ", host_colored);
+                // Manual padding to ensure proper visual alignment with ANSI codes
+                let padding = " ".repeat(max_host_len.saturating_sub(host.len()));
+                print!("{}{}: ", host_colored, padding);
                 print!("{} ", fmt_stat("ok", host_stats.ok, colored::Color::Green));
                 print!(
                     "{} ",
