@@ -27,6 +27,7 @@ use crate::modules::{
     mount::MountModule,
     package::PackageModule,
     pip::PipModule,
+    proxmox_vm::ProxmoxVmModule,
     service::ServiceModule,
     set_fact::SetFactModule,
     shell::ShellModule,
@@ -88,9 +89,9 @@ pub struct LazyModuleRegistry {
 impl LazyModuleRegistry {
     /// Create a new lazy registry with all builtin module factories.
     pub fn new() -> Self {
-        let mut factories: HashMap<&'static str, ModuleFactory> = HashMap::with_capacity(28);
+        let mut factories: HashMap<&'static str, ModuleFactory> = HashMap::with_capacity(29);
         let mut cache: HashMap<&'static str, OnceCell<Arc<dyn Module>>> =
-            HashMap::with_capacity(28);
+            HashMap::with_capacity(29);
 
         // Register factory functions (not instances!)
         // Package management
@@ -135,6 +136,7 @@ impl LazyModuleRegistry {
 
         // Network/API modules
         factories.insert("uri", || Arc::new(UriModule) as Arc<dyn Module>);
+        factories.insert("proxmox_vm", || Arc::new(ProxmoxVmModule) as Arc<dyn Module>);
 
         // Initialize cache cells for each module
         for name in factories.keys() {
