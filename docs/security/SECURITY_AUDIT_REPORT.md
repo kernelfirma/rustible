@@ -5,9 +5,10 @@ read_when: You need to understand the security posture of Rustible or plan secur
 
 # Rustible Security Audit Report
 
-**Audit Date:** 2025-12-26
+**Audit Date (Manual Review):** 2025-12-26
+**Automated Scan Refresh:** 2026-01-19
 **Version:** 0.1.0
-**Auditor:** Claude Code Security Reviewer
+**Auditor:** Claude Code Security Reviewer + CI Security Workflow
 **Audit ID:** SEC-08
 
 ---
@@ -16,6 +17,8 @@ read_when: You need to understand the security posture of Rustible or plan secur
 
 This comprehensive security audit evaluates the Rustible codebase against OWASP Top 10 vulnerabilities, unsafe Rust code patterns, memory safety concerns, and dependency vulnerabilities. Rustible is a modern configuration management tool written in Rust, offering SSH-based remote execution capabilities.
 
+Manual findings below reflect the 2025-12-26 review; automated CI security scans were refreshed on 2026-01-19 and summarized in the next section.
+
 ### Overall Security Rating: **MODERATE** (7.2/10)
 
 | Category | Finding Count | Critical | High | Medium | Low |
@@ -23,8 +26,18 @@ This comprehensive security audit evaluates the Rustible codebase against OWASP 
 | OWASP Top 10 | 8 | 0 | 2 | 4 | 2 |
 | Unsafe Rust | 3 | 0 | 0 | 1 | 2 |
 | Memory Safety | 5 | 0 | 1 | 2 | 2 |
-| Dependencies | 2 | 0 | 1 | 1 | 0 |
-| **Total** | **18** | **0** | **4** | **8** | **6** |
+| Dependencies | 2 | 0 | 0 | 0 | 2 |
+| **Total** | **18** | **0** | **3** | **7** | **8** |
+
+---
+
+## CI Security Workflow Snapshot (2026-01-19)
+
+The CI workflow in `.github/workflows/security.yml` runs daily at 06:00 UTC and on PRs. It provides automated security coverage aligned with this report.
+
+- **Cargo audit (local run, 2026-01-19):** No vulnerabilities; warnings for unmaintained `paste` 1.0.15 and `rustls-pemfile` 2.2.0 (both via `sqlx`).
+- **CI artifacts:** `audit-report.txt/json`, `license-report.txt`, `clippy-security.txt`, `secrets-scan.txt` (from the security workflow).
+- **Supply chain check:** `cargo fetch --locked` plus dependency name review (see CI job logs).
 
 ---
 
@@ -81,7 +94,7 @@ pub fn encrypt(&self, content: &str) -> Result<String> {
 
 ### A03:2021 - Injection
 
-**Status: MEDIUM RISK**
+**Status: LOW RISK**
 
 **Findings:**
 
@@ -172,22 +185,24 @@ if context.check_mode {
 
 ### A06:2021 - Vulnerable and Outdated Components
 
-**Status: HIGH RISK**
+**Status: MEDIUM RISK**
 
 **Findings:**
 
-1. **serde_yaml v0.9.34** - Marked as deprecated
-   ```
-   serde_yaml v0.9.34+deprecated
-   ```
+1. **Cargo audit enabled in CI**
+   - Uses `.cargo/audit.toml` ignore list for known advisories
+   - No vulnerabilities detected in the 2026-01-19 scan
 
-2. **Dependency Audit Not Available**
-   - `cargo-audit` is not installed, preventing automated CVE checking
+2. **Unmaintained transitive dependencies (warnings)**
+   - `paste` 1.0.15 (via `sqlx`)
+   - `rustls-pemfile` 2.2.0 (via `sqlx`)
+
+3. **YAML parser updated**
+   - Direct dependency is now `serde_yaml_ng` 0.10.0 (non-deprecated)
 
 **Recommendation:**
-- Install and run `cargo audit` regularly
-- Replace deprecated `serde_yaml` with maintained alternative
-- Add dependency scanning to CI/CD pipeline
+- Monitor `sqlx` updates for replacements of unmaintained transitive crates
+- Keep cargo-audit running in CI and review warnings during releases
 
 ---
 
@@ -333,7 +348,7 @@ All unsafe blocks are:
    **Risk:** Panic if semaphore unexpectedly closes
    **Impact:** Could crash long-running executor
 
-2. **src/connection/russh_auth.rs:1100**
+2. **src/connection/russh_auth.rs:1171**
    ```rust
    Ok(self.agent.as_mut().unwrap())
    ```
@@ -396,30 +411,26 @@ semaphore: Arc<Semaphore>,
 |------------|---------|-----------------|
 | aes-gcm | 0.10.3 | OK |
 | argon2 | 0.5.3 | OK |
-| russh | 0.45.0 | OK |
+| russh | 0.55.0 | OK |
 | russh-keys | 0.45.0 | OK |
 | tokio | 1.48.0 | OK |
-| reqwest | 0.11.27 | OK (rustls-tls) |
-| serde_yaml | 0.9.34 | **DEPRECATED** |
+| reqwest | 0.12.28 | OK (rustls-tls) |
+| serde_yaml_ng | 0.10.0 | OK |
 | regex | 1.12.2 | OK |
 | rand | 0.8.5 | OK |
 | sha2 | 0.10.9 | OK |
 
 ### Known Vulnerabilities
 
-**Unable to perform automated CVE scan** - `cargo-audit` not installed.
+**Cargo audit (2026-01-19):** No vulnerabilities detected. Two unmaintained warnings:
+- `paste` 1.0.15 (via `sqlx`)
+- `rustls-pemfile` 2.2.0 (via `sqlx`)
 
-**Recommendation:** Run the following to enable CVE scanning:
-```bash
-cargo install cargo-audit
-cargo audit
-```
+Audit configuration lives in `.cargo/audit.toml`, which downgrades unmaintained advisories to warnings and documents ignored advisories.
 
 ### Deprecated Dependencies
 
-1. **serde_yaml v0.9.34**
-   - Marked deprecated by maintainers
-   - Consider migration to `serde_yml` or other alternatives
+No deprecated direct dependencies identified in the current lockfile; `serde_yaml_ng` replaces the deprecated `serde_yaml` crate.
 
 ---
 
@@ -427,18 +438,16 @@ cargo audit
 
 ### Critical Priority (Address Immediately)
 
-1. **Install and run cargo-audit**
-   ```bash
-   cargo install cargo-audit
-   cargo audit
-   ```
-
-2. **Replace deprecated serde_yaml**
-   - Evaluate `serde_yml` or `yaml-rust2` as alternatives
+1. **No critical findings in the 2026-01-19 automated scan**
+   - Continue monitoring CI results for new advisories
 
 ### High Priority
 
-3. **Implement zeroize for sensitive data**
+1. **Address unmaintained transitive dependencies**
+   - `paste` 1.0.15 and `rustls-pemfile` 2.2.0 (via `sqlx`)
+   - Re-evaluate when `sqlx` updates remove these warnings
+
+2. **Implement zeroize for sensitive data**
    ```rust
    use zeroize::Zeroize;
 
@@ -447,32 +456,44 @@ cargo audit
    }
    ```
 
-4. **Add error handling for production .unwrap() calls**
+3. **Add error handling for production .unwrap() calls**
    - Focus on `src/executor/parallelization.rs`
    - Focus on `src/connection/russh_auth.rs`
 
 ### Medium Priority
 
-5. **Document security model**
+4. **Document security model**
    - Create SECURITY.md file
    - Document expected threat model
    - Document secure deployment practices
 
-6. **Add CI/CD security checks**
-   - Integrate `cargo-audit` into pipeline
-   - Add `cargo-deny` for license/security checks
+5. **Review CI security artifacts on release cadence**
+   - Check `audit-report.txt/json`, `license-report.txt`, `clippy-security.txt`, `secrets-scan.txt`
+   - Consider committing a `deny.toml` if policy needs to be versioned
 
-7. **Implement playbook signing** (optional)
+6. **Implement playbook signing** (optional)
    - Consider GPG or sigstore integration for playbook verification
 
 ### Low Priority
 
-8. **Consider constant-time comparisons**
+7. **Consider constant-time comparisons**
    - For sensitive string comparisons (passwords, tokens)
 
-9. **Add security-focused logging**
+8. **Add security-focused logging**
    - Log authentication attempts
    - Log privilege escalation usage
+
+---
+
+## 5.1 Audit Update Cadence and Procedure
+
+**Cadence:** Quarterly (or after dependency/CI workflow changes).
+
+**Procedure:**
+1. Run `cargo audit` (uses `.cargo/audit.toml`) and capture new warnings/advisories.
+2. Review the latest CI security workflow artifacts and summary from `.github/workflows/security.yml`.
+3. Update the "Automated Scan Refresh" date, CI snapshot section, and dependency analysis table.
+4. Document new advisories in `.cargo/audit.toml` with justification or remediation plan.
 
 ---
 
@@ -492,9 +513,9 @@ cargo audit
 ## 7. Compliance Notes
 
 ### Rust Security Best Practices
-- [ ] Run `cargo clippy` with security lints
+- [x] Run `cargo clippy` with security lints (CI security workflow)
 - [ ] Enable `#[deny(unsafe_code)]` where possible
-- [ ] Use `cargo-audit` in CI/CD
+- [x] Use `cargo-audit` in CI/CD
 - [ ] Review dependencies regularly
 
 ### Infrastructure Security
@@ -519,12 +540,14 @@ cargo audit
 
 ## Appendix B: Tools Used
 
-- Manual code review
+- Manual code review (2025-12-26)
+- Cargo audit 0.22.0 (2026-01-19)
+- CI security workflow (`.github/workflows/security.yml`)
 - Pattern matching (grep/ripgrep)
 - Cargo dependency analysis
 - OWASP Top 10 2021 checklist
 
 ---
 
-**Report Generated:** 2025-12-26
-**Next Audit Recommended:** 2026-03-26 (quarterly)
+**Report Generated:** 2026-01-19
+**Next Audit Recommended:** 2026-04-19 (quarterly)

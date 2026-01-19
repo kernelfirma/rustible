@@ -182,14 +182,14 @@ impl AuthorizedKey {
         let mut parts = Vec::new();
 
         if let Some(ref opts) = self.options {
-            parts.push(opts.clone());
+            parts.push(opts.as_str());
         }
 
-        parts.push(self.key_type.clone());
-        parts.push(self.key_data.clone());
+        parts.push(self.key_type.as_str());
+        parts.push(self.key_data.as_str());
 
         if let Some(ref comment) = self.comment {
-            parts.push(comment.clone());
+            parts.push(comment.as_str());
         }
 
         parts.join(" ")
