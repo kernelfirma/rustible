@@ -187,12 +187,12 @@ impl ComplexityAnalyzer {
                 complexity += 1;
             }
             // Block adds complexity
-            if task.block.as_deref().map_or(false, |block| !block.is_empty()) {
+            if task.block.as_deref().is_some_and(|block| !block.is_empty()) {
                 complexity += 1;
                 if task
                     .rescue
                     .as_deref()
-                    .map_or(false, |rescue| !rescue.is_empty())
+                    .is_some_and(|rescue| !rescue.is_empty())
                 {
                     complexity += 1;
                 }
@@ -341,7 +341,7 @@ impl ComplexityAnalyzer {
         let size_penalty = (metrics.task_count as f64 * 0.2).min(25.0);
 
         let index = 100.0 - complexity_penalty - depth_penalty - size_penalty;
-        index.max(0.0).min(100.0)
+        index.clamp(0.0, 100.0)
     }
 }
 

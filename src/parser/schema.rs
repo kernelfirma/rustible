@@ -850,7 +850,7 @@ impl SchemaValidator {
                 module_found = true;
 
                 // Check if we have a schema for this module
-                let module_name = key.split('.').last().unwrap_or(key);
+                let module_name = key.split('.').next_back().unwrap_or(key);
                 if let Some(schema) = self.module_schemas.get(module_name) {
                     self.validate_module_args(value, schema, &format!("{}/{}", path, key), result);
                 }
@@ -875,8 +875,8 @@ impl SchemaValidator {
         // Check for deprecated when syntax
         if let Some(when) = task_obj.get("when") {
             if let Some(when_str) = when.as_str() {
-                if when_str.contains("{{") && when_str.contains("}}") {
-                    if self.config.check_deprecations {
+                if when_str.contains("{{") && when_str.contains("}}")
+                    && self.config.check_deprecations {
                         result.add_warning(ValidationError {
                             path: format!("{}/when", path),
                             message: "Jinja2 braces in 'when' are deprecated".to_string(),
@@ -886,7 +886,6 @@ impl SchemaValidator {
                             suggestion: Some("Remove {{ and }} from when conditions".to_string()),
                         });
                     }
-                }
             }
         }
     }

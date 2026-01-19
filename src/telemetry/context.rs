@@ -365,8 +365,10 @@ impl SpanContext {
 /// Span kind as defined by OpenTelemetry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SpanKind {
     /// Internal span (default)
+    #[default]
     Internal,
     /// Server span (handling incoming request)
     Server,
@@ -378,11 +380,6 @@ pub enum SpanKind {
     Consumer,
 }
 
-impl Default for SpanKind {
-    fn default() -> Self {
-        Self::Internal
-    }
-}
 
 /// Span attribute value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -501,18 +498,12 @@ impl TraceContextPropagator for W3CTraceContextPropagator {
 }
 
 /// B3 (Zipkin) propagator.
+#[derive(Default)]
 pub struct B3Propagator {
     /// Use single header format (B3: {TraceId}-{SpanId}-{SamplingState}-{ParentSpanId})
     pub single_header: bool,
 }
 
-impl Default for B3Propagator {
-    fn default() -> Self {
-        Self {
-            single_header: false,
-        }
-    }
-}
 
 impl TraceContextPropagator for B3Propagator {
     type Carrier = HashMap<String, String>;

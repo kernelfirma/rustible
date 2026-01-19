@@ -85,9 +85,12 @@
 
 // Clippy configuration
 #![warn(clippy::all)]
-// Enable pedantic for local development, CI allows these
-#![warn(clippy::pedantic)]
+// Keep pedantic lints opt-in to avoid noisy warnings in normal builds.
+#![allow(clippy::pedantic)]
+// Many async signatures are intentionally async for trait compatibility.
+#![allow(clippy::unused_async)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::should_implement_trait)]
 // Development-time allowances
 #![allow(dead_code)]
 #![allow(unused_variables)]

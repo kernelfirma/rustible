@@ -50,6 +50,14 @@ impl CronState {
     }
 }
 
+impl std::str::FromStr for CronState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        CronState::from_str(s)
+    }
+}
+
 /// Represents a cron job entry
 #[derive(Debug, Clone)]
 pub struct CronJob {
@@ -113,11 +121,7 @@ impl CronJob {
                 // Next line should be the actual cron entry
                 if i + 1 < lines.len() {
                     let job_line = lines[i + 1];
-                    let job_line = if job_line.starts_with('#') {
-                        &job_line[1..]
-                    } else {
-                        job_line
-                    };
+                    let job_line = job_line.strip_prefix('#').unwrap_or(job_line);
 
                     // Parse the cron line
                     let parts: Vec<&str> = job_line.split_whitespace().collect();
@@ -171,6 +175,9 @@ impl CronModule {
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
             }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
         options
     }
@@ -209,7 +216,7 @@ impl CronModule {
     fn set_crontab(
         connection: &Arc<dyn Connection + Send + Sync>,
         user: Option<&str>,
-        content: &str,
+        crontab_content: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Use a heredoc to set the crontab
@@ -226,7 +233,7 @@ impl CronModule {
             "cat << '{}' | crontab {}\n{}\n{}",
             delimiter,
             user_flag,
-            content.trim(),
+            crontab_content.trim(),
             delimiter
         );
 

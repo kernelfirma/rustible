@@ -1131,11 +1131,10 @@ impl RusshConnectionPool {
         let connections = self.connections.read().await;
         if let Some(host_connections) = connections.get(&key) {
             for pooled in host_connections {
-                if !pooled.in_use.load(Ordering::SeqCst) {
-                    if pooled.is_alive_with_timeout(timeout).await {
+                if !pooled.in_use.load(Ordering::SeqCst)
+                    && pooled.is_alive_with_timeout(timeout).await {
                         return true;
                     }
-                }
             }
         }
 

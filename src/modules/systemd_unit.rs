@@ -150,6 +150,14 @@ impl UnitType {
     }
 }
 
+impl std::str::FromStr for UnitType {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UnitType::from_str(s)
+    }
+}
+
 impl std::fmt::Display for UnitType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.extension())
@@ -178,6 +186,14 @@ impl UnitState {
     }
 }
 
+impl std::str::FromStr for UnitState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UnitState::from_str(s)
+    }
+}
+
 /// Desired running state for a unit
 #[derive(Debug, Clone, PartialEq)]
 pub enum RunningState {
@@ -199,6 +215,14 @@ impl RunningState {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for RunningState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RunningState::from_str(s)
     }
 }
 
@@ -287,11 +311,7 @@ impl SystemdUnitConfig {
         let is_template = name.contains("@.");
 
         // Check for instance name
-        let instance = if let Some(caps) = INSTANCE_NAME_REGEX.captures(&name) {
-            Some(caps.get(2).map_or("", |m| m.as_str()).to_string())
-        } else {
-            None
-        };
+        let instance = INSTANCE_NAME_REGEX.captures(&name).map(|caps| caps.get(2).map_or("", |m| m.as_str()).to_string());
 
         // Parse state
         let state_str = params
@@ -395,6 +415,7 @@ impl SystemdUnitModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {
@@ -584,7 +605,6 @@ impl SystemdUnitModule {
                     backup: false,
                     owner: config.owner.clone(),
                     group: config.group.clone(),
-                    ..Default::default()
                 };
 
                 connection

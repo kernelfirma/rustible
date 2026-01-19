@@ -46,6 +46,14 @@ impl FileState {
     }
 }
 
+impl std::str::FromStr for FileState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        FileState::from_str(s)
+    }
+}
+
 /// SELinux context parameters
 #[derive(Debug, Clone, Default)]
 pub struct SelinuxContext {
@@ -128,14 +136,14 @@ impl FileModule {
         use std::os::unix::fs::chown;
 
         let meta = fs::symlink_metadata(path)?;
-        let current_uid = meta.uid();
-        let current_gid = meta.gid();
+        let current_user_id = meta.uid();
+        let current_group_id = meta.gid();
 
-        let new_uid = owner.unwrap_or(current_uid);
-        let new_gid = group.unwrap_or(current_gid);
+        let target_user_id = owner.unwrap_or(current_user_id);
+        let target_group_id = group.unwrap_or(current_group_id);
 
-        if current_uid != new_uid || current_gid != new_gid {
-            chown(path, Some(new_uid), Some(new_gid))?;
+        if current_user_id != target_user_id || current_group_id != target_group_id {
+            chown(path, Some(target_user_id), Some(target_group_id))?;
             return Ok(true);
         }
         Ok(false)
@@ -152,15 +160,17 @@ impl FileModule {
         }
 
         let meta = fs::metadata(path)?;
-        let current_atime = meta.atime();
-        let current_mtime = meta.mtime();
+        let current_access_time = meta.atime();
+        let current_modification_time = meta.mtime();
 
-        let new_atime = access_time.unwrap_or(current_atime);
-        let new_mtime = modification_time.unwrap_or(current_mtime);
+        let target_access_time = access_time.unwrap_or(current_access_time);
+        let target_modification_time = modification_time.unwrap_or(current_modification_time);
 
-        if current_atime != new_atime || current_mtime != new_mtime {
-            let atime = filetime::FileTime::from_unix_time(new_atime, 0);
-            let mtime = filetime::FileTime::from_unix_time(new_mtime, 0);
+        if current_access_time != target_access_time
+            || current_modification_time != target_modification_time
+        {
+            let atime = filetime::FileTime::from_unix_time(target_access_time, 0);
+            let mtime = filetime::FileTime::from_unix_time(target_modification_time, 0);
             filetime::set_file_times(path, atime, mtime)?;
             return Ok(true);
         }
@@ -305,12 +315,11 @@ impl FileModule {
         if path.exists() {
             if path.is_dir() {
                 return Ok(false);
-            } else {
-                return Err(ModuleError::ExecutionFailed(format!(
-                    "Path '{}' exists but is not a directory",
-                    path.display()
-                )));
             }
+            return Err(ModuleError::ExecutionFailed(format!(
+                "Path '{}' exists but is not a directory",
+                path.display()
+            )));
         }
 
         if recurse {
@@ -330,12 +339,11 @@ impl FileModule {
         if path.exists() {
             if path.is_file() {
                 return Ok(false);
-            } else {
-                return Err(ModuleError::ExecutionFailed(format!(
-                    "Path '{}' exists but is not a file",
-                    path.display()
-                )));
             }
+            return Err(ModuleError::ExecutionFailed(format!(
+                "Path '{}' exists but is not a file",
+                path.display()
+            )));
         }
 
         // Create parent directories if needed

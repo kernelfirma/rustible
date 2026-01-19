@@ -129,6 +129,14 @@ impl TlsMode {
     }
 }
 
+impl std::str::FromStr for TlsMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(TlsMode::from_str(s))
+    }
+}
+
 impl std::fmt::Display for TlsMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

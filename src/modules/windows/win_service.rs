@@ -315,7 +315,7 @@ $result | ConvertTo-Json -Compress
             .unwrap_or_default();
 
         format!(
-            r#"
+            r"
 $serviceName = {name}
 $path = {path}
 $displayName = {display_name}
@@ -330,7 +330,7 @@ New-Service -Name $serviceName -BinaryPathName $path -DisplayName $displayName -
 $result.changed = $true
 
 $result | ConvertTo-Json -Compress
-"#,
+",
             name = powershell_escape(name),
             path = powershell_escape(path),
             display_name = powershell_escape(display_name),
@@ -342,7 +342,7 @@ $result | ConvertTo-Json -Compress
     /// Generate PowerShell script to remove a service
     fn generate_remove_service_script(name: &str) -> String {
         format!(
-            r#"
+            r"
 $serviceName = {name}
 $result = @{{
     changed = $false
@@ -359,7 +359,7 @@ if ($svc) {{
 }}
 
 $result | ConvertTo-Json -Compress
-"#,
+",
             name = powershell_escape(name)
         )
     }

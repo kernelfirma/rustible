@@ -217,7 +217,7 @@ impl ExecutionCallback for MinimalCallback {
         // Print duration if we have start time
         if let Some(start) = *start_time {
             let duration = start.elapsed();
-            let status = if success {
+            let playbook_status = if success {
                 "completed".green()
             } else {
                 "failed".red().bold()
@@ -226,7 +226,7 @@ impl ExecutionCallback for MinimalCallback {
             println!(
                 "\n{} {} in {:.2}s",
                 name.bright_white().bold(),
-                status,
+                playbook_status,
                 duration.as_secs_f64()
             );
         }

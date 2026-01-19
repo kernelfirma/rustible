@@ -418,6 +418,7 @@ impl ParamValidator {
     }
 
     /// Validate a task's module parameters.
+    #[allow(clippy::too_many_arguments)]
     pub fn validate_task(
         &self,
         task: &serde_yaml::Value,
@@ -434,7 +435,7 @@ impl ParamValidator {
         };
 
         let task_name = task_map
-            .get(&serde_yaml::Value::String("name".to_string()))
+            .get(serde_yaml::Value::String("name".to_string()))
             .and_then(|v| v.as_str());
 
         // Find the module being called
@@ -470,6 +471,7 @@ impl ParamValidator {
     }
 
     /// Validate parameters for a specific module.
+    #[allow(clippy::too_many_arguments)]
     fn validate_module_params(
         &self,
         module: &ModuleDef,
@@ -488,8 +490,8 @@ impl ParamValidator {
 
         // Handle string arguments (free-form)
         if args.is_string() {
-            if !module.free_form {
-                if config.should_run_rule("P001", RuleCategory::Parameters, Severity::Warning) {
+            if !module.free_form
+                && config.should_run_rule("P001", RuleCategory::Parameters, Severity::Warning) {
                     result.add_issue(LintIssue::new(
                         "P001",
                         "unexpected-free-form",
@@ -502,7 +504,6 @@ impl ParamValidator {
                         location.clone(),
                     ).with_suggestion("Use named parameters instead of a string"));
                 }
-            }
             return;
         }
 
@@ -523,8 +524,8 @@ impl ParamValidator {
                 let has_param = provided_params.contains(&param.name)
                     || param.aliases.iter().any(|a| provided_params.contains(a));
 
-                if !has_param {
-                    if config.should_run_rule("P002", RuleCategory::Parameters, Severity::Error) {
+                if !has_param
+                    && config.should_run_rule("P002", RuleCategory::Parameters, Severity::Error) {
                         result.add_issue(LintIssue::new(
                             "P002",
                             "missing-required-param",
@@ -537,7 +538,6 @@ impl ParamValidator {
                             location.clone(),
                         ).with_suggestion(format!("Add '{}' parameter", param.name)));
                     }
-                }
             }
         }
 
@@ -574,8 +574,8 @@ impl ParamValidator {
                 // Check choices
                 if let Some(ref choices) = def.choices {
                     if let Some(value_str) = value.as_str() {
-                        if !choices.contains(&value_str.to_string()) {
-                            if config.should_run_rule("P004", RuleCategory::Parameters, Severity::Error) {
+                        if !choices.contains(&value_str.to_string())
+                            && config.should_run_rule("P004", RuleCategory::Parameters, Severity::Error) {
                                 result.add_issue(LintIssue::new(
                                     "P004",
                                     "invalid-choice",
@@ -588,7 +588,6 @@ impl ParamValidator {
                                     location.clone(),
                                 ));
                             }
-                        }
                     }
                 }
 
@@ -612,6 +611,7 @@ impl ParamValidator {
     }
 
     /// Validate parameter type.
+    #[allow(clippy::too_many_arguments)]
     fn validate_param_type(
         &self,
         def: &ParamDef,
@@ -626,17 +626,17 @@ impl ParamValidator {
             ParamType::String => value.is_string() || value.is_number() || value.is_bool(),
             ParamType::Bool => {
                 value.is_bool()
-                    || value.as_str().map_or(false, |s| {
+                    || value.as_str().is_some_and(|s| {
                         matches!(s.to_lowercase().as_str(), "yes" | "no" | "true" | "false" | "on" | "off")
                     })
             }
             ParamType::Int => {
                 value.as_i64().is_some()
-                    || value.as_str().map_or(false, |s| s.parse::<i64>().is_ok())
+                    || value.as_str().is_some_and(|s| s.parse::<i64>().is_ok())
             }
             ParamType::Float => {
                 value.as_f64().is_some()
-                    || value.as_str().map_or(false, |s| s.parse::<f64>().is_ok())
+                    || value.as_str().is_some_and(|s| s.parse::<f64>().is_ok())
             }
             ParamType::List => value.is_sequence(),
             ParamType::Dict => value.is_mapping(),
@@ -644,8 +644,8 @@ impl ParamValidator {
             ParamType::Raw => true,
         };
 
-        if !type_match {
-            if config.should_run_rule("P006", RuleCategory::Parameters, Severity::Warning) {
+        if !type_match
+            && config.should_run_rule("P006", RuleCategory::Parameters, Severity::Warning) {
                 result.add_issue(LintIssue::new(
                     "P006",
                     "type-mismatch",
@@ -658,7 +658,6 @@ impl ParamValidator {
                     location.clone(),
                 ));
             }
-        }
     }
 }
 

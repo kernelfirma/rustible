@@ -161,10 +161,12 @@ pub type SecurityResult<T> = Result<T, SecurityError>;
 
 /// Policy for host key verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum HostKeyVerificationMode {
     /// Accept any host key (insecure, for testing only)
     AcceptAll,
     /// Accept first seen and verify on subsequent connections (TOFU)
+    #[default]
     TrustOnFirstUse,
     /// Only accept keys from known_hosts file
     KnownHostsOnly,
@@ -174,11 +176,6 @@ pub enum HostKeyVerificationMode {
     KnownHostsOrPinned,
 }
 
-impl Default for HostKeyVerificationMode {
-    fn default() -> Self {
-        Self::TrustOnFirstUse
-    }
-}
 
 /// A pinned host key entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -279,8 +276,10 @@ pub struct HostKeyPolicy {
     pub log_verification: bool,
     /// Callback for unknown hosts (return true to accept)
     #[serde(skip)]
-    unknown_host_callback: Option<Arc<dyn Fn(&str, &str) -> bool + Send + Sync>>,
+    unknown_host_callback: Option<UnknownHostCallback>,
 }
+
+type UnknownHostCallback = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
 
 impl std::fmt::Debug for HostKeyPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -886,18 +885,15 @@ fn ip_in_cidr(ip: IpAddr, network: IpAddr, prefix_len: u8) -> bool {
 
 /// Minimum TLS version
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TlsVersion {
     Tls10,
     Tls11,
+    #[default]
     Tls12,
     Tls13,
 }
 
-impl Default for TlsVersion {
-    fn default() -> Self {
-        Self::Tls12
-    }
-}
 
 /// TLS certificate validation configuration
 #[derive(Debug, Clone)]
@@ -1121,20 +1117,17 @@ impl TlsValidationConfig {
 
 /// Level of detail for audit logging
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum AuditLevel {
     /// Log only errors and security violations
     Minimal,
     /// Log connections and key operations
+    #[default]
     Standard,
     /// Log all encryption-related events
     Verbose,
 }
 
-impl Default for AuditLevel {
-    fn default() -> Self {
-        Self::Standard
-    }
-}
 
 /// Type of audit event
 #[derive(Debug, Clone, Serialize, Deserialize)]

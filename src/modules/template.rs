@@ -50,6 +50,7 @@ impl TemplateModule {
         serde_json::Value::Object(ctx_map)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn execute_remote(
         conn: Arc<dyn crate::connection::Connection + Send + Sync>,
         dest_path: PathBuf,
@@ -379,7 +380,7 @@ impl Module for TemplateModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         let src = params.get_string("src")?;
-        let content = params.get_string("content")?;
+        let inline_content = params.get_string("content")?;
         let dest = params.get_string_required("dest")?;
         let dest_path = Path::new(&dest);
         let backup = params.get_bool_or("backup", false);
@@ -390,7 +391,7 @@ impl Module for TemplateModule {
         let extra_vars = params.get("vars");
 
         // Get template content from either src file or content parameter
-        let (template_content, src_name) = match (&src, &content) {
+        let (template_content, src_name) = match (&src, &inline_content) {
             (Some(src_path_str), _) => {
                 let src_path = Path::new(src_path_str);
                 if !src_path.exists() {
@@ -399,8 +400,8 @@ impl Module for TemplateModule {
                         src_path_str
                     )));
                 }
-                let content = fs::read_to_string(src_path).map_err(ModuleError::Io)?;
-                (content, src_path_str.clone())
+                let file_content = fs::read_to_string(src_path).map_err(ModuleError::Io)?;
+                (file_content, src_path_str.clone())
             }
             (None, Some(content_str)) => (content_str.clone(), "<inline>".to_string()),
             (None, None) => {

@@ -425,7 +425,7 @@ impl NxosConfig {
 
     /// Get the effective NX-API port
     fn effective_nxapi_port(&self) -> u16 {
-        self.nxapi_port.unwrap_or_else(|| {
+        self.nxapi_port.unwrap_or({
             if self.nxapi_use_ssl {
                 NXAPI_DEFAULT_HTTPS_PORT
             } else {
@@ -450,6 +450,7 @@ impl NxosConfigModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {
@@ -906,11 +907,11 @@ impl NxosConfigModule {
 
         // Read from source file if specified
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
             })?;
 
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') {
                     commands.push(trimmed.to_string());
@@ -973,11 +974,11 @@ impl NxosConfigModule {
 
         // Read from source file if specified
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
             })?;
 
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') {
                     commands.push(trimmed.to_string());
@@ -1011,7 +1012,7 @@ impl NxosConfigModule {
         // This requires the file to be accessible from the device
 
         // Read the config file content
-        let content = std::fs::read_to_string(src).map_err(|e| {
+        let source_contents = std::fs::read_to_string(src).map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
         })?;
 
@@ -1020,7 +1021,7 @@ impl NxosConfigModule {
         Self::create_checkpoint_ssh(connection, &temp_checkpoint, context).await?;
 
         // Apply the new configuration
-        let commands: Vec<String> = content
+        let commands: Vec<String> = source_contents
             .lines()
             .filter_map(|line| {
                 let trimmed = line.trim();
@@ -1386,10 +1387,10 @@ impl NxosConfigModule {
         }
 
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file: {}", e))
             })?;
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') {
                     proposed_lines.push(trimmed.to_string());

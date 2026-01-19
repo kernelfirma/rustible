@@ -598,7 +598,7 @@ impl<T: Send + Sync + Clone + 'static> WorkStealingScheduler<T> {
 
         // Distribute items across queues based on weight
         let num_queues = self.queues.len();
-        let items_per_queue = (items.len() + num_queues - 1) / num_queues;
+        let items_per_queue = items.len().div_ceil(num_queues);
 
         for (i, item) in items.into_iter().enumerate() {
             let queue_idx = i / items_per_queue.max(1);

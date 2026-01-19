@@ -712,7 +712,7 @@ impl InventoryCache {
         let cache_file = cache_dir.join(format!("{}.json", safe_key));
 
         let json = super::plugin::inventory_to_json(inventory)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         tokio::fs::write(cache_file, serde_json::to_string_pretty(&json)?).await
     }

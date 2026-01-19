@@ -11,8 +11,10 @@ use std::time::SystemTime;
 /// Severity level for audit events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AuditSeverity {
     /// Informational events (routine operations)
+    #[default]
     Info,
     /// Warning events (potential issues)
     Warning,
@@ -33,11 +35,6 @@ impl fmt::Display for AuditSeverity {
     }
 }
 
-impl Default for AuditSeverity {
-    fn default() -> Self {
-        AuditSeverity::Info
-    }
-}
 
 /// Category of audit events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +82,7 @@ impl fmt::Display for AuditCategory {
 /// Outcome of an audited operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AuditOutcome {
     /// Operation completed successfully
     Success,
@@ -95,6 +93,7 @@ pub enum AuditOutcome {
     /// Operation was skipped
     Skipped,
     /// Operation outcome is unknown
+    #[default]
     Unknown,
 }
 
@@ -110,11 +109,6 @@ impl fmt::Display for AuditOutcome {
     }
 }
 
-impl Default for AuditOutcome {
-    fn default() -> Self {
-        AuditOutcome::Unknown
-    }
-}
 
 /// An audit event representing a logged operation
 #[derive(Debug, Clone, Serialize, Deserialize)]

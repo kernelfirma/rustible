@@ -34,6 +34,14 @@ impl UserState {
     }
 }
 
+impl std::str::FromStr for UserState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UserState::from_str(s)
+    }
+}
+
 /// Information about a user
 #[derive(Debug, Clone)]
 pub struct UserInfo {
@@ -57,6 +65,9 @@ impl UserModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options
@@ -142,7 +153,7 @@ impl UserModule {
         let groups = if groups_success {
             groups_stdout
                 .split(':')
-                .last()
+                .next_back()
                 .unwrap_or("")
                 .split_whitespace()
                 .map(|s| s.to_string())
@@ -163,6 +174,7 @@ impl UserModule {
     }
 
     /// Create a user via connection
+    #[allow(clippy::too_many_arguments)]
     fn create_user_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,
@@ -241,6 +253,7 @@ impl UserModule {
     }
 
     /// Modify a user via connection
+    #[allow(clippy::too_many_arguments)]
     fn modify_user_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,
@@ -383,7 +396,7 @@ impl UserModule {
     ) -> ModuleResult<()> {
         // Use a temporary file to avoid exposing password in process list via echo
         let temp_path = format!("/tmp/.ansible_passwd_{}", Uuid::new_v4());
-        let content = format!("{}:{}", name, password);
+        let passwd_entry = format!("{}:{}", name, password);
 
         // Upload content to temp file with 600 permissions
         let mut transfer_opts = TransferOptions::new();
@@ -394,14 +407,14 @@ impl UserModule {
 
         let conn_clone = connection.clone();
         let temp_path_clone = temp_path.clone();
-        let content_clone = content.clone();
+        let entry_clone = passwd_entry.clone();
 
         std::thread::scope(|s| {
             s.spawn(|| {
                 handle.block_on(async {
                     conn_clone
                         .upload_content(
-                            content_clone.as_bytes(),
+                            entry_clone.as_bytes(),
                             Path::new(&temp_path_clone),
                             Some(transfer_opts),
                         )
@@ -476,6 +489,7 @@ impl UserModule {
     }
 
     /// Generate SSH key via connection
+    #[allow(clippy::too_many_arguments)]
     fn generate_ssh_key_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,

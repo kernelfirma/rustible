@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use indexmap::IndexMap;
 use tracing::{debug, info, warn};
 
 use crate::recovery::TransactionId;
@@ -128,10 +129,12 @@ impl Executor {
                     delegate_facts: None,
                     run_once: false,
                     tags: Vec::new(),
+                    vars: IndexMap::new(),
                     r#become: false,
                     become_user: None,
                     block_id: None,
                     block_role: BlockRole::Normal,
+                    block_stack: Vec::new(),
                     retries: None,
                     delay: None,
                     until: None,

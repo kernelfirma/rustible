@@ -422,12 +422,11 @@ impl AzurePlugin {
         for (key, filter_config) in &self.config.filters {
             let filter_values = filter_config.values();
 
-            if key.starts_with("tag:") {
-                let tag_name = &key[4..];
+            if let Some(tag_name) = key.strip_prefix("tag:") {
                 let tag_value = vm.tags.get(tag_name).map(|s| s.as_str());
 
                 if let Some(value) = tag_value {
-                    if !filter_values.iter().any(|fv| *fv == value) {
+                    if !filter_values.contains(&value) {
                         return false;
                     }
                 } else {

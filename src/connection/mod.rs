@@ -1184,7 +1184,7 @@ impl ConnectionBuilder {
                 "docker" => ConnectionType::Docker {
                     container: self.host.clone(),
                 },
-                "ssh" | _ => ConnectionType::Ssh {
+                _ => ConnectionType::Ssh {
                     host: self.host.clone(),
                     port: self.port.unwrap_or(22),
                     user: self.user.clone().unwrap_or_else(whoami),

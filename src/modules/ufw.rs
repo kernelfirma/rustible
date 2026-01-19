@@ -90,6 +90,14 @@ impl UfwRule {
     }
 }
 
+impl std::str::FromStr for UfwRule {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwRule::from_str(s)
+    }
+}
+
 /// Traffic direction
 #[derive(Debug, Clone, PartialEq)]
 pub enum UfwDirection {
@@ -120,6 +128,14 @@ impl UfwDirection {
     }
 }
 
+impl std::str::FromStr for UfwDirection {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwDirection::from_str(s)
+    }
+}
+
 /// Protocol types
 #[derive(Debug, Clone, PartialEq)]
 pub enum UfwProto {
@@ -147,6 +163,14 @@ impl UfwProto {
             UfwProto::Udp => "udp",
             UfwProto::Any => "any",
         }
+    }
+}
+
+impl std::str::FromStr for UfwProto {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwProto::from_str(s)
     }
 }
 
@@ -186,6 +210,14 @@ impl UfwLogLevel {
     }
 }
 
+impl std::str::FromStr for UfwLogLevel {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwLogLevel::from_str(s)
+    }
+}
+
 /// UFW state
 #[derive(Debug, Clone, PartialEq)]
 pub enum UfwState {
@@ -207,6 +239,14 @@ impl UfwState {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for UfwState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwState::from_str(s)
     }
 }
 
@@ -237,6 +277,14 @@ impl UfwDefault {
             UfwDefault::Deny => "deny",
             UfwDefault::Reject => "reject",
         }
+    }
+}
+
+impl std::str::FromStr for UfwDefault {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UfwDefault::from_str(s)
     }
 }
 
@@ -401,6 +449,9 @@ impl UfwModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options
@@ -937,19 +988,17 @@ impl Module for UfwModule {
                 } else {
                     messages.push("Rule does not exist".to_string());
                 }
-            } else {
-                if !exists {
-                    if context.check_mode {
-                        messages.push("Would add UFW rule".to_string());
-                        changed = true;
-                    } else {
-                        Self::add_rule(connection, &config, context)?;
-                        messages.push("Added UFW rule".to_string());
-                        changed = true;
-                    }
+            } else if !exists {
+                if context.check_mode {
+                    messages.push("Would add UFW rule".to_string());
+                    changed = true;
                 } else {
-                    messages.push("Rule already exists".to_string());
+                    Self::add_rule(connection, &config, context)?;
+                    messages.push("Added UFW rule".to_string());
+                    changed = true;
                 }
+            } else {
+                messages.push("Rule already exists".to_string());
             }
         }
 

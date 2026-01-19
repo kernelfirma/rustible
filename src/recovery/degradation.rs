@@ -54,8 +54,10 @@ use tracing::{debug, info, warn};
 /// Level of degradation for the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DegradationLevel {
     /// Normal operation, all features available
+    #[default]
     Normal,
     /// Minor degradation, non-critical features may be limited
     Minor,
@@ -67,17 +69,14 @@ pub enum DegradationLevel {
     Critical,
 }
 
-impl Default for DegradationLevel {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
 
 /// State of a circuit breaker
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CircuitState {
     /// Circuit is closed, requests flow normally
+    #[default]
     Closed,
     /// Circuit is open, requests are rejected immediately
     Open,
@@ -85,11 +84,6 @@ pub enum CircuitState {
     HalfOpen,
 }
 
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
-}
 
 /// Configuration for circuit breaker
 #[derive(Debug, Clone, Serialize, Deserialize)]

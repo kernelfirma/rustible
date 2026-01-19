@@ -172,14 +172,10 @@ impl SecretManager {
             config.cache.clone().unwrap_or_default(),
         )));
 
-        let rotator = if let Some(rotation_config) = &config.rotation {
-            Some(Arc::new(SecretRotator::new(
+        let rotator = config.rotation.as_ref().map(|rotation_config| Arc::new(SecretRotator::new(
                 rotation_config.clone(),
                 backend.clone(),
-            )))
-        } else {
-            None
-        };
+            )));
 
         let no_log_registry = Arc::new(NoLogRegistry::new());
 
@@ -385,7 +381,7 @@ impl SecretManager {
 
     /// Register sensitive values from a secret in the no_log registry.
     fn register_sensitive_values(&self, secret: &Secret) {
-        for (_, value) in secret.data() {
+        for value in secret.data().values() {
             if let SecretValue::String(s) = value {
                 self.no_log_registry.register(s.clone());
             }

@@ -162,8 +162,8 @@ impl DiffEngine {
         if old.status != new.status {
             diff.changes.push(ValueChange {
                 path: "status".to_string(),
-                old_value: Some(serde_json::to_value(&old.status).ok()?),
-                new_value: Some(serde_json::to_value(&new.status).ok()?),
+                old_value: Some(serde_json::to_value(old.status).ok()?),
+                new_value: Some(serde_json::to_value(new.status).ok()?),
             });
         }
 
@@ -490,7 +490,7 @@ impl DiffReport {
     pub fn format_detailed(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("=== Diff Report ===\n"));
+        output.push_str("=== Diff Report ===\n");
         output.push_str(&format!("Generated: {}\n", self.generated_at));
         if let Some(ref old) = self.old_snapshot_id {
             output.push_str(&format!("Old Snapshot: {}\n", old));

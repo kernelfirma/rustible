@@ -438,7 +438,7 @@ impl GcpPlugin {
                 continue;
             };
 
-            if !filter_values.iter().any(|fv| *fv == value) {
+            if !filter_values.contains(&value) {
                 return false;
             }
         }

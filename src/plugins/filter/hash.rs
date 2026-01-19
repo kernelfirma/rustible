@@ -129,7 +129,11 @@ fn password_hash(
             let hash = compute_sha256(&format!("{}${}", salt, password));
             format!("$5${}${}", salt, hash)
         }
-        "sha512" | _ => {
+        "sha512" => {
+            let hash = compute_sha512(&format!("{}${}", salt, password));
+            format!("$6${}${}", salt, hash)
+        }
+        _ => {
             let hash = compute_sha512(&format!("{}${}", salt, password));
             format!("$6${}${}", salt, hash)
         }

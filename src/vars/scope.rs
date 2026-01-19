@@ -710,7 +710,7 @@ impl ScopeVisualization {
             }
             serde_yaml::Value::Sequence(seq) => format!("[{} items]", seq.len()),
             serde_yaml::Value::Mapping(map) => format!("{{}} {} keys}}", map.len()),
-            serde_yaml::Value::Tagged(t) => format!("!{} ...", t.tag.to_string()),
+            serde_yaml::Value::Tagged(t) => format!("!{} ...", t.tag),
         }
     }
 }

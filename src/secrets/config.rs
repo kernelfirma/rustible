@@ -424,6 +424,7 @@ impl Default for VaultAuthMethod {
 /// AWS Secrets Manager configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct AwsSecretsManagerConfig {
     /// AWS region
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -458,20 +459,6 @@ pub struct AwsSecretsManagerConfig {
     pub use_dual_stack: bool,
 }
 
-impl Default for AwsSecretsManagerConfig {
-    fn default() -> Self {
-        Self {
-            region: None,
-            profile: None,
-            access_key_id: None,
-            secret_access_key: None,
-            session_token: None,
-            endpoint_url: None,
-            use_fips: false,
-            use_dual_stack: false,
-        }
-    }
-}
 
 impl AwsSecretsManagerConfig {
     /// Create from environment variables.

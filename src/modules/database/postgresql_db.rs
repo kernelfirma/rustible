@@ -64,6 +64,14 @@ impl DbState {
     }
 }
 
+impl std::str::FromStr for DbState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        DbState::from_str(s)
+    }
+}
+
 /// SSL mode for PostgreSQL connections
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum SslMode {
@@ -101,6 +109,14 @@ impl SslMode {
             SslMode::VerifyCa => "verify-ca",
             SslMode::VerifyFull => "verify-full",
         }
+    }
+}
+
+impl std::str::FromStr for SslMode {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SslMode::from_str(s)
     }
 }
 
@@ -230,11 +246,7 @@ impl DbConfig {
             DbState::Present
         };
 
-        let conn_limit = if let Some(limit) = params.get_i64("conn_limit")? {
-            Some(limit as i32)
-        } else {
-            None
-        };
+        let conn_limit = params.get_i64("conn_limit")?.map(|limit| limit as i32);
 
         Ok(Self {
             name: params.get_string_required("name")?,
@@ -278,6 +290,9 @@ impl PostgresqlDbModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         options
@@ -815,12 +830,11 @@ impl PostgresqlDbModule {
                                     output = output.with_diff(d);
                                 }
                                 return Ok(output);
-                            } else {
-                                return Ok(ModuleOutput::ok(format!(
-                                    "Database '{}' exists",
-                                    config.name
-                                )));
                             }
+                            return Ok(ModuleOutput::ok(format!(
+                                "Database '{}' exists",
+                                config.name
+                            )));
                         }
 
                         let changed = Self::update_database(

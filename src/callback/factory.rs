@@ -451,11 +451,11 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut summary_config = SummaryConfig::default();
-
-        // Apply global config
-        summary_config.use_colors = config.use_colors;
-        summary_config.show_timing = config.show_task_timing;
+        let mut summary_config = SummaryConfig {
+            use_colors: config.use_colors,
+            show_timing: config.show_task_timing,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {
@@ -483,10 +483,10 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut progress_config = ProgressConfig::default();
-
-        // Apply global config
-        progress_config.use_color = config.use_colors;
+        let mut progress_config = ProgressConfig {
+            use_color: config.use_colors,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {
@@ -551,11 +551,11 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut diff_config = DiffConfig::default();
-
-        // Apply global config
-        diff_config.use_color = config.use_colors;
-        diff_config.enabled = config.show_diff;
+        let mut diff_config = DiffConfig {
+            use_color: config.use_colors,
+            enabled: config.show_diff,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {

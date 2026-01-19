@@ -725,7 +725,7 @@ fn filter_unique(value: Vec<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
 
 fn filter_sort(value: Vec<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
     let mut sorted = value;
-    sorted.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    sorted.sort_by_key(|a| a.to_string());
     sorted
 }
 
@@ -769,9 +769,9 @@ fn filter_expanduser(value: &str) -> String {
     if !unsafe_template_access_allowed() {
         return value.to_string();
     }
-    if value.starts_with("~/") {
+    if let Some(rest) = value.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
-            return home.join(&value[2..]).to_string_lossy().to_string();
+            return home.join(rest).to_string_lossy().to_string();
         }
     }
     value.to_string()

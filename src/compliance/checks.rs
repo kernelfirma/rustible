@@ -316,7 +316,7 @@ impl ComplianceCheck for FileCheck {
             )));
         }
 
-        let parts: Vec<&str> = result.stdout.trim().split_whitespace().collect();
+        let parts: Vec<&str> = result.stdout.split_whitespace().collect();
         if parts.len() < 3 {
             return Ok(CheckResult::error("Unexpected stat output format"));
         }

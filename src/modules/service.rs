@@ -215,6 +215,14 @@ impl ServiceState {
     }
 }
 
+impl std::str::FromStr for ServiceState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ServiceState::from_str(s)
+    }
+}
+
 /// Service module configuration parsed from parameters
 #[derive(Debug, Clone)]
 struct ServiceConfig {
@@ -298,6 +306,7 @@ impl ServiceModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {

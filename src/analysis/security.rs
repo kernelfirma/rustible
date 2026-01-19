@@ -496,7 +496,7 @@ impl SecurityAnalyzer {
             let has_special = value.chars().any(|c| !c.is_alphanumeric());
 
             // High entropy heuristic
-            if (has_mixed_case && has_numbers) || (has_mixed_case && has_special) {
+            if (has_numbers || has_special) && has_mixed_case {
                 return true;
             }
         }

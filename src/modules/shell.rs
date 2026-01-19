@@ -110,6 +110,9 @@ impl ShellModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         Ok(options)
@@ -265,12 +268,11 @@ impl ShellModule {
                     "Shell command executed successfully".to_string(),
                 )
                 .with_command_output(Some(stdout), Some(stderr), Some(rc)));
-            } else {
-                return Err(ModuleError::CommandFailed {
-                    code: rc,
-                    message: if stderr.is_empty() { stdout } else { stderr },
-                });
             }
+            return Err(ModuleError::CommandFailed {
+                code: rc,
+                message: if stderr.is_empty() { stdout } else { stderr },
+            });
         }
 
         // Execute the command

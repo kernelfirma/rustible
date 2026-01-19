@@ -37,8 +37,10 @@ pub type AuditLogResult<T> = Result<T, AuditLogError>;
 
 /// Format for audit log output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum AuditFormat {
     /// Single-line text format
+    #[default]
     Text,
     /// JSON format (one event per line)
     Json,
@@ -46,11 +48,6 @@ pub enum AuditFormat {
     Cef,
 }
 
-impl Default for AuditFormat {
-    fn default() -> Self {
-        AuditFormat::Text
-    }
-}
 
 /// Trait for audit log backends
 pub trait AuditLogger: Send + Sync {
@@ -213,10 +210,12 @@ impl fmt::Debug for FileLogger {
 
 /// Syslog facility for audit messages
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SyslogFacility {
     /// Security/authorization messages
     Auth,
     /// Security/authorization messages (private)
+    #[default]
     AuthPriv,
     /// System daemons
     Daemon,
@@ -249,11 +248,6 @@ impl SyslogFacility {
     }
 }
 
-impl Default for SyslogFacility {
-    fn default() -> Self {
-        SyslogFacility::AuthPriv
-    }
-}
 
 /// Syslog transport protocol
 #[derive(Debug, Clone)]

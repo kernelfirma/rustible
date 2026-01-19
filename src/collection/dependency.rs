@@ -68,8 +68,10 @@ impl CollectionDependency {
 
 /// Version constraint for dependencies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum VersionConstraint {
     /// Any version
+    #[default]
     Any,
     /// Exact version
     Exact(String),
@@ -87,11 +89,6 @@ pub enum VersionConstraint {
     And(Vec<VersionConstraint>),
 }
 
-impl Default for VersionConstraint {
-    fn default() -> Self {
-        Self::Any
-    }
-}
 
 impl VersionConstraint {
     /// Parse a version constraint string

@@ -539,15 +539,15 @@ impl ExecutionCallback for NotificationCallback {
     async fn on_task_complete(&self, result: &ExecutionResult) {
         let mut state = self.state.write().await;
 
-        let stats = state
+        let host_stats = state
             .host_stats
             .entry(result.host.clone())
             .or_insert_with(HostStatsSummary::default);
 
         if result.result.skipped {
-            stats.skipped += 1;
+            host_stats.skipped += 1;
         } else if !result.result.success {
-            stats.failed += 1;
+            host_stats.failed += 1;
             state.has_failures = true;
             state.failures.push(FailureDetail {
                 host: result.host.clone(),
@@ -555,9 +555,9 @@ impl ExecutionCallback for NotificationCallback {
                 message: result.result.message.clone(),
             });
         } else if result.result.changed {
-            stats.changed += 1;
+            host_stats.changed += 1;
         } else {
-            stats.ok += 1;
+            host_stats.ok += 1;
         }
     }
 }
