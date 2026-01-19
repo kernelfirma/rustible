@@ -419,7 +419,7 @@ impl SecretRotator {
 
         if let Some(updated_time) = metadata.updated_time {
             let last_rotation = chrono::DateTime::from_timestamp(updated_time, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
+                .unwrap_or_else(chrono::Utc::now);
             let age = chrono::Utc::now().signed_duration_since(last_rotation);
             let threshold = chrono::Duration::from_std(policy.interval)
                 .unwrap_or_else(|_| chrono::Duration::days(30));

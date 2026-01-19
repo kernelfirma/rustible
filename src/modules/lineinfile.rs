@@ -39,6 +39,14 @@ impl LineState {
     }
 }
 
+impl std::str::FromStr for LineState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        LineState::from_str(s)
+    }
+}
+
 /// Where to insert a new line
 #[derive(Debug, Clone, PartialEq)]
 pub enum InsertPosition {
@@ -317,7 +325,7 @@ impl LineinfileModule {
                         }
 
                         // Download file content (empty if doesn't exist)
-                        let content = if file_exists {
+                        let file_bytes = if file_exists {
                             conn.download_content(remote_path).await.map_err(|e| {
                                 ModuleError::ExecutionFailed(format!(
                                     "Failed to download file: {}",
@@ -329,7 +337,7 @@ impl LineinfileModule {
                         };
 
                         // Parse lines from content
-                        let content_str = String::from_utf8_lossy(&content);
+                        let content_str = String::from_utf8_lossy(&file_bytes);
                         let mut lines: Vec<String> =
                             content_str.lines().map(|s| s.to_string()).collect();
                         let original_lines = lines.clone();
@@ -410,7 +418,7 @@ impl LineinfileModule {
                             let backup_path_str = format!("{}{}", path, backup_suffix);
                             let backup_dest = Path::new(&backup_path_str);
 
-                            conn.upload_content(&content, backup_dest, None)
+                            conn.upload_content(&file_bytes, backup_dest, None)
                                 .await
                                 .map_err(|e| {
                                     ModuleError::ExecutionFailed(format!(
@@ -616,13 +624,12 @@ impl Module for LineinfileModule {
                     "Either 'line' or 'regexp' is required for state=present".to_string(),
                 ));
             }
-        } else if state == "absent" {
-            if params.get("line").is_none() && params.get("regexp").is_none() {
+        } else if state == "absent"
+            && params.get("line").is_none() && params.get("regexp").is_none() {
                 return Err(ModuleError::MissingParameter(
                     "Either 'line' or 'regexp' is required for state=absent".to_string(),
                 ));
             }
-        }
 
         Ok(())
     }

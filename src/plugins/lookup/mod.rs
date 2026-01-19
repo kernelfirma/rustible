@@ -204,9 +204,9 @@ impl LookupOptions {
 
     /// Get a string option
     pub fn get_string(&self, key: &str) -> Option<String> {
-        self.options.get(key).and_then(|v| match v {
-            serde_json::Value::String(s) => Some(s.clone()),
-            _ => Some(v.to_string().trim_matches('"').to_string()),
+        self.options.get(key).map(|v| match v {
+            serde_json::Value::String(s) => s.clone(),
+            _ => v.to_string().trim_matches('"').to_string(),
         })
     }
 

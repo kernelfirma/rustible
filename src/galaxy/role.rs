@@ -78,9 +78,7 @@ impl RoleInfo {
         let user = self.github_user.as_ref()?;
         let repo = self.github_repo.as_ref()?;
         let branch = self
-            .github_branch
-            .as_ref()
-            .map(|s| s.as_str())
+            .github_branch.as_deref()
             .unwrap_or("master");
 
         Some(format!(

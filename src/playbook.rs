@@ -1282,8 +1282,7 @@ impl SerialSpec {
         pct.trim_end_matches('%')
             .parse::<f64>()
             .unwrap_or(100.0)
-            .max(0.0)
-            .min(100.0)
+            .clamp(0.0, 100.0)
     }
 }
 

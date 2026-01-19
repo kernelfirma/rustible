@@ -151,7 +151,7 @@ impl RateLimiter {
     /// Create a global rate limiter (singleton pattern)
     pub fn global() -> &'static RateLimiter {
         use once_cell::sync::Lazy;
-        static GLOBAL: Lazy<RateLimiter> = Lazy::new(|| RateLimiter::default());
+        static GLOBAL: Lazy<RateLimiter> = Lazy::new(RateLimiter::default);
         &GLOBAL
     }
 

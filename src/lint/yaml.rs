@@ -194,8 +194,8 @@ impl YamlChecker {
             .map(String::from);
 
         // Check for required 'hosts' key
-        if !play_map.contains_key(&serde_yaml::Value::String("hosts".to_string())) {
-            if config.should_run_rule("E005", RuleCategory::Syntax, Severity::Error) {
+        if !play_map.contains_key(serde_yaml::Value::String("hosts".to_string()))
+            && config.should_run_rule("E005", RuleCategory::Syntax, Severity::Error) {
                 result.add_issue(LintIssue::new(
                     "E005",
                     "missing-hosts",
@@ -205,14 +205,13 @@ impl YamlChecker {
                     Location::file(path).with_play(play_idx, play_name.clone()),
                 ).with_suggestion("Add 'hosts: all' or specify target hosts"));
             }
-        }
 
         // Check for unknown keys
         let play_keys_set: HashSet<&str> = PLAY_KEYS.iter().copied().collect();
         for key in play_map.keys() {
             if let Some(key_str) = key.as_str() {
-                if !play_keys_set.contains(key_str) {
-                    if config.should_run_rule("W001", RuleCategory::Syntax, Severity::Warning) {
+                if !play_keys_set.contains(key_str)
+                    && config.should_run_rule("W001", RuleCategory::Syntax, Severity::Warning) {
                         let similar = find_similar_key(key_str, &play_keys_set);
                         let mut issue = LintIssue::new(
                             "W001",
@@ -227,13 +226,12 @@ impl YamlChecker {
                         }
                         result.add_issue(issue);
                     }
-                }
             }
         }
 
         // Check tasks
         for task_key in &["tasks", "pre_tasks", "post_tasks", "handlers"] {
-            if let Some(tasks) = play_map.get(&serde_yaml::Value::String(task_key.to_string())) {
+            if let Some(tasks) = play_map.get(serde_yaml::Value::String(task_key.to_string())) {
                 if let Some(task_list) = tasks.as_sequence() {
                     for (task_idx, task) in task_list.iter().enumerate() {
                         self.check_task(task, task_idx, play_idx, &play_name, path, config, result)?;
@@ -247,6 +245,7 @@ impl YamlChecker {
     }
 
     /// Check a single task.
+    #[allow(clippy::too_many_arguments)]
     fn check_task(
         &self,
         task: &serde_yaml::Value,
@@ -332,14 +331,14 @@ impl YamlChecker {
         }
 
         // Check if task has a module (unless it's a block task)
-        let is_block = task_map.contains_key(&serde_yaml::Value::String("block".to_string()));
+        let is_block = task_map.contains_key(serde_yaml::Value::String("block".to_string()));
         if !found_module && !is_block {
             // Task might be using 'action' key
-            let has_action = task_map.contains_key(&serde_yaml::Value::String("action".to_string()));
-            let has_local_action = task_map.contains_key(&serde_yaml::Value::String("local_action".to_string()));
+            let has_action = task_map.contains_key(serde_yaml::Value::String("action".to_string()));
+            let has_local_action = task_map.contains_key(serde_yaml::Value::String("local_action".to_string()));
 
-            if !has_action && !has_local_action {
-                if config.should_run_rule("E007", RuleCategory::Syntax, Severity::Error) {
+            if !has_action && !has_local_action
+                && config.should_run_rule("E007", RuleCategory::Syntax, Severity::Error) {
                     result.add_issue(LintIssue::new(
                         "E007",
                         "task-missing-module",
@@ -351,12 +350,11 @@ impl YamlChecker {
                             .with_task(task_idx, task_name.clone()),
                     ).with_suggestion("Add a module name like 'debug:', 'command:', or 'shell:'"));
                 }
-            }
         }
 
         // Recursively check block/rescue/always
         for block_key in &["block", "rescue", "always"] {
-            if let Some(block_tasks) = task_map.get(&serde_yaml::Value::String(block_key.to_string())) {
+            if let Some(block_tasks) = task_map.get(serde_yaml::Value::String(block_key.to_string())) {
                 if let Some(block_list) = block_tasks.as_sequence() {
                     for (block_task_idx, block_task) in block_list.iter().enumerate() {
                         self.check_task(
@@ -389,8 +387,8 @@ impl YamlChecker {
             let line_num = line_num + 1; // 1-indexed
 
             // Check for tabs (YAML should use spaces)
-            if line.contains('\t') {
-                if config.should_run_rule("E008", RuleCategory::Syntax, Severity::Error) {
+            if line.contains('\t')
+                && config.should_run_rule("E008", RuleCategory::Syntax, Severity::Error) {
                     result.add_issue(LintIssue::new(
                         "E008",
                         "yaml-tab-character",
@@ -400,11 +398,10 @@ impl YamlChecker {
                         Location::file(path).with_line(line_num),
                     ).with_suggestion("Replace tabs with spaces (2 spaces per level is standard)"));
                 }
-            }
 
             // Check for trailing whitespace
-            if line.ends_with(' ') || line.ends_with('\t') {
-                if config.should_run_rule("W003", RuleCategory::Syntax, Severity::Hint) {
+            if (line.ends_with(' ') || line.ends_with('\t'))
+                && config.should_run_rule("W003", RuleCategory::Syntax, Severity::Hint) {
                     result.add_issue(LintIssue::new(
                         "W003",
                         "trailing-whitespace",
@@ -414,11 +411,10 @@ impl YamlChecker {
                         Location::file(path).with_line(line_num),
                     ).with_suggestion("Remove trailing whitespace"));
                 }
-            }
 
             // Check for very long lines
-            if line.len() > 160 {
-                if config.should_run_rule("W004", RuleCategory::Syntax, Severity::Hint) {
+            if line.len() > 160
+                && config.should_run_rule("W004", RuleCategory::Syntax, Severity::Hint) {
                     result.add_issue(LintIssue::new(
                         "W004",
                         "line-too-long",
@@ -428,12 +424,11 @@ impl YamlChecker {
                         Location::file(path).with_line(line_num),
                     ).with_suggestion("Consider breaking long lines for readability"));
                 }
-            }
 
             // Check for odd indentation (not multiple of 2)
             let indent = line.len() - line.trim_start().len();
-            if indent > 0 && indent % 2 != 0 && !line.trim().is_empty() {
-                if config.should_run_rule("W005", RuleCategory::Syntax, Severity::Warning) {
+            if indent > 0 && indent % 2 != 0 && !line.trim().is_empty()
+                && config.should_run_rule("W005", RuleCategory::Syntax, Severity::Warning) {
                     result.add_issue(LintIssue::new(
                         "W005",
                         "odd-indentation",
@@ -443,12 +438,11 @@ impl YamlChecker {
                         Location::file(path).with_line(line_num),
                     ).with_suggestion("Use consistent 2-space indentation"));
                 }
-            }
         }
 
         // Check for CRLF line endings
-        if content.contains("\r\n") {
-            if config.should_run_rule("W006", RuleCategory::Syntax, Severity::Hint) {
+        if content.contains("\r\n")
+            && config.should_run_rule("W006", RuleCategory::Syntax, Severity::Hint) {
                 result.add_issue(LintIssue::new(
                     "W006",
                     "crlf-line-endings",
@@ -458,7 +452,6 @@ impl YamlChecker {
                     Location::file(path),
                 ).with_suggestion("Convert to Unix-style (LF) line endings"));
             }
-        }
     }
 }
 
@@ -485,6 +478,7 @@ fn find_similar_key<'a>(key: &str, valid_keys: &HashSet<&'a str>) -> Option<&'a 
 }
 
 /// Calculate Levenshtein distance between two strings.
+#[allow(clippy::needless_range_loop)]
 fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();

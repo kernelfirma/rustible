@@ -68,6 +68,14 @@ impl RuntimeConfig {
     }
 }
 
+impl std::str::FromStr for RuntimeConfig {
+    type Err = super::CollectionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RuntimeConfig::from_str(s)
+    }
+}
+
 /// Plugin routing configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PluginRouting {

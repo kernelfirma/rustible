@@ -108,10 +108,12 @@ const MASK: &str = "********";
 
 /// Verbosity levels for context output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ContextVerbosity {
     /// Show only essential variables used in task args
     Minimal,
     /// Show task variables and relevant facts (default)
+    #[default]
     Normal,
     /// Show all variables, facts, and registered vars
     Verbose,
@@ -119,11 +121,6 @@ pub enum ContextVerbosity {
     Debug,
 }
 
-impl Default for ContextVerbosity {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
 
 /// Statistics tracked per host during execution.
 #[derive(Debug, Clone, Default)]
@@ -595,16 +592,14 @@ impl ContextCallback {
                 if let Some(rc) = obj.get("rc") {
                     println!("    {}: {}", "rc".bright_black(), self.format_value(rc, 0));
                 }
-                if let Some(stdout) = obj.get("stdout") {
-                    if let JsonValue::String(s) = stdout {
-                        if !s.is_empty() {
-                            let truncated = if s.len() > 100 {
-                                format!("{}...", &s[..100])
-                            } else {
-                                s.clone()
-                            };
-                            println!("    {}: \"{}\"", "stdout".bright_black(), truncated);
-                        }
+                if let Some(JsonValue::String(s)) = obj.get("stdout") {
+                    if !s.is_empty() {
+                        let truncated = if s.len() > 100 {
+                            format!("{}...", &s[..100])
+                        } else {
+                            s.clone()
+                        };
+                        println!("    {}: \"{}\"", "stdout".bright_black(), truncated);
                     }
                 }
                 if let Some(msg) = obj.get("msg") {
@@ -747,7 +742,7 @@ impl ExecutionCallback for ContextCallback {
         // Print duration if we have start time
         if let Some(start) = *start_time {
             let duration = start.elapsed();
-            let status = if success {
+            let playbook_status = if success {
                 "completed".green()
             } else {
                 "failed".red().bold()
@@ -756,7 +751,7 @@ impl ExecutionCallback for ContextCallback {
             println!(
                 "\n{} {} in {:.2}s",
                 name.bright_white().bold(),
-                status,
+                playbook_status,
                 duration.as_secs_f64()
             );
         }

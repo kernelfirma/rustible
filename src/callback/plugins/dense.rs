@@ -315,8 +315,8 @@ impl DenseCallback {
                     ));
                 } else {
                     // Just add individually
-                    for k in i..j {
-                        result.push(host_nums[k].0.clone());
+                    for host in &host_nums[i..j] {
+                        result.push(host.0.clone());
                     }
                 }
 
@@ -498,16 +498,16 @@ impl DenseCallback {
     /// Print the final recap with host statistics.
     fn print_final_recap(&self) {
         let header = "PLAY RECAP";
-        let stars = "*".repeat(80 - header.len());
+        let divider = "*".repeat(80 - header.len());
 
         if self.config.use_colors {
             println!(
                 "\n{} {}",
                 header.bright_white().bold(),
-                stars.bright_black()
+                divider.bright_black()
             );
         } else {
-            println!("\n{} {}", header, stars);
+            println!("\n{} {}", header, divider);
         }
 
         let stats = self.host_stats.read();

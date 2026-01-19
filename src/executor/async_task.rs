@@ -83,8 +83,10 @@ impl AsyncConfig {
 /// Status of an async job
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AsyncJobStatus {
     /// Job is queued but not yet started
+    #[default]
     Pending,
     /// Job is currently running
     Running,
@@ -98,11 +100,6 @@ pub enum AsyncJobStatus {
     TimedOut,
 }
 
-impl Default for AsyncJobStatus {
-    fn default() -> Self {
-        AsyncJobStatus::Pending
-    }
-}
 
 /// Information about an async job
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -349,7 +346,7 @@ impl AsyncTaskManager {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-            uuid.to_string().replace('-', "")[..16].to_string()
+            &uuid.to_string().replace('-', "")[..16]
         )
     }
 

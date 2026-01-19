@@ -210,7 +210,7 @@ impl SynchronizeModule {
                         .get("ansible_user")
                         .and_then(|v| v.as_str().map(String::from))
                 })
-                .unwrap_or_else(|| "".to_string())
+                .unwrap_or_default()
         } else {
             String::new()
         };

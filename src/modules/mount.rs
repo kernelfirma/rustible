@@ -43,6 +43,14 @@ impl MountState {
     }
 }
 
+impl std::str::FromStr for MountState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        MountState::from_str(s)
+    }
+}
+
 /// Information about a mount entry
 #[derive(Debug, Clone)]
 pub struct MountEntry {
@@ -97,6 +105,9 @@ impl MountModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options
@@ -166,7 +177,7 @@ impl MountModule {
             return Ok(None);
         }
 
-        let parts: Vec<&str> = stdout.trim().split_whitespace().collect();
+        let parts: Vec<&str> = stdout.split_whitespace().collect();
         if parts.len() >= 4 {
             Ok(Some(MountEntry {
                 src: parts[0].to_string(),
@@ -200,7 +211,7 @@ impl MountModule {
     /// Write /etc/fstab content
     fn write_fstab(
         connection: &Arc<dyn Connection + Send + Sync>,
-        content: &str,
+        fstab_content: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Create a backup first
@@ -210,7 +221,7 @@ impl MountModule {
         // Write new content
         let cmd = format!(
             "cat << 'RUSTIBLE_EOF' > /etc/fstab\n{}\nRUSTIBLE_EOF",
-            content.trim()
+            fstab_content.trim()
         );
         let (success, _, stderr) = Self::execute_command(connection, &cmd, context)?;
 

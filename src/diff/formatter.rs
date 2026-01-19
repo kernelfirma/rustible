@@ -339,13 +339,7 @@ impl DiffFormatter {
         match line.change_type {
             ChangeType::Delete => self.format_delete_line(content),
             ChangeType::Insert => self.format_insert_line(content),
-            ChangeType::Equal => {
-                if self.options.use_color {
-                    format!(" {}", content)
-                } else {
-                    format!(" {}", content)
-                }
-            }
+            ChangeType::Equal => format!(" {}", content),
         }
     }
 
@@ -430,7 +424,7 @@ impl DiffFormatter {
                             let line = if self.options.use_color {
                                 format!(
                                     "{:width$} | {:width$}",
-                                    format!("{}", left).red(),
+                                    left.to_string().red(),
                                     "",
                                     width = half_width
                                 )
@@ -449,7 +443,7 @@ impl DiffFormatter {
                                 format!(
                                     "{:width$} | {:width$}",
                                     "",
-                                    format!("{}", right).green(),
+                                    right.to_string().green(),
                                     width = half_width
                                 )
                             } else {

@@ -159,6 +159,7 @@ impl CopyModule {
     }
 
     /// Async implementation for remote copy using connection
+    #[allow(clippy::too_many_arguments)]
     async fn execute_remote_async(
         connection: Arc<dyn Connection + Send + Sync>,
         dest: &str,
@@ -276,10 +277,8 @@ impl CopyModule {
         if check_mode {
             let src_display = if content.is_some() {
                 "(content)"
-            } else if let Some(s) = src {
-                s
             } else {
-                ""
+                src.unwrap_or_default()
             };
 
             let diff = if diff_mode {
@@ -401,6 +400,7 @@ impl CopyModule {
 
     /// Execute remote copy using the connection from context
     /// Uses a dedicated runtime to avoid blocking single-threaded executors
+    #[allow(clippy::too_many_arguments)]
     fn execute_remote(
         connection: Arc<dyn Connection + Send + Sync>,
         dest: &str,
@@ -449,6 +449,7 @@ impl CopyModule {
     }
 
     /// Execute local copy (when connection is None or local)
+    #[allow(clippy::too_many_arguments)]
     fn execute_local(
         dest: &str,
         src: Option<&str>,
@@ -699,7 +700,7 @@ impl Module for CopyModule {
     ) -> ModuleResult<ModuleOutput> {
         let dest = params.get_string_required("dest")?;
         let src = params.get_string("src")?;
-        let content = params.get_string("content")?;
+        let inline_content = params.get_string("content")?;
         let force = params.get_bool_or("force", true);
         let backup = params.get_bool_or("backup", false);
         let backup_suffix = params
@@ -719,7 +720,7 @@ impl Module for CopyModule {
                 connection.clone(),
                 &dest,
                 src.as_deref(),
-                content.as_deref(),
+                inline_content.as_deref(),
                 mode,
                 owner.as_deref(),
                 group.as_deref(),
@@ -733,7 +734,7 @@ impl Module for CopyModule {
             Self::execute_local(
                 &dest,
                 src.as_deref(),
-                content.as_deref(),
+                inline_content.as_deref(),
                 mode,
                 directory_mode,
                 force,

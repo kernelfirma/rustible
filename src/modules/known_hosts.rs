@@ -71,6 +71,14 @@ impl KnownHostsState {
     }
 }
 
+impl std::str::FromStr for KnownHostsState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        KnownHostsState::from_str(s)
+    }
+}
+
 /// Supported SSH key types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyType {
@@ -138,6 +146,14 @@ impl KeyType {
             "sk-ecdsa-sha2-nistp256@openssh.com" => Some(KeyType::SkEcdsa),
             _ => None,
         }
+    }
+}
+
+impl std::str::FromStr for KeyType {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        KeyType::from_str(s)
     }
 }
 
@@ -282,7 +298,7 @@ fn hash_hostname(hostname: &str, port: Option<u16>) -> String {
 
     // Generate 20 random bytes for salt (SHA1 output size)
     let salt: [u8; 20] = rand::thread_rng().gen();
-    let salt_b64 = BASE64.encode(&salt);
+    let salt_b64 = BASE64.encode(salt);
     let hash_b64 = compute_hostname_hash(&target, &salt);
 
     format!("|1|{}|{}", salt_b64, hash_b64)
@@ -321,10 +337,10 @@ mod hmac {
             }
 
             let mut inner = Sha1::new();
-            inner.update(&inner_key);
+            inner.update(inner_key);
 
             let mut outer = Sha1::new();
-            outer.update(&outer_key);
+            outer.update(outer_key);
 
             Ok(Self { inner, outer })
         }
@@ -336,7 +352,7 @@ mod hmac {
         pub fn finalize(self) -> HmacOutput {
             let inner_result = self.inner.finalize();
             let mut outer = self.outer;
-            outer.update(&inner_result);
+            outer.update(inner_result);
             HmacOutput {
                 bytes: outer.finalize().into(),
             }
@@ -439,7 +455,7 @@ impl KnownHostsFile {
             .iter()
             .filter(|e| {
                 e.matches_hostname(hostname, port)
-                    && key_type.map_or(true, |kt| e.matches_key_type(kt))
+                    && key_type.is_none_or(|kt| e.matches_key_type(kt))
             })
             .collect()
     }
@@ -459,7 +475,7 @@ impl KnownHostsFile {
         let original_len = self.entries.len();
         self.entries.retain(|e| {
             !(e.matches_hostname(hostname, port)
-                && key_type.map_or(true, |kt| e.matches_key_type(kt)))
+                && key_type.is_none_or(|kt| e.matches_key_type(kt)))
         });
         original_len - self.entries.len()
     }

@@ -218,13 +218,13 @@ impl Lookup for UrlLookup {
             .unwrap_or(false);
 
         // Fetch the URL
-        let content = self.fetch_url(url, headers, validate_certs, timeout, auth)?;
+        let response_body = self.fetch_url(url, headers, validate_certs, timeout, auth)?;
 
         // Return results
         if split_lines {
-            Ok(content.lines().map(|s| s.to_string()).collect())
+            Ok(response_body.lines().map(|s| s.to_string()).collect())
         } else {
-            Ok(vec![content])
+            Ok(vec![response_body])
         }
     }
 }

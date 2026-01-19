@@ -42,6 +42,10 @@ pub struct RunArgs {
     #[arg(long)]
     pub vault_password_file: Option<PathBuf>,
 
+    /// Ask for SSH password
+    #[arg(short = 'k', long = "ask-pass")]
+    pub ask_pass: bool,
+
     /// Become (sudo/su)
     #[arg(short = 'b', long)]
     pub r#become: bool,
@@ -240,6 +244,33 @@ impl RunArgs {
                 .warning("Running in CHECK MODE - no changes will be made");
         }
 
+        let has_extra_ssh_pass = extra_vars.contains_key("ansible_ssh_pass");
+        let has_inventory_ssh_pass = runtime.hosts().iter().any(|host| {
+            runtime
+                .get_var("ansible_ssh_pass", Some(host))
+                .is_some()
+        });
+        let ssh_password = if !has_extra_ssh_pass && !has_inventory_ssh_pass {
+            if self.ask_pass {
+                Some(Self::prompt_ssh_password(ctx)?)
+            } else {
+                crate::cli::env::ssh_password()
+            }
+        } else {
+            None
+        };
+        if let Some(password) = ssh_password {
+            extra_vars.insert("ansible_ssh_pass".to_string(), serde_json::json!(password));
+        }
+
+        let ask_become_pass =
+            self.ask_become_pass || ctx.config.privilege_escalation.become_ask_pass;
+        let become_password = if ask_become_pass {
+            Some(Self::prompt_become_password(ctx)?)
+        } else {
+            None
+        };
+
         // Build executor configuration from CLI args
         let executor_config = ExecutorConfig {
             forks: ctx.forks,
@@ -253,7 +284,7 @@ impl RunArgs {
             r#become: self.r#become,
             become_method: self.become_method.clone(),
             become_user: self.become_user.clone(),
-            become_password: None, // TODO: Implement --ask-become-pass
+            become_password,
         };
 
         // Create executor with runtime context and event callback
@@ -922,6 +953,22 @@ impl RunArgs {
             .filter(|tag| !tag.is_empty())
             .map(|tag| tag.to_string())
             .collect()
+    }
+
+    fn prompt_ssh_password(ctx: &CommandContext) -> Result<String> {
+        ctx.output.flush();
+        let password = dialoguer::Password::new()
+            .with_prompt("SSH password")
+            .interact()?;
+        Ok(password)
+    }
+
+    fn prompt_become_password(ctx: &CommandContext) -> Result<String> {
+        ctx.output.flush();
+        let password = dialoguer::Password::new()
+            .with_prompt("Become password")
+            .interact()?;
+        Ok(password)
     }
 
     /// Detect which module a task is using

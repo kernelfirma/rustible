@@ -592,7 +592,7 @@ impl Vault {
         // Encode as hex
         use base64::Engine;
         let encoded_salt = salt.as_str().to_string();
-        let encoded_nonce = base64::engine::general_purpose::STANDARD.encode(&nonce_bytes);
+        let encoded_nonce = base64::engine::general_purpose::STANDARD.encode(nonce_bytes);
         let encoded_ciphertext = base64::engine::general_purpose::STANDARD.encode(&ciphertext);
 
         // Format as vault file
@@ -747,7 +747,7 @@ pub mod resolve {
         for part in parts {
             match current {
                 serde_yaml::Value::Mapping(map) => {
-                    current = map.get(&serde_yaml::Value::String(part.to_string()))?;
+                    current = map.get(serde_yaml::Value::String(part.to_string()))?;
                 }
                 serde_yaml::Value::Sequence(seq) => {
                     let index: usize = part.parse().ok()?;

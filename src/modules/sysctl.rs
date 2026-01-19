@@ -38,6 +38,14 @@ impl SysctlState {
     }
 }
 
+impl std::str::FromStr for SysctlState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SysctlState::from_str(s)
+    }
+}
+
 /// Module for sysctl parameter management
 pub struct SysctlModule;
 
@@ -49,6 +57,9 @@ impl SysctlModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options
@@ -120,7 +131,7 @@ impl SysctlModule {
     fn write_sysctl_conf(
         connection: &Arc<dyn Connection + Send + Sync>,
         path: &str,
-        content: &str,
+        sysctl_contents: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Ensure directory exists
@@ -132,7 +143,7 @@ impl SysctlModule {
         let cmd = format!(
             "cat << 'RUSTIBLE_EOF' > {}\n{}\nRUSTIBLE_EOF",
             shell_escape(path),
-            content.trim()
+            sysctl_contents.trim()
         );
         let (success, _, stderr) = Self::execute_command(connection, &cmd, context)?;
 

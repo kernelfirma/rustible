@@ -292,9 +292,8 @@ impl FullSkipCallback {
             }
         }
 
-        if message.starts_with("Skipped: ") {
-            let reason = message[9..].to_string();
-            return (None, reason);
+        if let Some(reason) = message.strip_prefix("Skipped: ") {
+            return (None, reason.to_string());
         }
 
         (None, message.to_string())

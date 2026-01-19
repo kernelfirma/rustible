@@ -610,37 +610,7 @@ impl WebhookConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    struct EnvGuard {
-        saved: Vec<(String, Option<String>)>,
-    }
-
-    impl EnvGuard {
-        fn new() -> Self {
-            Self { saved: Vec::new() }
-        }
-
-        fn set(&mut self, key: &str, value: &str) {
-            let prev = env::var(key).ok();
-            self.saved.push((key.to_string(), prev));
-            env::set_var(key, value);
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            for (key, value) in self.saved.drain(..) {
-                if let Some(val) = value {
-                    env::set_var(key, val);
-                } else {
-                    env::remove_var(key);
-                }
-            }
-        }
-    }
+    use crate::notify::test_support::{EnvGuard, ENV_LOCK};
 
     #[test]
     fn test_notification_config_builder() {

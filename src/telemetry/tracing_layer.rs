@@ -31,6 +31,12 @@ pub struct TelemetryBuilder {
     config: TelemetryConfig,
 }
 
+impl Default for TelemetryBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TelemetryBuilder {
     pub fn new() -> Self {
         Self {

@@ -11,8 +11,10 @@ use super::error::GalaxyResult;
 /// Checksum algorithm
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ChecksumAlgorithm {
     /// SHA-256 (default)
+    #[default]
     Sha256,
     /// SHA-512
     Sha512,
@@ -20,11 +22,6 @@ pub enum ChecksumAlgorithm {
     Md5,
 }
 
-impl Default for ChecksumAlgorithm {
-    fn default() -> Self {
-        Self::Sha256
-    }
-}
 
 /// File integrity information
 #[derive(Debug, Clone, Serialize, Deserialize)]

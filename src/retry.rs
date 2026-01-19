@@ -118,12 +118,14 @@ fn fibonacci(n: u32) -> u64 {
 /// clients retry at exactly the same time.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum JitterStrategy {
     /// No jitter - use exact calculated delay.
     None,
 
     /// Full jitter: random value between 0 and calculated delay.
     /// delay = random(0, calculated_delay)
+    #[default]
     Full,
 
     /// Equal jitter: half the delay plus random jitter.
@@ -142,11 +144,6 @@ pub enum JitterStrategy {
     },
 }
 
-impl Default for JitterStrategy {
-    fn default() -> Self {
-        Self::Full
-    }
-}
 
 impl JitterStrategy {
     /// Apply jitter to a calculated delay.
@@ -279,8 +276,10 @@ pub struct RetryPolicy {
     pub retry_on_timeout: bool,
 
     /// Custom retry condition (checked before backoff calculation).
-    condition: Option<Box<dyn Fn(&str, u32) -> bool + Send + Sync>>,
+    condition: Option<RetryConditionFn>,
 }
+
+type RetryConditionFn = Box<dyn Fn(&str, u32) -> bool + Send + Sync>;
 
 impl std::fmt::Debug for RetryPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

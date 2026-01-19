@@ -108,6 +108,14 @@ impl SELinuxMode {
     }
 }
 
+impl std::str::FromStr for SELinuxMode {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SELinuxMode::from_str(s)
+    }
+}
+
 /// SELinux port protocol
 #[derive(Debug, Clone, PartialEq)]
 pub enum SELinuxProtocol {
@@ -138,6 +146,14 @@ impl SELinuxProtocol {
             SELinuxProtocol::Dccp => "dccp",
             SELinuxProtocol::Sctp => "sctp",
         }
+    }
+}
+
+impl std::str::FromStr for SELinuxProtocol {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SELinuxProtocol::from_str(s)
     }
 }
 
@@ -194,6 +210,14 @@ impl SELinuxFileType {
     }
 }
 
+impl std::str::FromStr for SELinuxFileType {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SELinuxFileType::from_str(s)
+    }
+}
+
 /// SELinux port state
 #[derive(Debug, Clone, PartialEq)]
 pub enum PortState {
@@ -211,6 +235,14 @@ impl PortState {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for PortState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PortState::from_str(s)
     }
 }
 
@@ -238,6 +270,9 @@ impl SELinuxModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options
@@ -335,21 +370,25 @@ impl SELinuxModule {
     ) -> ModuleResult<()> {
         // Read current config
         let cmd = format!("cat {} 2>/dev/null || true", shell_escape(configfile));
-        let (_, content, _) = Self::execute_command(connection, &cmd, context)?;
+        let (_, config_contents, _) = Self::execute_command(connection, &cmd, context)?;
 
         let mut new_lines: Vec<String> = Vec::new();
         let mut found_selinux = false;
         let mut found_selinuxtype = false;
 
-        for line in content.lines() {
+        for line in config_contents.lines() {
             let trimmed = line.trim();
 
             if trimmed.starts_with("SELINUX=") {
                 new_lines.push(format!("SELINUX={}", mode.as_str()));
                 found_selinux = true;
-            } else if trimmed.starts_with("SELINUXTYPE=") && policy.is_some() {
-                new_lines.push(format!("SELINUXTYPE={}", policy.unwrap()));
-                found_selinuxtype = true;
+            } else if trimmed.starts_with("SELINUXTYPE=") {
+                if let Some(policy) = policy {
+                    new_lines.push(format!("SELINUXTYPE={}", policy));
+                    found_selinuxtype = true;
+                } else {
+                    new_lines.push(line.to_string());
+                }
             } else {
                 new_lines.push(line.to_string());
             }
@@ -359,8 +398,10 @@ impl SELinuxModule {
         if !found_selinux {
             new_lines.push(format!("SELINUX={}", mode.as_str()));
         }
-        if !found_selinuxtype && policy.is_some() {
-            new_lines.push(format!("SELINUXTYPE={}", policy.unwrap()));
+        if !found_selinuxtype {
+            if let Some(policy) = policy {
+                new_lines.push(format!("SELINUXTYPE={}", policy));
+            }
         }
 
         let new_content = new_lines.join("\n");
@@ -475,6 +516,7 @@ impl SELinuxModule {
     }
 
     /// Set file context using chcon
+    #[allow(clippy::too_many_arguments)]
     fn set_file_context(
         connection: &Arc<dyn Connection + Send + Sync>,
         path: &str,
@@ -825,8 +867,8 @@ impl SELinuxModule {
             .or_else(|| params.get_string("state").ok().flatten());
 
         let desired_value = match state.as_deref() {
-            Some("on") | Some("true") | Some("1") | Some("yes") => true,
-            Some("off") | Some("false") | Some("0") | Some("no") => false,
+            Some("on" | "true" | "1" | "yes") => true,
+            Some("off" | "false" | "0" | "no") => false,
             None => {
                 return Err(ModuleError::MissingParameter(
                     "boolean_state or state is required for boolean operations".to_string(),
@@ -962,13 +1004,12 @@ impl SELinuxModule {
                     ))
                     .with_data("target", serde_json::json!(target))
                     .with_data("setype", serde_json::json!(t)));
-                } else {
-                    return Ok(ModuleOutput::ok(format!(
-                        "Fcontext for '{}' already correct",
-                        target
-                    ))
-                    .with_data("target", serde_json::json!(target)));
                 }
+                return Ok(ModuleOutput::ok(format!(
+                    "Fcontext for '{}' already correct",
+                    target
+                ))
+                .with_data("target", serde_json::json!(target)));
             }
         }
 

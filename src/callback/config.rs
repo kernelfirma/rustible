@@ -208,7 +208,7 @@ impl CallbackConfig {
     pub fn get_or_create_plugin_config(&mut self, plugin_name: &str) -> &mut PluginConfig {
         self.plugins
             .entry(plugin_name.to_string())
-            .or_insert_with(PluginConfig::default)
+            .or_default()
     }
 
     /// Check if a specific plugin is enabled.

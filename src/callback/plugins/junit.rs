@@ -116,8 +116,10 @@ impl TestSuite {
 
     /// Calculates summary statistics for this test suite.
     fn stats(&self) -> SuiteStats {
-        let mut stats = SuiteStats::default();
-        stats.tests = self.test_cases.len();
+        let mut stats = SuiteStats {
+            tests: self.test_cases.len(),
+            ..Default::default()
+        };
 
         for tc in &self.test_cases {
             match &tc.outcome {

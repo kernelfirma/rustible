@@ -255,8 +255,10 @@ impl DriftArgs {
         }
 
         // Calculate summary
-        let mut summary = DriftSummary::default();
-        summary.total_resources = findings.len();
+        let mut summary = DriftSummary {
+            total_resources: findings.len(),
+            ..Default::default()
+        };
         for finding in &findings {
             match finding.status {
                 DriftStatus::InSync => summary.in_sync += 1,

@@ -241,12 +241,14 @@ impl Module for ScriptModule {
 
         // Upload the script
         let conn = connection.clone();
-        let content = local_script.clone();
+        let script_bytes = local_script.clone();
         let path = remote_path_buf.clone();
         std::thread::scope(|s| {
-            s.spawn(|| rt.block_on(async move { conn.upload_content(&content, &path, None).await }))
-                .join()
-                .unwrap()
+            s.spawn(|| {
+                rt.block_on(async move { conn.upload_content(&script_bytes, &path, None).await })
+            })
+            .join()
+            .unwrap()
         })
         .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload script: {}", e)))?;
 

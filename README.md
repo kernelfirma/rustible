@@ -165,6 +165,34 @@ Benchmarks demonstrate significant performance improvements:
 - [API Reference](docs/reference/README.md) - Module documentation
 - [Architecture](docs/architecture/ARCHITECTURE.md) - Technical design
 
+## Testing
+
+### SSH Integration Tests (Ignored)
+
+Russh integration tests are ignored by default and require real SSH hosts.
+You can export the variables manually or source the helper script:
+
+```bash
+source scripts/ssh-test-env.sh
+cargo test test_russh_ -- --ignored
+```
+
+Environment variables:
+
+- `RUSTIBLE_SSH_TEST_HOST` / `RUSTIBLE_SSH_TEST_PORT` / `RUSTIBLE_SSH_TEST_USER` / `RUSTIBLE_SSH_TEST_KEY`
+- `RUSTIBLE_SSH_TEST_JUMP_HOST` / `RUSTIBLE_SSH_TEST_JUMP_PORT` / `RUSTIBLE_SSH_TEST_JUMP_USER` / `RUSTIBLE_SSH_TEST_JUMP_KEY`
+- `RUSTIBLE_SSH_TEST_JUMP2_HOST` / `RUSTIBLE_SSH_TEST_JUMP2_PORT` / `RUSTIBLE_SSH_TEST_JUMP2_USER` / `RUSTIBLE_SSH_TEST_JUMP2_KEY` (multi-hop test)
+
+### Homelab Playbook Tests (Ignored)
+
+Run the homelab smoke playbook against real hosts:
+
+```bash
+export RUSTIBLE_HOMELAB_TESTS=1
+export RUSTIBLE_HOMELAB_INVENTORY=tests/fixtures/homelab_inventory.yml
+cargo test --test homelab_playbook_tests -- --ignored
+```
+
 ## Contributing
 
 All contributions are welcome.

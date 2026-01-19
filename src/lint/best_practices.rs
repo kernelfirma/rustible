@@ -67,7 +67,7 @@ impl BestPracticesChecker {
         };
 
         let play_name = play_map
-            .get(&serde_yaml::Value::String("name".to_string()))
+            .get(serde_yaml::Value::String("name".to_string()))
             .and_then(|v| v.as_str());
 
         result.plays_analyzed += 1;
@@ -80,7 +80,7 @@ impl BestPracticesChecker {
 
         // Check tasks
         for task_key in &["tasks", "pre_tasks", "post_tasks", "handlers"] {
-            if let Some(tasks) = play_map.get(&serde_yaml::Value::String(task_key.to_string())) {
+            if let Some(tasks) = play_map.get(serde_yaml::Value::String(task_key.to_string())) {
                 if let Some(task_list) = tasks.as_sequence() {
                     for (task_idx, task) in task_list.iter().enumerate() {
                         self.check_task(task, task_idx, play_idx, play_name, path, config, result);
@@ -139,28 +139,24 @@ impl BestPracticesChecker {
         result: &mut LintResult,
     ) {
         let gather_facts = play
-            .get(&serde_yaml::Value::String("gather_facts".to_string()))
+            .get(serde_yaml::Value::String("gather_facts".to_string()))
             .and_then(|v| {
                 if v.is_bool() {
                     v.as_bool()
-                } else if let Some(s) = v.as_str() {
-                    Some(matches!(s.to_lowercase().as_str(), "true" | "yes"))
-                } else {
-                    None
-                }
+                } else { v.as_str().map(|s| matches!(s.to_lowercase().as_str(), "true" | "yes")) }
             })
             .unwrap_or(true); // default is true
 
         // Count total tasks
         let task_count: usize = ["tasks", "pre_tasks", "post_tasks"]
             .iter()
-            .filter_map(|k| play.get(&serde_yaml::Value::String(k.to_string())))
+            .filter_map(|k| play.get(serde_yaml::Value::String(k.to_string())))
             .filter_map(|v| v.as_sequence())
             .map(|s| s.len())
             .sum();
 
-        if gather_facts && task_count == 0 {
-            if config.should_run_rule("B003", RuleCategory::BestPractices, Severity::Hint) {
+        if gather_facts && task_count == 0
+            && config.should_run_rule("B003", RuleCategory::BestPractices, Severity::Hint) {
                 result.add_issue(LintIssue::new(
                     "B003",
                     "gather-facts-no-tasks",
@@ -170,10 +166,10 @@ impl BestPracticesChecker {
                     Location::file(path).with_play(play_idx, play_name.map(String::from)),
                 ).with_suggestion("Consider setting 'gather_facts: false' or adding tasks"));
             }
-        }
     }
 
     /// Check a single task.
+    #[allow(clippy::too_many_arguments)]
     fn check_task(
         &self,
         task: &serde_yaml::Value,
@@ -190,7 +186,7 @@ impl BestPracticesChecker {
         };
 
         let task_name = task_map
-            .get(&serde_yaml::Value::String("name".to_string()))
+            .get(serde_yaml::Value::String("name".to_string()))
             .and_then(|v| v.as_str());
 
         result.tasks_analyzed += 1;
@@ -221,7 +217,7 @@ impl BestPracticesChecker {
 
         // Recursively check block tasks
         for block_key in &["block", "rescue", "always"] {
-            if let Some(block_tasks) = task_map.get(&serde_yaml::Value::String(block_key.to_string())) {
+            if let Some(block_tasks) = task_map.get(serde_yaml::Value::String(block_key.to_string())) {
                 if let Some(block_list) = block_tasks.as_sequence() {
                     for (block_idx, block_task) in block_list.iter().enumerate() {
                         self.check_task(block_task, block_idx, play_idx, play_name, path, config, result);
@@ -232,6 +228,7 @@ impl BestPracticesChecker {
     }
 
     /// Check task name.
+    #[allow(clippy::too_many_arguments)]
     fn check_task_name(
         &self,
         name: Option<&str>,
@@ -290,6 +287,7 @@ impl BestPracticesChecker {
     }
 
     /// Check command/shell usage.
+    #[allow(clippy::too_many_arguments)]
     fn check_command_usage(
         &self,
         task: &serde_yaml::Mapping,
@@ -302,11 +300,11 @@ impl BestPracticesChecker {
         result: &mut LintResult,
     ) {
         // Check for shell when command would suffice
-        if let Some(shell_args) = task.get(&serde_yaml::Value::String("shell".to_string())) {
+        if let Some(shell_args) = task.get(serde_yaml::Value::String("shell".to_string())) {
             let cmd = match shell_args {
                 serde_yaml::Value::String(s) => Some(s.as_str()),
                 serde_yaml::Value::Mapping(m) => {
-                    m.get(&serde_yaml::Value::String("cmd".to_string()))
+                    m.get(serde_yaml::Value::String("cmd".to_string()))
                         .and_then(|v| v.as_str())
                 }
                 _ => None,
@@ -317,8 +315,8 @@ impl BestPracticesChecker {
                 let shell_features = ['|', '>', '<', '&', ';', '$', '`', '(', ')', '{', '}', '*', '?', '[', ']'];
                 let uses_shell_features = cmd.chars().any(|c| shell_features.contains(&c));
 
-                if !uses_shell_features {
-                    if config.should_run_rule("B007", RuleCategory::BestPractices, Severity::Warning) {
+                if !uses_shell_features
+                    && config.should_run_rule("B007", RuleCategory::BestPractices, Severity::Warning) {
                         result.add_issue(LintIssue::new(
                             "B007",
                             "use-command-instead",
@@ -330,24 +328,23 @@ impl BestPracticesChecker {
                                 .with_task(task_idx, task_name.map(String::from)),
                         ).with_suggestion("Replace 'shell' with 'command' for better security and performance"));
                     }
-                }
             }
         }
 
         // Check for command/shell without creates/removes for idempotency
         for cmd_module in &["command", "shell"] {
-            if let Some(args) = task.get(&serde_yaml::Value::String(cmd_module.to_string())) {
+            if let Some(args) = task.get(serde_yaml::Value::String(cmd_module.to_string())) {
                 let has_creates = if let Some(m) = args.as_mapping() {
-                    m.contains_key(&serde_yaml::Value::String("creates".to_string()))
-                        || m.contains_key(&serde_yaml::Value::String("removes".to_string()))
+                    m.contains_key(serde_yaml::Value::String("creates".to_string()))
+                        || m.contains_key(serde_yaml::Value::String("removes".to_string()))
                 } else {
                     false
                 };
 
-                let has_changed_when = task.contains_key(&serde_yaml::Value::String("changed_when".to_string()));
+                let has_changed_when = task.contains_key(serde_yaml::Value::String("changed_when".to_string()));
 
-                if !has_creates && !has_changed_when {
-                    if config.should_run_rule("B008", RuleCategory::BestPractices, Severity::Hint) {
+                if !has_creates && !has_changed_when
+                    && config.should_run_rule("B008", RuleCategory::BestPractices, Severity::Hint) {
                         result.add_issue(LintIssue::new(
                             "B008",
                             "command-not-idempotent",
@@ -359,12 +356,12 @@ impl BestPracticesChecker {
                                 .with_task(task_idx, task_name.map(String::from)),
                         ).with_suggestion("Add 'creates', 'removes', or 'changed_when' for idempotency"));
                     }
-                }
             }
         }
     }
 
     /// Check for deprecated features.
+    #[allow(clippy::too_many_arguments)]
     fn check_deprecated_features(
         &self,
         task: &serde_yaml::Mapping,
@@ -383,8 +380,8 @@ impl BestPracticesChecker {
         ];
 
         for (loop_key, suggestion) in deprecated_loops {
-            if task.contains_key(&serde_yaml::Value::String(loop_key.to_string())) {
-                if config.should_run_rule("B009", RuleCategory::Deprecation, Severity::Hint) {
+            if task.contains_key(serde_yaml::Value::String(loop_key.to_string()))
+                && config.should_run_rule("B009", RuleCategory::Deprecation, Severity::Hint) {
                     result.add_issue(LintIssue::new(
                         "B009",
                         "deprecated-loop",
@@ -396,12 +393,11 @@ impl BestPracticesChecker {
                             .with_task(task_idx, task_name.map(String::from)),
                     ).with_suggestion(suggestion));
                 }
-            }
         }
 
         // Check for sudo instead of become
-        if task.contains_key(&serde_yaml::Value::String("sudo".to_string())) {
-            if config.should_run_rule("B010", RuleCategory::Deprecation, Severity::Warning) {
+        if task.contains_key(serde_yaml::Value::String("sudo".to_string()))
+            && config.should_run_rule("B010", RuleCategory::Deprecation, Severity::Warning) {
                 result.add_issue(LintIssue::new(
                     "B010",
                     "deprecated-sudo",
@@ -413,10 +409,10 @@ impl BestPracticesChecker {
                         .with_task(task_idx, task_name.map(String::from)),
                 ).with_suggestion("Replace 'sudo: yes' with 'become: yes'"));
             }
-        }
     }
 
     /// Check git module for version pinning.
+    #[allow(clippy::too_many_arguments)]
     fn check_git_pinning(
         &self,
         task: &serde_yaml::Mapping,
@@ -428,12 +424,12 @@ impl BestPracticesChecker {
         config: &LintConfig,
         result: &mut LintResult,
     ) {
-        if let Some(git_args) = task.get(&serde_yaml::Value::String("git".to_string())) {
+        if let Some(git_args) = task.get(serde_yaml::Value::String("git".to_string())) {
             if let Some(args_map) = git_args.as_mapping() {
-                let has_version = args_map.contains_key(&serde_yaml::Value::String("version".to_string()));
+                let has_version = args_map.contains_key(serde_yaml::Value::String("version".to_string()));
 
-                if !has_version {
-                    if config.should_run_rule("B011", RuleCategory::BestPractices, Severity::Warning) {
+                if !has_version
+                    && config.should_run_rule("B011", RuleCategory::BestPractices, Severity::Warning) {
                         result.add_issue(LintIssue::new(
                             "B011",
                             "git-no-version",
@@ -445,12 +441,12 @@ impl BestPracticesChecker {
                                 .with_task(task_idx, task_name.map(String::from)),
                         ).with_suggestion("Specify 'version' to ensure reproducible builds"));
                     }
-                }
             }
         }
     }
 
     /// Check become usage.
+    #[allow(clippy::too_many_arguments)]
     fn check_become_usage(
         &self,
         task: &serde_yaml::Mapping,
@@ -463,11 +459,11 @@ impl BestPracticesChecker {
         result: &mut LintResult,
     ) {
         // Check for become_user without become
-        let has_become = task.contains_key(&serde_yaml::Value::String("become".to_string()));
-        let has_become_user = task.contains_key(&serde_yaml::Value::String("become_user".to_string()));
+        let has_become = task.contains_key(serde_yaml::Value::String("become".to_string()));
+        let has_become_user = task.contains_key(serde_yaml::Value::String("become_user".to_string()));
 
-        if has_become_user && !has_become {
-            if config.should_run_rule("B012", RuleCategory::BestPractices, Severity::Warning) {
+        if has_become_user && !has_become
+            && config.should_run_rule("B012", RuleCategory::BestPractices, Severity::Warning) {
                 result.add_issue(LintIssue::new(
                     "B012",
                     "become-user-without-become",
@@ -479,10 +475,10 @@ impl BestPracticesChecker {
                         .with_task(task_idx, task_name.map(String::from)),
                 ).with_suggestion("Add 'become: yes' or remove 'become_user'"));
             }
-        }
     }
 
     /// Check path usage in certain modules.
+    #[allow(clippy::too_many_arguments)]
     fn check_path_usage(
         &self,
         task: &serde_yaml::Mapping,
@@ -498,15 +494,15 @@ impl BestPracticesChecker {
         let path_modules = ["copy", "template", "file"];
 
         for module_name in path_modules {
-            if let Some(args) = task.get(&serde_yaml::Value::String(module_name.to_string())) {
+            if let Some(args) = task.get(serde_yaml::Value::String(module_name.to_string())) {
                 if let Some(args_map) = args.as_mapping() {
                     // Check dest parameter
                     for dest_key in &["dest", "path"] {
-                        if let Some(dest) = args_map.get(&serde_yaml::Value::String(dest_key.to_string())) {
+                        if let Some(dest) = args_map.get(serde_yaml::Value::String(dest_key.to_string())) {
                             if let Some(dest_str) = dest.as_str() {
                                 // Skip if it's a template variable
-                                if !self.jinja_pattern.is_match(dest_str) && !dest_str.starts_with('/') && !dest_str.starts_with('~') {
-                                    if config.should_run_rule("B013", RuleCategory::BestPractices, Severity::Hint) {
+                                if !self.jinja_pattern.is_match(dest_str) && !dest_str.starts_with('/') && !dest_str.starts_with('~')
+                                    && config.should_run_rule("B013", RuleCategory::BestPractices, Severity::Hint) {
                                         result.add_issue(LintIssue::new(
                                             "B013",
                                             "relative-path",
@@ -518,7 +514,6 @@ impl BestPracticesChecker {
                                                 .with_task(task_idx, task_name.map(String::from)),
                                         ).with_suggestion("Consider using an absolute path for clarity"));
                                     }
-                                }
                             }
                         }
                     }
@@ -528,6 +523,7 @@ impl BestPracticesChecker {
     }
 
     /// Check handler naming.
+    #[allow(clippy::too_many_arguments)]
     fn check_handler_names(
         &self,
         task: &serde_yaml::Mapping,
@@ -539,7 +535,7 @@ impl BestPracticesChecker {
         config: &LintConfig,
         result: &mut LintResult,
     ) {
-        if let Some(notify) = task.get(&serde_yaml::Value::String("notify".to_string())) {
+        if let Some(notify) = task.get(serde_yaml::Value::String("notify".to_string())) {
             let handlers: Vec<&str> = match notify {
                 serde_yaml::Value::String(s) => vec![s.as_str()],
                 serde_yaml::Value::Sequence(seq) => {
@@ -550,8 +546,8 @@ impl BestPracticesChecker {
 
             for handler in handlers {
                 // Check for handler names with spaces in wrong format
-                if handler.contains("  ") {
-                    if config.should_run_rule("B014", RuleCategory::BestPractices, Severity::Hint) {
+                if handler.contains("  ")
+                    && config.should_run_rule("B014", RuleCategory::BestPractices, Severity::Hint) {
                         result.add_issue(LintIssue::new(
                             "B014",
                             "handler-multiple-spaces",
@@ -563,12 +559,12 @@ impl BestPracticesChecker {
                                 .with_task(task_idx, task_name.map(String::from)),
                         ).with_suggestion("Use single spaces in handler names"));
                     }
-                }
             }
         }
     }
 
     /// Check retry usage.
+    #[allow(clippy::too_many_arguments)]
     fn check_retry_usage(
         &self,
         task: &serde_yaml::Mapping,
@@ -580,11 +576,11 @@ impl BestPracticesChecker {
         config: &LintConfig,
         result: &mut LintResult,
     ) {
-        let has_retries = task.contains_key(&serde_yaml::Value::String("retries".to_string()));
-        let has_until = task.contains_key(&serde_yaml::Value::String("until".to_string()));
+        let has_retries = task.contains_key(serde_yaml::Value::String("retries".to_string()));
+        let has_until = task.contains_key(serde_yaml::Value::String("until".to_string()));
 
-        if has_retries && !has_until {
-            if config.should_run_rule("B015", RuleCategory::BestPractices, Severity::Warning) {
+        if has_retries && !has_until
+            && config.should_run_rule("B015", RuleCategory::BestPractices, Severity::Warning) {
                 result.add_issue(LintIssue::new(
                     "B015",
                     "retries-without-until",
@@ -596,7 +592,6 @@ impl BestPracticesChecker {
                         .with_task(task_idx, task_name.map(String::from)),
                 ).with_suggestion("Add 'until' condition to define when retries should stop"));
             }
-        }
     }
 }
 

@@ -43,7 +43,7 @@
 
 use std::collections::HashMap;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -231,7 +231,7 @@ impl SshAgentClient {
     /// # Arguments
     ///
     /// * `socket_path` - Path to the SSH agent Unix socket
-    pub async fn connect_to(socket_path: &PathBuf) -> Result<Self, AgentError> {
+    pub async fn connect_to(socket_path: &Path) -> Result<Self, AgentError> {
         debug!(path = %socket_path.display(), "Connecting to SSH agent");
 
         let agent = AgentClient::connect_env()
@@ -245,7 +245,7 @@ impl SshAgentClient {
 
         Ok(Self {
             agent: Mutex::new(Some(agent)),
-            socket_path: socket_path.clone(),
+            socket_path: socket_path.to_path_buf(),
             request_count: AtomicU64::new(0),
             created_at: Instant::now(),
         })
@@ -292,7 +292,7 @@ impl SshAgentClient {
 
         let keys: Vec<AgentKeyInfo> = identities
             .iter()
-            .map(|key| AgentKeyInfo::from_public_key(key))
+            .map(AgentKeyInfo::from_public_key)
             .collect();
 
         debug!(
@@ -740,8 +740,8 @@ impl AgentForwarder {
         }
 
         // Check host allowlist
-        if !self.config.allowed_hosts.is_empty() {
-            if !self
+        if !self.config.allowed_hosts.is_empty()
+            && !self
                 .config
                 .allowed_hosts
                 .iter()
@@ -749,7 +749,6 @@ impl AgentForwarder {
             {
                 return false;
             }
-        }
 
         true
     }

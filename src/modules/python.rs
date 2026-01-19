@@ -288,7 +288,7 @@ impl PythonModuleExecutor {
     fn find_ansible_library(&self) -> Option<PathBuf> {
         // Try to find it via python3
         let output = std::process::Command::new("python3")
-            .args(&["-c", "import ansible; print(ansible.__path__[0])"])
+            .args(["-c", "import ansible; print(ansible.__path__[0])"])
             .output()
             .ok()?;
 
@@ -332,7 +332,7 @@ impl PythonModuleExecutor {
             // Prepend args injection to module source
             // We use Base64 for args to avoid escaping issues
             let injection_header = format!(
-                r#"
+                r"
 import os
 import json
 import base64
@@ -347,7 +347,7 @@ os.environ['ANSIBLE_MODULE_ARGS'] = base64.b64decode(APP_ARGS_B64).decode('utf-8
 if sys.path[0] != os.path.dirname(__file__):
     sys.path.insert(0, os.path.dirname(__file__))
 
-"#,
+",
                 args_b64.as_str()
             );
 
@@ -416,7 +416,7 @@ if sys.path[0] != os.path.dirname(__file__):
 
         // Create the wrapper script that executes the zip
         let wrapper = format!(
-            r#"#!/usr/bin/env python
+            r"#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Rustible AnsiballZ-compatible runner
 import sys
@@ -459,7 +459,7 @@ def main():
 
 if __name__ == '__main__':
     main()
-"#
+"
         );
 
         Ok(wrapper)

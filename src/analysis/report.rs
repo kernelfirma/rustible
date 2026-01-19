@@ -120,7 +120,7 @@ impl AnalysisReport {
             output.push('\n');
         }
 
-        output.push_str(&format!("\nSummary:\n"));
+        output.push_str("\nSummary:\n");
         output.push_str(&format!("  Total findings: {}\n", self.summary.total_findings));
         output.push_str(&format!(
             "  Health score: {:.1}/100\n",
@@ -251,8 +251,10 @@ impl AnalysisReportBuilder {
 
     /// Build the report
     pub fn build(self) -> AnalysisReport {
-        let mut summary = ReportSummary::default();
-        summary.total_findings = self.findings.len();
+        let mut summary = ReportSummary {
+            total_findings: self.findings.len(),
+            ..Default::default()
+        };
 
         // Count by severity
         for finding in &self.findings {
@@ -314,7 +316,7 @@ fn calculate_health_score(
         score = (score * 0.7) + (metrics.maintainability_index * 0.3);
     }
 
-    score.max(0.0).min(100.0)
+    score.clamp(0.0, 100.0)
 }
 
 #[cfg(test)]

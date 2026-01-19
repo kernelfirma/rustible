@@ -45,6 +45,14 @@ impl HostnameStrategy {
     }
 }
 
+impl std::str::FromStr for HostnameStrategy {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        HostnameStrategy::from_str(s)
+    }
+}
+
 /// Module for hostname management
 pub struct HostnameModule;
 
@@ -56,6 +64,9 @@ impl HostnameModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options

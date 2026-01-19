@@ -31,6 +31,14 @@ impl BlockState {
     }
 }
 
+impl std::str::FromStr for BlockState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        BlockState::from_str(s)
+    }
+}
+
 /// Module for block-in-file operations
 pub struct BlockinfileModule;
 

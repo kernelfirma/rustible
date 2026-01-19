@@ -70,6 +70,14 @@ impl DnfState {
     }
 }
 
+impl std::str::FromStr for DnfState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        DnfState::from_str(s)
+    }
+}
+
 /// Module for DNF package management
 #[derive(Default)]
 pub struct DnfModule;
@@ -86,6 +94,9 @@ impl DnfModule {
                 .clone()
                 .or_else(|| Some("root".to_string()));
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         if let Some(ref work_dir) = context.work_dir {

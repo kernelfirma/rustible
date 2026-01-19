@@ -564,6 +564,7 @@ impl TransactionManager {
     }
 
     /// Record a task completion
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_task(
         &self,
         tx_id: &TransactionId,

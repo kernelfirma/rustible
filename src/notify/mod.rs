@@ -79,6 +79,8 @@ mod manager;
 mod slack;
 mod template;
 mod webhook;
+#[cfg(test)]
+mod test_support;
 
 pub use config::{
     EmailConfig, NotificationConfig, NotificationConfigBuilder, SlackConfig, WebhookConfig,
@@ -337,8 +339,10 @@ impl FailureInfo {
 /// Notification severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Severity {
     /// Informational notification
+    #[default]
     Info,
     /// Warning notification
     Warning,
@@ -348,11 +352,6 @@ pub enum Severity {
     Critical,
 }
 
-impl Default for Severity {
-    fn default() -> Self {
-        Self::Info
-    }
-}
 
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -617,10 +617,9 @@ impl SlackCallback {
 
         let attachment = SlackAttachment {
             fallback: format!(
-                "Rustible playbook {}: {} ({})",
+                "Rustible playbook {}: {} ({duration_secs:.1}s)",
                 status_text.to_lowercase(),
-                playbook,
-                format!("{:.1}s", duration_secs)
+                playbook
             ),
             color: color.to_string(),
             pretext: None,
@@ -758,12 +757,12 @@ impl ExecutionCallback for SlackCallback {
             let playbook = state.playbook.clone();
 
             // Update statistics
-            let stats = state.host_stats.entry(result.host.clone()).or_default();
+            let host_stats = state.host_stats.entry(result.host.clone()).or_default();
             let failure = if result.result.skipped {
-                stats.skipped += 1;
+                host_stats.skipped += 1;
                 None
             } else if !result.result.success {
-                stats.failed += 1;
+                host_stats.failed += 1;
                 let failure = FailureDetail {
                     host: result.host.clone(),
                     task: result.task_name.clone(),
@@ -772,10 +771,10 @@ impl ExecutionCallback for SlackCallback {
                 state.failures.push(failure.clone());
                 Some(failure)
             } else if result.result.changed {
-                stats.changed += 1;
+                host_stats.changed += 1;
                 None
             } else {
-                stats.ok += 1;
+                host_stats.ok += 1;
                 None
             };
 

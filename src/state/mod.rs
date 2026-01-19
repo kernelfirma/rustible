@@ -670,11 +670,10 @@ impl ExecutionSession {
             }
             stats.total += 1;
         }
-        if let Some(duration) = Utc::now()
+        if let Ok(duration) = Utc::now()
             .signed_duration_since(self.started_at)
             .num_milliseconds()
             .try_into()
-            .ok()
         {
             stats.duration_ms = duration;
         }

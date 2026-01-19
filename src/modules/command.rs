@@ -170,6 +170,9 @@ impl CommandModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         Ok(options)

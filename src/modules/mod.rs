@@ -915,6 +915,7 @@ pub type ModuleParams = HashMap<String, serde_json::Value>;
 
 /// Context for module execution
 #[derive(Clone)]
+#[derive(Default)]
 pub struct ModuleContext {
     /// Whether to run in check mode (dry run)
     pub check_mode: bool,
@@ -934,6 +935,8 @@ pub struct ModuleContext {
     pub become_method: Option<String>,
     /// User to become
     pub become_user: Option<String>,
+    /// Password for privilege escalation
+    pub become_password: Option<String>,
     /// Connection to use for remote operations
     pub connection: Option<Arc<dyn Connection + Send + Sync>>,
 }
@@ -957,22 +960,6 @@ impl std::fmt::Debug for ModuleContext {
     }
 }
 
-impl Default for ModuleContext {
-    fn default() -> Self {
-        Self {
-            check_mode: false,
-            diff_mode: false,
-            verbosity: 0,
-            vars: HashMap::new(),
-            facts: HashMap::new(),
-            work_dir: None,
-            r#become: false,
-            become_method: None,
-            become_user: None,
-            connection: None,
-        }
-    }
-}
 
 impl ModuleContext {
     pub fn new() -> Self {
@@ -1027,6 +1014,12 @@ impl ModuleContext {
         self
     }
 
+    /// Set the privilege escalation password
+    pub fn with_become_password(mut self, password: impl Into<String>) -> Self {
+        self.become_password = Some(password.into());
+        self
+    }
+
     /// Create a builder for constructing a ModuleContext with validation
     pub fn builder() -> ModuleContextBuilder {
         ModuleContextBuilder::default()
@@ -1065,6 +1058,7 @@ pub enum ModuleContextBuilderError {
 /// assert_eq!(context.verbosity, 2);
 /// ```
 #[derive(Clone)]
+#[derive(Default)]
 pub struct ModuleContextBuilder {
     check_mode: bool,
     diff_mode: bool,
@@ -1075,25 +1069,10 @@ pub struct ModuleContextBuilder {
     r#become: bool,
     become_method: Option<String>,
     become_user: Option<String>,
+    become_password: Option<String>,
     connection: Option<Arc<dyn Connection + Send + Sync>>,
 }
 
-impl Default for ModuleContextBuilder {
-    fn default() -> Self {
-        Self {
-            check_mode: false,
-            diff_mode: false,
-            verbosity: 0,
-            vars: HashMap::new(),
-            facts: HashMap::new(),
-            work_dir: None,
-            r#become: false,
-            become_method: None,
-            become_user: None,
-            connection: None,
-        }
-    }
-}
 
 impl std::fmt::Debug for ModuleContextBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1107,6 +1086,7 @@ impl std::fmt::Debug for ModuleContextBuilder {
             .field("become", &self.r#become)
             .field("become_method", &self.become_method)
             .field("become_user", &self.become_user)
+            .field("has_become_password", &self.become_password.is_some())
             .field("has_connection", &self.connection.is_some())
             .finish()
     }
@@ -1186,6 +1166,12 @@ impl ModuleContextBuilder {
         self
     }
 
+    /// Set the privilege escalation password
+    pub fn become_password(mut self, password: impl Into<String>) -> Self {
+        self.become_password = Some(password.into());
+        self
+    }
+
     /// Set the connection for remote operations
     pub fn connection(mut self, conn: Arc<dyn Connection + Send + Sync>) -> Self {
         self.connection = Some(conn);
@@ -1225,6 +1211,7 @@ impl ModuleContextBuilder {
             r#become: self.r#become,
             become_method: self.become_method,
             become_user: self.become_user,
+            become_password: self.become_password,
             connection: self.connection,
         })
     }
@@ -1244,6 +1231,7 @@ impl ModuleContextBuilder {
             r#become: self.r#become,
             become_method: self.become_method,
             become_user: self.become_user,
+            become_password: self.become_password,
             connection: self.connection,
         }
     }
@@ -1616,7 +1604,7 @@ impl ModuleRegistry {
         self.categories.insert(name, category);
     }
 
-    fn normalize_module_name<'a>(name: &'a str) -> &'a str {
+    fn normalize_module_name(name: &str) -> &str {
         if let Some(stripped) = name.strip_prefix("ansible.builtin.") {
             stripped.rsplit('.').next().unwrap_or(stripped)
         } else if let Some(stripped) = name.strip_prefix("ansible.legacy.") {
