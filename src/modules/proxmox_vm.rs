@@ -13,6 +13,8 @@ use url::Url;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_REQUESTS_PER_SECOND: u32 = 5;
+const DEFAULT_WAIT_TIMEOUT_SECS: u64 = 300;
+const DEFAULT_WAIT_INTERVAL_SECS: u64 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DesiredState {
@@ -70,6 +72,23 @@ impl StopMethod {
 }
 
 #[derive(Debug, Clone)]
+struct WaitConfig {
+    enabled: bool,
+    timeout_secs: u64,
+    interval_secs: u64,
+}
+
+impl Default for WaitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            timeout_secs: DEFAULT_WAIT_TIMEOUT_SECS,
+            interval_secs: DEFAULT_WAIT_INTERVAL_SECS,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct ProxmoxVmConfig {
     api_base: String,
     token_id: String,
@@ -80,6 +99,7 @@ struct ProxmoxVmConfig {
     stop_method: StopMethod,
     timeout_secs: u64,
     validate_certs: bool,
+    wait: WaitConfig,
 }
 
 impl ProxmoxVmConfig {
@@ -116,6 +136,17 @@ impl ProxmoxVmConfig {
 
         let validate_certs = params.get_bool_or("validate_certs", true);
 
+        let wait_enabled = params.get_bool_or("wait", false);
+        let wait_timeout = params
+            .get_u32("wait_timeout")?
+            .map(u64::from)
+            .unwrap_or(DEFAULT_WAIT_TIMEOUT_SECS);
+        let wait_interval = params
+            .get_u32("wait_interval")?
+            .map(u64::from)
+            .unwrap_or(DEFAULT_WAIT_INTERVAL_SECS)
+            .max(1); // Minimum 1 second interval
+
         Ok(Self {
             api_base: normalize_api_base(&api_url)?,
             token_id: token_id.trim().to_string(),
@@ -126,6 +157,11 @@ impl ProxmoxVmConfig {
             stop_method,
             timeout_secs,
             validate_certs,
+            wait: WaitConfig {
+                enabled: wait_enabled,
+                timeout_secs: wait_timeout,
+                interval_secs: wait_interval,
+            },
         })
     }
 }
@@ -167,6 +203,106 @@ impl VmPowerState {
 struct VmStatus {
     power_state: VmPowerState,
     raw: Value,
+}
+
+/// Task completion information from UPID polling
+#[derive(Debug, Clone)]
+struct TaskInfo {
+    /// The UPID string
+    upid: String,
+    /// Task status: "running", "stopped", etc.
+    status: String,
+    /// Exit status: "OK", "ERROR", etc. (only set when stopped)
+    exitstatus: Option<String>,
+    /// Start time (Unix timestamp)
+    starttime: Option<i64>,
+    /// End time (Unix timestamp)
+    endtime: Option<i64>,
+    /// Duration in seconds (computed)
+    duration_secs: Option<i64>,
+    /// Node where task ran
+    node: Option<String>,
+    /// Task type
+    task_type: Option<String>,
+}
+
+impl TaskInfo {
+    fn from_api_response(upid: &str, data: &Value) -> Self {
+        let status = data
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let exitstatus = data
+            .get("exitstatus")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let starttime = data.get("starttime").and_then(|v| v.as_i64());
+        let endtime = data.get("endtime").and_then(|v| v.as_i64());
+
+        let duration_secs = match (starttime, endtime) {
+            (Some(start), Some(end)) => Some(end - start),
+            _ => None,
+        };
+
+        let node = data
+            .get("node")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let task_type = data
+            .get("type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        Self {
+            upid: upid.to_string(),
+            status,
+            exitstatus,
+            starttime,
+            endtime,
+            duration_secs,
+            node,
+            task_type,
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.status == "stopped"
+    }
+
+    fn is_success(&self) -> bool {
+        self.is_complete() && self.exitstatus.as_deref() == Some("OK")
+    }
+
+    fn to_json(&self) -> Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert("upid".to_string(), Value::String(self.upid.clone()));
+        obj.insert("status".to_string(), Value::String(self.status.clone()));
+
+        if let Some(ref es) = self.exitstatus {
+            obj.insert("exitstatus".to_string(), Value::String(es.clone()));
+        }
+        if let Some(st) = self.starttime {
+            obj.insert("starttime".to_string(), Value::Number(st.into()));
+        }
+        if let Some(et) = self.endtime {
+            obj.insert("endtime".to_string(), Value::Number(et.into()));
+        }
+        if let Some(d) = self.duration_secs {
+            obj.insert("duration_secs".to_string(), Value::Number(d.into()));
+        }
+        if let Some(ref n) = self.node {
+            obj.insert("node".to_string(), Value::String(n.clone()));
+        }
+        if let Some(ref t) = self.task_type {
+            obj.insert("task_type".to_string(), Value::String(t.clone()));
+        }
+
+        Value::Object(obj)
+    }
 }
 
 fn normalize_api_base(api_url: &str) -> ModuleResult<String> {
@@ -403,6 +539,83 @@ fn perform_action(
     )
 }
 
+/// Get task status from UPID
+fn get_task_status(
+    client: &Client,
+    config: &ProxmoxVmConfig,
+    upid: &str,
+) -> ModuleResult<TaskInfo> {
+    // Parse node from UPID if possible, otherwise use config.node
+    // UPID format: UPID:{node}:{pid}:{pstart}:{starttime}:{type}:{id}:{user}
+    let node = upid
+        .strip_prefix("UPID:")
+        .and_then(|s| s.split(':').next())
+        .unwrap_or(&config.node);
+
+    let url = api_url(
+        config,
+        &format!("nodes/{}/tasks/{}/status", node, urlencoding::encode(upid)),
+    );
+
+    let response = request_json(
+        client,
+        Method::GET,
+        &url,
+        &config.token_id,
+        &config.token_secret,
+        None,
+    )?;
+
+    let data = response.get("data").cloned().unwrap_or(Value::Null);
+    Ok(TaskInfo::from_api_response(upid, &data))
+}
+
+/// Wait for a task to complete, polling until done or timeout
+fn wait_for_task(
+    client: &Client,
+    config: &ProxmoxVmConfig,
+    upid: &str,
+) -> ModuleResult<TaskInfo> {
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(config.wait.timeout_secs);
+    let interval = std::time::Duration::from_secs(config.wait.interval_secs);
+
+    loop {
+        let task_info = get_task_status(client, config, upid)?;
+
+        if task_info.is_complete() {
+            if task_info.is_success() {
+                return Ok(task_info);
+            } else {
+                let exit_status = task_info.exitstatus.as_deref().unwrap_or("unknown");
+                return Err(ModuleError::ExecutionFailed(format!(
+                    "Proxmox task {} failed with exit status: {}",
+                    upid, exit_status
+                )));
+            }
+        }
+
+        if start.elapsed() >= timeout {
+            return Err(ModuleError::ExecutionFailed(format!(
+                "Timed out waiting for task {} after {} seconds (status: {})",
+                upid,
+                config.wait.timeout_secs,
+                task_info.status
+            )));
+        }
+
+        std::thread::sleep(interval);
+    }
+}
+
+/// Extract UPID from API response data
+fn extract_upid(response: &Value) -> Option<String> {
+    response
+        .get("data")
+        .and_then(|d| d.as_str())
+        .map(|s| s.to_string())
+}
+
 fn value_to_param_string(key: &str, value: &Value) -> ModuleResult<String> {
     match value {
         Value::String(value) => Ok(value.clone()),
@@ -584,6 +797,29 @@ fn delete_vm(
     )
 }
 
+/// Handle waiting for task completion and updating output with task info
+fn handle_task_wait(
+    client: &Client,
+    config: &ProxmoxVmConfig,
+    response: &Value,
+    mut output: ModuleOutput,
+) -> ModuleResult<ModuleOutput> {
+    // Extract UPID from response
+    let upid = extract_upid(response);
+
+    if let Some(ref upid_str) = upid {
+        output = output.with_data("upid", json!(upid_str));
+
+        // If wait is enabled, poll until completion
+        if config.wait.enabled {
+            let task_info = wait_for_task(client, config, upid_str)?;
+            output = output.with_data("task", task_info.to_json());
+        }
+    }
+
+    Ok(output)
+}
+
 fn with_common_data(
     output: ModuleOutput,
     config: &ProxmoxVmConfig,
@@ -694,9 +930,10 @@ impl Module for ProxmoxVmModule {
                     ModuleOutput::changed("VM would be created (check mode)")
                 } else {
                     let response = create_vm(&client, &config, params)?;
-                    ModuleOutput::changed("VM create requested")
+                    let output = ModuleOutput::changed("VM create requested")
                         .with_data("action", json!("create"))
-                        .with_data("action_response", response)
+                        .with_data("action_response", response.clone());
+                    handle_task_wait(&client, &config, &response, output)?
                 }
             }
             DesiredState::Absent => {
@@ -705,9 +942,10 @@ impl Module for ProxmoxVmModule {
                         ModuleOutput::changed("VM would be deleted (check mode)")
                     } else {
                         let response = delete_vm(&client, &config, params)?;
-                        ModuleOutput::changed("VM delete requested")
+                        let output = ModuleOutput::changed("VM delete requested")
                             .with_data("action", json!("delete"))
-                            .with_data("action_response", response)
+                            .with_data("action_response", response.clone());
+                        handle_task_wait(&client, &config, &response, output)?
                     }
                 } else {
                     ModuleOutput::ok("VM already absent")
@@ -723,10 +961,11 @@ impl Module for ProxmoxVmModule {
                 } else {
                     let source_vmid = parse_vmid_from_param(params, "clone_from")?;
                     let response = clone_vm(&client, &config, params, source_vmid)?;
-                    ModuleOutput::changed("VM clone requested")
+                    let output = ModuleOutput::changed("VM clone requested")
                         .with_data("action", json!("clone"))
-                        .with_data("action_response", response)
-                        .with_data("clone_from", json!(source_vmid))
+                        .with_data("action_response", response.clone())
+                        .with_data("clone_from", json!(source_vmid));
+                    handle_task_wait(&client, &config, &response, output)?
                 }
             }
             DesiredState::Started => {
@@ -739,9 +978,10 @@ impl Module for ProxmoxVmModule {
                     ModuleOutput::changed("VM would be started (check mode)")
                 } else {
                     let response = perform_action(&client, &config, "start")?;
-                    ModuleOutput::changed("VM start requested")
+                    let output = ModuleOutput::changed("VM start requested")
                         .with_data("action", json!("start"))
-                        .with_data("action_response", response)
+                        .with_data("action_response", response.clone());
+                    handle_task_wait(&client, &config, &response, output)?
                 }
             }
             DesiredState::Stopped => {
@@ -754,9 +994,10 @@ impl Module for ProxmoxVmModule {
                     ModuleOutput::changed("VM would be stopped (check mode)")
                 } else {
                     let response = perform_action(&client, &config, config.stop_method.endpoint())?;
-                    ModuleOutput::changed("VM stop requested")
+                    let output = ModuleOutput::changed("VM stop requested")
                         .with_data("action", json!(config.stop_method.endpoint()))
-                        .with_data("action_response", response)
+                        .with_data("action_response", response.clone());
+                    handle_task_wait(&client, &config, &response, output)?
                 }
             }
             DesiredState::Restarted => {
@@ -767,14 +1008,16 @@ impl Module for ProxmoxVmModule {
                     ModuleOutput::changed("VM would be restarted (check mode)")
                 } else if status.power_state.is_running() {
                     let response = perform_action(&client, &config, "reboot")?;
-                    ModuleOutput::changed("VM reboot requested")
+                    let output = ModuleOutput::changed("VM reboot requested")
                         .with_data("action", json!("reboot"))
-                        .with_data("action_response", response)
+                        .with_data("action_response", response.clone());
+                    handle_task_wait(&client, &config, &response, output)?
                 } else {
                     let response = perform_action(&client, &config, "start")?;
-                    ModuleOutput::changed("VM start requested")
+                    let output = ModuleOutput::changed("VM start requested")
                         .with_data("action", json!("start"))
-                        .with_data("action_response", response)
+                        .with_data("action_response", response.clone());
+                    handle_task_wait(&client, &config, &response, output)?
                 }
             }
         };
@@ -795,6 +1038,80 @@ mod tests {
 
         let base = normalize_api_base("https://pve.example:8006/api2/json/").unwrap();
         assert_eq!(base, "https://pve.example:8006/api2/json");
+    }
+
+    #[test]
+    fn test_task_info_from_response() {
+        let upid = "UPID:pve:00001234:00000001:12345678:qmstart:101:user@pam:";
+        let data = json!({
+            "status": "stopped",
+            "exitstatus": "OK",
+            "starttime": 1705600000,
+            "endtime": 1705600010,
+            "node": "pve",
+            "type": "qmstart"
+        });
+        let task_info = TaskInfo::from_api_response(upid, &data);
+
+        assert_eq!(task_info.upid, upid);
+        assert_eq!(task_info.status, "stopped");
+        assert_eq!(task_info.exitstatus, Some("OK".to_string()));
+        assert_eq!(task_info.starttime, Some(1705600000));
+        assert_eq!(task_info.endtime, Some(1705600010));
+        assert_eq!(task_info.duration_secs, Some(10));
+        assert!(task_info.is_complete());
+        assert!(task_info.is_success());
+    }
+
+    #[test]
+    fn test_task_info_running() {
+        let upid = "UPID:pve:00001234:00000001:12345678:qmstart:101:user@pam:";
+        let data = json!({
+            "status": "running",
+            "starttime": 1705600000,
+        });
+        let task_info = TaskInfo::from_api_response(upid, &data);
+
+        assert!(!task_info.is_complete());
+        assert!(!task_info.is_success());
+    }
+
+    #[test]
+    fn test_task_info_failed() {
+        let upid = "UPID:pve:00001234:00000001:12345678:qmstart:101:user@pam:";
+        let data = json!({
+            "status": "stopped",
+            "exitstatus": "ERROR",
+        });
+        let task_info = TaskInfo::from_api_response(upid, &data);
+
+        assert!(task_info.is_complete());
+        assert!(!task_info.is_success());
+    }
+
+    #[test]
+    fn test_task_info_to_json() {
+        let upid = "UPID:pve:00001234:00000001:12345678:qmstart:101:user@pam:";
+        let data = json!({
+            "status": "stopped",
+            "exitstatus": "OK",
+            "starttime": 1705600000,
+            "endtime": 1705600010,
+        });
+        let task_info = TaskInfo::from_api_response(upid, &data);
+        let json = task_info.to_json();
+
+        assert_eq!(json.get("status"), Some(&json!("stopped")));
+        assert_eq!(json.get("exitstatus"), Some(&json!("OK")));
+        assert_eq!(json.get("duration_secs"), Some(&json!(10)));
+    }
+
+    #[test]
+    fn test_wait_config_default() {
+        let wait = WaitConfig::default();
+        assert!(!wait.enabled);
+        assert_eq!(wait.timeout_secs, DEFAULT_WAIT_TIMEOUT_SECS);
+        assert_eq!(wait.interval_secs, DEFAULT_WAIT_INTERVAL_SECS);
     }
 
     #[test]
@@ -853,6 +1170,7 @@ mod tests {
             stop_method: StopMethod::Shutdown,
             timeout_secs: 30,
             validate_certs: true,
+            wait: WaitConfig::default(),
         };
 
         let mut params: ModuleParams = HashMap::new();
@@ -876,6 +1194,7 @@ mod tests {
             stop_method: StopMethod::Shutdown,
             timeout_secs: 30,
             validate_certs: true,
+            wait: WaitConfig::default(),
         };
 
         let mut params: ModuleParams = HashMap::new();
