@@ -333,6 +333,24 @@ impl SystemdUnitConfig {
             .get_string("unit_path")?
             .unwrap_or_else(|| "/etc/systemd/system".to_string());
 
+        // Security validation for unit_path
+        let path = std::path::Path::new(&unit_path);
+        if !path.is_absolute() {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Invalid unit_path '{}': path must be absolute",
+                unit_path
+            )));
+        }
+
+        for component in path.components() {
+            if matches!(component, std::path::Component::ParentDir) {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid unit_path '{}': Path traversal detected",
+                    unit_path
+                )));
+            }
+        }
+
         Ok(Self {
             name,
             unit_type,
@@ -1451,5 +1469,43 @@ mod tests {
         let result = SystemdUnitModule::render_template(template, &context, None, &config).unwrap();
         // Adjust expectation for potential newline differences
         assert_eq!(result.trim(), "[Service]\nType=simple");
+    }
+
+    #[test]
+    fn test_config_path_traversal() {
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("myapp.service"));
+        params.insert("content".to_string(), serde_json::json!("[Unit]"));
+        params.insert(
+            "unit_path".to_string(),
+            serde_json::json!("/etc/systemd/system/../.."),
+        );
+
+        let result = SystemdUnitConfig::from_params(&params);
+        assert!(result.is_err(), "Should detect path traversal");
+        let err = result.err().unwrap();
+        match err {
+            ModuleError::InvalidParameter(msg) => assert!(msg.contains("Path traversal detected")),
+            _ => panic!("Unexpected error type: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_config_relative_path() {
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("myapp.service"));
+        params.insert("content".to_string(), serde_json::json!("[Unit]"));
+        params.insert(
+            "unit_path".to_string(),
+            serde_json::json!("etc/systemd/system"),
+        );
+
+        let result = SystemdUnitConfig::from_params(&params);
+        assert!(result.is_err(), "Should require absolute path");
+        let err = result.err().unwrap();
+        match err {
+            ModuleError::InvalidParameter(msg) => assert!(msg.contains("must be absolute")),
+            _ => panic!("Unexpected error type: {:?}", err),
+        }
     }
 }
