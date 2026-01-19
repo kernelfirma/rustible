@@ -16,6 +16,145 @@ const DEFAULT_REQUESTS_PER_SECOND: u32 = 5;
 const DEFAULT_WAIT_TIMEOUT_SECS: u64 = 300;
 const DEFAULT_WAIT_INTERVAL_SECS: u64 = 2;
 
+/// Allowed parameters for VM creation (POST /nodes/{node}/qemu)
+/// Based on Proxmox VE API documentation
+const ALLOWED_CREATE_PARAMS: &[&str] = &[
+    // Required
+    "vmid",
+    // General
+    "name",
+    "description",
+    "tags",
+    "pool",
+    "onboot",
+    "startup",
+    "protection",
+    "lock",
+    // CPU
+    "sockets",
+    "cores",
+    "vcpus",
+    "cpu",
+    "cpulimit",
+    "cpuunits",
+    "numa",
+    "affinity",
+    // Memory
+    "memory",
+    "balloon",
+    "shares",
+    // BIOS/Boot
+    "bios",
+    "boot",
+    "bootdisk",
+    "efidisk0",
+    "tpmstate0",
+    // OS
+    "ostype",
+    "machine",
+    "arch",
+    // Display
+    "vga",
+    "spice_enhancements",
+    // Cloud-init
+    "cicustom",
+    "cipassword",
+    "citype",
+    "ciupgrade",
+    "ciuser",
+    "ipconfig0", "ipconfig1", "ipconfig2", "ipconfig3", "ipconfig4",
+    "ipconfig5", "ipconfig6", "ipconfig7", "ipconfig8", "ipconfig9",
+    "nameserver",
+    "searchdomain",
+    "sshkeys",
+    // Storage (virtio, scsi, ide, sata, etc.)
+    "virtio0", "virtio1", "virtio2", "virtio3", "virtio4",
+    "virtio5", "virtio6", "virtio7", "virtio8", "virtio9",
+    "virtio10", "virtio11", "virtio12", "virtio13", "virtio14", "virtio15",
+    "scsi0", "scsi1", "scsi2", "scsi3", "scsi4", "scsi5", "scsi6", "scsi7",
+    "scsi8", "scsi9", "scsi10", "scsi11", "scsi12", "scsi13", "scsi14",
+    "scsi15", "scsi16", "scsi17", "scsi18", "scsi19", "scsi20",
+    "scsi21", "scsi22", "scsi23", "scsi24", "scsi25", "scsi26",
+    "scsi27", "scsi28", "scsi29", "scsi30",
+    "ide0", "ide1", "ide2", "ide3",
+    "sata0", "sata1", "sata2", "sata3", "sata4", "sata5",
+    "scsihw",
+    // Network
+    "net0", "net1", "net2", "net3", "net4", "net5", "net6", "net7",
+    "net8", "net9", "net10", "net11", "net12", "net13", "net14", "net15",
+    // Serial/Parallel
+    "serial0", "serial1", "serial2", "serial3",
+    "parallel0", "parallel1", "parallel2",
+    // USB
+    "usb0", "usb1", "usb2", "usb3", "usb4",
+    // PCI passthrough
+    "hostpci0", "hostpci1", "hostpci2", "hostpci3", "hostpci4",
+    "hostpci5", "hostpci6", "hostpci7", "hostpci8", "hostpci9",
+    "hostpci10", "hostpci11", "hostpci12", "hostpci13", "hostpci14", "hostpci15",
+    // Audio
+    "audio0",
+    // Agent
+    "agent",
+    // ACPI/APIC
+    "acpi",
+    "hotplug",
+    "localtime",
+    "freeze",
+    "kvm",
+    "tablet",
+    // Watchdog
+    "watchdog",
+    // RNG
+    "rng0",
+    // NUMA nodes
+    "numa0", "numa1", "numa2", "numa3", "numa4", "numa5", "numa6", "numa7",
+    // Misc
+    "args",
+    "autostart",
+    "cdrom",
+    "hookscript",
+    "hugepages",
+    "ivshmem",
+    "keephugepages",
+    "keyboard",
+    "live-restore",
+    "migrate_downtime",
+    "migrate_speed",
+    "reboot",
+    "smbios1",
+    "template",
+    "unique",
+    "vmgenid",
+    "vmstatestorage",
+    // Import
+    "archive",
+    "bwlimit",
+    "force",
+    "start",
+    "storage",
+];
+
+/// Allowed parameters for VM cloning (POST /nodes/{node}/qemu/{vmid}/clone)
+const ALLOWED_CLONE_PARAMS: &[&str] = &[
+    "newid",      // Required: target VMID
+    "name",       // VM name
+    "description",
+    "pool",       // Resource pool
+    "target",     // Target node
+    "storage",    // Target storage
+    "format",     // Target format (raw, qcow2, vmdk)
+    "full",       // Full clone (1) or linked clone (0)
+    "snapname",   // Source snapshot name
+    "bwlimit",    // I/O bandwidth limit
+];
+
+/// Allowed parameters for VM deletion (DELETE /nodes/{node}/qemu/{vmid})
+const ALLOWED_DELETE_PARAMS: &[&str] = &[
+    "purge",           // Remove from backup jobs and HA
+    "destroy-unreferenced-disks", // Remove unreferenced disks
+    "skiplock",        // Ignore lock
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DesiredState {
     Status,
@@ -100,6 +239,8 @@ struct ProxmoxVmConfig {
     timeout_secs: u64,
     validate_certs: bool,
     wait: WaitConfig,
+    /// Validate create/clone/delete params against allowlists
+    strict_params: bool,
 }
 
 impl ProxmoxVmConfig {
@@ -135,6 +276,7 @@ impl ProxmoxVmConfig {
             .unwrap_or(DEFAULT_TIMEOUT_SECS);
 
         let validate_certs = params.get_bool_or("validate_certs", true);
+        let strict_params = params.get_bool_or("strict_params", true);
 
         let wait_enabled = params.get_bool_or("wait", false);
         let wait_timeout = params
@@ -162,6 +304,7 @@ impl ProxmoxVmConfig {
                 timeout_secs: wait_timeout,
                 interval_secs: wait_interval,
             },
+            strict_params,
         })
     }
 }
@@ -646,6 +789,34 @@ fn parse_string_map(field: &str, value: &Value) -> ModuleResult<HashMap<String, 
     Ok(map)
 }
 
+/// Validate parameter keys against an allowlist
+///
+/// Returns an error listing unknown keys if any are found.
+fn validate_params(
+    params: &HashMap<String, String>,
+    allowlist: &[&str],
+    operation: &str,
+) -> ModuleResult<()> {
+    let unknown: Vec<&String> = params
+        .keys()
+        .filter(|k| !allowlist.contains(&k.as_str()))
+        .collect();
+
+    if unknown.is_empty() {
+        Ok(())
+    } else {
+        // Sort for consistent error messages
+        let mut unknown_sorted: Vec<&str> = unknown.iter().map(|s| s.as_str()).collect();
+        unknown_sorted.sort();
+
+        Err(ModuleError::InvalidParameter(format!(
+            "Unknown {} parameter(s): {}. Set strict_params=false to allow pass-through.",
+            operation,
+            unknown_sorted.join(", ")
+        )))
+    }
+}
+
 fn build_create_params(
     config: &ProxmoxVmConfig,
     params: &ModuleParams,
@@ -680,6 +851,11 @@ fn build_create_params(
                 "name (required for create)".to_string(),
             ));
         }
+    }
+
+    // Validate params if strict mode is enabled
+    if config.strict_params {
+        validate_params(&body, ALLOWED_CREATE_PARAMS, "create")?;
     }
 
     Ok(body)
@@ -731,15 +907,30 @@ fn build_clone_params(
         );
     }
 
+    // Validate params if strict mode is enabled
+    if config.strict_params {
+        validate_params(&body, ALLOWED_CLONE_PARAMS, "clone")?;
+    }
+
     Ok(body)
 }
 
-fn build_delete_params(params: &ModuleParams) -> ModuleResult<HashMap<String, String>> {
-    if let Some(value) = params.get("delete") {
-        parse_string_map("delete", value)
+fn build_delete_params(
+    config: &ProxmoxVmConfig,
+    params: &ModuleParams,
+) -> ModuleResult<HashMap<String, String>> {
+    let body = if let Some(value) = params.get("delete") {
+        parse_string_map("delete", value)?
     } else {
-        Ok(HashMap::new())
+        HashMap::new()
+    };
+
+    // Validate params if strict mode is enabled
+    if config.strict_params && !body.is_empty() {
+        validate_params(&body, ALLOWED_DELETE_PARAMS, "delete")?;
     }
+
+    Ok(body)
 }
 
 fn create_vm(
@@ -786,7 +977,7 @@ fn delete_vm(
     params: &ModuleParams,
 ) -> ModuleResult<Value> {
     let url = api_url(config, &format!("nodes/{}/qemu/{}", config.node, config.vmid));
-    let body = build_delete_params(params)?;
+    let body = build_delete_params(config, params)?;
     request_json(
         client,
         Method::DELETE,
@@ -1171,6 +1362,7 @@ mod tests {
             timeout_secs: 30,
             validate_certs: true,
             wait: WaitConfig::default(),
+            strict_params: false, // Disable for this test
         };
 
         let mut params: ModuleParams = HashMap::new();
@@ -1195,6 +1387,7 @@ mod tests {
             timeout_secs: 30,
             validate_certs: true,
             wait: WaitConfig::default(),
+            strict_params: false, // Disable for this test
         };
 
         let mut params: ModuleParams = HashMap::new();
@@ -1204,5 +1397,163 @@ mod tests {
             body.get("name"),
             Some(&"rustible-clone-456".to_string())
         );
+    }
+
+    #[test]
+    fn test_validate_params_valid() {
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), "test-vm".to_string());
+        params.insert("memory".to_string(), "1024".to_string());
+        params.insert("cores".to_string(), "2".to_string());
+
+        let result = validate_params(&params, ALLOWED_CREATE_PARAMS, "create");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_params_unknown() {
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), "test-vm".to_string());
+        params.insert("typo_param".to_string(), "value".to_string());
+        params.insert("another_bad".to_string(), "value".to_string());
+
+        let result = validate_params(&params, ALLOWED_CREATE_PARAMS, "create");
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Unknown create parameter(s)"));
+        assert!(msg.contains("typo_param"));
+        assert!(msg.contains("another_bad"));
+        assert!(msg.contains("strict_params=false"));
+    }
+
+    #[test]
+    fn test_strict_params_catches_typo_in_create() {
+        let config = ProxmoxVmConfig {
+            api_base: "https://pve.example/api2/json".to_string(),
+            token_id: "id".to_string(),
+            token_secret: "secret".to_string(),
+            node: "node".to_string(),
+            vmid: 100,
+            state: DesiredState::Present,
+            stop_method: StopMethod::Shutdown,
+            timeout_secs: 30,
+            validate_certs: true,
+            wait: WaitConfig::default(),
+            strict_params: true, // Enable strict validation
+        };
+
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("name".to_string(), json!("test-vm"));
+        // Typo: "memorry" instead of "memory"
+        params.insert(
+            "create".to_string(),
+            json!({
+                "memorry": 1024,
+                "cores": 2
+            }),
+        );
+
+        let result = build_create_params(&config, &params);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("memorry"));
+    }
+
+    #[test]
+    fn test_strict_params_disabled_allows_unknown() {
+        let config = ProxmoxVmConfig {
+            api_base: "https://pve.example/api2/json".to_string(),
+            token_id: "id".to_string(),
+            token_secret: "secret".to_string(),
+            node: "node".to_string(),
+            vmid: 100,
+            state: DesiredState::Present,
+            stop_method: StopMethod::Shutdown,
+            timeout_secs: 30,
+            validate_certs: true,
+            wait: WaitConfig::default(),
+            strict_params: false, // Disable strict validation
+        };
+
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("name".to_string(), json!("test-vm"));
+        params.insert(
+            "create".to_string(),
+            json!({
+                "custom_param": "value",
+                "another_custom": 123
+            }),
+        );
+
+        let result = build_create_params(&config, &params);
+        assert!(result.is_ok());
+        let body = result.unwrap();
+        assert_eq!(body.get("custom_param"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    fn test_strict_params_clone_validation() {
+        let config = ProxmoxVmConfig {
+            api_base: "https://pve.example/api2/json".to_string(),
+            token_id: "id".to_string(),
+            token_secret: "secret".to_string(),
+            node: "node".to_string(),
+            vmid: 200,
+            state: DesiredState::Cloned,
+            stop_method: StopMethod::Shutdown,
+            timeout_secs: 30,
+            validate_certs: true,
+            wait: WaitConfig::default(),
+            strict_params: true,
+        };
+
+        let mut params: ModuleParams = HashMap::new();
+        // Typo: "storge" instead of "storage"
+        params.insert(
+            "clone".to_string(),
+            json!({
+                "storge": "local-lvm"
+            }),
+        );
+
+        let result = build_clone_params(&config, &params);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("storge"));
+        assert!(msg.contains("clone"));
+    }
+
+    #[test]
+    fn test_strict_params_delete_validation() {
+        let config = ProxmoxVmConfig {
+            api_base: "https://pve.example/api2/json".to_string(),
+            token_id: "id".to_string(),
+            token_secret: "secret".to_string(),
+            node: "node".to_string(),
+            vmid: 100,
+            state: DesiredState::Absent,
+            stop_method: StopMethod::Shutdown,
+            timeout_secs: 30,
+            validate_certs: true,
+            wait: WaitConfig::default(),
+            strict_params: true,
+        };
+
+        let mut params: ModuleParams = HashMap::new();
+        // Typo: "purg" instead of "purge"
+        params.insert(
+            "delete".to_string(),
+            json!({
+                "purg": true
+            }),
+        );
+
+        let result = build_delete_params(&config, &params);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("purg"));
+        assert!(msg.contains("delete"));
     }
 }
