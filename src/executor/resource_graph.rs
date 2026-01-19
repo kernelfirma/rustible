@@ -31,7 +31,8 @@
 //! });
 //!
 //! let dag = graph.build_dag()?;
-//! let plan = graph.plan()?;
+//! let state = rustible::provisioning::state::ProvisioningState::new();
+//! let plan = graph.plan(&state, None).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -40,9 +41,21 @@
 //! for the full design.
 
 use std::collections::HashMap;
+#[cfg(feature = "provisioning")]
+use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+#[cfg(feature = "provisioning")]
+use serde_json::Value as JsonValue;
+
+#[cfg(feature = "provisioning")]
+use crate::provisioning::registry::{parse_resource_type, ProviderRegistry};
+#[cfg(feature = "provisioning")]
+use crate::provisioning::state::{ProvisioningState, ResourceId, ResourceState};
+#[cfg(feature = "provisioning")]
+use crate::provisioning::traits::{ChangeType, ResourceDiff};
 
 use super::dependency::{DependencyError, DependencyGraph, DependencyKind, DependencyNode};
 
@@ -72,6 +85,10 @@ pub enum ResourceGraphError {
     /// Provider validation failed
     #[error("Provider validation failed for resource '{0}': {1}")]
     ValidationError(String, String),
+
+    /// Planning failed
+    #[error("Plan error: {0}")]
+    PlanError(String),
 }
 
 /// Result type for resource graph operations
@@ -163,6 +180,8 @@ pub enum ResourceAction {
     Create,
     /// Resource will be updated (exists but desired state differs).
     Update,
+    /// Resource will be replaced (destroy + create).
+    Replace,
     /// Resource will be deleted (exists in state but not in desired config).
     Delete,
     /// No operation needed (current state matches desired state).
@@ -174,6 +193,7 @@ impl std::fmt::Display for ResourceAction {
         match self {
             ResourceAction::Create => write!(f, "create"),
             ResourceAction::Update => write!(f, "update"),
+            ResourceAction::Replace => write!(f, "replace"),
             ResourceAction::Delete => write!(f, "delete"),
             ResourceAction::NoOp => write!(f, "no-op"),
         }
@@ -362,7 +382,7 @@ impl ResourceGraph {
 
         // Add all resources as nodes
         for resource in self.iter() {
-            dag.add_node(&resource.id, DependencyNode::task(&resource.label()));
+            dag.add_node(&resource.id, DependencyNode::task(resource.label()));
         }
 
         // Add dependency edges
@@ -385,24 +405,526 @@ impl ResourceGraph {
 
     /// Generates an execution plan for all resources.
     ///
+    /// Compares desired state against the current provisioning state and uses
+    /// provider-specific diff logic when a provider registry is supplied.
+    #[cfg(feature = "provisioning")]
+    pub async fn plan(
+        &self,
+        state: &ProvisioningState,
+        providers: Option<&ProviderRegistry>,
+    ) -> ResourceGraphResult<Vec<ResourcePlan>> {
+        let order = self.execution_order()?;
+        let mut plans = Vec::new();
+        let mut desired_addresses = HashSet::new();
+
+        for id in order {
+            let resource = self
+                .resources
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| ResourceGraphError::PlanError(format!("Resource '{}' missing", id)))?;
+            let address = format!("{}.{}", resource.resource_type, resource.id);
+            desired_addresses.insert(address);
+
+            let state_id = ResourceId::new(&resource.resource_type, &resource.id);
+            let current_state = state.get_resource(&state_id).cloned();
+            let current_json = current_state.as_ref().map(current_state_value);
+
+            let provider_diff = if let Some(providers) = providers {
+                match parse_resource_type(&resource.resource_type) {
+                    Ok((provider_name, _)) => {
+                        let desired_json = yaml_to_json(&resource.desired)?;
+                        Some(
+                            provider_plan(
+                                providers,
+                                &provider_name,
+                                &resource,
+                                &desired_json,
+                                current_json.as_ref(),
+                            )
+                            .await?,
+                        )
+                    }
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let plan = if let Some(mut diff) = provider_diff {
+                apply_ignore_changes(&mut diff, &resource.lifecycle.ignore_changes);
+                let changes = diff_to_changes(&diff, current_json.as_ref())?;
+                let action = action_from_diff(&diff);
+                let reason = reason_for_action(action, Some(&diff), &resource.lifecycle);
+                ResourcePlan {
+                    resource_id: resource.id,
+                    action,
+                    reason: Some(reason),
+                    changes,
+                }
+            } else {
+                let current_yaml = match current_json.as_ref() {
+                    Some(value) => Some(json_to_yaml(value)?),
+                    None => None,
+                };
+                let changes = match current_yaml.as_ref() {
+                    Some(current) => compute_yaml_changes(
+                        &resource.desired,
+                        current,
+                        &resource.lifecycle.ignore_changes,
+                    )?,
+                    None => HashMap::new(),
+                };
+                let action = if current_yaml.is_none() {
+                    ResourceAction::Create
+                } else if changes.is_empty() {
+                    ResourceAction::NoOp
+                } else {
+                    ResourceAction::Update
+                };
+                let reason = reason_for_action(action, None, &resource.lifecycle);
+                ResourcePlan {
+                    resource_id: resource.id,
+                    action,
+                    reason: Some(reason),
+                    changes,
+                }
+            };
+
+            plans.push(plan);
+        }
+
+        for (address, _) in &state.resources {
+            if desired_addresses.contains(address) {
+                continue;
+            }
+
+            plans.push(ResourcePlan {
+                resource_id: address.clone(),
+                action: ResourceAction::Delete,
+                reason: Some("Resource no longer in configuration".to_string()),
+                changes: HashMap::new(),
+            });
+        }
+
+        Ok(plans)
+    }
+
+    /// Generates an execution plan for all resources.
+    ///
     /// This is a placeholder that returns NoOp for all resources.
-    /// Actual implementation will compare desired state against current state.
+    /// Actual implementation requires the provisioning feature.
+    #[cfg(not(feature = "provisioning"))]
     pub fn plan(&self) -> ResourceGraphResult<Vec<ResourcePlan>> {
         let order = self.execution_order()?;
 
-        // TODO: Implement actual state comparison via providers
         let plans = order
             .into_iter()
             .map(|id| ResourcePlan {
                 resource_id: id,
                 action: ResourceAction::NoOp,
-                reason: Some("State comparison not yet implemented".to_string()),
+                reason: Some("State comparison requires provisioning feature".to_string()),
                 changes: HashMap::new(),
             })
             .collect();
 
         Ok(plans)
     }
+}
+
+// ============================================================================
+// Planning Helpers
+// ============================================================================
+
+#[cfg(feature = "provisioning")]
+fn current_state_value(state: &ResourceState) -> JsonValue {
+    if state.attributes.is_null() {
+        state.config.clone()
+    } else {
+        state.attributes.clone()
+    }
+}
+
+#[cfg(feature = "provisioning")]
+async fn provider_plan(
+    providers: &ProviderRegistry,
+    provider_name: &str,
+    resource: &Resource,
+    desired: &JsonValue,
+    current: Option<&JsonValue>,
+) -> ResourceGraphResult<ResourceDiff> {
+    let provider_lock = providers
+        .get_provider(provider_name)
+        .map_err(|err| ResourceGraphError::PlanError(err.to_string()))?;
+
+    let (resource_impl, context) = {
+        let provider = provider_lock.read();
+        let resource_impl = provider
+            .resource(&resource.resource_type)
+            .map_err(|err| ResourceGraphError::PlanError(err.to_string()))?;
+        let context = provider
+            .context()
+            .map_err(|err| ResourceGraphError::PlanError(err.to_string()))?;
+        (resource_impl, context)
+    };
+
+    resource_impl
+        .validate(desired)
+        .map_err(|err| ResourceGraphError::ValidationError(resource.id.clone(), err.to_string()))?;
+
+    resource_impl
+        .plan(desired, current, &context)
+        .await
+        .map_err(|err| ResourceGraphError::PlanError(err.to_string()))
+}
+
+#[cfg(feature = "provisioning")]
+fn action_from_diff(diff: &ResourceDiff) -> ResourceAction {
+    if diff.requires_replacement || diff.change_type == ChangeType::Replace {
+        return ResourceAction::Replace;
+    }
+
+    match diff.change_type {
+        ChangeType::Create => ResourceAction::Create,
+        ChangeType::Update => ResourceAction::Update,
+        ChangeType::Destroy => ResourceAction::Delete,
+        ChangeType::NoOp | ChangeType::Read => ResourceAction::NoOp,
+        ChangeType::Replace => ResourceAction::Replace,
+    }
+}
+
+#[cfg(feature = "provisioning")]
+fn reason_for_action(
+    action: ResourceAction,
+    diff: Option<&ResourceDiff>,
+    lifecycle: &ResourceLifecycle,
+) -> String {
+    match action {
+        ResourceAction::Create => "Resource not found in state".to_string(),
+        ResourceAction::Update => "Desired state differs from current state".to_string(),
+        ResourceAction::Replace => {
+            let mut reason = match diff {
+                Some(diff) if !diff.replacement_fields.is_empty() => format!(
+                    "Change requires replacement due to {:?}",
+                    diff.replacement_fields
+                ),
+                _ => "Change requires replacement".to_string(),
+            };
+            if lifecycle.create_before_destroy {
+                reason.push_str(" (create_before_destroy)");
+            }
+            reason
+        }
+        ResourceAction::Delete => "Resource no longer in configuration".to_string(),
+        ResourceAction::NoOp => "State matches desired".to_string(),
+    }
+}
+
+#[cfg(feature = "provisioning")]
+fn apply_ignore_changes(diff: &mut ResourceDiff, ignore_changes: &[String]) {
+    if ignore_changes.is_empty() {
+        return;
+    }
+
+    let should_ignore = |path: &str| should_ignore_path(path, ignore_changes);
+    diff.additions.retain(|path, _| !should_ignore(path));
+    diff.modifications.retain(|path, _| !should_ignore(path));
+    diff.deletions.retain(|path| !should_ignore(path));
+    diff.replacement_fields.retain(|path| !should_ignore(path));
+
+    if matches!(diff.change_type, ChangeType::Create | ChangeType::Destroy) {
+        return;
+    }
+
+    let has_changes =
+        !diff.additions.is_empty() || !diff.modifications.is_empty() || !diff.deletions.is_empty();
+    diff.requires_replacement = !diff.replacement_fields.is_empty();
+
+    diff.change_type = if diff.requires_replacement {
+        ChangeType::Replace
+    } else if has_changes {
+        ChangeType::Update
+    } else {
+        ChangeType::NoOp
+    };
+}
+
+#[cfg(feature = "provisioning")]
+fn diff_to_changes(
+    diff: &ResourceDiff,
+    current: Option<&JsonValue>,
+) -> ResourceGraphResult<HashMap<String, AttributeChange>> {
+    let mut changes = HashMap::new();
+
+    for (path, value) in &diff.additions {
+        changes.insert(
+            path.clone(),
+            AttributeChange {
+                path: path.clone(),
+                old: None,
+                new: Some(json_to_yaml(value)?),
+            },
+        );
+    }
+
+    for (path, (old, new)) in &diff.modifications {
+        changes.insert(
+            path.clone(),
+            AttributeChange {
+                path: path.clone(),
+                old: Some(json_to_yaml(old)?),
+                new: Some(json_to_yaml(new)?),
+            },
+        );
+    }
+
+    for path in &diff.deletions {
+        let old_value = current.and_then(|value| value.get(path)).cloned();
+        let old_yaml = match old_value {
+            Some(value) => Some(json_to_yaml(&value)?),
+            None => None,
+        };
+        changes.insert(
+            path.clone(),
+            AttributeChange {
+                path: path.clone(),
+                old: old_yaml,
+                new: None,
+            },
+        );
+    }
+
+    Ok(changes)
+}
+
+#[cfg(feature = "provisioning")]
+fn compute_yaml_changes(
+    desired: &serde_yaml::Value,
+    current: &serde_yaml::Value,
+    ignore_changes: &[String],
+) -> ResourceGraphResult<HashMap<String, AttributeChange>> {
+    let mut changes = HashMap::new();
+    collect_changes("", desired, current, ignore_changes, &mut changes)?;
+    Ok(changes)
+}
+
+#[cfg(feature = "provisioning")]
+fn collect_changes(
+    path: &str,
+    desired: &serde_yaml::Value,
+    current: &serde_yaml::Value,
+    ignore_changes: &[String],
+    changes: &mut HashMap<String, AttributeChange>,
+) -> ResourceGraphResult<()> {
+    if !path.is_empty() && should_ignore_path(path, ignore_changes) {
+        return Ok(());
+    }
+
+    match (desired, current) {
+        (serde_yaml::Value::Mapping(desired_map), serde_yaml::Value::Mapping(current_map)) => {
+            let mut keys = HashSet::new();
+            for key in desired_map.keys() {
+                keys.insert(map_key_to_string(key)?);
+            }
+            for key in current_map.keys() {
+                keys.insert(map_key_to_string(key)?);
+            }
+
+            for key in keys {
+                let key_value = serde_yaml::Value::String(key.clone());
+                let desired_val = desired_map.get(&key_value);
+                let current_val = current_map.get(&key_value);
+                let next_path = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{}.{}", path, key)
+                };
+
+                match (desired_val, current_val) {
+                    (Some(desired_val), Some(current_val)) => {
+                        if desired_val == current_val {
+                            continue;
+                        }
+                        collect_changes(
+                            &next_path,
+                            desired_val,
+                            current_val,
+                            ignore_changes,
+                            changes,
+                        )?;
+                    }
+                    (Some(desired_val), None) => {
+                        if should_ignore_path(&next_path, ignore_changes) {
+                            continue;
+                        }
+                        changes.insert(
+                            next_path.clone(),
+                            AttributeChange {
+                                path: next_path,
+                                old: None,
+                                new: Some(desired_val.clone()),
+                            },
+                        );
+                    }
+                    (None, Some(current_val)) => {
+                        if should_ignore_path(&next_path, ignore_changes) {
+                            continue;
+                        }
+                        changes.insert(
+                            next_path.clone(),
+                            AttributeChange {
+                                path: next_path,
+                                old: Some(current_val.clone()),
+                                new: None,
+                            },
+                        );
+                    }
+                    (None, None) => {}
+                }
+            }
+        }
+        (serde_yaml::Value::Sequence(desired_seq), serde_yaml::Value::Sequence(current_seq)) => {
+            let max_len = desired_seq.len().max(current_seq.len());
+            for index in 0..max_len {
+                let next_path = if path.is_empty() {
+                    index.to_string()
+                } else {
+                    format!("{}.{}", path, index)
+                };
+                let desired_val = desired_seq.get(index);
+                let current_val = current_seq.get(index);
+
+                match (desired_val, current_val) {
+                    (Some(desired_val), Some(current_val)) => {
+                        if desired_val == current_val {
+                            continue;
+                        }
+                        collect_changes(
+                            &next_path,
+                            desired_val,
+                            current_val,
+                            ignore_changes,
+                            changes,
+                        )?;
+                    }
+                    (Some(desired_val), None) => {
+                        if should_ignore_path(&next_path, ignore_changes) {
+                            continue;
+                        }
+                        changes.insert(
+                            next_path.clone(),
+                            AttributeChange {
+                                path: next_path,
+                                old: None,
+                                new: Some(desired_val.clone()),
+                            },
+                        );
+                    }
+                    (None, Some(current_val)) => {
+                        if should_ignore_path(&next_path, ignore_changes) {
+                            continue;
+                        }
+                        changes.insert(
+                            next_path.clone(),
+                            AttributeChange {
+                                path: next_path,
+                                old: Some(current_val.clone()),
+                                new: None,
+                            },
+                        );
+                    }
+                    (None, None) => {}
+                }
+            }
+        }
+        _ => {
+            if desired != current {
+                let change_path = if path.is_empty() { "root" } else { path };
+                if should_ignore_path(change_path, ignore_changes) {
+                    return Ok(());
+                }
+                changes.insert(
+                    change_path.to_string(),
+                    AttributeChange {
+                        path: change_path.to_string(),
+                        old: Some(current.clone()),
+                        new: Some(desired.clone()),
+                    },
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "provisioning")]
+fn should_ignore_path(path: &str, ignore_changes: &[String]) -> bool {
+    ignore_changes.iter().any(|ignore| {
+        if path == ignore {
+            return true;
+        }
+        path.starts_with(&format!("{}.", ignore))
+    })
+}
+
+#[cfg(feature = "provisioning")]
+fn map_key_to_string(key: &serde_yaml::Value) -> ResourceGraphResult<String> {
+    match key {
+        serde_yaml::Value::String(value) => Ok(value.clone()),
+        _ => Err(ResourceGraphError::PlanError(
+            "Only string keys are supported in resource graphs".to_string(),
+        )),
+    }
+}
+
+#[cfg(feature = "provisioning")]
+fn yaml_to_json(value: &serde_yaml::Value) -> ResourceGraphResult<JsonValue> {
+    Ok(match value {
+        serde_yaml::Value::Null => JsonValue::Null,
+        serde_yaml::Value::Bool(value) => JsonValue::Bool(*value),
+        serde_yaml::Value::Number(number) => {
+            if let Some(value) = number.as_i64() {
+                JsonValue::Number(value.into())
+            } else if let Some(value) = number.as_u64() {
+                JsonValue::Number(value.into())
+            } else if let Some(value) = number.as_f64() {
+                let number = serde_json::Number::from_f64(value).ok_or_else(|| {
+                    ResourceGraphError::PlanError(format!(
+                        "Unsupported floating point value: {}",
+                        value
+                    ))
+                })?;
+                JsonValue::Number(number)
+            } else {
+                return Err(ResourceGraphError::PlanError(
+                    "Unsupported numeric value".to_string(),
+                ));
+            }
+        }
+        serde_yaml::Value::String(value) => JsonValue::String(value.clone()),
+        serde_yaml::Value::Sequence(values) => JsonValue::Array(
+            values
+                .iter()
+                .map(yaml_to_json)
+                .collect::<ResourceGraphResult<Vec<_>>>()?,
+        ),
+        serde_yaml::Value::Mapping(map) => {
+            let mut object = serde_json::Map::new();
+            for (key, value) in map {
+                let key = map_key_to_string(key)?;
+                object.insert(key, yaml_to_json(value)?);
+            }
+            JsonValue::Object(object)
+        }
+        serde_yaml::Value::Tagged(tagged) => yaml_to_json(&tagged.value)?,
+    })
+}
+
+#[cfg(feature = "provisioning")]
+fn json_to_yaml(value: &JsonValue) -> ResourceGraphResult<serde_yaml::Value> {
+    serde_yaml::to_value(value)
+        .map_err(|err| ResourceGraphError::PlanError(err.to_string()))
 }
 
 // ============================================================================
@@ -443,6 +965,10 @@ impl From<ResourceGraph> for ResourceGraphFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "provisioning")]
+    use crate::provisioning::state::{ProvisioningState, ResourceId, ResourceState};
+    #[cfg(feature = "provisioning")]
+    use serde_json::json;
 
     #[test]
     fn test_resource_creation() {
@@ -541,6 +1067,98 @@ mod tests {
         assert_eq!(order, vec!["a", "b", "c"]);
     }
 
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_plan_generation() {
+        let mut graph = ResourceGraph::new();
+        graph.add_resource(Resource::new("test", "type")).unwrap();
+
+        let state = ProvisioningState::new();
+        let plans = graph.plan(&state, None).await.unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].resource_id, "test");
+        assert_eq!(plans[0].action, ResourceAction::Create);
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_plan_detects_update() {
+        let mut graph = ResourceGraph::new();
+        let desired = serde_yaml::to_value(json!({ "size": "small" })).unwrap();
+        graph
+            .add_resource(Resource::new("app", "type").with_desired(desired))
+            .unwrap();
+
+        let mut state = ProvisioningState::new();
+        let id = ResourceId::new("type", "app");
+        state.add_resource(ResourceState::new(
+            id,
+            "cloud-1",
+            "test",
+            json!({ "size": "large" }),
+            json!({ "size": "large" }),
+        ));
+
+        let plans = graph.plan(&state, None).await.unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].action, ResourceAction::Update);
+        assert!(plans[0].changes.contains_key("size"));
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_plan_ignores_changes() {
+        let mut graph = ResourceGraph::new();
+        let desired = serde_yaml::to_value(json!({ "size": "small" })).unwrap();
+        let lifecycle = ResourceLifecycle {
+            ignore_changes: vec!["size".to_string()],
+            ..ResourceLifecycle::default()
+        };
+        graph
+            .add_resource(
+                Resource::new("app", "type")
+                    .with_desired(desired)
+                    .with_lifecycle(lifecycle),
+            )
+            .unwrap();
+
+        let mut state = ProvisioningState::new();
+        let id = ResourceId::new("type", "app");
+        state.add_resource(ResourceState::new(
+            id,
+            "cloud-1",
+            "test",
+            json!({ "size": "large" }),
+            json!({ "size": "large" }),
+        ));
+
+        let plans = graph.plan(&state, None).await.unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].action, ResourceAction::NoOp);
+        assert!(plans[0].changes.is_empty());
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_plan_deletes_orphans() {
+        let graph = ResourceGraph::new();
+        let mut state = ProvisioningState::new();
+        let id = ResourceId::new("type", "orphan");
+        state.add_resource(ResourceState::new(
+            id,
+            "cloud-1",
+            "test",
+            json!({}),
+            json!({ "size": "large" }),
+        ));
+
+        let plans = graph.plan(&state, None).await.unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].action, ResourceAction::Delete);
+        assert_eq!(plans[0].resource_id, "type.orphan");
+    }
+
+    #[cfg(not(feature = "provisioning"))]
     #[test]
     fn test_plan_generation() {
         let mut graph = ResourceGraph::new();
@@ -556,6 +1174,7 @@ mod tests {
     fn test_resource_action_display() {
         assert_eq!(ResourceAction::Create.to_string(), "create");
         assert_eq!(ResourceAction::Update.to_string(), "update");
+        assert_eq!(ResourceAction::Replace.to_string(), "replace");
         assert_eq!(ResourceAction::Delete.to_string(), "delete");
         assert_eq!(ResourceAction::NoOp.to_string(), "no-op");
     }
