@@ -27,3 +27,8 @@
 **Vulnerability:** The `find_playbook` API handler allowed absolute paths and relative path traversal (`../`) without validating they remained within the configured `playbook_paths`. This could allow authenticated users to trigger execution of arbitrary files on the server or probe for file existence.
 **Learning:** `Path::join` resolves absolute paths by replacing the base, and `canonicalize` resolves `..` but doesn't check boundaries. Explicit validation of the resolved path against allowed prefixes is required.
 **Prevention:** Always canonicalize both the base path and the target path, then verify `target.starts_with(base)`. Reject absolute paths in user input unless explicitly validated against an allowlist.
+
+## 2024-05-27 - Path Traversal in Systemd Unit Module
+**Vulnerability:** The `systemd_unit` module accepted arbitrary paths for `unit_path` without validation, allowing creation of files outside intended directories via `..` (e.g., `/etc/systemd/system/../../tmp/evil.service`).
+**Learning:** Relying on `Path::join` without inspecting components allows directory traversal if user input contains `..`. System modules often run with elevated privileges, making filesystem boundaries critical.
+**Prevention:** Validate all file paths from user input. Enforce absolute paths where required and explicitly reject paths containing `ParentDir` (`..`) components to prevent directory traversal.
