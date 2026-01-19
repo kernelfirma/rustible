@@ -2,11 +2,15 @@
 //!
 //! This module provides secure password caching for privilege escalation
 //! operations, with configurable TTL and automatic expiration.
+//!
+//! Passwords are stored using `SecretBytes` which automatically zeroes
+//! memory on drop, preventing secret leakage.
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zeroize::Zeroizing;
 
 use super::{SecurityError, SecurityResult};
 
@@ -59,10 +63,13 @@ impl PasswordCacheConfig {
 }
 
 /// A cached password entry
+///
+/// The password is stored in a `Zeroizing<Vec<u8>>` which automatically
+/// zeroes memory on drop, preventing secret leakage.
 #[derive(Clone)]
 pub struct CachedPassword {
-    /// The password (stored as bytes for potential zeroing)
-    password: Vec<u8>,
+    /// The password (stored in zeroizing container)
+    password: Zeroizing<Vec<u8>>,
     /// When this entry was created
     created_at: Instant,
     /// When this entry expires
@@ -80,7 +87,7 @@ impl CachedPassword {
     fn new(host: String, user: String, password: &str, ttl: Duration) -> Self {
         let now = Instant::now();
         Self {
-            password: password.as_bytes().to_vec(),
+            password: Zeroizing::new(password.as_bytes().to_vec()),
             created_at: now,
             expires_at: now + ttl,
             use_count: 0,
@@ -96,7 +103,7 @@ impl CachedPassword {
 
     /// Get the password as a string
     pub fn password(&self) -> Option<String> {
-        String::from_utf8(self.password.clone()).ok()
+        String::from_utf8(self.password.to_vec()).ok()
     }
 
     /// Get remaining TTL
@@ -114,19 +121,6 @@ impl CachedPassword {
         Instant::now() - self.created_at
     }
 
-    /// Clear the password from memory
-    fn clear(&mut self) {
-        for byte in &mut self.password {
-            *byte = 0;
-        }
-        self.password.clear();
-    }
-}
-
-impl Drop for CachedPassword {
-    fn drop(&mut self) {
-        self.clear();
-    }
 }
 
 // Debug implementation that redacts the password
@@ -288,10 +282,10 @@ impl PasswordCache {
         // If clear_on_retrieve, we need write lock anyway
         if self.config.clear_on_retrieve {
             let mut entries = self.entries.write();
-            if let Some(mut entry) = entries.remove(&key) {
+            if let Some(entry) = entries.remove(&key) {
                 if !entry.is_expired() {
                     if let Some(pwd) = entry.password() {
-                        entry.clear();
+                        // Entry is dropped here, Zeroizing clears password automatically
                         return Ok(pwd);
                     }
                 }
@@ -324,8 +318,8 @@ impl PasswordCache {
         let key = CacheKey::new(host, user);
         let mut entries = self.entries.write();
 
-        if let Some(mut entry) = entries.remove(&key) {
-            entry.clear();
+        if entries.remove(&key).is_some() {
+            // Entry dropped, Zeroizing clears password automatically
             tracing::debug!(
                 host = %host,
                 user = %user,
@@ -345,9 +339,8 @@ impl PasswordCache {
             .collect();
 
         for key in keys_to_remove {
-            if let Some(mut entry) = entries.remove(&key) {
-                entry.clear();
-            }
+            // Entries dropped, Zeroizing clears passwords automatically
+            entries.remove(&key);
         }
 
         self.stats.write().clears += 1;
@@ -357,10 +350,8 @@ impl PasswordCache {
     /// Clear all cached passwords
     pub fn clear_all(&self) {
         let mut entries = self.entries.write();
-
-        for (_, mut entry) in entries.drain() {
-            entry.clear();
-        }
+        // Drain and drop all entries, Zeroizing clears passwords automatically
+        entries.clear();
 
         self.stats.write().clears += 1;
         tracing::debug!("Cleared all cached passwords");
@@ -383,9 +374,8 @@ impl PasswordCache {
         let count = expired_keys.len();
 
         for key in expired_keys {
-            if let Some(mut entry) = entries.remove(&key) {
-                entry.clear();
-            }
+            // Entries dropped, Zeroizing clears passwords automatically
+            entries.remove(&key);
         }
 
         if count > 0 {
