@@ -24,6 +24,39 @@ use super::{
     TransferOptions,
 };
 
+struct KeyboardInteractivePassword {
+    password: String,
+}
+
+impl ssh2::KeyboardInteractivePrompt for KeyboardInteractivePassword {
+    fn prompt<'a>(
+        &mut self,
+        _username: &str,
+        _instructions: &str,
+        prompts: &[ssh2::Prompt<'a>],
+    ) -> Vec<String> {
+        prompts
+            .iter()
+            .map(|_| self.password.clone())
+            .collect::<Vec<_>>()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthAttempt {
+    Agent,
+    PublicKey,
+    Password,
+    KeyboardInteractive,
+}
+
+fn supports_auth_method(methods: &str, method: &str) -> bool {
+    methods
+        .split(',')
+        .map(|entry| entry.trim())
+        .any(|entry| entry == method)
+}
+
 /// SSH connection implementation using ssh2 crate
 pub struct SshConnection {
     /// Session identifier
@@ -160,53 +193,91 @@ impl SshConnection {
 
         debug!(methods = %methods, "Available authentication methods");
 
-        // Try SSH agent first if enabled
-        if global_config.defaults.use_agent && methods.contains("publickey") {
-            if Self::try_agent_auth(session, user).is_ok() {
-                debug!("Authenticated using SSH agent");
-                return Ok(());
-            }
+        if supports_auth_method(&methods, "keyboard-interactive") && host_config.password.is_none()
+        {
+            debug!("Keyboard-interactive auth available but no password provided");
         }
 
-        // Try key-based authentication
-        if methods.contains("publickey") {
-            for key_path in ssh_common::identity_file_candidates(host_config, global_config) {
-                if Self::try_key_auth(session, user, &key_path, host_config.password.as_deref())
-                    .is_ok()
-                {
-                    debug!(key = %key_path.display(), "Authenticated using key");
-                    return Ok(());
+        for attempt in Self::build_auth_attempts(&methods, host_config, global_config) {
+            match attempt {
+                AuthAttempt::Agent => {
+                    if Self::try_agent_auth(session, user).is_ok() {
+                        debug!("Authenticated using SSH agent");
+                        return Ok(());
+                    }
+                }
+                AuthAttempt::PublicKey => {
+                    for key_path in
+                        ssh_common::identity_file_candidates(host_config, global_config)
+                    {
+                        if Self::try_key_auth(
+                            session,
+                            user,
+                            &key_path,
+                            host_config.password.as_deref(),
+                        )
+                        .is_ok()
+                        {
+                            debug!(key = %key_path.display(), "Authenticated using key");
+                            return Ok(());
+                        }
+                    }
+                }
+                AuthAttempt::Password => {
+                    if let Some(password) = &host_config.password {
+                        session.userauth_password(user, password).map_err(|e| {
+                            ConnectionError::AuthenticationFailed(format!(
+                                "Password authentication failed: {}",
+                                e
+                            ))
+                        })?;
+
+                        if session.authenticated() {
+                            debug!("Authenticated using password");
+                            return Ok(());
+                        }
+                    }
+                }
+                AuthAttempt::KeyboardInteractive => {
+                    if let Some(password) = &host_config.password {
+                        if Self::try_keyboard_interactive_auth(session, user, password).is_ok() {
+                            debug!("Authenticated using keyboard-interactive");
+                            return Ok(());
+                        }
+                    }
                 }
             }
-        }
-
-        // Try password authentication
-        if methods.contains("password") {
-            if let Some(password) = &host_config.password {
-                session.userauth_password(user, password).map_err(|e| {
-                    ConnectionError::AuthenticationFailed(format!(
-                        "Password authentication failed: {}",
-                        e
-                    ))
-                })?;
-
-                if session.authenticated() {
-                    debug!("Authenticated using password");
-                    return Ok(());
-                }
-            }
-        }
-
-        // Try keyboard-interactive authentication
-        // Note: keyboard-interactive requires implementing KeyboardInteractivePrompt trait
-        // For simplicity, we skip this method and rely on password auth instead
-        if methods.contains("keyboard-interactive") && !methods.contains("password") {
-            debug!("Keyboard-interactive auth available but not implemented, skipping");
         }
 
         Err(ConnectionError::AuthenticationFailed(
             "All authentication methods failed".to_string(),
         ))
+    }
+
+    fn build_auth_attempts(
+        methods: &str,
+        host_config: &HostConfig,
+        global_config: &ConnectionConfig,
+    ) -> Vec<AuthAttempt> {
+        let mut attempts = Vec::new();
+
+        if global_config.defaults.use_agent && supports_auth_method(methods, "publickey") {
+            attempts.push(AuthAttempt::Agent);
+        }
+
+        if supports_auth_method(methods, "publickey") {
+            attempts.push(AuthAttempt::PublicKey);
+        }
+
+        if supports_auth_method(methods, "password") && host_config.password.is_some() {
+            attempts.push(AuthAttempt::Password);
+        }
+
+        if supports_auth_method(methods, "keyboard-interactive") && host_config.password.is_some() {
+            attempts.push(AuthAttempt::KeyboardInteractive);
+        }
+
+        attempts
     }
 
     /// Try SSH agent authentication
@@ -264,6 +335,34 @@ impl SshConnection {
         } else {
             Err(ConnectionError::AuthenticationFailed(
                 "Key authentication failed".to_string(),
+            ))
+        }
+    }
+
+    /// Try keyboard-interactive authentication
+    fn try_keyboard_interactive_auth(
+        session: &Session,
+        user: &str,
+        password: &str,
+    ) -> ConnectionResult<()> {
+        let mut prompter = KeyboardInteractivePassword {
+            password: password.to_string(),
+        };
+
+        session
+            .userauth_keyboard_interactive(user, &mut prompter)
+            .map_err(|e| {
+                ConnectionError::AuthenticationFailed(format!(
+                    "Keyboard-interactive authentication failed: {}",
+                    e
+                ))
+            })?;
+
+        if session.authenticated() {
+            Ok(())
+        } else {
+            Err(ConnectionError::AuthenticationFailed(
+                "Keyboard-interactive authentication failed".to_string(),
             ))
         }
     }
@@ -880,6 +979,8 @@ impl SshConnectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ssh2::KeyboardInteractivePrompt;
+    use std::borrow::Cow;
 
     #[test]
     fn test_build_command_basic() {
@@ -930,5 +1031,64 @@ mod tests {
         assert_eq!(builder.port, 2222);
         assert_eq!(builder.user, "admin");
         assert!(builder.compression);
+    }
+
+    #[test]
+    fn test_keyboard_interactive_prompts_repeat_password() {
+        let mut prompter = KeyboardInteractivePassword {
+            password: "secret".to_string(),
+        };
+        let prompts = vec![
+            ssh2::Prompt {
+                text: Cow::Borrowed("Password: "),
+                echo: false,
+            },
+            ssh2::Prompt {
+                text: Cow::Borrowed("OTP: "),
+                echo: false,
+            },
+        ];
+
+        let responses = prompter.prompt("user", "instructions", &prompts);
+        assert_eq!(
+            responses,
+            vec!["secret".to_string(), "secret".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_build_auth_attempts_includes_keyboard_interactive() {
+        let mut host_config = HostConfig::default();
+        host_config.password = Some("pw".to_string());
+        let global_config = ConnectionConfig::default();
+
+        let attempts = SshConnection::build_auth_attempts(
+            "publickey,keyboard-interactive",
+            &host_config,
+            &global_config,
+        );
+
+        assert_eq!(
+            attempts,
+            vec![
+                AuthAttempt::Agent,
+                AuthAttempt::PublicKey,
+                AuthAttempt::KeyboardInteractive
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_auth_attempts_skip_keyboard_interactive_without_password() {
+        let host_config = HostConfig::default();
+        let global_config = ConnectionConfig::default();
+
+        let attempts = SshConnection::build_auth_attempts(
+            "publickey,keyboard-interactive",
+            &host_config,
+            &global_config,
+        );
+
+        assert_eq!(attempts, vec![AuthAttempt::Agent, AuthAttempt::PublicKey]);
     }
 }
