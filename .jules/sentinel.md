@@ -32,3 +32,8 @@
 **Vulnerability:** The `systemd_unit` module accepted arbitrary paths for `unit_path` without validation, allowing creation of files outside intended directories via `..` (e.g., `/etc/systemd/system/../../tmp/evil.service`).
 **Learning:** Relying on `Path::join` without inspecting components allows directory traversal if user input contains `..`. System modules often run with elevated privileges, making filesystem boundaries critical.
 **Prevention:** Validate all file paths from user input. Enforce absolute paths where required and explicitly reject paths containing `ParentDir` (`..`) components to prevent directory traversal.
+
+## 2024-05-28 - ZipSlip/Path Traversal in Unarchive Module
+**Vulnerability:** The `unarchive` module was vulnerable to a path traversal attack (ZipSlip) when extracting tar archives. Specifically, it joined the destination directory with the archive entry path without validation before checking for file existence (for the `keep_newer` feature). This allowed an attacker to probe for the existence and modification time of arbitrary files on the system by crafting a tarball with entries like `../etc/passwd`.
+**Learning:** Even if a library (like `tar-rs`) provides secure extraction methods (`unpack_in`), custom logic that inspects paths before extraction must also perform security validation. Trusting input data (archive entry paths) implicitly is dangerous.
+**Prevention:** Always validate and sanitize paths from untrusted sources (like archives) before using them in any filesystem operation. Explicitly check for and reject paths containing `ParentDir` (`..`) components or absolute paths.
