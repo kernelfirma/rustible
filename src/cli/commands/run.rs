@@ -263,8 +263,10 @@ impl RunArgs {
             extra_vars.insert("ansible_ssh_pass".to_string(), serde_json::json!(password));
         }
 
-        let ask_become_pass =
-            self.ask_become_pass || ctx.config.privilege_escalation.become_ask_pass;
+        let ask_become_pass = Self::should_prompt_become_password(
+            self.ask_become_pass,
+            ctx.config.privilege_escalation.become_ask_pass,
+        );
         let become_password = if ask_become_pass {
             Some(Self::prompt_become_password(ctx)?)
         } else {
@@ -955,6 +957,10 @@ impl RunArgs {
             .collect()
     }
 
+    fn should_prompt_become_password(ask_become_pass: bool, config_ask_pass: bool) -> bool {
+        ask_become_pass || config_ask_pass
+    }
+
     fn prompt_ssh_password(ctx: &CommandContext) -> Result<String> {
         ctx.output.flush();
         let password = dialoguer::Password::new()
@@ -1157,9 +1163,26 @@ mod tests {
     }
 
     #[test]
+    fn test_run_args_ask_become_pass_parsing() {
+        let args =
+            RunArgs::try_parse_from(["run", "playbook.yml", "--ask-become-pass"]).unwrap();
+        assert!(args.ask_become_pass);
+
+        let args = RunArgs::try_parse_from(["run", "playbook.yml", "-K"]).unwrap();
+        assert!(args.ask_become_pass);
+    }
+
+    #[test]
     fn test_run_args_plan_flag() {
         let args = RunArgs::try_parse_from(["run", "playbook.yml", "--plan"]).unwrap();
         assert!(args.plan);
+    }
+
+    #[test]
+    fn test_should_prompt_become_password_gating() {
+        assert!(RunArgs::should_prompt_become_password(true, false));
+        assert!(RunArgs::should_prompt_become_password(false, true));
+        assert!(!RunArgs::should_prompt_become_password(false, false));
     }
 
     #[test]
