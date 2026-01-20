@@ -225,14 +225,7 @@ impl SshConnection {
                 }
                 AuthAttempt::Password => {
                     if let Some(password) = &host_config.password {
-                        session.userauth_password(user, password).map_err(|e| {
-                            ConnectionError::AuthenticationFailed(format!(
-                                "Password authentication failed: {}",
-                                e
-                            ))
-                        })?;
-
-                        if session.authenticated() {
+                        if Self::try_password_auth(session, user, password).is_ok() {
                             debug!("Authenticated using password");
                             return Ok(());
                         }
@@ -335,6 +328,26 @@ impl SshConnection {
         } else {
             Err(ConnectionError::AuthenticationFailed(
                 "Key authentication failed".to_string(),
+            ))
+        }
+    }
+
+    /// Try password authentication
+    fn try_password_auth(session: &Session, user: &str, password: &str) -> ConnectionResult<()> {
+        session
+            .userauth_password(user, password)
+            .map_err(|e| {
+                ConnectionError::AuthenticationFailed(format!(
+                    "Password authentication failed: {}",
+                    e
+                ))
+            })?;
+
+        if session.authenticated() {
+            Ok(())
+        } else {
+            Err(ConnectionError::AuthenticationFailed(
+                "Password authentication failed".to_string(),
             ))
         }
     }
@@ -1073,6 +1086,29 @@ mod tests {
             vec![
                 AuthAttempt::Agent,
                 AuthAttempt::PublicKey,
+                AuthAttempt::KeyboardInteractive
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_auth_attempts_includes_password_and_keyboard_interactive() {
+        let mut host_config = HostConfig::default();
+        host_config.password = Some("pw".to_string());
+        let global_config = ConnectionConfig::default();
+
+        let attempts = SshConnection::build_auth_attempts(
+            "publickey,password,keyboard-interactive",
+            &host_config,
+            &global_config,
+        );
+
+        assert_eq!(
+            attempts,
+            vec![
+                AuthAttempt::Agent,
+                AuthAttempt::PublicKey,
+                AuthAttempt::Password,
                 AuthAttempt::KeyboardInteractive
             ]
         );
