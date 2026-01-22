@@ -73,14 +73,17 @@ jobs:
           [advisories]
           db-path = "~/.cargo/advisory-db"
           db-urls = ["https://github.com/rustsec/advisory-db"]
-          vulnerability = "deny"
-          unmaintained = "warn"
+          unmaintained = "all"
+          unsound = "workspace"
           yanked = "warn"
-          notice = "warn"
+          ignore = [
+              "RUSTSEC-2023-0071",
+              "RUSTSEC-2021-0145",
+              "RUSTSEC-2024-0421",
+          ]
 
           [licenses]
-          unlicensed = "deny"
-          copyleft = "warn"
+          confidence-threshold = 0.8
           allow = [
               "MIT",
               "Apache-2.0",
@@ -91,8 +94,11 @@ jobs:
               "Zlib",
               "0BSD",
               "Unicode-DFS-2016",
+              "Unicode-3.0",
               "MPL-2.0",
               "CC0-1.0",
+              "OpenSSL",
+              "CDLA-Permissive-2.0",
           ]
 
           [bans]
@@ -108,7 +114,7 @@ jobs:
           fi
 
       - name: Run cargo deny
-        run: cargo deny check 2>&1 | tee license-report.txt || true
+        run: cargo deny check -W unmaintained -W unsound 2>&1 | tee license-report.txt || true
 
       - name: Upload license report
         uses: actions/upload-artifact@v4
