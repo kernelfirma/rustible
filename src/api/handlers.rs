@@ -299,7 +299,7 @@ fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
     }
 
     Err(ApiError::NotFound(format!(
-        "Playbook not found: {}",
+        "Playbook not found or access denied: {}",
         playbook
     )))
 }
