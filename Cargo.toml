@@ -9,7 +9,7 @@ bench-ssh2 = []
 # Bench-only gate for template optimization benchmarks.
 bench-template-optimization = []
 # SSH backend using russh crate (pure Rust) - recommended
-russh = ["dep:russh", "dep:russh-sftp", "dep:russh-keys"]
+russh = ["dep:russh", "dep:russh-sftp"]
 local = []
 docker = ["dep:bollard"]
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
@@ -146,9 +146,9 @@ humantime-serde = "1.1"
 
 # SSH connectivity - pure Rust (russh)
 # Updated to 0.55+ to fix CVE and future incompatibility warnings
+# Note: russh 0.55+ includes russh::keys module, so separate russh-keys is not needed
 russh = { version = "0.55", optional = true }
 russh-sftp = { version = "2.0", optional = true }
-russh-keys = { version = "0.45", optional = true }
 # SSH connectivity - C wrapper (ssh2/libssh2) - optional, legacy
 ssh2 = { version = "0.9", optional = true }
 
