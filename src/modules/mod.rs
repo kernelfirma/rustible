@@ -35,6 +35,7 @@ pub mod network;
 pub mod package;
 pub mod pause;
 pub mod pip;
+pub mod proxmox_lxc;
 pub mod proxmox_vm;
 pub mod python;
 pub mod raw;
@@ -1557,6 +1558,7 @@ impl ModuleRegistry {
             ],
             // Cloud provider modules
             Cloud: [
+                proxmox_lxc::ProxmoxLxcModule,
                 proxmox_vm::ProxmoxVmModule,
             ],
             // Security modules
