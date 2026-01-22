@@ -175,7 +175,10 @@ impl Secret {
                 SecretValue::String(s) => Some((k.clone(), s.clone())),
                 SecretValue::Integer(i) => Some((k.clone(), i.to_string())),
                 SecretValue::Boolean(b) => Some((k.clone(), b.to_string())),
-                SecretValue::Binary(b) => Some((k.clone(), base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b))),
+                SecretValue::Binary(b) => Some((
+                    k.clone(),
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b),
+                )),
                 SecretValue::Null => None,
             })
             .collect()
@@ -435,8 +438,14 @@ mod tests {
     #[test]
     fn test_secret_creation() {
         let mut data = HashMap::new();
-        data.insert("username".to_string(), SecretValue::String("admin".to_string()));
-        data.insert("password".to_string(), SecretValue::String("secret123".to_string()));
+        data.insert(
+            "username".to_string(),
+            SecretValue::String("admin".to_string()),
+        );
+        data.insert(
+            "password".to_string(),
+            SecretValue::String("secret123".to_string()),
+        );
 
         let secret = Secret::new("secret/database", data);
 
@@ -449,7 +458,10 @@ mod tests {
     #[test]
     fn test_secret_get_sensitive() {
         let mut data = HashMap::new();
-        data.insert("password".to_string(), SecretValue::String("secret123".to_string()));
+        data.insert(
+            "password".to_string(),
+            SecretValue::String("secret123".to_string()),
+        );
         let secret = Secret::new("test", data);
 
         let sensitive = secret.get_sensitive("password").unwrap();
@@ -462,7 +474,10 @@ mod tests {
     #[test]
     fn test_secret_debug_hides_values() {
         let mut data = HashMap::new();
-        data.insert("password".to_string(), SecretValue::String("secret123".to_string()));
+        data.insert(
+            "password".to_string(),
+            SecretValue::String("secret123".to_string()),
+        );
         let secret = Secret::new("test", data);
 
         let debug = format!("{:?}", secret);
@@ -472,7 +487,9 @@ mod tests {
 
     #[test]
     fn test_secret_value_types() {
-        assert!(SecretValue::String("test".to_string()).as_string().is_some());
+        assert!(SecretValue::String("test".to_string())
+            .as_string()
+            .is_some());
         assert!(SecretValue::Integer(42).as_int().is_some());
         assert!(SecretValue::Boolean(true).as_bool().is_some());
         assert!(SecretValue::Binary(vec![1, 2, 3]).as_binary().is_some());

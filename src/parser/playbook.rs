@@ -739,7 +739,10 @@ impl Task {
             "loop_control",
         ];
 
-        self.module.keys().find(|&key| !non_module_keys.contains(&key.as_str()) && !key.starts_with("with_")).map(|v| v as _)
+        self.module
+            .keys()
+            .find(|&key| !non_module_keys.contains(&key.as_str()) && !key.starts_with("with_"))
+            .map(|v| v as _)
     }
 
     /// Get the module arguments

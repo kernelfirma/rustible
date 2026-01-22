@@ -290,10 +290,7 @@ impl LookupRegistry {
             Ok(result) => Ok(result),
             Err(e) if !context.fail_on_error => {
                 // Return default value if fail_on_error is false
-                Ok(vec![context
-                    .default_value
-                    .clone()
-                    .unwrap_or_default()])
+                Ok(vec![context.default_value.clone().unwrap_or_default()])
             }
             Err(e) => Err(e),
         }
@@ -390,7 +387,11 @@ mod tests {
             fn description(&self) -> &'static str {
                 "Test lookup"
             }
-            fn lookup(&self, _args: &[&str], _context: &LookupContext) -> LookupResult<Vec<String>> {
+            fn lookup(
+                &self,
+                _args: &[&str],
+                _context: &LookupContext,
+            ) -> LookupResult<Vec<String>> {
                 Ok(vec![])
             }
         }

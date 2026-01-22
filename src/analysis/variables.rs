@@ -3,9 +3,7 @@
 //! This module provides analysis of variable definitions, usage, and detection of
 //! undefined or unused variables in playbooks.
 
-use super::{
-    helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
-};
+use super::{helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation};
 use crate::playbook::{Play, Playbook};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -237,22 +235,12 @@ impl VariableAnalyzer {
 
         // First pass: collect all variable definitions
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            self.collect_play_definitions(
-                play,
-                play_idx,
-                &source_file,
-                &mut all_definitions,
-            );
+            self.collect_play_definitions(play, play_idx, &source_file, &mut all_definitions);
         }
 
         // Second pass: collect all variable usages
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            self.collect_play_usages(
-                play,
-                play_idx,
-                &source_file,
-                &mut all_usages,
-            );
+            self.collect_play_usages(play, play_idx, &source_file, &mut all_usages);
         }
 
         // Analyze for issues
@@ -269,7 +257,7 @@ impl VariableAnalyzer {
                         )
                         .with_description(
                             "This variable is used but not defined in the playbook. \
-                             It might be defined in inventory, extra vars, or role defaults."
+                             It might be defined in inventory, extra vars, or role defaults.",
                         )
                         .with_location(location.clone())
                         .with_suggestion(format!(
@@ -325,8 +313,7 @@ impl VariableAnalyzer {
         source_file: &Option<String>,
         definitions: &mut HashMap<String, VariableUsage>,
     ) {
-        let play_location = SourceLocation::new()
-            .with_play(play_idx, &play.name);
+        let play_location = SourceLocation::new().with_play(play_idx, &play.name);
         let play_location = if let Some(f) = source_file {
             play_location.with_file(f.clone())
         } else {
@@ -553,12 +540,12 @@ impl VariableAnalyzer {
                             )
                             .with_description(
                                 "This variable is defined at both play and task level. \
-                                 The task-level definition will take precedence."
+                                 The task-level definition will take precedence.",
                             )
                             .with_location(location)
                             .with_suggestion(
                                 "Consider using a different name to avoid confusion, \
-                                 or remove the duplicate definition."
+                                 or remove the duplicate definition.",
                             ),
                         );
                     }
@@ -656,7 +643,11 @@ impl VariableAnalyzer {
 
         for i in 1..=a_len {
             for j in 1..=b_len {
-                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
                 matrix[i][j] = (matrix[i - 1][j] + 1)
                     .min(matrix[i][j - 1] + 1)
                     .min(matrix[i - 1][j - 1] + cost);

@@ -205,9 +205,11 @@ fn json_to_minijinja_value(json: serde_json::Value) -> Value {
             }
         }
         serde_json::Value::String(s) => Value::from(s),
-        serde_json::Value::Array(arr) => {
-            Value::from(arr.into_iter().map(json_to_minijinja_value).collect::<Vec<_>>())
-        }
+        serde_json::Value::Array(arr) => Value::from(
+            arr.into_iter()
+                .map(json_to_minijinja_value)
+                .collect::<Vec<_>>(),
+        ),
         serde_json::Value::Object(obj) => {
             let items: Vec<(String, Value)> = obj
                 .into_iter()

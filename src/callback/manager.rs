@@ -281,24 +281,24 @@ impl PluginEntry {
 ///
 /// # Example
 ///
-    /// ```rust,ignore,no_run
-    /// # #[tokio::main]
-    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    /// use rustible::callback::prelude::*;
-    /// use rustible::callback::manager::{CallbackManager, PluginPriority};
-    /// use std::sync::Arc;
-    ///
-    /// let manager = CallbackManager::new();
-    ///
-    /// // Register with explicit priority
-    /// manager
-    ///     .register("stdout", Arc::new(DefaultCallback::new()), PluginPriority::STDOUT)
-    ///     .await;
-    ///
-    /// // Register with default priority
-    /// manager
-    ///     .register_default("custom", Arc::new(MinimalCallback::new()))
-    ///     .await;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::manager::{CallbackManager, PluginPriority};
+/// use std::sync::Arc;
+///
+/// let manager = CallbackManager::new();
+///
+/// // Register with explicit priority
+/// manager
+///     .register("stdout", Arc::new(DefaultCallback::new()), PluginPriority::STDOUT)
+///     .await;
+///
+/// // Register with default priority
+/// manager
+///     .register_default("custom", Arc::new(MinimalCallback::new()))
+///     .await;
 ///
 /// // Dispatch events
 /// let result = manager.on_playbook_start("deploy").await;

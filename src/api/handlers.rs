@@ -355,7 +355,11 @@ async fn run_playbook_job(
         format!(
             "Playbook: {} plays, {} tasks",
             playbook.plays.len(),
-            playbook.plays.iter().map(|p| p.pre_tasks.len() + p.tasks.len() + p.post_tasks.len()).sum::<usize>()
+            playbook
+                .plays
+                .iter()
+                .map(|p| p.pre_tasks.len() + p.tasks.len() + p.post_tasks.len())
+                .sum::<usize>()
         ),
         "stdout",
     );
@@ -730,7 +734,10 @@ mod tests {
         // Test finding by relative path
         let result = find_playbook(&search_paths, "site.yml");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), valid_playbook.to_string_lossy().to_string());
+        assert_eq!(
+            result.unwrap(),
+            valid_playbook.to_string_lossy().to_string()
+        );
 
         // Test finding by absolute path
         let result = find_playbook(&search_paths, valid_playbook.to_str().unwrap());

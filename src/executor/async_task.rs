@@ -100,7 +100,6 @@ pub enum AsyncJobStatus {
     TimedOut,
 }
 
-
 /// Information about an async job
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AsyncJobInfo {

@@ -279,7 +279,8 @@ impl CollectionMetadata {
 
     /// Returns dependencies if available
     pub fn dependencies(&self) -> HashMap<String, String> {
-        self.galaxy.as_ref()
+        self.galaxy
+            .as_ref()
             .map(|g| g.dependencies.clone())
             .unwrap_or_default()
     }

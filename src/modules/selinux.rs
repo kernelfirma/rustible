@@ -1005,11 +1005,10 @@ impl SELinuxModule {
                     .with_data("target", serde_json::json!(target))
                     .with_data("setype", serde_json::json!(t)));
                 }
-                return Ok(ModuleOutput::ok(format!(
-                    "Fcontext for '{}' already correct",
-                    target
-                ))
-                .with_data("target", serde_json::json!(target)));
+                return Ok(
+                    ModuleOutput::ok(format!("Fcontext for '{}' already correct", target))
+                        .with_data("target", serde_json::json!(target)),
+                );
             }
         }
 

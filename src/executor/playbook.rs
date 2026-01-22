@@ -150,12 +150,11 @@ impl Playbook {
     pub fn parse(content: &str, path: Option<PathBuf>) -> ExecutorResult<Self> {
         // Ansible playbooks are arrays of plays at the top level
         let plays: Vec<PlayDefinition> = serde_yaml::from_str(content).map_err(|e| {
-            let (line, col) = e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
-            let path_buf = path
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("<string>"));
-            let diagnostic =
-                yaml_syntax_error(path_buf, content, line, col, &e.to_string());
+            let (line, col) = e
+                .location()
+                .map_or((1, 1), |loc| (loc.line(), loc.column()));
+            let path_buf = path.clone().unwrap_or_else(|| PathBuf::from("<string>"));
+            let diagnostic = yaml_syntax_error(path_buf, content, line, col, &e.to_string());
             ExecutorError::diagnostic(diagnostic, Some(content.to_string()))
         })?;
 

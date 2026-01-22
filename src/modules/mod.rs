@@ -915,8 +915,7 @@ impl ModuleOutput {
 pub type ModuleParams = HashMap<String, serde_json::Value>;
 
 /// Context for module execution
-#[derive(Clone)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ModuleContext {
     /// Whether to run in check mode (dry run)
     pub check_mode: bool,
@@ -960,7 +959,6 @@ impl std::fmt::Debug for ModuleContext {
             .finish()
     }
 }
-
 
 impl ModuleContext {
     pub fn new() -> Self {
@@ -1058,8 +1056,7 @@ pub enum ModuleContextBuilderError {
 /// assert!(context.check_mode);
 /// assert_eq!(context.verbosity, 2);
 /// ```
-#[derive(Clone)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ModuleContextBuilder {
     check_mode: bool,
     diff_mode: bool,
@@ -1073,7 +1070,6 @@ pub struct ModuleContextBuilder {
     become_password: Option<String>,
     connection: Option<Arc<dyn Connection + Send + Sync>>,
 }
-
 
 impl std::fmt::Debug for ModuleContextBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

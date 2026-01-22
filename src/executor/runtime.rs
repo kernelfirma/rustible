@@ -563,10 +563,7 @@ impl RuntimeContext {
     /// Set a task-level variable for a host
     pub fn set_task_var(&mut self, host: &str, name: String, value: JsonValue) {
         trace!("Setting task var: {} = {:?} (host: {})", name, value, host);
-        let vars = self
-            .task_vars
-            .entry(host.to_string())
-            .or_default();
+        let vars = self.task_vars.entry(host.to_string()).or_default();
         vars.insert(name, value);
         self.bump_vars_version();
     }
@@ -730,7 +727,11 @@ impl RuntimeContext {
             .map(|hd| hd.facts.len())
             .unwrap_or(0);
         let task_vars_count = self.task_vars.get(host).map(|vars| vars.len()).unwrap_or(0);
-        let block_vars_count = self.block_vars.get(host).map(|vars| vars.len()).unwrap_or(0);
+        let block_vars_count = self
+            .block_vars
+            .get(host)
+            .map(|vars| vars.len())
+            .unwrap_or(0);
         let estimated_size = self.magic_vars.len()
             + self.global_vars.len()
             + self.play_vars.len()
@@ -859,15 +860,10 @@ impl RuntimeContext {
             self.all_hosts.push(host.clone());
         }
 
-        self.host_data
-            .entry(host.clone())
-            .or_default();
+        self.host_data.entry(host.clone()).or_default();
 
         if let Some(group_name) = group {
-            let group = self
-                .groups
-                .entry(group_name.to_string())
-                .or_default();
+            let group = self.groups.entry(group_name.to_string()).or_default();
 
             if !group.hosts.contains(&host) {
                 group.hosts.push(host);
@@ -919,10 +915,7 @@ impl RuntimeContext {
 
     /// Set a fact for a host
     pub fn set_host_fact(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.set_fact(name, value);
         self.bump_vars_version();
     }
@@ -936,10 +929,7 @@ impl RuntimeContext {
 
     /// Set all facts for a host
     pub fn set_host_facts(&mut self, host: &str, facts: IndexMap<String, JsonValue>) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         for (k, v) in facts {
             host_data.set_fact(k, v);
         }
@@ -949,10 +939,7 @@ impl RuntimeContext {
     /// Register a task result for a host
     pub fn register_result(&mut self, host: &str, name: String, result: RegisteredResult) {
         debug!("Registering result '{}' for host '{}'", name, host);
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.register(name, result);
         self.bump_vars_version();
     }
@@ -966,10 +953,7 @@ impl RuntimeContext {
 
     /// Set a host variable
     pub fn set_host_var(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.set_var(name, value);
         self.bump_vars_version();
     }
@@ -1016,10 +1000,7 @@ impl RuntimeContext {
     /// Set a block-level variable for a host
     pub fn set_block_var(&mut self, host: &str, name: String, value: JsonValue) {
         trace!("Setting block var: {} = {:?} (host: {})", name, value, host);
-        let vars = self
-            .block_vars
-            .entry(host.to_string())
-            .or_default();
+        let vars = self.block_vars.entry(host.to_string()).or_default();
         vars.insert(name, value);
         self.bump_vars_version();
     }
@@ -1158,10 +1139,7 @@ impl RuntimeContext {
 
     /// Set a group variable
     pub fn set_group_var(&mut self, group: &str, name: String, value: JsonValue) {
-        let group_data = self
-            .groups
-            .entry(group.to_string())
-            .or_default();
+        let group_data = self.groups.entry(group.to_string()).or_default();
         group_data.vars.insert(name, value);
         self.bump_vars_version();
     }
@@ -1639,7 +1617,11 @@ mod tests {
         let host = "server1";
         ctx.add_host(host.to_string(), None);
 
-        ctx.set_block_var(host, "block_var".to_string(), serde_json::json!("block_value"));
+        ctx.set_block_var(
+            host,
+            "block_var".to_string(),
+            serde_json::json!("block_value"),
+        );
         assert_eq!(
             ctx.get_var_with_full_precedence("block_var", Some(host)),
             Some(serde_json::json!("block_value"))
@@ -1647,7 +1629,10 @@ mod tests {
 
         // Clear block vars (simulating exiting a block)
         ctx.clear_block_vars(host);
-        assert_eq!(ctx.get_var_with_full_precedence("block_var", Some(host)), None);
+        assert_eq!(
+            ctx.get_var_with_full_precedence("block_var", Some(host)),
+            None
+        );
     }
 
     #[test]
@@ -1808,8 +1793,16 @@ mod tests {
         );
         ctx.set_global_var("test_var".to_string(), serde_json::json!("global_var"));
         ctx.set_play_var("test_var".to_string(), serde_json::json!("play_var"));
-        ctx.set_block_var("server1", "test_var".to_string(), serde_json::json!("block_var"));
-        ctx.set_task_var("server1", "test_var".to_string(), serde_json::json!("task_var"));
+        ctx.set_block_var(
+            "server1",
+            "test_var".to_string(),
+            serde_json::json!("block_var"),
+        );
+        ctx.set_task_var(
+            "server1",
+            "test_var".to_string(),
+            serde_json::json!("task_var"),
+        );
         ctx.set_include_var("test_var".to_string(), serde_json::json!("include_var"));
         ctx.set_role_param("test_var".to_string(), serde_json::json!("role_param"));
         ctx.set_include_param("test_var".to_string(), serde_json::json!("include_param"));

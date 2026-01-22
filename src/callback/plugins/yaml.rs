@@ -881,11 +881,7 @@ impl ExecutionCallback for YamlCallback {
     async fn on_handler_triggered(&self, name: &str) {
         let indent = self.indent();
         if self.config.use_color {
-            println!(
-                "{}# Handler triggered: {}",
-                indent,
-                name.bright_blue()
-            );
+            println!("{}# Handler triggered: {}", indent, name.bright_blue());
         } else {
             println!("{}# Handler triggered: {}", indent, name);
         }
@@ -895,11 +891,7 @@ impl ExecutionCallback for YamlCallback {
     async fn on_facts_gathered(&self, host: &str, _facts: &Facts) {
         let indent = self.indent();
         if self.config.use_color {
-            println!(
-                "{}# Facts gathered for: {}",
-                indent,
-                host.bright_green()
-            );
+            println!("{}# Facts gathered for: {}", indent, host.bright_green());
         } else {
             println!("{}# Facts gathered for: {}", indent, host);
         }

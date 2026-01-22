@@ -95,7 +95,6 @@ pub enum StepAction {
     None,
 }
 
-
 impl StepAction {
     /// Parse an action from a string command
     pub fn from_command(cmd: &str) -> Option<Self> {

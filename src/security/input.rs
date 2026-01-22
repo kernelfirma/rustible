@@ -275,7 +275,9 @@ pub fn validate_hostname(host: &str) -> SecurityResult<()> {
 /// ```
 pub fn validate_url(url: &str) -> SecurityResult<()> {
     if url.is_empty() {
-        return Err(SecurityError::InvalidInput("URL cannot be empty".to_string()));
+        return Err(SecurityError::InvalidInput(
+            "URL cannot be empty".to_string(),
+        ));
     }
 
     if url.len() > 2048 {
@@ -312,7 +314,9 @@ pub fn validate_url(url: &str) -> SecurityResult<()> {
     }
 
     // Basic URL structure validation
-    let allowed_schemes = ["http://", "https://", "git://", "ssh://", "ftp://", "sftp://"];
+    let allowed_schemes = [
+        "http://", "https://", "git://", "ssh://", "ftp://", "sftp://",
+    ];
     let has_valid_scheme = allowed_schemes.iter().any(|s| lower_url.starts_with(s));
 
     if !has_valid_scheme {

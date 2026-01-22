@@ -518,9 +518,9 @@ impl SplunkCallback {
             state.buffer.push(event);
 
             state.buffer.len() >= self.config.batch_size
-                || state.last_flush.is_none_or(|t| {
-                    t.elapsed().as_millis() as u64 >= self.config.flush_interval_ms
-                })
+                || state
+                    .last_flush
+                    .is_none_or(|t| t.elapsed().as_millis() as u64 >= self.config.flush_interval_ms)
         };
 
         if should_flush {

@@ -1478,12 +1478,12 @@ mod integration_tests {
         let (host, port, user) = get_ssh_test_config().expect("SSH test config required");
         let (jump_host, jump_port, jump_user) =
             match get_ssh_test_jump_config("RUSTIBLE_SSH_TEST_JUMP", &user) {
-            Some(config) => config,
-            None => {
-                eprintln!("Skipping: No jump host configured");
-                return;
-            }
-        };
+                Some(config) => config,
+                None => {
+                    eprintln!("Skipping: No jump host configured");
+                    return;
+                }
+            };
 
         let target_key = get_ssh_test_key();
         let jump_key = get_ssh_test_jump_key("RUSTIBLE_SSH_TEST_JUMP");
@@ -1499,10 +1499,7 @@ mod integration_tests {
         }
         config.add_host("jump1", jump_config);
 
-        let mut target_config = HostConfig::new()
-            .hostname(&host)
-            .port(port)
-            .user(&user);
+        let mut target_config = HostConfig::new().hostname(&host).port(port).user(&user);
         if target_key.exists() {
             target_config = target_config.identity_file(target_key.to_string_lossy().to_string());
         }
@@ -1581,10 +1578,7 @@ mod integration_tests {
         }
         config.add_host("jump2", jump2_config);
 
-        let mut target_config = HostConfig::new()
-            .hostname(&host)
-            .port(port)
-            .user(&user);
+        let mut target_config = HostConfig::new().hostname(&host).port(port).user(&user);
         if target_key.exists() {
             target_config = target_config.identity_file(target_key.to_string_lossy().to_string());
         }
