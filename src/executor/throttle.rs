@@ -18,6 +18,7 @@ use tracing::debug;
 
 /// Configuration for throttling behavior
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ThrottleConfig {
     /// Global throttle limit (0 = unlimited, use forks)
     pub global_limit: usize,
@@ -29,16 +30,6 @@ pub struct ThrottleConfig {
     pub default_rate_limit: u32,
 }
 
-impl Default for ThrottleConfig {
-    fn default() -> Self {
-        Self {
-            global_limit: 0,
-            per_host_limit: 0,
-            module_rate_limits: HashMap::new(),
-            default_rate_limit: 0,
-        }
-    }
-}
 
 impl ThrottleConfig {
     /// Create a new throttle config with a global limit
@@ -288,7 +279,7 @@ impl ThrottleManager {
         self.module_rate_limits
             .get(module_name)
             .copied()
-            .or_else(|| {
+            .or({
                 if self.default_rate_limit > 0 {
                     Some(self.default_rate_limit)
                 } else {

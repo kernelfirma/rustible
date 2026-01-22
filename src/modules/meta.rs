@@ -104,6 +104,14 @@ impl MetaAction {
     }
 }
 
+impl std::str::FromStr for MetaAction {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        MetaAction::from_str(s).ok_or(())
+    }
+}
+
 impl std::fmt::Display for MetaAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())

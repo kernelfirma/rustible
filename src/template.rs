@@ -11,7 +11,7 @@
 //! (`{{` or `{%`), rendering is bypassed entirely.
 
 use crate::error::{Error, Result};
-use crate::utils::unsafe_template_access_allowed;
+use crate::utils::{get_regex, unsafe_template_access_allowed};
 use indexmap::IndexMap;
 use lru::LruCache;
 use minijinja::value::{Kwargs, Value as MiniJinjaValue, ValueKind};
@@ -570,7 +570,7 @@ fn filter_regex_replace(
     pattern: &str,
     replacement: &str,
 ) -> std::result::Result<String, minijinja::Error> {
-    let re = regex::Regex::new(pattern).map_err(|e| {
+    let re = get_regex(pattern).map_err(|e| {
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid regex: {}", e))
     })?;
     Ok(re.replace_all(value, replacement).to_string())
@@ -581,7 +581,7 @@ fn filter_regex_replace(
 /// Returns the matched string if found, or an empty string if not found.
 /// This is compatible with Ansible's regex_search filter.
 fn filter_regex_search(value: &str, pattern: &str) -> MiniJinjaValue {
-    match regex::Regex::new(pattern) {
+    match get_regex(pattern) {
         Ok(re) => {
             if let Some(caps) = re.captures(value) {
                 // If there are capture groups, return the first one
@@ -725,7 +725,7 @@ fn filter_unique(value: Vec<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
 
 fn filter_sort(value: Vec<MiniJinjaValue>) -> Vec<MiniJinjaValue> {
     let mut sorted = value;
-    sorted.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    sorted.sort_by_key(|a| a.to_string());
     sorted
 }
 
@@ -769,9 +769,9 @@ fn filter_expanduser(value: &str) -> String {
     if !unsafe_template_access_allowed() {
         return value.to_string();
     }
-    if value.starts_with("~/") {
+    if let Some(rest) = value.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
-            return home.join(&value[2..]).to_string_lossy().to_string();
+            return home.join(rest).to_string_lossy().to_string();
         }
     }
     value.to_string()
@@ -1173,7 +1173,7 @@ fn test_contains(haystack: &MiniJinjaValue, needle: &MiniJinjaValue) -> bool {
 
 fn test_match(value: &MiniJinjaValue, pattern: &str) -> bool {
     if let Some(s) = value.as_str() {
-        regex::Regex::new(pattern)
+        get_regex(pattern)
             .map(|re| re.is_match(s))
             .unwrap_or(false)
     } else {
@@ -1183,7 +1183,7 @@ fn test_match(value: &MiniJinjaValue, pattern: &str) -> bool {
 
 fn test_search(value: &MiniJinjaValue, pattern: &str) -> bool {
     if let Some(s) = value.as_str() {
-        regex::Regex::new(pattern)
+        get_regex(pattern)
             .map(|re| re.find(s).is_some())
             .unwrap_or(false)
     } else {

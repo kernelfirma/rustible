@@ -421,8 +421,7 @@ impl StateDumper {
     /// Dump failure state to a file
     pub fn dump(&self, context: FailureContext) -> Result<PathBuf, io::Error> {
         if !self.enabled {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "State dumping is disabled",
             ));
         }
@@ -434,8 +433,7 @@ impl StateDumper {
     /// Dump a complete state dump
     pub fn dump_full(&self, dump: &StateDump) -> Result<PathBuf, io::Error> {
         if !self.enabled {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "State dumping is disabled",
             ));
         }

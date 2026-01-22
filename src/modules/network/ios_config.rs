@@ -625,9 +625,7 @@ pub fn find_config_section<'a>(
         };
 
         current = search_in.iter().find(|n| n.line.trim() == parent.trim());
-        if current.is_none() {
-            return None;
-        }
+        current?;
     }
 
     current
@@ -692,7 +690,7 @@ impl ConfigMatcher {
     fn check_line_match(&self, config: &str, lines: &[String]) -> bool {
         let config_lines: HashSet<String> = config
             .lines()
-            .map(|l| Self::normalize_line(l))
+            .map(Self::normalize_line)
             .filter(|l| !l.is_empty() && !l.starts_with('!'))
             .collect();
 
@@ -834,13 +832,13 @@ impl IosConfigModule {
     fn load_template(&self, path: &str, context: &ModuleContext) -> ModuleResult<String> {
         // Expand path and read file
         let expanded_path = shellexpand::tilde(path).to_string();
-        let content = std::fs::read_to_string(&expanded_path).map_err(|e| {
+        let template_source = std::fs::read_to_string(&expanded_path).map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to read template '{}': {}", path, e))
         })?;
 
         // Render template
         TEMPLATE_ENGINE
-            .render(&content, &context.vars)
+            .render(&template_source, &context.vars)
             .map_err(|e| {
                 ModuleError::TemplateError(format!("Failed to render template '{}': {}", path, e))
             })

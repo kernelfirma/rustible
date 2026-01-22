@@ -603,25 +603,23 @@ impl ExecutionCallback for DefaultCallback {
             let duration = start.elapsed();
             let duration_str = Self::format_duration(duration);
 
-            let status = if success {
+            let playbook_status = if success {
                 if self.use_color() {
                     "completed".green().bold().to_string()
                 } else {
                     "completed".to_string()
                 }
+            } else if self.use_color() {
+                "failed".red().bold().to_string()
             } else {
-                if self.use_color() {
-                    "failed".red().bold().to_string()
-                } else {
-                    "failed".to_string()
-                }
+                "failed".to_string()
             };
 
             println!();
             if self.use_color() {
-                println!("Playbook {} in {}", status, duration_str.bright_white());
+                println!("Playbook {} in {}", playbook_status, duration_str.bright_white());
             } else {
-                println!("Playbook {} in {}", status, duration_str);
+                println!("Playbook {} in {}", playbook_status, duration_str);
             }
         }
 

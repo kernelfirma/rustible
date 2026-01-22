@@ -583,7 +583,7 @@ impl LogstashCallback {
             }
             LogstashProtocol::Udp => {
                 let socket = UdpSocket::bind("0.0.0.0:0")?;
-                socket.connect(&self.config.address())?;
+                socket.connect(self.config.address())?;
                 state.connection = ConnectionState::UdpConnected(socket);
                 info!("Connected to Logstash via UDP at {}", self.config.address());
             }
@@ -634,7 +634,7 @@ impl LogstashCallback {
 
                 // Check if we should flush
                 let should_flush = state.buffer.len() >= self.config.batch_size
-                    || state.last_flush.map_or(true, |t| {
+                    || state.last_flush.is_none_or(|t| {
                         t.elapsed().as_millis() as u64 >= self.config.flush_interval_ms
                     });
 

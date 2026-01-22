@@ -240,6 +240,7 @@ impl UriModule {
     }
 
     /// Execute HTTP request with retry logic
+    #[allow(clippy::too_many_arguments)]
     async fn execute_request(
         client: &Client,
         method: Method,

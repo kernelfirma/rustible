@@ -335,7 +335,7 @@ impl fmt::Display for AnalysisFinding {
             "[{}] {} ({}): {}",
             self.severity, self.rule_id, self.category, self.message
         )?;
-        if !self.location.file.is_none() || !self.location.play_name.is_none() {
+        if self.location.file.is_some() || self.location.play_name.is_some() {
             write!(f, " at {}", self.location)?;
         }
         Ok(())

@@ -739,13 +739,7 @@ impl Task {
             "loop_control",
         ];
 
-        for key in self.module.keys() {
-            if !non_module_keys.contains(&key.as_str()) && !key.starts_with("with_") {
-                return Some(key);
-            }
-        }
-
-        None
+        self.module.keys().find(|&key| !non_module_keys.contains(&key.as_str()) && !key.starts_with("with_")).map(|v| v as _)
     }
 
     /// Get the module arguments
@@ -911,7 +905,7 @@ pub enum RoleInclusion {
     /// Simple role name
     Name(String),
     /// Role with parameters
-    Full(RoleSpec),
+    Full(Box<RoleSpec>),
 }
 
 impl RoleInclusion {
@@ -1235,7 +1229,7 @@ always:
         let simple = RoleInclusion::Name("common".to_string());
         assert_eq!(simple.name(), "common");
 
-        let full = RoleInclusion::Full(RoleSpec::new("nginx"));
+        let full = RoleInclusion::Full(Box::new(RoleSpec::new("nginx")));
         assert_eq!(full.name(), "nginx");
     }
 }

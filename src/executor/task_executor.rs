@@ -82,6 +82,12 @@ impl Executor {
                 ctx = ctx.with_connection(conn);
             }
 
+            {
+                let mut rt = self.runtime.write().await;
+                rt.set_block_vars(host, task.merged_block_vars());
+                rt.set_task_vars(host, task.vars.clone());
+            }
+
             let result = task
                 .execute(
                     &ctx,
@@ -92,6 +98,12 @@ impl Executor {
                     &self.module_registry,
                 )
                 .await;
+
+            {
+                let mut rt = self.runtime.write().await;
+                rt.clear_task_vars(host);
+                rt.clear_block_vars(host);
+            }
 
             let mut results = HashMap::with_capacity(1);
             match result {
@@ -182,7 +194,6 @@ impl Executor {
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization = Arc::clone(&self.parallelization_manager);
                 let module_registry = Arc::clone(&self.module_registry);
-                let effective_become = effective_become;
                 let config_become_method = config_become_method.clone();
                 let effective_become_user = effective_become_user.clone();
                 let config_become_password = config_become_password.clone();
@@ -210,6 +221,12 @@ impl Executor {
                     }
                     ctx = ctx.with_python_interpreter(python_interpreter);
 
+                    {
+                        let mut rt = runtime.write().await;
+                        rt.set_block_vars(&host, task.merged_block_vars());
+                        rt.set_task_vars(&host, task.vars.clone());
+                    }
+
                     let result = task
                         .execute(
                             &ctx,
@@ -220,6 +237,12 @@ impl Executor {
                             &module_registry,
                         )
                         .await;
+
+                    {
+                        let mut rt = runtime.write().await;
+                        rt.clear_task_vars(&host);
+                        rt.clear_block_vars(&host);
+                    }
 
                     match result {
                         Ok(task_result) => {

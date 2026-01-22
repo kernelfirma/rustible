@@ -550,7 +550,7 @@ impl ExecutionCallback for DebugCallback {
             // Print overall summary
             if let Some(start_time) = *start {
                 let duration = start_time.elapsed();
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully".green().bold()
                 } else {
                     "failed".red().bold()
@@ -561,7 +561,7 @@ impl ExecutionCallback for DebugCallback {
                 println!(
                     "{} {} in {}",
                     "Playbook".bright_white(),
-                    status,
+                    playbook_status,
                     Self::format_duration(duration).yellow()
                 );
 

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Source this script to set SSH integration test env vars used by russh tests.
+#
+# Example:
+#   source scripts/ssh-test-env.sh
+#   cargo test test_russh_ -- --ignored
+#
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Source this script (do not execute): source scripts/ssh-test-env.sh" >&2
+    exit 1
+fi
+
+export RUSTIBLE_SSH_TEST_HOST="${RUSTIBLE_SSH_TEST_HOST:-192.168.178.150}"
+export RUSTIBLE_SSH_TEST_PORT="${RUSTIBLE_SSH_TEST_PORT:-22}"
+export RUSTIBLE_SSH_TEST_USER="${RUSTIBLE_SSH_TEST_USER:-artur}"
+export RUSTIBLE_SSH_TEST_KEY="${RUSTIBLE_SSH_TEST_KEY:-$HOME/.ssh/id_ed25519}"
+
+export RUSTIBLE_SSH_TEST_JUMP_HOST="${RUSTIBLE_SSH_TEST_JUMP_HOST:-192.168.178.151}"
+export RUSTIBLE_SSH_TEST_JUMP_PORT="${RUSTIBLE_SSH_TEST_JUMP_PORT:-22}"
+export RUSTIBLE_SSH_TEST_JUMP_USER="${RUSTIBLE_SSH_TEST_JUMP_USER:-$RUSTIBLE_SSH_TEST_USER}"
+export RUSTIBLE_SSH_TEST_JUMP_KEY="${RUSTIBLE_SSH_TEST_JUMP_KEY:-$RUSTIBLE_SSH_TEST_KEY}"
+
+export RUSTIBLE_SSH_TEST_JUMP2_HOST="${RUSTIBLE_SSH_TEST_JUMP2_HOST:-192.168.178.152}"
+export RUSTIBLE_SSH_TEST_JUMP2_PORT="${RUSTIBLE_SSH_TEST_JUMP2_PORT:-22}"
+export RUSTIBLE_SSH_TEST_JUMP2_USER="${RUSTIBLE_SSH_TEST_JUMP2_USER:-$RUSTIBLE_SSH_TEST_USER}"
+export RUSTIBLE_SSH_TEST_JUMP2_KEY="${RUSTIBLE_SSH_TEST_JUMP2_KEY:-$RUSTIBLE_SSH_TEST_KEY}"

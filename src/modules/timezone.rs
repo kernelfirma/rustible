@@ -78,6 +78,14 @@ impl TimezoneStrategy {
     }
 }
 
+impl std::str::FromStr for TimezoneStrategy {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        TimezoneStrategy::from_str(s)
+    }
+}
+
 /// Hardware clock mode
 #[derive(Debug, Clone, PartialEq)]
 pub enum HwclockMode {
@@ -100,6 +108,14 @@ impl HwclockMode {
     }
 }
 
+impl std::str::FromStr for HwclockMode {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        HwclockMode::from_str(s)
+    }
+}
+
 /// Module for timezone management
 pub struct TimezoneModule;
 
@@ -111,6 +127,9 @@ impl TimezoneModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options

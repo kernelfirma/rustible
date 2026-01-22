@@ -23,7 +23,7 @@
 
 use super::{Lookup, LookupContext, LookupError, LookupResult};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// File lookup plugin for reading file contents
 #[derive(Debug, Clone, Default)]
@@ -48,7 +48,7 @@ impl FileLookup {
     }
 
     /// Validate that a path is safe to read
-    fn validate_path(&self, path: &PathBuf) -> LookupResult<()> {
+    fn validate_path(&self, path: &Path) -> LookupResult<()> {
         // Check for null bytes (path injection attack)
         if path.to_string_lossy().contains('\0') {
             return Err(LookupError::InvalidArguments(
@@ -125,14 +125,14 @@ impl Lookup for FileLookup {
 
             // Read the file
             match fs::read_to_string(&path) {
-                Ok(mut content) => {
+                Ok(mut file_content) => {
                     if lstrip {
-                        content = content.trim_start().to_string();
+                        file_content = file_content.trim_start().to_string();
                     }
                     if rstrip {
-                        content = content.trim_end().to_string();
+                        file_content = file_content.trim_end().to_string();
                     }
-                    results.push(content);
+                    results.push(file_content);
                 }
                 Err(e) => {
                     match error_mode {

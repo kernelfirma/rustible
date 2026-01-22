@@ -248,11 +248,10 @@ impl GalaxyClient {
                             tokio::time::sleep(Duration::from_secs(retry_after)).await;
                             retry_count += 1;
                             continue;
-                        } else {
-                            return Err(GalaxyError::RateLimited {
-                                retry_after_secs: retry_after,
-                            });
                         }
+                        return Err(GalaxyError::RateLimited {
+                            retry_after_secs: retry_after,
+                        });
                     }
 
                     // Handle authentication errors

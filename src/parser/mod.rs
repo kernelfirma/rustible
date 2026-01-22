@@ -193,10 +193,8 @@ impl Parser {
                 s.parse().unwrap_or(0.0)
             } else if let Ok(n) = TryInto::<i64>::try_into(value.clone()) {
                 n as f64
-            } else if let Ok(f) = value.try_into() {
-                f
             } else {
-                0.0
+                value.try_into().unwrap_or(0.0)
             }
         });
 
@@ -272,7 +270,7 @@ impl Parser {
             if matches!(value.kind(), ValueKind::Seq) {
                 if let Ok(iter) = value.try_iter() {
                     let mut items: Vec<Value> = iter.collect();
-                    items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+                    items.sort_by_key(|a| a.to_string());
                     items
                 } else {
                     Vec::new()
@@ -487,16 +485,12 @@ impl Parser {
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
 
-            let algo = algorithm.unwrap_or_else(|| "sha256".to_string());
-            match algo.as_str() {
-                // For simplicity, use a basic hash for non-crypto purposes
-                // In production, you'd use proper crypto hash functions
-                _ => {
-                    let mut hasher = DefaultHasher::new();
-                    s.hash(&mut hasher);
-                    format!("{:x}", hasher.finish())
-                }
-            }
+            let _algo = algorithm.unwrap_or_else(|| "sha256".to_string());
+            // For simplicity, use a basic hash for non-crypto purposes.
+            // In production, you'd use proper crypto hash functions.
+            let mut hasher = DefaultHasher::new();
+            s.hash(&mut hasher);
+            format!("{:x}", hasher.finish())
         });
 
         // Quote filter for shell
@@ -771,7 +765,7 @@ impl Parser {
 
         // Join filter with custom separator
         env.add_filter("join", |value: Value, sep: Option<String>| -> String {
-            let separator = sep.unwrap_or_else(|| "".to_string());
+            let separator = sep.unwrap_or_default();
             if matches!(value.kind(), ValueKind::Seq) {
                 if let Ok(iter) = value.try_iter() {
                     iter.map(|v| v.to_string())
@@ -1019,9 +1013,7 @@ impl Parser {
             "query",
             |plugin: String, _args: Option<Value>| -> Vec<Value> {
                 // This would need full implementation for each lookup plugin
-                match plugin.as_str() {
-                    _ => Vec::new(),
-                }
+                Vec::new()
             },
         );
 

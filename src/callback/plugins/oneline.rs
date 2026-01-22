@@ -390,7 +390,7 @@ impl ExecutionCallback for OnelineCallback {
             .map(|t| t.elapsed())
             .unwrap_or_default();
 
-        let status = if success { "SUCCESS" } else { "FAILED" };
+        let playbook_status = if success { "SUCCESS" } else { "FAILED" };
 
         // Print recap header
         self.output_line("");
@@ -398,7 +398,7 @@ impl ExecutionCallback for OnelineCallback {
             "PLAYBOOK RECAP: {}{}{}  ({:.2}s)",
             name,
             self.config.separator,
-            status,
+            playbook_status,
             duration.as_secs_f64()
         ));
 

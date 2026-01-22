@@ -50,6 +50,14 @@ impl AptState {
     }
 }
 
+impl std::str::FromStr for AptState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AptState::from_str(s)
+    }
+}
+
 /// Upgrade mode for apt
 #[derive(Debug, Clone, PartialEq)]
 pub enum UpgradeMode {
@@ -76,6 +84,14 @@ impl UpgradeMode {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for UpgradeMode {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UpgradeMode::from_str(s)
     }
 }
 
@@ -259,6 +275,9 @@ impl AptModule {
                 .clone()
                 .or_else(|| Some("root".to_string()));
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         if let Some(ref work_dir) = context.work_dir {
@@ -346,9 +365,7 @@ impl AptModule {
         }
 
         // Check the age of the apt cache
-        let cmd = format!(
-            "stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || stat -c %Y /var/cache/apt/pkgcache.bin 2>/dev/null || echo 0"
-        );
+        let cmd = "stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || stat -c %Y /var/cache/apt/pkgcache.bin 2>/dev/null || echo 0".to_string();
 
         match conn.execute(&cmd, options).await {
             Ok(result) if result.success => {

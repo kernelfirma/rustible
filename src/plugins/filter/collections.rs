@@ -404,7 +404,7 @@ fn flatten(list: Value, levels: Option<i64>) -> Vec<Value> {
 
         if let Some(seq) = value.as_seq() {
             for item in seq.iter() {
-                flatten_recursive(&item, depth + 1, max_depth, result);
+                flatten_recursive(item, depth + 1, max_depth, result);
             }
         } else {
             result.push(value.clone());
@@ -727,17 +727,17 @@ fn rejectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
 
 fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool {
     match test {
-        Some("equalto") | Some("==") | Some("eq") => {
+        Some("equalto" | "==" | "eq") => {
             compare.map(|c| val.to_string() == c.to_string()).unwrap_or(false)
         }
-        Some("ne") | Some("!=") => {
+        Some("ne" | "!=") => {
             compare.map(|c| val.to_string() != c.to_string()).unwrap_or(true)
         }
         Some("defined") => !val.is_undefined(),
         Some("undefined") => val.is_undefined(),
-        Some("none") | Some("null") => val.is_none(),
-        Some("true") | Some("truthy") => val.is_true(),
-        Some("false") | Some("falsy") => !val.is_true(),
+        Some("none" | "null") => val.is_none(),
+        Some("true" | "truthy") => val.is_true(),
+        Some("false" | "falsy") => !val.is_true(),
         Some("in") => {
             if let Some(list) = compare.and_then(|c| c.as_seq()) {
                 list.iter().any(|item| item.to_string() == val.to_string())

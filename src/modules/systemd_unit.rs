@@ -150,6 +150,14 @@ impl UnitType {
     }
 }
 
+impl std::str::FromStr for UnitType {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UnitType::from_str(s)
+    }
+}
+
 impl std::fmt::Display for UnitType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.extension())
@@ -178,6 +186,14 @@ impl UnitState {
     }
 }
 
+impl std::str::FromStr for UnitState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UnitState::from_str(s)
+    }
+}
+
 /// Desired running state for a unit
 #[derive(Debug, Clone, PartialEq)]
 pub enum RunningState {
@@ -199,6 +215,14 @@ impl RunningState {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for RunningState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RunningState::from_str(s)
     }
 }
 
@@ -287,11 +311,7 @@ impl SystemdUnitConfig {
         let is_template = name.contains("@.");
 
         // Check for instance name
-        let instance = if let Some(caps) = INSTANCE_NAME_REGEX.captures(&name) {
-            Some(caps.get(2).map_or("", |m| m.as_str()).to_string())
-        } else {
-            None
-        };
+        let instance = INSTANCE_NAME_REGEX.captures(&name).map(|caps| caps.get(2).map_or("", |m| m.as_str()).to_string());
 
         // Parse state
         let state_str = params
@@ -332,6 +352,24 @@ impl SystemdUnitConfig {
         let unit_path = params
             .get_string("unit_path")?
             .unwrap_or_else(|| "/etc/systemd/system".to_string());
+
+        // Security validation for unit_path
+        let path = std::path::Path::new(&unit_path);
+        if !path.is_absolute() {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Invalid unit_path '{}': path must be absolute",
+                unit_path
+            )));
+        }
+
+        for component in path.components() {
+            if matches!(component, std::path::Component::ParentDir) {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid unit_path '{}': Path traversal detected",
+                    unit_path
+                )));
+            }
+        }
 
         Ok(Self {
             name,
@@ -377,6 +415,7 @@ impl SystemdUnitModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {
@@ -566,7 +605,6 @@ impl SystemdUnitModule {
                     backup: false,
                     owner: config.owner.clone(),
                     group: config.group.clone(),
-                    ..Default::default()
                 };
 
                 connection
@@ -1451,5 +1489,43 @@ mod tests {
         let result = SystemdUnitModule::render_template(template, &context, None, &config).unwrap();
         // Adjust expectation for potential newline differences
         assert_eq!(result.trim(), "[Service]\nType=simple");
+    }
+
+    #[test]
+    fn test_config_path_traversal() {
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("myapp.service"));
+        params.insert("content".to_string(), serde_json::json!("[Unit]"));
+        params.insert(
+            "unit_path".to_string(),
+            serde_json::json!("/etc/systemd/system/../.."),
+        );
+
+        let result = SystemdUnitConfig::from_params(&params);
+        assert!(result.is_err(), "Should detect path traversal");
+        let err = result.err().unwrap();
+        match err {
+            ModuleError::InvalidParameter(msg) => assert!(msg.contains("Path traversal detected")),
+            _ => panic!("Unexpected error type: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_config_relative_path() {
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("myapp.service"));
+        params.insert("content".to_string(), serde_json::json!("[Unit]"));
+        params.insert(
+            "unit_path".to_string(),
+            serde_json::json!("etc/systemd/system"),
+        );
+
+        let result = SystemdUnitConfig::from_params(&params);
+        assert!(result.is_err(), "Should require absolute path");
+        let err = result.err().unwrap();
+        match err {
+            ModuleError::InvalidParameter(msg) => assert!(msg.contains("must be absolute")),
+            _ => panic!("Unexpected error type: {:?}", err),
+        }
     }
 }

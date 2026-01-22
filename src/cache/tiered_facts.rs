@@ -965,8 +965,6 @@ impl TieredFactCache {
     }
 
     fn maybe_evict_l1(&self, needed_bytes: usize) {
-        let current_memory = self.metrics.l1_memory_bytes.load(Ordering::Relaxed);
-
         // Check entry count
         while self.l1_cache.len() >= self.config.l1_max_entries {
             self.evict_lru_from_l1();
@@ -974,7 +972,11 @@ impl TieredFactCache {
 
         // Check memory
         if self.config.l1_max_memory_bytes > 0 {
-            while current_memory + needed_bytes > self.config.l1_max_memory_bytes {
+            loop {
+                let current_memory = self.metrics.l1_memory_bytes.load(Ordering::Relaxed);
+                if current_memory + needed_bytes <= self.config.l1_max_memory_bytes {
+                    break;
+                }
                 if !self.evict_lru_from_l1() {
                     break;
                 }
