@@ -57,7 +57,11 @@ fn regex_search(
     ignorecase: Option<bool>,
     multiline: Option<bool>,
 ) -> Value {
-    let pattern = build_pattern(&pattern, ignorecase.unwrap_or(false), multiline.unwrap_or(false));
+    let pattern = build_pattern(
+        &pattern,
+        ignorecase.unwrap_or(false),
+        multiline.unwrap_or(false),
+    );
 
     match Regex::new(&pattern) {
         Ok(re) => {
@@ -171,7 +175,11 @@ fn regex_findall(
     ignorecase: Option<bool>,
     multiline: Option<bool>,
 ) -> Vec<Value> {
-    let pattern = build_pattern(&pattern, ignorecase.unwrap_or(false), multiline.unwrap_or(false));
+    let pattern = build_pattern(
+        &pattern,
+        ignorecase.unwrap_or(false),
+        multiline.unwrap_or(false),
+    );
 
     match Regex::new(&pattern) {
         Ok(re) => {
@@ -271,7 +279,12 @@ mod tests {
 
     #[test]
     fn test_regex_search_basic() {
-        let result = regex_search("hello123world".to_string(), "[0-9]+".to_string(), None, None);
+        let result = regex_search(
+            "hello123world".to_string(),
+            "[0-9]+".to_string(),
+            None,
+            None,
+        );
         assert_eq!(result.to_string(), "123");
     }
 
@@ -310,7 +323,11 @@ mod tests {
             "[0-9]+".to_string(),
             None
         ));
-        assert!(!regex_match("hello".to_string(), "[0-9]+".to_string(), None));
+        assert!(!regex_match(
+            "hello".to_string(),
+            "[0-9]+".to_string(),
+            None
+        ));
     }
 
     #[test]

@@ -58,7 +58,12 @@ impl EnvLookup {
         }
 
         // Check that name doesn't start with a digit
-        if name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        if name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+        {
             return Err(LookupError::InvalidArguments(format!(
                 "Environment variable name '{}' cannot start with a digit",
                 name
@@ -180,7 +185,10 @@ mod tests {
         let context = LookupContext::default();
 
         let result = lookup.lookup(
-            &["RUSTIBLE_TEST_NONEXISTENT_VAR_12345", "default=fallback_value"],
+            &[
+                "RUSTIBLE_TEST_NONEXISTENT_VAR_12345",
+                "default=fallback_value",
+            ],
             &context,
         );
         assert!(result.is_ok());

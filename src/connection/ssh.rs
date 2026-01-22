@@ -207,8 +207,7 @@ impl SshConnection {
                     }
                 }
                 AuthAttempt::PublicKey => {
-                    for key_path in
-                        ssh_common::identity_file_candidates(host_config, global_config)
+                    for key_path in ssh_common::identity_file_candidates(host_config, global_config)
                     {
                         if Self::try_key_auth(
                             session,
@@ -334,14 +333,9 @@ impl SshConnection {
 
     /// Try password authentication
     fn try_password_auth(session: &Session, user: &str, password: &str) -> ConnectionResult<()> {
-        session
-            .userauth_password(user, password)
-            .map_err(|e| {
-                ConnectionError::AuthenticationFailed(format!(
-                    "Password authentication failed: {}",
-                    e
-                ))
-            })?;
+        session.userauth_password(user, password).map_err(|e| {
+            ConnectionError::AuthenticationFailed(format!("Password authentication failed: {}", e))
+        })?;
 
         if session.authenticated() {
             Ok(())
@@ -454,12 +448,14 @@ impl SshConnection {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
 
-            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
-                ConnectionError::InvalidConfig(format!(
-                    "Invalid escalation user '{}': {}",
-                    escalate_user, e
-                ))
-            })?;
+            BecomeValidator::new()
+                .validate_username(escalate_user)
+                .map_err(|e| {
+                    ConnectionError::InvalidConfig(format!(
+                        "Invalid escalation user '{}': {}",
+                        escalate_user, e
+                    ))
+                })?;
 
             match escalate_method {
                 "sudo" => {
@@ -590,18 +586,20 @@ impl Connection for SshConnection {
             let mode = options.mode.unwrap_or(0o644);
             // Use open_mode to set permissions atomically at creation time
             // This prevents the race condition where file is created with 644 and then chmodded
-            let mut remote_file = sftp.open_mode(
-                &remote_path,
-                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
-                mode as i32,
-                ssh2::OpenType::File,
-            ).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create remote file {}: {}",
-                    remote_path.display(),
-                    e
-                ))
-            })?;
+            let mut remote_file = sftp
+                .open_mode(
+                    &remote_path,
+                    ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                    mode as i32,
+                    ssh2::OpenType::File,
+                )
+                .map_err(|e| {
+                    ConnectionError::TransferFailed(format!(
+                        "Failed to create remote file {}: {}",
+                        remote_path.display(),
+                        e
+                    ))
+                })?;
 
             remote_file.write_all(&content).map_err(|e| {
                 ConnectionError::TransferFailed(format!("Failed to write to remote file: {}", e))
@@ -665,18 +663,20 @@ impl Connection for SshConnection {
             // Write to remote file
             let mode = options.mode.unwrap_or(0o644);
             // Use open_mode to set permissions atomically at creation time
-            let mut remote_file = sftp.open_mode(
-                &remote_path,
-                ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
-                mode as i32,
-                ssh2::OpenType::File,
-            ).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create remote file {}: {}",
-                    remote_path.display(),
-                    e
-                ))
-            })?;
+            let mut remote_file = sftp
+                .open_mode(
+                    &remote_path,
+                    ssh2::OpenFlags::WRITE | ssh2::OpenFlags::CREATE | ssh2::OpenFlags::TRUNCATE,
+                    mode as i32,
+                    ssh2::OpenType::File,
+                )
+                .map_err(|e| {
+                    ConnectionError::TransferFailed(format!(
+                        "Failed to create remote file {}: {}",
+                        remote_path.display(),
+                        e
+                    ))
+                })?;
 
             remote_file.write_all(&content).map_err(|e| {
                 ConnectionError::TransferFailed(format!("Failed to write to remote file: {}", e))
@@ -1027,8 +1027,7 @@ mod tests {
 
     #[test]
     fn test_build_command_rejects_invalid_user() {
-        let options =
-            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let options = ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
         let result = SshConnection::build_command("echo hello", &options);
         assert!(result.is_err());
     }
@@ -1063,10 +1062,7 @@ mod tests {
         ];
 
         let responses = prompter.prompt("user", "instructions", &prompts);
-        assert_eq!(
-            responses,
-            vec!["secret".to_string(), "secret".to_string()]
-        );
+        assert_eq!(responses, vec!["secret".to_string(), "secret".to_string()]);
     }
 
     #[test]

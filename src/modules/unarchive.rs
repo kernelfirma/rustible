@@ -136,9 +136,16 @@ impl UnarchiveModule {
     }
 
     /// Download a file from a URL
-    fn download_file(url: &str, dest: &Path) -> ModuleResult<()> {
-        // Use blocking reqwest client
-        let response = reqwest::blocking::get(url).map_err(|e| {
+    fn download_file(url: &str, dest: &Path, timeout: Option<u64>) -> ModuleResult<()> {
+        // Use configured client with timeout
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout.unwrap_or(30)))
+            .build()
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
+            })?;
+
+        let mut response = client.get(url).send().map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to download '{}': {}", url, e))
         })?;
 
@@ -150,10 +157,6 @@ impl UnarchiveModule {
             )));
         }
 
-        let bytes = response.bytes().map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to read response from '{}': {}", url, e))
-        })?;
-
         // Create parent directories
         if let Some(parent) = dest.parent() {
             if !parent.exists() {
@@ -161,8 +164,15 @@ impl UnarchiveModule {
             }
         }
 
+        // Stream content to file instead of loading into memory
         let mut file = File::create(dest)?;
-        file.write_all(&bytes)?;
+        std::io::copy(&mut response, &mut file).map_err(|e| {
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write to file '{}': {}",
+                dest.display(),
+                e
+            ))
+        })?;
 
         Ok(())
     }
@@ -619,6 +629,15 @@ impl Module for UnarchiveModule {
             }
         }
 
+        // Validate timeout
+        if let Some(timeout) = params.get_i64("timeout")? {
+            if timeout <= 0 {
+                return Err(ModuleError::InvalidParameter(
+                    "timeout must be a positive integer".to_string(),
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -637,6 +656,7 @@ impl Module for UnarchiveModule {
         let keep_newer = params.get_bool_or("keep_newer", false);
         let list_files = params.get_bool_or("list_files", false);
         let checksum = params.get_string("checksum")?;
+        let timeout = params.get_i64("timeout")?.map(|t| t as u64);
 
         // Get patterns
         let exclude_patterns: Vec<String> = params.get_vec_string("exclude")?.unwrap_or_default();
@@ -666,7 +686,7 @@ impl Module for UnarchiveModule {
                 )));
             }
 
-            Self::download_file(&src_str, &download_path)?;
+            Self::download_file(&src_str, &download_path, timeout)?;
             download_path
         } else {
             // Local file
@@ -1093,10 +1113,18 @@ mod tests {
         params.insert("checksum".to_string(), serde_json::json!("invalid"));
         assert!(module.validate_params(&params).is_err());
 
+        // Invalid timeout
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("src".to_string(), serde_json::json!("/tmp/archive.tar.gz"));
+        params.insert("dest".to_string(), serde_json::json!("/tmp/dest"));
+        params.insert("timeout".to_string(), serde_json::json!(0));
+        assert!(module.validate_params(&params).is_err());
+
         // Valid params
         let mut params: ModuleParams = HashMap::new();
         params.insert("src".to_string(), serde_json::json!("/tmp/archive.tar.gz"));
         params.insert("dest".to_string(), serde_json::json!("/tmp/dest"));
+        params.insert("timeout".to_string(), serde_json::json!(60));
         assert!(module.validate_params(&params).is_ok());
     }
 

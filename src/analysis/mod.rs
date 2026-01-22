@@ -443,7 +443,10 @@ impl StaticAnalyzer {
             variable_analyzer: VariableAnalyzer::new(),
             dead_code_analyzer: DeadCodeAnalyzer::new(),
             dependency_analyzer: DependencyAnalyzer::new(),
-            complexity_analyzer: ComplexityAnalyzer::new(config.max_complexity, config.max_nesting_depth),
+            complexity_analyzer: ComplexityAnalyzer::new(
+                config.max_complexity,
+                config.max_nesting_depth,
+            ),
             security_analyzer: SecurityAnalyzer::new(),
             config,
         }
@@ -595,19 +598,62 @@ pub(crate) mod helpers {
 
         // Skip keywords and built-in functions
         let keywords: HashSet<&str> = [
-            "and", "or", "not", "in", "is", "true", "false", "none", "null",
-            "defined", "undefined", "succeeded", "failed", "skipped", "changed",
-            "if", "else", "elif", "for", "endfor", "endif", "match", "search",
-            "length", "lower", "upper", "title", "int", "float", "string",
-            "bool", "list", "dict", "set", "range", "default", "first", "last",
-            "ansible_facts", "hostvars", "groups", "group_names", "inventory_hostname",
-        ].into_iter().collect();
+            "and",
+            "or",
+            "not",
+            "in",
+            "is",
+            "true",
+            "false",
+            "none",
+            "null",
+            "defined",
+            "undefined",
+            "succeeded",
+            "failed",
+            "skipped",
+            "changed",
+            "if",
+            "else",
+            "elif",
+            "for",
+            "endfor",
+            "endif",
+            "match",
+            "search",
+            "length",
+            "lower",
+            "upper",
+            "title",
+            "int",
+            "float",
+            "string",
+            "bool",
+            "list",
+            "dict",
+            "set",
+            "range",
+            "default",
+            "first",
+            "last",
+            "ansible_facts",
+            "hostvars",
+            "groups",
+            "group_names",
+            "inventory_hostname",
+        ]
+        .into_iter()
+        .collect();
 
         for cap in WHEN_VAR_PATTERN.captures_iter(condition) {
             if let Some(var) = cap.get(1) {
                 let var_name = var.as_str();
                 // Skip if it looks like a number or keyword
-                if !var_name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                if !var_name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
                     && !keywords.contains(var_name)
                 {
                     vars.insert(var_name.to_string());

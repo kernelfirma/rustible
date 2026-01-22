@@ -224,11 +224,11 @@ impl EmailNotifier {
         let subject = subject.to_string();
         let body = body.to_string();
 
-        tokio::task::spawn_blocking(move || {
-            send_smtp_email(&config, &subject, &body, timeout)
-        })
-        .await
-        .map_err(|e| NotificationError::internal(format!("Failed to spawn email task: {}", e)))?
+        tokio::task::spawn_blocking(move || send_smtp_email(&config, &subject, &body, timeout))
+            .await
+            .map_err(|e| {
+                NotificationError::internal(format!("Failed to spawn email task: {}", e))
+            })?
     }
 }
 
@@ -250,7 +250,10 @@ impl Notifier for EmailNotifier {
         let subject = self.generate_subject(event);
         let body = self.generate_body(event);
 
-        debug!("Sending email notification for event: {}", event.event_type());
+        debug!(
+            "Sending email notification for event: {}",
+            event.event_type()
+        );
 
         self.send_smtp(&subject, &body).await?;
 
@@ -277,7 +280,10 @@ fn send_smtp_email(
         timeout,
     )
     .map_err(|e| {
-        NotificationError::network(format!("Failed to connect to SMTP server '{}': {}", addr, e))
+        NotificationError::network(format!(
+            "Failed to connect to SMTP server '{}': {}",
+            addr, e
+        ))
     })?;
 
     stream.set_read_timeout(Some(timeout)).ok();

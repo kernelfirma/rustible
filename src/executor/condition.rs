@@ -11,8 +11,7 @@ use serde_json::Value as JsonValue;
 ///
 /// Conditions are used for `when`, `changed_when`, and `failed_when` clauses
 /// in task definitions.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum Condition {
     /// Always evaluates to true
     #[default]
@@ -46,7 +45,6 @@ impl Condition {
         Condition::Boolean(value)
     }
 }
-
 
 /// Context for condition evaluation.
 ///

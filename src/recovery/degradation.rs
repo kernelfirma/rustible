@@ -69,7 +69,6 @@ pub enum DegradationLevel {
     Critical,
 }
 
-
 /// State of a circuit breaker
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -83,7 +82,6 @@ pub enum CircuitState {
     /// Circuit is half-open, testing if service recovered
     HalfOpen,
 }
-
 
 /// Configuration for circuit breaker
 #[derive(Debug, Clone, Serialize, Deserialize)]

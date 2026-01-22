@@ -22,7 +22,6 @@ pub enum ChecksumAlgorithm {
     Md5,
 }
 
-
 /// File integrity information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileIntegrity {
@@ -214,7 +213,8 @@ mod tests {
         let file_path = temp_dir.path().join("file.txt");
         std::fs::write(&file_path, b"hello file").expect("write file");
 
-        let expected = IntegrityVerifier::compute_checksum(b"hello file", ChecksumAlgorithm::Sha256);
+        let expected =
+            IntegrityVerifier::compute_checksum(b"hello file", ChecksumAlgorithm::Sha256);
         let ok = IntegrityVerifier::verify_file(&file_path, &expected, ChecksumAlgorithm::Sha256)
             .await
             .expect("verify file");
@@ -250,8 +250,7 @@ mod tests {
 }}"#,
             checksum, checksum
         );
-        std::fs::write(temp_dir.path().join("FILES.json"), manifest)
-            .expect("write manifest");
+        std::fs::write(temp_dir.path().join("FILES.json"), manifest).expect("write manifest");
 
         let report = IntegrityVerifier::verify_collection(temp_dir.path())
             .await

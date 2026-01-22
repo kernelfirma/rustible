@@ -655,7 +655,6 @@ pub enum DegradationStrategy {
     ReturnCached,
 }
 
-
 /// Configuration for graceful degradation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DegradationConfig {
