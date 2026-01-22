@@ -110,6 +110,7 @@ where
     }
 }
 
+use crate::diagnostics::yaml_syntax_error;
 use crate::executor::task::{Handler, Task};
 use crate::executor::{ExecutorError, ExecutorResult};
 
@@ -148,8 +149,15 @@ impl Playbook {
     /// Parse a playbook from YAML content
     pub fn parse(content: &str, path: Option<PathBuf>) -> ExecutorResult<Self> {
         // Ansible playbooks are arrays of plays at the top level
-        let plays: Vec<PlayDefinition> = serde_yaml::from_str(content)
-            .map_err(|e| ExecutorError::ParseError(format!("YAML parse error: {}", e)))?;
+        let plays: Vec<PlayDefinition> = serde_yaml::from_str(content).map_err(|e| {
+            let (line, col) = e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
+            let path_buf = path
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("<string>"));
+            let diagnostic =
+                yaml_syntax_error(path_buf, content, line, col, &e.to_string());
+            ExecutorError::diagnostic(diagnostic, Some(content.to_string()))
+        })?;
 
         if plays.is_empty() {
             return Err(ExecutorError::ParseError(
@@ -1506,6 +1514,22 @@ mod tests {
         let task = &play.tasks[0];
         assert_eq!(task.name, "Debug message");
         assert_eq!(task.module, "debug");
+    }
+
+    #[test]
+    fn test_parse_invalid_yaml_diagnostic() {
+        let yaml = r#"
+- name: Bad Play
+  hosts all
+  tasks:
+    - debug:
+        msg: "oops"
+"#;
+
+        let err = Playbook::parse(yaml, None).unwrap_err();
+        let rendered = err.render_diagnostic().expect("expected diagnostic");
+        assert!(rendered.contains("E0010"));
+        assert!(rendered.contains("syntax error"));
     }
 
     #[test]
