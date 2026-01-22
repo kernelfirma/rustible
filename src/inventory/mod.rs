@@ -136,7 +136,7 @@ pub use plugins::{
     AzurePlugin, CacheConfig, ComposeConfig, DynamicInventoryPlugin, DynamicPluginRegistry,
     FilterConfig, FilterOperator, GcpPlugin, GroupByRule, HostnameConfig, KeyedGroupConfig,
     LocalBackend, PluginConfig, PluginConfigBuilder, PluginConfigError, PluginConfigResult,
-    PluginOption, PluginOptionType, ResourceMapping, TerraformBackendType,
+    PluginOption, PluginOptionType, ProxmoxPlugin, ResourceMapping, TerraformBackendType,
     TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
 };
 
