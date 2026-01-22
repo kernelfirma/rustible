@@ -172,10 +172,9 @@ impl SecretManager {
             config.cache.clone().unwrap_or_default(),
         )));
 
-        let rotator = config.rotation.as_ref().map(|rotation_config| Arc::new(SecretRotator::new(
-                rotation_config.clone(),
-                backend.clone(),
-            )));
+        let rotator = config.rotation.as_ref().map(|rotation_config| {
+            Arc::new(SecretRotator::new(rotation_config.clone(), backend.clone()))
+        });
 
         let no_log_registry = Arc::new(NoLogRegistry::new());
 

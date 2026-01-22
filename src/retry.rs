@@ -85,9 +85,7 @@ impl BackoffStrategy {
                 let fib = fibonacci(attempt + 2);
                 base_millis * fib as f64
             }
-            Self::Polynomial { exponent } => {
-                base_millis * ((attempt as f64 + 1.0).powf(*exponent))
-            }
+            Self::Polynomial { exponent } => base_millis * ((attempt as f64 + 1.0).powf(*exponent)),
         };
 
         Duration::from_millis(delay_millis as u64)
@@ -144,7 +142,6 @@ pub enum JitterStrategy {
     },
 }
 
-
 impl JitterStrategy {
     /// Apply jitter to a calculated delay.
     ///
@@ -152,7 +149,12 @@ impl JitterStrategy {
     /// * `delay` - The base delay before jitter
     /// * `initial_delay` - The original initial delay (for decorrelated jitter)
     /// * `previous_delay` - The previous delay used (for decorrelated jitter)
-    pub fn apply(&self, delay: Duration, initial_delay: Duration, previous_delay: Option<Duration>) -> Duration {
+    pub fn apply(
+        &self,
+        delay: Duration,
+        initial_delay: Duration,
+        previous_delay: Option<Duration>,
+    ) -> Duration {
         let mut rng = rand::thread_rng();
         let delay_millis = delay.as_millis() as f64;
 
@@ -353,7 +355,8 @@ impl RetryPolicy {
     pub fn delay_for_attempt(&self, attempt: u32, previous_delay: Option<Duration>) -> Duration {
         let base_delay = self.backoff.calculate_delay(attempt, self.initial_delay);
         let capped_delay = base_delay.min(self.max_delay);
-        self.jitter.apply(capped_delay, self.initial_delay, previous_delay)
+        self.jitter
+            .apply(capped_delay, self.initial_delay, previous_delay)
     }
 
     /// Check if retrying should continue based on attempt count.
@@ -474,7 +477,11 @@ impl RetryPolicy {
                 }
             }
 
-            debug!("Retry attempt {} of {} (until condition)", attempt + 1, self.max_retries + 1);
+            debug!(
+                "Retry attempt {} of {} (until condition)",
+                attempt + 1,
+                self.max_retries + 1
+            );
 
             match operation().await {
                 Ok(result) => {
@@ -492,7 +499,6 @@ impl RetryPolicy {
                             elapsed: start_time.elapsed(),
                         });
                     }
-
                 }
                 Err(e) => {
                     warn!("Attempt {} failed with error: {:?}", attempt + 1, e);
@@ -639,14 +645,21 @@ pub enum RetryError<E> {
 impl<E: std::fmt::Display> std::fmt::Display for RetryError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RetryError::MaxRetriesExceeded { attempts, last_error } => {
+            RetryError::MaxRetriesExceeded {
+                attempts,
+                last_error,
+            } => {
                 write!(
                     f,
                     "Max retries exceeded after {} attempts. Last error: {}",
                     attempts, last_error
                 )
             }
-            RetryError::TotalTimeoutExceeded { attempts, elapsed, last_error } => {
+            RetryError::TotalTimeoutExceeded {
+                attempts,
+                elapsed,
+                last_error,
+            } => {
                 write!(
                     f,
                     "Total timeout exceeded after {} attempts ({:?} elapsed){}",
@@ -673,7 +686,10 @@ impl<E: std::error::Error + 'static> std::error::Error for RetryError<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             RetryError::MaxRetriesExceeded { last_error, .. } => Some(last_error),
-            RetryError::TotalTimeoutExceeded { last_error: Some(e), .. } => Some(e),
+            RetryError::TotalTimeoutExceeded {
+                last_error: Some(e),
+                ..
+            } => Some(e),
             _ => None,
         }
     }
@@ -760,7 +776,9 @@ pub fn is_transient_error_message(msg: &str) -> bool {
     ];
 
     let msg_lower = msg.to_lowercase();
-    transient_patterns.iter().any(|pattern| msg_lower.contains(pattern))
+    transient_patterns
+        .iter()
+        .any(|pattern| msg_lower.contains(pattern))
 }
 
 #[cfg(test)]
@@ -929,7 +947,10 @@ mod tests {
             })
             .await;
 
-        assert!(matches!(result, Err(RetryError::MaxRetriesExceeded { attempts: 3, .. })));
+        assert!(matches!(
+            result,
+            Err(RetryError::MaxRetriesExceeded { attempts: 3, .. })
+        ));
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 
@@ -937,8 +958,12 @@ mod tests {
     fn test_transient_error_detection() {
         assert!(is_transient_error_message("Connection timeout occurred"));
         assert!(is_transient_error_message("connection refused by server"));
-        assert!(is_transient_error_message("Service temporarily unavailable"));
-        assert!(is_transient_error_message("Too many requests - rate limited"));
+        assert!(is_transient_error_message(
+            "Service temporarily unavailable"
+        ));
+        assert!(is_transient_error_message(
+            "Too many requests - rate limited"
+        ));
         assert!(!is_transient_error_message("Invalid input provided"));
         assert!(!is_transient_error_message("File not found"));
     }

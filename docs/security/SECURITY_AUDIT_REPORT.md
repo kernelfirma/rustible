@@ -6,7 +6,7 @@ read_when: You need to understand the security posture of Rustible or plan secur
 # Rustible Security Audit Report
 
 **Audit Date (Manual Review):** 2025-12-26
-**Automated Scan Refresh:** 2026-01-19
+**Automated Scan Refresh:** 2026-01-22
 **Version:** 0.1.0
 **Auditor:** Claude Code Security Reviewer + CI Security Workflow
 **Audit ID:** SEC-08
@@ -17,7 +17,7 @@ read_when: You need to understand the security posture of Rustible or plan secur
 
 This comprehensive security audit evaluates the Rustible codebase against OWASP Top 10 vulnerabilities, unsafe Rust code patterns, memory safety concerns, and dependency vulnerabilities. Rustible is a modern configuration management tool written in Rust, offering SSH-based remote execution capabilities.
 
-Manual findings below reflect the 2025-12-26 review; automated CI security scans were refreshed on 2026-01-19 and summarized in the next section.
+Manual findings below reflect the 2025-12-26 review; automated CI security scans were refreshed on 2026-01-22 and summarized in the next section.
 
 ### Overall Security Rating: **MODERATE** (7.2/10)
 
@@ -31,11 +31,12 @@ Manual findings below reflect the 2025-12-26 review; automated CI security scans
 
 ---
 
-## CI Security Workflow Snapshot (2026-01-19)
+## CI Security Workflow Snapshot (2026-01-22)
 
 The CI workflow in `.github/workflows/security.yml` runs daily at 06:00 UTC and on PRs. It provides automated security coverage aligned with this report.
 
-- **Cargo audit (local run, 2026-01-19):** No vulnerabilities; warnings for unmaintained `paste` 1.0.15 and `rustls-pemfile` 2.2.0 (both via `sqlx`).
+- **Cargo audit (local run, 2026-01-22):** No vulnerabilities; warnings for unmaintained `paste` 1.0.15 and `rustls-pemfile` 2.2.0 (both via `sqlx`).
+- **Cargo deny (policy snapshot, 2026-01-22):** No disallowed licenses or advisories; warnings for duplicate crate versions (e.g., `base64`, `generic-array`, `getrandom`, `windows-*`) and unused allow/ignore entries.
 - **CI artifacts:** `audit-report.txt/json`, `license-report.txt`, `clippy-security.txt`, `secrets-scan.txt` (from the security workflow).
 - **Supply chain check:** `cargo fetch --locked` plus dependency name review (see CI job logs).
 
@@ -191,7 +192,7 @@ if context.check_mode {
 
 1. **Cargo audit enabled in CI**
    - Uses `.cargo/audit.toml` ignore list for known advisories
-   - No vulnerabilities detected in the 2026-01-19 scan
+   - No vulnerabilities detected in the 2026-01-22 scan
 
 2. **Unmaintained transitive dependencies (warnings)**
    - `paste` 1.0.15 (via `sqlx`)
@@ -422,11 +423,13 @@ semaphore: Arc<Semaphore>,
 
 ### Known Vulnerabilities
 
-**Cargo audit (2026-01-19):** No vulnerabilities detected. Two unmaintained warnings:
+**Cargo audit (2026-01-22):** No vulnerabilities detected. Two unmaintained warnings:
 - `paste` 1.0.15 (via `sqlx`)
 - `rustls-pemfile` 2.2.0 (via `sqlx`)
 
 Audit configuration lives in `.cargo/audit.toml`, which downgrades unmaintained advisories to warnings and documents ignored advisories.
+
+**Cargo deny (2026-01-22):** Policy snapshot reports no blocked licenses or advisories. Warnings remain for duplicate crate versions in `Cargo.lock` and unused allow/ignore entries in the generated policy file.
 
 ### Deprecated Dependencies
 
@@ -438,7 +441,7 @@ No deprecated direct dependencies identified in the current lockfile; `serde_yam
 
 ### Critical Priority (Address Immediately)
 
-1. **No critical findings in the 2026-01-19 automated scan**
+1. **No critical findings in the 2026-01-22 automated scan**
    - Continue monitoring CI results for new advisories
 
 ### High Priority
@@ -491,9 +494,10 @@ No deprecated direct dependencies identified in the current lockfile; `serde_yam
 
 **Procedure:**
 1. Run `cargo audit` (uses `.cargo/audit.toml`) and capture new warnings/advisories.
-2. Review the latest CI security workflow artifacts and summary from `.github/workflows/security.yml`.
-3. Update the "Automated Scan Refresh" date, CI snapshot section, and dependency analysis table.
-4. Document new advisories in `.cargo/audit.toml` with justification or remediation plan.
+2. Run `cargo deny check` using the policy from `deny.toml` (or the CI template in `.github/workflows/security.yml`) and note any license or duplicate-version warnings.
+3. Review the latest CI security workflow artifacts and summary from `.github/workflows/security.yml`.
+4. Update the "Automated Scan Refresh" date, CI snapshot section, and dependency analysis table.
+5. Document new advisories in `.cargo/audit.toml` with justification or remediation plan.
 
 ---
 
@@ -541,7 +545,8 @@ No deprecated direct dependencies identified in the current lockfile; `serde_yam
 ## Appendix B: Tools Used
 
 - Manual code review (2025-12-26)
-- Cargo audit 0.22.0 (2026-01-19)
+- Cargo audit 0.22.0 (2026-01-22)
+- Cargo deny 0.19.0 (2026-01-22)
 - CI security workflow (`.github/workflows/security.yml`)
 - Pattern matching (grep/ripgrep)
 - Cargo dependency analysis
@@ -549,5 +554,5 @@ No deprecated direct dependencies identified in the current lockfile; `serde_yam
 
 ---
 
-**Report Generated:** 2026-01-19
-**Next Audit Recommended:** 2026-04-19 (quarterly)
+**Report Generated:** 2026-01-22
+**Next Audit Recommended:** 2026-04-22 (quarterly)

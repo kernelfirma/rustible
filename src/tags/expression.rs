@@ -82,7 +82,7 @@ impl TagExpression {
         // Handle parentheses
         if input.starts_with('(') && input.ends_with(')') {
             // Check if these are matching parens
-            let inner = &input[1..input.len()-1];
+            let inner = &input[1..input.len() - 1];
             let mut depth = 0;
             let mut all_inner = true;
             for ch in inner.chars() {
@@ -183,7 +183,9 @@ impl TagExpression {
                     "all" => true,
                     "tagged" => !task_tags.is_empty(),
                     "untagged" => task_tags.is_empty(),
-                    _ => task_tags.iter().any(|t| t.as_ref().eq_ignore_ascii_case(tag)),
+                    _ => task_tags
+                        .iter()
+                        .any(|t| t.as_ref().eq_ignore_ascii_case(tag)),
                 }
             }
             TagExpression::Not(inner) => !inner.matches(task_tags),
@@ -425,7 +427,9 @@ mod tests {
 
     #[test]
     fn test_parse_tag_args_multiple() {
-        let result = parse_tag_args(&["deploy".to_string(), "web".to_string()]).unwrap().unwrap();
+        let result = parse_tag_args(&["deploy".to_string(), "web".to_string()])
+            .unwrap()
+            .unwrap();
         assert!(matches!(result, TagExpression::Or(_)));
         assert!(result.matches(&["deploy"]));
         assert!(result.matches(&["web"]));

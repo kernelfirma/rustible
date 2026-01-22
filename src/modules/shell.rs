@@ -206,11 +206,10 @@ impl ShellModule {
 
         // In check mode, return what would happen
         if context.check_mode {
-            return Ok(ModuleOutput::changed(format!(
-                "Would execute shell command: {}",
-                cmd
-            ))
-            .with_command_output(Some(String::new()), Some(String::new()), Some(0)));
+            return Ok(
+                ModuleOutput::changed(format!("Would execute shell command: {}", cmd))
+                    .with_command_output(Some(String::new()), Some(String::new()), Some(0)),
+            );
         }
 
         let (shell, flag) = self.get_shell(params)?;

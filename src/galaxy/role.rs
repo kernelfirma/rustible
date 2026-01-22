@@ -77,9 +77,7 @@ impl RoleInfo {
     pub fn download_url(&self) -> Option<String> {
         let user = self.github_user.as_ref()?;
         let repo = self.github_repo.as_ref()?;
-        let branch = self
-            .github_branch.as_deref()
-            .unwrap_or("master");
+        let branch = self.github_branch.as_deref().unwrap_or("master");
 
         Some(format!(
             "https://github.com/{}/{}/archive/{}.tar.gz",
@@ -570,8 +568,7 @@ mod tests {
         }
 
         let mut buffer = Vec::new();
-        let encoder =
-            flate2::write::GzEncoder::new(&mut buffer, flate2::Compression::default());
+        let encoder = flate2::write::GzEncoder::new(&mut buffer, flate2::Compression::default());
         let mut tar = tar::Builder::new(encoder);
         tar.append_dir_all(root_name, &root_path)
             .expect("append dir");

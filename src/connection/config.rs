@@ -117,10 +117,9 @@ impl ConnectionConfig {
 
         // Then try pattern matching
         for (pattern, config) in &self.hosts {
-            if (pattern.contains('*') || pattern.contains('?'))
-                && matches_pattern(pattern, host) {
-                    return Some(config);
-                }
+            if (pattern.contains('*') || pattern.contains('?')) && matches_pattern(pattern, host) {
+                return Some(config);
+            }
         }
 
         None

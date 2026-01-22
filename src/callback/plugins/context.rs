@@ -107,8 +107,7 @@ const SENSITIVE_PATTERNS: &[&str] = &[
 const MASK: &str = "********";
 
 /// Verbosity levels for context output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ContextVerbosity {
     /// Show only essential variables used in task args
     Minimal,
@@ -120,7 +119,6 @@ pub enum ContextVerbosity {
     /// Show everything including internal magic variables
     Debug,
 }
-
 
 /// Statistics tracked per host during execution.
 #[derive(Debug, Clone, Default)]

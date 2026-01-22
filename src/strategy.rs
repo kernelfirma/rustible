@@ -96,7 +96,6 @@ pub enum Strategy {
     Debug,
 }
 
-
 impl fmt::Display for Strategy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -255,8 +254,7 @@ impl Strategy {
 // ============================================================================
 
 /// Configuration options for strategy execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StrategyConfig {
     /// The execution strategy to use.
     pub strategy: Strategy,
@@ -293,7 +291,6 @@ pub struct StrategyConfig {
     #[serde(default)]
     pub custom_params: HashMap<String, serde_json::Value>,
 }
-
 
 impl StrategyConfig {
     /// Create a new configuration with the specified strategy.

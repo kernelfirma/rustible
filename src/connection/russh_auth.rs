@@ -449,7 +449,7 @@ pub fn standard_key_locations() -> Vec<PathBuf> {
         let potential_paths = [
             ssh_dir.join("id_ed25519"),
             ssh_dir.join("id_ecdsa"),
-            ssh_dir.join("id_ecdsa_sk"), // Security key
+            ssh_dir.join("id_ecdsa_sk"),   // Security key
             ssh_dir.join("id_ed25519_sk"), // Security key
             ssh_dir.join("id_rsa"),
             ssh_dir.join("id_dsa"), // Deprecated, but still supported
@@ -623,7 +623,11 @@ impl AuthConfig {
 
     /// Add SSH agent authentication
     pub fn with_agent(mut self) -> Self {
-        if !self.methods.iter().any(|method| matches!(method, AuthMethod::Agent)) {
+        if !self
+            .methods
+            .iter()
+            .any(|method| matches!(method, AuthMethod::Agent))
+        {
             self.methods.push(AuthMethod::Agent);
         }
         self
@@ -659,7 +663,9 @@ pub enum AuthResult {
 fn map_auth_result(result: client::AuthResult) -> AuthResult {
     match result {
         client::AuthResult::Success => AuthResult::Success,
-        client::AuthResult::Failure { partial_success, .. } => map_partial_success(partial_success),
+        client::AuthResult::Failure {
+            partial_success, ..
+        } => map_partial_success(partial_success),
     }
 }
 
@@ -736,7 +742,10 @@ impl Handler for RusshClientHandler {
     /// 1. Check the key against known_hosts
     /// 2. Prompt the user for unknown keys
     /// 3. Never blindly accept all keys
-    async fn check_server_key(&mut self, server_public_key: &PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
         trace!(
             "Checking server key: {}",
             server_public_key.algorithm().as_str()
@@ -949,9 +958,7 @@ impl RusshAuthenticator {
     ) -> Result<AuthResult, ConnectionError> {
         match method {
             AuthMethod::None => self.auth_none(handle, username).await,
-            AuthMethod::Password(password) => {
-                self.auth_password(handle, username, password).await
-            }
+            AuthMethod::Password(password) => self.auth_password(handle, username, password).await,
             AuthMethod::PublicKey {
                 key_path,
                 passphrase,
@@ -1049,10 +1056,9 @@ impl RusshAuthenticator {
         let agent = self.get_or_connect_agent().await?;
 
         // Get identities from the agent
-        let identities = agent
-            .request_identities()
-            .await
-            .map_err(|e| ConnectionError::AuthenticationFailed(format!("Failed to list agent identities: {}", e)))?;
+        let identities = agent.request_identities().await.map_err(|e| {
+            ConnectionError::AuthenticationFailed(format!("Failed to list agent identities: {}", e))
+        })?;
 
         if identities.is_empty() {
             debug!("No identities found in SSH agent");
@@ -1061,7 +1067,10 @@ impl RusshAuthenticator {
 
         debug!("Found {} identities in SSH agent", identities.len());
 
-        let rsa_hash = if identities.iter().any(|identity| identity.algorithm().is_rsa()) {
+        let rsa_hash = if identities
+            .iter()
+            .any(|identity| identity.algorithm().is_rsa())
+        {
             handle
                 .best_supported_rsa_hash()
                 .await
@@ -1130,7 +1139,9 @@ impl RusshAuthenticator {
         loop {
             match response {
                 KeyboardInteractiveAuthResponse::Success => return Ok(AuthResult::Success),
-                KeyboardInteractiveAuthResponse::Failure { partial_success, .. } => {
+                KeyboardInteractiveAuthResponse::Failure {
+                    partial_success, ..
+                } => {
                     return Ok(map_partial_success(partial_success));
                 }
                 KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
@@ -1138,9 +1149,7 @@ impl RusshAuthenticator {
                     if responses.is_empty() {
                         answers.resize(prompts.len(), String::new());
                     } else if responses.len() == 1 && prompts.len() > 1 {
-                        answers.extend(
-                            std::iter::repeat(responses[0].clone()).take(prompts.len()),
-                        );
+                        answers.extend(std::iter::repeat(responses[0].clone()).take(prompts.len()));
                     } else {
                         for index in 0..prompts.len() {
                             answers.push(responses.get(index).cloned().unwrap_or_default());
@@ -1176,9 +1185,9 @@ impl RusshAuthenticator {
 pub async fn connect_to_agent() -> Result<AgentClient<tokio::net::UnixStream>, ConnectionError> {
     debug!("Connecting to SSH agent");
 
-    AgentClient::connect_env()
-        .await
-        .map_err(|e| ConnectionError::AuthenticationFailed(format!("Failed to connect to SSH agent: {}", e)))
+    AgentClient::connect_env().await.map_err(|e| {
+        ConnectionError::AuthenticationFailed(format!("Failed to connect to SSH agent: {}", e))
+    })
 }
 
 /// Load a private key from file
@@ -1272,7 +1281,8 @@ mod tests {
 
     #[test]
     fn test_key_type_detect_openssh() {
-        let content = "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
+        let content =
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
         // OpenSSH format needs parsing
         assert_eq!(KeyType::detect_from_content(content), None);
     }
@@ -1333,17 +1343,16 @@ mod tests {
     #[test]
     fn test_key_loader_with_key_path() {
         let loader = KeyLoader::new().with_key_path("/custom/path/id_rsa");
-        assert!(loader.search_paths.contains(&PathBuf::from("/custom/path/id_rsa")));
+        assert!(loader
+            .search_paths
+            .contains(&PathBuf::from("/custom/path/id_rsa")));
         // Custom path should be first
         assert_eq!(loader.search_paths[0], PathBuf::from("/custom/path/id_rsa"));
     }
 
     #[test]
     fn test_key_loader_with_key_paths() {
-        let paths = vec![
-            PathBuf::from("/path1/key"),
-            PathBuf::from("/path2/key"),
-        ];
+        let paths = vec![PathBuf::from("/path1/key"), PathBuf::from("/path2/key")];
         let loader = KeyLoader::new().with_key_paths(paths);
         assert!(loader.search_paths.contains(&PathBuf::from("/path1/key")));
         assert!(loader.search_paths.contains(&PathBuf::from("/path2/key")));
@@ -1376,13 +1385,15 @@ mod tests {
 
     #[test]
     fn test_detect_encryption_unencrypted() {
-        let content = "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
+        let content =
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
         assert!(!detect_encryption_from_content(content));
     }
 
     #[test]
     fn test_detect_encryption_encrypted_pkcs8() {
-        let content = "-----BEGIN ENCRYPTED PRIVATE KEY-----\ndata\n-----END ENCRYPTED PRIVATE KEY-----";
+        let content =
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----\ndata\n-----END ENCRYPTED PRIVATE KEY-----";
         assert!(detect_encryption_from_content(content));
     }
 

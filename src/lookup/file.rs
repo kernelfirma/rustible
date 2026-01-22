@@ -134,30 +134,26 @@ impl Lookup for FileLookup {
                     }
                     results.push(file_content);
                 }
-                Err(e) => {
-                    match error_mode {
-                        "ignore" => continue,
-                        "warn" => {
-                            tracing::warn!("Failed to read file '{}': {}", path.display(), e);
-                            continue;
-                        }
-                        _ => {
-                            if e.kind() == std::io::ErrorKind::NotFound {
-                                return Err(LookupError::FileNotFound(path));
-                            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                return Err(LookupError::PermissionDenied(path.display().to_string()));
-                            }
-                            return Err(LookupError::Io(e));
-                        }
+                Err(e) => match error_mode {
+                    "ignore" => continue,
+                    "warn" => {
+                        tracing::warn!("Failed to read file '{}': {}", path.display(), e);
+                        continue;
                     }
-                }
+                    _ => {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            return Err(LookupError::FileNotFound(path));
+                        } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            return Err(LookupError::PermissionDenied(path.display().to_string()));
+                        }
+                        return Err(LookupError::Io(e));
+                    }
+                },
             }
         }
 
         if results.is_empty() && context.fail_on_error {
-            return Err(LookupError::Other(
-                "No files could be read".to_string(),
-            ));
+            return Err(LookupError::Other("No files could be read".to_string()));
         }
 
         Ok(results)
@@ -225,7 +221,10 @@ mod tests {
         let context = LookupContext::default();
 
         let result = lookup.lookup(
-            &[temp1.path().to_str().unwrap(), temp2.path().to_str().unwrap()],
+            &[
+                temp1.path().to_str().unwrap(),
+                temp2.path().to_str().unwrap(),
+            ],
             &context,
         );
         assert!(result.is_ok());
@@ -247,7 +246,10 @@ mod tests {
         let lookup = FileLookup::new();
         let context = LookupContext::new().with_fail_on_error(false);
 
-        let result = lookup.lookup(&["/nonexistent/path/to/file.txt", "errors=ignore"], &context);
+        let result = lookup.lookup(
+            &["/nonexistent/path/to/file.txt", "errors=ignore"],
+            &context,
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }

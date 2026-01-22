@@ -111,18 +111,17 @@ pub fn generate_diff(
 
     for hunk in unified.iter_hunks() {
         let ops = hunk.ops();
-        let (old_start, old_end, new_start, new_end) = if let (Some(first), Some(last)) =
-            (ops.first(), ops.last())
-        {
-            (
-                first.old_range().start,
-                last.old_range().end,
-                first.new_range().start,
-                last.new_range().end,
-            )
-        } else {
-            (0, 0, 0, 0)
-        };
+        let (old_start, old_end, new_start, new_end) =
+            if let (Some(first), Some(last)) = (ops.first(), ops.last()) {
+                (
+                    first.old_range().start,
+                    last.old_range().end,
+                    first.new_range().start,
+                    last.new_range().end,
+                )
+            } else {
+                (0, 0, 0, 0)
+            };
 
         let mut diff_hunk = DiffHunk {
             old_start: old_start + 1,

@@ -50,7 +50,9 @@ use std::sync::Arc;
 use thiserror::Error;
 
 // Re-export main types
-pub use checks::{CheckCategory, CheckResult, ComplianceCheck, FileCheck, ServiceCheck, SysctlCheck};
+pub use checks::{
+    CheckCategory, CheckResult, ComplianceCheck, FileCheck, ServiceCheck, SysctlCheck,
+};
 pub use cis::CisScanner;
 pub use pci_dss::PciDssScanner;
 pub use report::{ComplianceReport, ComplianceReportBuilder, ReportFormat};
@@ -130,10 +132,10 @@ impl Severity {
     /// Returns the color code for terminal output
     pub fn color_code(&self) -> &'static str {
         match self {
-            Severity::Info => "\x1b[36m",    // Cyan
-            Severity::Low => "\x1b[32m",     // Green
-            Severity::Medium => "\x1b[33m",  // Yellow
-            Severity::High => "\x1b[91m",    // Light Red
+            Severity::Info => "\x1b[36m",     // Cyan
+            Severity::Low => "\x1b[32m",      // Green
+            Severity::Medium => "\x1b[33m",   // Yellow
+            Severity::High => "\x1b[91m",     // Light Red
             Severity::Critical => "\x1b[31m", // Red
         }
     }
@@ -395,11 +397,7 @@ impl ComplianceContext {
         self.facts
             .get("os_family")
             .and_then(|v| v.as_str())
-            .or_else(|| {
-                self.facts
-                    .get("ansible_os_family")
-                    .and_then(|v| v.as_str())
-            })
+            .or_else(|| self.facts.get("ansible_os_family").and_then(|v| v.as_str()))
     }
 
     /// Get the distribution name from facts
@@ -592,7 +590,10 @@ impl ScannerRegistry {
     }
 
     /// Run all registered scanners
-    pub async fn scan_all(&self, context: &ComplianceContext) -> ComplianceResult<ComplianceReport> {
+    pub async fn scan_all(
+        &self,
+        context: &ComplianceContext,
+    ) -> ComplianceResult<ComplianceReport> {
         let mut builder = ComplianceReportBuilder::new();
 
         for (framework, scanner) in &self.scanners {

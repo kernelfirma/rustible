@@ -17,8 +17,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::debug;
 
 /// Configuration for throttling behavior
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ThrottleConfig {
     /// Global throttle limit (0 = unlimited, use forks)
     pub global_limit: usize,
@@ -29,7 +28,6 @@ pub struct ThrottleConfig {
     /// Default rate limit for unlisted modules (0 = unlimited)
     pub default_rate_limit: u32,
 }
-
 
 impl ThrottleConfig {
     /// Create a new throttle config with a global limit
@@ -276,16 +274,13 @@ impl ThrottleManager {
 
     /// Get the rate limit for a module
     fn get_rate_limit(&self, module_name: &str) -> Option<u32> {
-        self.module_rate_limits
-            .get(module_name)
-            .copied()
-            .or({
-                if self.default_rate_limit > 0 {
-                    Some(self.default_rate_limit)
-                } else {
-                    None
-                }
-            })
+        self.module_rate_limits.get(module_name).copied().or({
+            if self.default_rate_limit > 0 {
+                Some(self.default_rate_limit)
+            } else {
+                None
+            }
+        })
     }
 
     /// Wait for rate limit token

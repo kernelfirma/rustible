@@ -35,7 +35,6 @@ pub enum BackoffStrategy {
     Fibonacci,
 }
 
-
 /// Configuration for retry behavior.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryPolicy {

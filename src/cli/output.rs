@@ -39,7 +39,7 @@ impl TaskStatus {
             TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
             TaskStatus::Unreachable => format!("✘ {}", "unreachable").red().bold().to_string(),
             TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
-            TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
+            TaskStatus::Ignored => format!("⊘ {}", "ignored").blue().to_string(),
         }
     }
 
@@ -925,6 +925,12 @@ mod tests {
         // It should contain the text
         assert!(TaskStatus::Ok.colored_string().contains("ok"));
         assert!(TaskStatus::Changed.colored_string().contains("changed"));
+
+        // Verify new icons
+        assert!(TaskStatus::Changed.colored_string().contains("✎"));
+        assert!(TaskStatus::Skipped.colored_string().contains("↷"));
+        assert!(TaskStatus::Unreachable.colored_string().contains("✘"));
+        assert!(TaskStatus::Ignored.colored_string().contains("⊘"));
     }
 
     #[test]

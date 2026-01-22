@@ -63,9 +63,9 @@ impl std::str::FromStr for TraceId {
 
         let mut bytes = [0u8; 16];
         for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
-            let hex_str =
-                std::str::from_utf8(chunk).map_err(|_| ParseTraceIdError::InvalidHex)?;
-            bytes[i] = u8::from_str_radix(hex_str, 16).map_err(|_| ParseTraceIdError::InvalidHex)?;
+            let hex_str = std::str::from_utf8(chunk).map_err(|_| ParseTraceIdError::InvalidHex)?;
+            bytes[i] =
+                u8::from_str_radix(hex_str, 16).map_err(|_| ParseTraceIdError::InvalidHex)?;
         }
         Ok(Self(bytes))
     }
@@ -144,8 +144,7 @@ impl std::str::FromStr for SpanId {
 
         let mut bytes = [0u8; 8];
         for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
-            let hex_str =
-                std::str::from_utf8(chunk).map_err(|_| ParseSpanIdError::InvalidHex)?;
+            let hex_str = std::str::from_utf8(chunk).map_err(|_| ParseSpanIdError::InvalidHex)?;
             bytes[i] = u8::from_str_radix(hex_str, 16).map_err(|_| ParseSpanIdError::InvalidHex)?;
         }
         Ok(Self(bytes))
@@ -304,7 +303,11 @@ impl TraceState {
 
 impl fmt::Display for TraceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let parts: Vec<_> = self.entries.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+        let parts: Vec<_> = self
+            .entries
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect();
         write!(f, "{}", parts.join(","))
     }
 }
@@ -379,7 +382,6 @@ pub enum SpanKind {
     /// Consumer span (receiving message)
     Consumer,
 }
-
 
 /// Span attribute value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -503,7 +505,6 @@ pub struct B3Propagator {
     /// Use single header format (B3: {TraceId}-{SpanId}-{SamplingState}-{ParentSpanId})
     pub single_header: bool,
 }
-
 
 impl TraceContextPropagator for B3Propagator {
     type Carrier = HashMap<String, String>;
@@ -705,10 +706,7 @@ mod tests {
         assert!(carrier.contains_key("traceparent"));
 
         let extracted = propagator.extract(&carrier).unwrap();
-        assert_eq!(
-            context.trace_id.as_bytes(),
-            extracted.trace_id.as_bytes()
-        );
+        assert_eq!(context.trace_id.as_bytes(), extracted.trace_id.as_bytes());
     }
 
     #[test]
@@ -723,10 +721,7 @@ mod tests {
         assert!(carrier.contains_key("X-B3-SpanId"));
 
         let extracted = propagator.extract(&carrier).unwrap();
-        assert_eq!(
-            context.trace_id.as_bytes(),
-            extracted.trace_id.as_bytes()
-        );
+        assert_eq!(context.trace_id.as_bytes(), extracted.trace_id.as_bytes());
     }
 
     #[test]

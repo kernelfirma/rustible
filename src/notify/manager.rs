@@ -194,7 +194,10 @@ impl NotificationManager {
     ///
     /// This is useful when you don't want notification delivery to block
     /// the main execution flow.
-    pub fn notify_async(&self, event: NotificationEvent) -> tokio::task::JoinHandle<NotificationResult<()>>
+    pub fn notify_async(
+        &self,
+        event: NotificationEvent,
+    ) -> tokio::task::JoinHandle<NotificationResult<()>>
     where
         Self: 'static,
     {
@@ -220,13 +223,8 @@ impl NotificationManager {
                     continue;
                 }
 
-                let result = send_with_retry_static(
-                    backend.as_ref(),
-                    &event,
-                    retries,
-                    retry_delay,
-                )
-                .await;
+                let result =
+                    send_with_retry_static(backend.as_ref(), &event, retries, retry_delay).await;
 
                 match result {
                     Ok(()) => success_count += 1,
@@ -263,7 +261,8 @@ impl NotificationManager {
         host_stats: std::collections::HashMap<String, super::HostStats>,
         failures: Option<Vec<super::FailureInfo>>,
     ) -> NotificationResult<()> {
-        let event = NotificationEvent::playbook_complete(playbook, success, duration, host_stats, failures);
+        let event =
+            NotificationEvent::playbook_complete(playbook, success, duration, host_stats, failures);
         self.notify(&event).await
     }
 
