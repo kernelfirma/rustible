@@ -9,9 +9,9 @@
 //! rustible explain --list
 //! ```
 
-use rustible::diagnostics::ErrorCodeRegistry;
 use anyhow::Result;
 use colored::Colorize;
+use rustible::diagnostics::ErrorCodeRegistry;
 
 /// Run the explain command
 pub fn run(code: Option<&str>, list: bool) -> Result<i32> {
@@ -23,10 +23,7 @@ pub fn run(code: Option<&str>, list: bool) -> Result<i32> {
     }
 
     let Some(code) = code else {
-        eprintln!(
-            "{}: no error code provided",
-            "error".red().bold()
-        );
+        eprintln!("{}: no error code provided", "error".red().bold());
         eprintln!();
         eprintln!("Usage: rustible explain <ERROR_CODE>");
         eprintln!("       rustible explain --list");
@@ -46,11 +43,7 @@ pub fn run(code: Option<&str>, list: bool) -> Result<i32> {
         print_error_explanation(info);
         Ok(0)
     } else {
-        eprintln!(
-            "{}: unknown error code '{}'",
-            "error".red().bold(),
-            code
-        );
+        eprintln!("{}: unknown error code '{}'", "error".red().bold(), code);
         eprintln!();
         eprintln!("Use 'rustible explain --list' to see all error codes.");
         Ok(1)
@@ -59,11 +52,7 @@ pub fn run(code: Option<&str>, list: bool) -> Result<i32> {
 
 fn print_error_explanation(info: &rustible::diagnostics::ErrorCodeInfo) {
     println!();
-    println!(
-        "{}: {}",
-        info.code.cyan().bold(),
-        info.title.bold()
-    );
+    println!("{}: {}", info.code.cyan().bold(), info.title.bold());
     println!();
     println!("{}", info.explanation);
     println!();
@@ -100,19 +89,11 @@ fn print_all_codes(registry: &ErrorCodeRegistry) {
 
     codes.sort_by_key(|(code, _)| *code);
 
-    println!(
-        "{:8} {}",
-        "Code".cyan().bold(),
-        "Description".bold()
-    );
+    println!("{:8} {}", "Code".cyan().bold(), "Description".bold());
     println!("{}", "─".repeat(60).dimmed());
 
     for (code, info) in codes {
-        println!(
-            "{:8} {}",
-            code.cyan(),
-            info.title
-        );
+        println!("{:8} {}", code.cyan(), info.title);
     }
 
     println!();

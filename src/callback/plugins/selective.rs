@@ -425,9 +425,8 @@ impl SelectiveCallback {
         let task_tags = self.task_tags.read();
         let tags = task_tags.get(task_name);
 
-        let has_matching_tag = tags.is_some_and(|task_tags| {
-            task_tags.iter().any(|t| self.config.tags.contains(t))
-        });
+        let has_matching_tag =
+            tags.is_some_and(|task_tags| task_tags.iter().any(|t| self.config.tags.contains(t)));
 
         // Apply filter mode
         match self.config.tag_mode {

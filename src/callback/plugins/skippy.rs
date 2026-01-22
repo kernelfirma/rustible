@@ -668,9 +668,10 @@ impl ExecutionCallback for SkippyCallback {
 
         if let Some(task) = current.as_mut() {
             // Check if we need to print header immediately for failures
-            let should_print_header =
-                matches!(task_status, TaskHostStatus::Failed | TaskHostStatus::Unreachable)
-                    && !task.header_printed;
+            let should_print_header = matches!(
+                task_status,
+                TaskHostStatus::Failed | TaskHostStatus::Unreachable
+            ) && !task.header_printed;
 
             if should_print_header {
                 println!("{}", self.format_task_header(&task.name));
@@ -689,7 +690,10 @@ impl ExecutionCallback for SkippyCallback {
             };
 
             // For failures, print immediately
-            if matches!(task_status, TaskHostStatus::Failed | TaskHostStatus::Unreachable) {
+            if matches!(
+                task_status,
+                TaskHostStatus::Failed | TaskHostStatus::Unreachable
+            ) {
                 println!("{}", self.format_host_result(&host_result));
             }
 

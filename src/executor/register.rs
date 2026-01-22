@@ -650,8 +650,7 @@ impl FailedTaskInfoBuilder {
 // ============================================================================
 
 /// Handle for accessing an asynchronously registered result
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct AsyncResultHandle {
     receiver: Option<oneshot::Receiver<RegisteredResult>>,
     result: Option<RegisteredResult>,
@@ -706,7 +705,6 @@ impl AsyncResultHandle {
         self.result.is_some()
     }
 }
-
 
 /// Registry for async results
 #[derive(Debug, Default)]

@@ -3,9 +3,9 @@
 //! Handles parsing of the runtime.yml file that provides runtime configuration
 //! including plugin routing, deprecations, and required Ansible versions.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 
 use super::CollectionResult;
 

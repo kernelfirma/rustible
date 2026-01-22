@@ -3,9 +3,7 @@
 //! This module provides analysis to detect unused or unreachable code in playbooks,
 //! including unused tasks, handlers, variables, and unreachable code paths.
 
-use super::{
-    helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
-};
+use super::{helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation};
 use crate::playbook::{Playbook, Task, When};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -123,8 +121,9 @@ impl DeadCodeFinding {
             ),
         };
 
-        let mut finding = AnalysisFinding::new(rule_id, AnalysisCategory::DeadCode, severity, message)
-            .with_location(self.location.clone());
+        let mut finding =
+            AnalysisFinding::new(rule_id, AnalysisCategory::DeadCode, severity, message)
+                .with_location(self.location.clone());
 
         if let Some(context) = &self.context {
             finding = finding.with_description(context.clone());
@@ -233,12 +232,10 @@ impl DeadCodeAnalyzer {
                         )
                         .with_context(
                             "This handler is defined but never notified by any task. \
-                             It will never be executed."
+                             It will never be executed.",
                         )
                         .to_finding()
-                        .with_suggestion(
-                            "Either notify this handler from a task, or remove it."
-                        ),
+                        .with_suggestion("Either notify this handler from a task, or remove it."),
                     );
                 }
             }
@@ -273,12 +270,10 @@ impl DeadCodeAnalyzer {
                     DeadCodeFinding::new(DeadCodeType::EmptyPlay, &play.name, location)
                         .with_context(
                             "This play has no tasks, roles, pre_tasks, or post_tasks. \
-                             It will only gather facts (if enabled) and do nothing else."
+                             It will only gather facts (if enabled) and do nothing else.",
                         )
                         .to_finding()
-                        .with_suggestion(
-                            "Add tasks to this play or remove it if not needed."
-                        ),
+                        .with_suggestion("Add tasks to this play or remove it if not needed."),
                 );
             }
         }
@@ -314,13 +309,9 @@ impl DeadCodeAnalyzer {
                                 &task.name,
                                 location,
                             )
-                            .with_context(
-                                "This task has a 'when' condition that is always false."
-                            )
+                            .with_context("This task has a 'when' condition that is always false.")
                             .to_finding()
-                            .with_suggestion(
-                                "Remove the task or fix the condition."
-                            ),
+                            .with_suggestion("Remove the task or fix the condition."),
                         );
                     }
                 }
@@ -421,7 +412,7 @@ impl DeadCodeAnalyzer {
                         ))
                         .to_finding()
                         .with_suggestion(
-                            "Remove this task or move it before the terminating task."
+                            "Remove this task or move it before the terminating task.",
                         ),
                 );
                 continue;
@@ -439,7 +430,11 @@ impl DeadCodeAnalyzer {
     /// Check if a task unconditionally terminates the play
     fn is_unconditional_terminator(&self, task: &Task) -> bool {
         // Must not have a when condition (or have an always-true condition)
-        let has_condition = task.when.as_ref().map(|w| !self.is_always_true(w)).unwrap_or(false);
+        let has_condition = task
+            .when
+            .as_ref()
+            .map(|w| !self.is_always_true(w))
+            .unwrap_or(false);
         if has_condition {
             return false;
         }
@@ -518,7 +513,7 @@ impl DeadCodeAnalyzer {
                             ))
                             .to_finding()
                             .with_suggestion(
-                                "Remove the duplicate task or add distinguishing conditions."
+                                "Remove the duplicate task or add distinguishing conditions.",
                             ),
                     );
                 } else {

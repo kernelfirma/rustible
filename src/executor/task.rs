@@ -37,11 +37,11 @@ static TEMPLATE_VAR_REGEX: Lazy<regex::Regex> =
 static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"\{\{|\{%").expect("Invalid template check regex"));
 
+use crate::diagnostics::template_syntax_error;
+use crate::error::Error;
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
-use crate::diagnostics::template_syntax_error;
-use crate::error::Error;
 use crate::modules::ModuleRegistry;
 use crate::template::TEMPLATE_ENGINE;
 
@@ -62,7 +62,6 @@ pub enum TaskStatus {
     /// Host was unreachable
     Unreachable,
 }
-
 
 /// Result of executing a task
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -456,7 +455,9 @@ impl From<crate::playbook::Task> for Task {
             // Standard loop or with_items - can be array or template expression
             if let Some(arr) = v.as_array() {
                 Some(LoopSource::Items(arr.clone()))
-            } else { v.as_str().map(|s| LoopSource::Template(s.to_string())) }
+            } else {
+                v.as_str().map(|s| LoopSource::Template(s.to_string()))
+            }
         } else if let Some(v) = pt.with_dict {
             // with_dict - convert dict to list of {key, value} objects
             if let Some(obj) = v.as_object() {
@@ -2590,18 +2591,15 @@ fn template_error_to_executor(template_source: &str, error: Error) -> ExecutorEr
             } else {
                 name
             };
-            let diagnostic =
-                template_syntax_error(file, template_source, line, col, &message);
+            let diagnostic = template_syntax_error(file, template_source, line, col, &message);
             ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
         }
         Error::TemplateRender { message, .. } => {
-            let diagnostic =
-                template_syntax_error("<template>", template_source, 1, 1, &message);
+            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
             ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
         }
         Error::TemplateSyntax { message, .. } => {
-            let diagnostic =
-                template_syntax_error("<template>", template_source, 1, 1, &message);
+            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
             ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
         }
         other => ExecutorError::RuntimeError(format!("Template error: {}", other)),
@@ -2666,10 +2664,12 @@ fn find_operator_outside_parens(expr: &str, op: &str) -> Option<usize> {
             b'(' => depth += 1,
             b')' => depth -= 1,
             _ => {
-                if depth == 0 && i + op_bytes.len() <= bytes.len()
-                    && &bytes[i..i + op_bytes.len()] == op_bytes {
-                        last_match = Some(i);
-                    }
+                if depth == 0
+                    && i + op_bytes.len() <= bytes.len()
+                    && &bytes[i..i + op_bytes.len()] == op_bytes
+                {
+                    last_match = Some(i);
+                }
             }
         }
         i += 1;

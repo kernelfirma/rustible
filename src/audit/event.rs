@@ -35,7 +35,6 @@ impl fmt::Display for AuditSeverity {
     }
 }
 
-
 /// Category of audit events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,7 +107,6 @@ impl fmt::Display for AuditOutcome {
         }
     }
 }
-
 
 /// An audit event representing a logged operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,11 +247,7 @@ impl AuditEvent {
     pub fn package_management(packages: &[String], action: &str) -> Self {
         Self::new(
             AuditCategory::PackageManagement,
-            format!(
-                "Package {}: {}",
-                action,
-                packages.join(", ")
-            ),
+            format!("Package {}: {}", action, packages.join(", ")),
         )
     }
 
@@ -369,7 +363,9 @@ impl AuditEvent {
             module,
             self.outcome,
             if self.privileged { "PRIVILEGED" } else { "" }
-        ).trim_end().to_string()
+        )
+        .trim_end()
+        .to_string()
     }
 }
 
@@ -516,8 +512,8 @@ mod tests {
 
     #[test]
     fn test_privilege_escalation_event() {
-        let event = AuditEvent::privilege_escalation("sudo", Some("root".to_string()))
-            .with_host("server1");
+        let event =
+            AuditEvent::privilege_escalation("sudo", Some("root".to_string())).with_host("server1");
 
         assert_eq!(event.category, AuditCategory::PrivilegeEscalation);
         assert_eq!(event.severity, AuditSeverity::Critical);

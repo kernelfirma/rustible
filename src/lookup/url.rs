@@ -40,7 +40,9 @@ impl UrlLookup {
     /// Validate a URL
     fn validate_url(&self, url: &str) -> LookupResult<()> {
         if url.is_empty() {
-            return Err(LookupError::InvalidArguments("URL cannot be empty".to_string()));
+            return Err(LookupError::InvalidArguments(
+                "URL cannot be empty".to_string(),
+            ));
         }
 
         // Check for null bytes
@@ -58,9 +60,8 @@ impl UrlLookup {
         }
 
         // Parse the URL to validate format
-        url::Url::parse(url).map_err(|e| {
-            LookupError::InvalidArguments(format!("Invalid URL format: {}", e))
-        })?;
+        url::Url::parse(url)
+            .map_err(|e| LookupError::InvalidArguments(format!("Invalid URL format: {}", e)))?;
 
         Ok(())
     }
@@ -139,9 +140,9 @@ impl UrlLookup {
         }
 
         // Get the response body
-        let body = response.text().map_err(|e| {
-            LookupError::Http(format!("Failed to read response body: {}", e))
-        })?;
+        let body = response
+            .text()
+            .map_err(|e| LookupError::Http(format!("Failed to read response body: {}", e)))?;
 
         Ok(body)
     }
@@ -160,9 +161,13 @@ impl Lookup for UrlLookup {
         // Find the URL (first non-option argument)
         let url = args
             .iter()
-            .find(|arg| !arg.contains('=') && (arg.starts_with("http://") || arg.starts_with("https://")))
+            .find(|arg| {
+                !arg.contains('=') && (arg.starts_with("http://") || arg.starts_with("https://"))
+            })
             .ok_or_else(|| {
-                LookupError::MissingArgument("URL required (must start with http:// or https://)".to_string())
+                LookupError::MissingArgument(
+                    "URL required (must start with http:// or https://)".to_string(),
+                )
             })?;
 
         // Validate the URL
@@ -181,11 +186,7 @@ impl Lookup for UrlLookup {
         // Parse validate_certs option
         let validate_certs = options
             .get("validate_certs")
-            .map(|v| {
-                v.eq_ignore_ascii_case("true")
-                    || v == "1"
-                    || v.eq_ignore_ascii_case("yes")
-            })
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1" || v.eq_ignore_ascii_case("yes"))
             .unwrap_or(true);
 
         // Parse timeout option
@@ -210,11 +211,7 @@ impl Lookup for UrlLookup {
         // Parse split_lines option
         let split_lines = options
             .get("split_lines")
-            .map(|v| {
-                v.eq_ignore_ascii_case("true")
-                    || v == "1"
-                    || v.eq_ignore_ascii_case("yes")
-            })
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1" || v.eq_ignore_ascii_case("yes"))
             .unwrap_or(false);
 
         // Fetch the URL
@@ -240,7 +237,9 @@ mod tests {
         // Valid URLs
         assert!(lookup.validate_url("https://example.com").is_ok());
         assert!(lookup.validate_url("http://example.com/path").is_ok());
-        assert!(lookup.validate_url("https://api.example.com/v1/data?key=value").is_ok());
+        assert!(lookup
+            .validate_url("https://api.example.com/v1/data?key=value")
+            .is_ok());
 
         // Invalid URLs
         assert!(lookup.validate_url("").is_err());
@@ -254,12 +253,19 @@ mod tests {
         let lookup = UrlLookup::new();
 
         // Single header
-        let headers = lookup.parse_headers("Content-Type:application/json").unwrap();
+        let headers = lookup
+            .parse_headers("Content-Type:application/json")
+            .unwrap();
         assert_eq!(headers.len(), 1);
-        assert_eq!(headers[0], ("Content-Type".to_string(), "application/json".to_string()));
+        assert_eq!(
+            headers[0],
+            ("Content-Type".to_string(), "application/json".to_string())
+        );
 
         // Multiple headers
-        let headers = lookup.parse_headers("Content-Type:application/json,Authorization:Bearer token").unwrap();
+        let headers = lookup
+            .parse_headers("Content-Type:application/json,Authorization:Bearer token")
+            .unwrap();
         assert_eq!(headers.len(), 2);
 
         // Empty string

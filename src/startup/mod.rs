@@ -49,7 +49,7 @@ pub mod lazy_registry;
 pub mod metrics;
 
 pub use lazy_registry::LazyModuleRegistry;
-pub use metrics::{StartupMetrics, StartupPhase, PhaseMetrics};
+pub use metrics::{PhaseMetrics, StartupMetrics, StartupPhase};
 
 use once_cell::sync::Lazy;
 use std::sync::Arc;

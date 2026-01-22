@@ -46,9 +46,10 @@ pub use inspector::{
     InspectionResult, VariableInspector, VariableScope, VariableSource, VariableWatch,
 };
 pub use rich_errors::{
-    connection_error, invalid_module_args_error, missing_required_arg_error, module_not_found_error,
-    template_syntax_error, undefined_variable_error, yaml_syntax_error, DiagnosticSeverity,
-    ErrorCodeInfo, ErrorCodeRegistry, RelatedInfo, RichDiagnostic, Span, Suggestion,
+    connection_error, invalid_module_args_error, missing_required_arg_error,
+    module_not_found_error, template_syntax_error, undefined_variable_error, yaml_syntax_error,
+    DiagnosticSeverity, ErrorCodeInfo, ErrorCodeRegistry, RelatedInfo, RichDiagnostic, Span,
+    Suggestion,
 };
 pub use state_dump::{FailureContext, StateDump, StateDumpFormat, StateDumper};
 pub use step_executor::{StepAction, StepExecutor, StepResult, StepState};

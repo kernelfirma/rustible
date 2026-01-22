@@ -3,9 +3,7 @@
 //! This module provides analysis of task dependencies, role dependencies,
 //! and execution order within playbooks.
 
-use super::{
-    helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
-};
+use super::{helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation};
 use crate::playbook::{Play, Playbook, Task};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -170,7 +168,13 @@ impl DependencyGraph {
 
         for node_id in self.nodes.keys() {
             if !visited.contains(node_id) {
-                self.dfs_cycle(node_id, &mut visited, &mut rec_stack, &mut path, &mut cycles);
+                self.dfs_cycle(
+                    node_id,
+                    &mut visited,
+                    &mut rec_stack,
+                    &mut path,
+                    &mut cycles,
+                );
             }
         }
 
@@ -378,8 +382,14 @@ impl DependencyAnalyzer {
 
             let first_node = cycle.first().unwrap();
             let location = SourceLocation::new()
-                .with_play(first_node.play_index, format!("play[{}]", first_node.play_index))
-                .with_task(first_node.task_index, format!("task[{}]", first_node.task_index));
+                .with_play(
+                    first_node.play_index,
+                    format!("play[{}]", first_node.play_index),
+                )
+                .with_task(
+                    first_node.task_index,
+                    format!("task[{}]", first_node.task_index),
+                );
             let location = if let Some(f) = &source_file {
                 location.with_file(f.clone())
             } else {
@@ -592,7 +602,7 @@ impl DependencyAnalyzer {
                     )
                     .with_description(
                         "This variable is used but not defined by any task in the playbook. \
-                         It might be defined in inventory, extra vars, or role defaults."
+                         It might be defined in inventory, extra vars, or role defaults.",
                     )
                     .with_location(location),
                 );

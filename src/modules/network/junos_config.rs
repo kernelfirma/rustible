@@ -115,8 +115,7 @@ const JUNOS_COMMIT_NS: &str = "http://xml.juniper.net/junos/*/junos-commit";
 // ============================================================================
 
 /// Configuration format for JunOS
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConfigFormat {
     /// Hierarchical text format (default JunOS format)
     #[default]
@@ -155,10 +154,8 @@ impl ConfigFormat {
     }
 }
 
-
 /// Configuration load operation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LoadOperation {
     /// Merge configuration with existing
     #[default]
@@ -186,7 +183,6 @@ impl LoadOperation {
         }
     }
 }
-
 
 // ============================================================================
 // Commit Options
@@ -342,8 +338,7 @@ pub struct JunosNetconfTransport {
 }
 
 /// NETCONF protocol version
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum NetconfVersion {
     /// NETCONF 1.0 (RFC 4741, EOM framing)
     #[default]
@@ -352,7 +347,6 @@ enum NetconfVersion {
     #[allow(dead_code)]
     V1_1,
 }
-
 
 impl JunosNetconfTransport {
     /// Create a new NETCONF transport using existing SSH connection

@@ -468,7 +468,10 @@ impl ProgressCallback {
                     duration_str.bright_yellow()
                 );
             } else {
-                println!("Playbook {} {} in {}", playbook_name, playbook_status, duration_str);
+                println!(
+                    "Playbook {} {} in {}",
+                    playbook_name, playbook_status, duration_str
+                );
             }
         }
     }
