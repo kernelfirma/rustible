@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin))]
+
 //! SSH Library Comparison Benchmark (ssh2 vs russh)
 //!
 //! This benchmark suite compares the performance of ssh2 (libssh2) and russh
@@ -13,6 +15,7 @@
 //!
 //! # Homelab Hosts
 //!
+
 //! The benchmark can test against multiple homelab hosts:
 //! - svr-core: 192.168.178.102
 //! - svr-host: 192.168.178.88

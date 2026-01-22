@@ -294,6 +294,7 @@ impl GitModule {
     }
 
     /// Clone a git repository
+    #[allow(clippy::too_many_arguments)]
     fn clone_repo(
         repo: &str,
         dest: &str,
@@ -408,6 +409,7 @@ impl GitModule {
     }
 
     /// Update (pull) a git repository
+    #[allow(clippy::too_many_arguments)]
     fn update_repo(
         dest: &str,
         version: Option<&str>,
@@ -740,13 +742,14 @@ impl Module for GitModule {
             )?;
 
             // Verify GPG signature if requested
-            if verify_commit && changed {
-                if !Self::verify_commit(&dest, &new_version, &gpg_whitelist)? {
-                    return Err(ModuleError::ExecutionFailed(format!(
-                        "GPG signature verification failed for commit {}",
-                        new_version
-                    )));
-                }
+            if verify_commit
+                && changed
+                && !Self::verify_commit(&dest, &new_version, &gpg_whitelist)?
+            {
+                return Err(ModuleError::ExecutionFailed(format!(
+                    "GPG signature verification failed for commit {}",
+                    new_version
+                )));
             }
 
             if changed {

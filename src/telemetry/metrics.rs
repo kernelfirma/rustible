@@ -3,7 +3,7 @@
 //! This module provides Prometheus-compatible metrics including counters,
 //! gauges, and histograms for monitoring Rustible execution.
 
-use crate::telemetry::config::{MetricsConfig, MetricsExporterType};
+use crate::telemetry::config::MetricsConfig;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
@@ -108,8 +108,7 @@ impl Gauge {
 
     /// Set the gauge to a floating-point value.
     pub fn set_f64(&self, value: f64) {
-        self.value
-            .store(value.to_bits() as i64, Ordering::Relaxed);
+        self.value.store(value.to_bits() as i64, Ordering::Relaxed);
     }
 
     /// Increment the gauge by 1.
@@ -183,7 +182,9 @@ impl Histogram {
         Self::with_buckets(
             name,
             help,
-            vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+            vec![
+                0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ],
         )
     }
 
@@ -214,8 +215,7 @@ impl Histogram {
     /// Observe a value.
     pub fn observe(&self, value: f64) {
         // Update sum and count
-        self.sum
-            .fetch_add(value.to_bits(), Ordering::Relaxed);
+        self.sum.fetch_add(value.to_bits(), Ordering::Relaxed);
         self.count.fetch_add(1, Ordering::Relaxed);
 
         // Update buckets
@@ -369,9 +369,7 @@ impl MetricsRegistry {
         let mut counters = self.counters.write();
         counters
             .entry(key.clone())
-            .or_insert_with(|| {
-                Arc::new(Counter::new(prefixed, help).with_labels(labels))
-            })
+            .or_insert_with(|| Arc::new(Counter::new(prefixed, help).with_labels(labels)))
             .clone()
     }
 
@@ -430,9 +428,7 @@ impl MetricsRegistry {
         let mut histograms = self.histograms.write();
         histograms
             .entry(prefixed.clone())
-            .or_insert_with(|| {
-                Arc::new(Histogram::with_buckets(prefixed, help, buckets))
-            })
+            .or_insert_with(|| Arc::new(Histogram::with_buckets(prefixed, help, buckets)))
             .clone()
     }
 
@@ -640,8 +636,10 @@ impl RustibleMetrics {
     pub fn new() -> Self {
         let registry = Arc::new(MetricsRegistry::with_prefix("rustible"));
 
-        let playbooks_total = registry.counter("playbooks_total", "Total number of playbooks executed");
-        let playbooks_running = registry.gauge("playbooks_running", "Number of playbooks currently running");
+        let playbooks_total =
+            registry.counter("playbooks_total", "Total number of playbooks executed");
+        let playbooks_running =
+            registry.gauge("playbooks_running", "Number of playbooks currently running");
         let playbook_duration_seconds = registry.histogram(
             "playbook_duration_seconds",
             "Duration of playbook execution in seconds",
@@ -667,10 +665,14 @@ impl RustibleMetrics {
             );
         }
 
-        let connections_total = registry.counter("connections_total", "Total number of connections made");
-        let connections_active = registry.gauge("connections_active", "Number of active connections");
-        let connection_errors_total =
-            registry.counter("connection_errors_total", "Total number of connection errors");
+        let connections_total =
+            registry.counter("connections_total", "Total number of connections made");
+        let connections_active =
+            registry.gauge("connections_active", "Number of active connections");
+        let connection_errors_total = registry.counter(
+            "connection_errors_total",
+            "Total number of connection errors",
+        );
         let connection_duration_seconds = registry.histogram(
             "connection_duration_seconds",
             "Duration of connection establishment in seconds",

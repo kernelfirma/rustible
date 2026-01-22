@@ -21,6 +21,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{StateError, StateResult, StateSnapshot, TaskStateRecord};
 
+type PersistedState = (
+    DashMap<String, StateSnapshot>,
+    DashMap<String, Vec<TaskStateRecord>>,
+    SqliteMetadata,
+);
+
 /// Persistence backend type
 #[derive(Debug, Clone)]
 pub enum PersistenceBackend {
@@ -363,13 +369,7 @@ impl SqlitePersistence {
         })
     }
 
-    fn load_from_file(
-        path: &PathBuf,
-    ) -> StateResult<(
-        DashMap<String, StateSnapshot>,
-        DashMap<String, Vec<TaskStateRecord>>,
-        SqliteMetadata,
-    )> {
+    fn load_from_file(path: &PathBuf) -> StateResult<PersistedState> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -422,7 +422,7 @@ impl SqlitePersistence {
         let db = DbFile {
             snapshots,
             tasks,
-            metadata: &*self.metadata.read(),
+            metadata: &self.metadata.read(),
         };
 
         let file = File::create(&self.db_path)?;
@@ -521,7 +521,7 @@ impl StatePersistence for SqlitePersistence {
     fn save_task_record(&self, session_id: &str, record: &TaskStateRecord) -> StateResult<()> {
         self.tasks
             .entry(session_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record.clone());
 
         {
@@ -661,7 +661,7 @@ impl StatePersistence for MemoryPersistence {
     fn save_task_record(&self, session_id: &str, record: &TaskStateRecord) -> StateResult<()> {
         self.tasks
             .entry(session_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record.clone());
         Ok(())
     }

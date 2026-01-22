@@ -91,7 +91,7 @@ impl WinFeatureModule {
             .join(", ");
 
         format!(
-            r#"
+            r"
 $ErrorActionPreference = 'Stop'
 $features = @({})
 $results = @{{}}
@@ -145,7 +145,7 @@ foreach ($name in $features) {{
 }}
 
 $results | ConvertTo-Json -Depth 3
-"#,
+",
             names_array
         )
     }
@@ -180,7 +180,7 @@ $results | ConvertTo-Json -Depth 3
         let restart_param = if config.restart { "-Restart" } else { "" };
 
         format!(
-            r#"
+            r"
 $ErrorActionPreference = 'Stop'
 $features = @({})
 $results = @{{}}
@@ -222,7 +222,7 @@ foreach ($name in $features) {{
     Changed = $changed
     RestartNeeded = $restartNeeded
 }} | ConvertTo-Json -Depth 3
-"#,
+",
             names_array, include_all, include_mgmt, source_param, restart_param
         )
     }
@@ -239,7 +239,7 @@ foreach ($name in $features) {{
         let restart_param = if config.restart { "-Restart" } else { "" };
 
         format!(
-            r#"
+            r"
 $ErrorActionPreference = 'Stop'
 $features = @({})
 $results = @{{}}
@@ -281,7 +281,7 @@ foreach ($name in $features) {{
     Changed = $changed
     RestartNeeded = $restartNeeded
 }} | ConvertTo-Json -Depth 3
-"#,
+",
             names_array, restart_param
         )
     }

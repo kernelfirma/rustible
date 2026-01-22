@@ -1,6 +1,5 @@
 //! Error types for secret management.
 
-use std::fmt;
 use thiserror::Error;
 
 /// Result type for secret operations.
@@ -157,7 +156,10 @@ impl SecretError {
 
     /// Check if this is an authentication error.
     pub fn is_auth_error(&self) -> bool {
-        matches!(self, SecretError::Authentication(_) | SecretError::Authorization(_))
+        matches!(
+            self,
+            SecretError::Authentication(_) | SecretError::Authorization(_)
+        )
     }
 
     /// Check if this is a not found error.
@@ -285,10 +287,22 @@ mod tests {
 
     #[test]
     fn test_error_status_codes() {
-        assert_eq!(SecretError::NotFound("x".to_string()).status_code(), Some(404));
-        assert_eq!(SecretError::Authentication("x".to_string()).status_code(), Some(401));
-        assert_eq!(SecretError::Authorization("x".to_string()).status_code(), Some(403));
-        assert_eq!(SecretError::RateLimited("x".to_string()).status_code(), Some(429));
+        assert_eq!(
+            SecretError::NotFound("x".to_string()).status_code(),
+            Some(404)
+        );
+        assert_eq!(
+            SecretError::Authentication("x".to_string()).status_code(),
+            Some(401)
+        );
+        assert_eq!(
+            SecretError::Authorization("x".to_string()).status_code(),
+            Some(403)
+        );
+        assert_eq!(
+            SecretError::RateLimited("x".to_string()).status_code(),
+            Some(429)
+        );
     }
 
     #[test]

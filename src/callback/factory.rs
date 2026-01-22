@@ -13,7 +13,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::factory::{PluginFactory, PluginRegistry};
 //! use rustible::callback::config::CallbackConfig;
 //!
@@ -28,6 +31,8 @@
 //! for info in PluginFactory::available_plugins() {
 //!     println!("{}: {}", info.name, info.description);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -200,8 +205,15 @@ impl PluginFactory {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
+    /// # use rustible::callback::config::CallbackConfig;
+    /// # use rustible::callback::factory::PluginFactory;
     /// let plugin = PluginFactory::create("minimal", &CallbackConfig::default())?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn create(name: &str, config: &CallbackConfig) -> PluginResult<Arc<dyn ExecutionCallback>> {
         let name_lower = name.to_lowercase();
@@ -439,11 +451,11 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut summary_config = SummaryConfig::default();
-
-        // Apply global config
-        summary_config.use_colors = config.use_colors;
-        summary_config.show_timing = config.show_task_timing;
+        let mut summary_config = SummaryConfig {
+            use_colors: config.use_colors,
+            show_timing: config.show_task_timing,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {
@@ -471,10 +483,10 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut progress_config = ProgressConfig::default();
-
-        // Apply global config
-        progress_config.use_color = config.use_colors;
+        let mut progress_config = ProgressConfig {
+            use_color: config.use_colors,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {
@@ -539,11 +551,11 @@ impl PluginFactory {
         config: &CallbackConfig,
         plugin_config: Option<&PluginConfig>,
     ) -> PluginResult<Arc<dyn ExecutionCallback>> {
-        let mut diff_config = DiffConfig::default();
-
-        // Apply global config
-        diff_config.use_color = config.use_colors;
-        diff_config.enabled = config.show_diff;
+        let mut diff_config = DiffConfig {
+            use_color: config.use_colors,
+            enabled: config.show_diff,
+            ..Default::default()
+        };
 
         // Apply plugin-specific config
         if let Some(pc) = plugin_config {
@@ -596,17 +608,24 @@ impl PluginFactory {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::config::CallbackConfig;
 /// use rustible::callback::factory::PluginRegistry;
 /// use std::sync::Arc;
 ///
 /// let mut registry = PluginRegistry::new();
 ///
 /// registry.register("my_plugin", |config| {
-///     Ok(Arc::new(MyCustomCallback::new(config)))
+///     let _ = config;
+///     Ok(Arc::new(MinimalCallback::new()))
 /// });
 ///
 /// let plugin = registry.create("my_plugin", &CallbackConfig::default())?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct PluginRegistry {
     /// Registered plugin factories

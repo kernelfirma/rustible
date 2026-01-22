@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::executor::runtime::ExecutionContext;
+use crate::executor::task::BlockRole;
+use crate::modules::ModuleClassification;
 use crate::recovery::TransactionId;
 
 use super::results::update_stats;
@@ -23,8 +25,6 @@ impl Executor {
         tasks: &[Task],
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
-        use crate::executor::task::BlockRole;
-
         // Pre-allocate HashMaps with known capacity
         let host_count = hosts.len();
         let mut results: HashMap<String, HostResult> = HashMap::with_capacity(host_count);
@@ -40,79 +40,55 @@ impl Executor {
             );
         }
 
-        // Track which blocks have failed (per host) - pre-allocate with capacity
-        let mut failed_blocks: HashMap<String, HashSet<String>> =
+        let block_meta = collect_block_meta(tasks);
+        let mut block_states: HashMap<String, HashMap<String, BlockState>> =
             HashMap::with_capacity(host_count);
         for h in hosts {
-            failed_blocks.insert(h.clone(), HashSet::new());
-        }
-        // Track which blocks have had their rescue tasks run
-        let mut rescued_blocks: HashMap<String, HashSet<String>> =
-            HashMap::with_capacity(host_count);
-        for h in hosts {
-            rescued_blocks.insert(h.clone(), HashSet::new());
+            block_states.insert(h.clone(), HashMap::new());
         }
 
-        for task in tasks {
+        for (task_index, task) in tasks.iter().enumerate() {
             if let Some(cb) = &self.event_callback {
                 cb(ExecutionEvent::TaskStart(task.name.clone()));
             }
 
             // Determine which hosts should run this task based on block state
-            let active_hosts: Vec<_> = hosts
-                .iter()
-                .filter(|h| {
-                    let host_result = results.get(*h);
-                    let host_failed_blocks = failed_blocks.get(*h);
-                    let host_rescued_blocks = rescued_blocks.get(*h);
-
-                    // Skip if host has failed (and not in a block)
-                    if host_result
-                        .map(|r| r.failed || r.unreachable)
-                        .unwrap_or(false)
-                    {
-                        // But still run always tasks
-                        if task.block_role == BlockRole::Always {
-                            return true;
-                        }
-                        return false;
-                    }
-
-                    // Handle block-specific logic
-                    if let Some(ref block_id) = task.block_id {
-                        let block_failed = host_failed_blocks
-                            .map(|blocks| blocks.contains(block_id))
-                            .unwrap_or(false);
-                        let block_rescued = host_rescued_blocks
-                            .map(|blocks| blocks.contains(block_id))
-                            .unwrap_or(false);
-
-                        match task.block_role {
-                            BlockRole::Normal => {
-                                // Skip normal tasks if block has failed
-                                !block_failed
-                            }
-                            BlockRole::Rescue => {
-                                // Run rescue tasks only if block failed and hasn't been rescued yet
-                                block_failed && !block_rescued
-                            }
-                            BlockRole::Always => {
-                                // Always run always tasks
-                                true
-                            }
-                        }
-                    } else {
-                        true
-                    }
-                })
-                .cloned()
-                .collect();
+            let mut active_hosts = Vec::new();
+            for host in hosts {
+                let (host_failed, host_unreachable) = results
+                    .get(host)
+                    .map(|r| (r.failed, r.unreachable))
+                    .unwrap_or((false, false));
+                let host_blocks = block_states
+                    .get_mut(host)
+                    .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                if !host_failed && !host_unreachable {
+                    ensure_block_states_for_task(task, host_blocks);
+                }
+                if should_run_task_for_host(task, host_failed, host_unreachable, host_blocks) {
+                    active_hosts.push(host.clone());
+                }
+            }
 
             if active_hosts.is_empty() {
                 // Check if all tasks remaining are block-related
-                if task.block_id.is_none() {
+                if task.block_stack.is_empty() {
                     warn!("All hosts have failed, stopping execution");
                     break;
+                }
+                for host in hosts {
+                    if let Some(host_result) = results.get_mut(host) {
+                        let host_blocks = block_states
+                            .get_mut(host)
+                            .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                        finalize_blocks_for_task_index(
+                            host_result,
+                            task,
+                            task_index,
+                            host_blocks,
+                            &block_meta,
+                        );
+                    }
                 }
                 continue;
             }
@@ -136,75 +112,31 @@ impl Executor {
                 );
 
                 if let Some(host_result) = results.get_mut(&host) {
-                    // Check if this task failed
-                    let task_failed =
-                        task_result.status == crate::executor::task::TaskStatus::Failed;
-
-                    // If it's a normal task in a block and it failed, mark the block as failed
-                    if task_failed {
-                        if let Some(ref block_id) = task.block_id {
-                            if task.block_role == BlockRole::Normal {
-                                if let Some(blocks) = failed_blocks.get_mut(&host) {
-                                    blocks.insert(block_id.clone());
-                                }
-                                // Mark that rescue is needed - don't mark host as failed yet
-                            }
-                        }
-                    }
-
-                    // If this is a rescue task, mark the block as rescued
-                    if task.block_role == BlockRole::Rescue {
-                        if let Some(ref block_id) = task.block_id {
-                            if let Some(blocks) = rescued_blocks.get_mut(&host) {
-                                blocks.insert(block_id.clone());
-                            }
-                        }
-                    }
-
-                    // Update stats, but only mark host as failed if:
-                    // - Task is not in a block, OR
-                    // - Task is in a block but there's no rescue section (block failed without rescue)
-                    let should_mark_failed = if task.block_id.is_some() {
-                        // For block tasks, we handle failure differently
-                        // The host only fails if rescue also fails
-                        task.block_role == BlockRole::Rescue && task_failed
-                    } else {
-                        task_failed
-                    };
-
-                    // Temporarily modify result for stats update
-                    let mut modified_result = task_result.clone();
-                    if task.block_id.is_some()
-                        && task.block_role == BlockRole::Normal
-                        && task_failed
-                    {
-                        // Don't count normal block failure as host failure
-                        modified_result.status = crate::executor::task::TaskStatus::Ok;
-                    }
-
-                    self.update_host_stats(host_result, &modified_result);
-
-                    // Now set the actual failure state
-                    if should_mark_failed && !task.ignore_errors {
-                        host_result.failed = true;
-                    }
+                    let host_blocks = block_states
+                        .get_mut(&host)
+                        .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                    update_host_result_for_task(
+                        host_result,
+                        task,
+                        &task_result,
+                        host_blocks,
+                        &block_meta,
+                    );
                 }
             }
-        }
 
-        // After all tasks, check if any blocks failed without being rescued
-        for (host, host_failed_blocks) in &failed_blocks {
-            if let Some(_host_result) = results.get_mut(host) {
-                let host_rescued = rescued_blocks.get(host);
-                for block_id in host_failed_blocks {
-                    let was_rescued = host_rescued.map(|r| r.contains(block_id)).unwrap_or(false);
-                    if !was_rescued {
-                        // Block failed without rescue - this is a failure
-                        // But we need to check if there was a rescue section defined
-                        // For now, assume if rescue tasks were found, it was rescued
-                        // If no rescue tasks exist, it's a real failure
-                        // This is a simplification - proper implementation would track this differently
-                    }
+            for host in hosts {
+                if let Some(host_result) = results.get_mut(host) {
+                    let host_blocks = block_states
+                        .get_mut(host)
+                        .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                    finalize_blocks_for_task_index(
+                        host_result,
+                        task,
+                        task_index,
+                        host_blocks,
+                        &block_meta,
+                    );
                 }
             }
         }
@@ -221,6 +153,14 @@ impl Executor {
         tasks: &[Task],
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        let requires_connection = tasks.iter().any(|task| {
+            self.module_registry
+                .get(&task.module)
+                .map(|module| !matches!(module.classification(), ModuleClassification::LocalLogic))
+                .unwrap_or(true)
+        });
+        let block_meta = collect_block_meta(tasks);
+
         // OPTIMIZATION: Fast path for single host
         if hosts.len() == 1 {
             let host = &hosts[0];
@@ -232,59 +172,117 @@ impl Executor {
                 failed: false,
                 unreachable: false,
             };
-
-            for task in tasks {
-                if host_result.failed || host_result.unreachable {
-                    break;
+            let (connection, python_interpreter) = if requires_connection {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => (Some(conn), self.get_python_interpreter(host).await),
+                    Err(e) => {
+                        host_result.stats.unreachable = 1;
+                        host_result.unreachable = true;
+                        warn!("Host unreachable: {} ({})", host, e);
+                        let mut results = HashMap::with_capacity(1);
+                        results.insert(host.clone(), host_result);
+                        return Ok(results);
+                    }
                 }
+            } else {
+                (None, "/usr/bin/python3".to_string())
+            };
 
-                // Apply become precedence: task > config (play-level handled separately)
-                let effective_become = task.r#become || self.config.r#become;
-                let effective_become_user = task
-                    .become_user
-                    .clone()
-                    .unwrap_or_else(|| self.config.r#become_user.clone());
+            let mut block_states: HashMap<String, BlockState> = HashMap::new();
 
-                let ctx = ExecutionContext::new(host.clone())
-                    .with_check_mode(self.config.check_mode)
-                    .with_diff_mode(self.config.diff_mode)
-                    .with_verbosity(self.config.verbosity)
-                    .with_become(effective_become)
-                    .with_become_method(self.config.r#become_method.clone())
-                    .with_become_user(effective_become_user)
-                    .with_become_password(self.config.r#become_password.clone());
+            for (task_index, task) in tasks.iter().enumerate() {
+                if !host_result.failed && !host_result.unreachable {
+                    ensure_block_states_for_task(task, &mut block_states);
+                }
+                let should_run = should_run_task_for_host(
+                    task,
+                    host_result.failed,
+                    host_result.unreachable,
+                    &block_states,
+                );
 
-                let task_result = task
-                    .execute(
-                        &ctx,
-                        &self.runtime,
-                        &self.handlers,
-                        &self.notified_handlers,
-                        &self.parallelization_manager,
-                        &self.module_registry,
+                if should_run {
+                    // Apply become precedence: task > config (play-level handled separately)
+                    let effective_become = task.r#become || self.config.r#become;
+                    let effective_become_user = task
+                        .become_user
+                        .clone()
+                        .unwrap_or_else(|| self.config.r#become_user.clone());
+
+                    let ctx = ExecutionContext::new(host.clone())
+                        .with_check_mode(self.config.check_mode)
+                        .with_diff_mode(self.config.diff_mode)
+                        .with_verbosity(self.config.verbosity)
+                        .with_become(effective_become)
+                        .with_become_method(self.config.r#become_method.clone())
+                        .with_become_user(effective_become_user)
+                        .with_become_password(self.config.r#become_password.clone());
+                    let mut ctx = if let Some(conn) = connection.clone() {
+                        ctx.with_connection(conn)
+                    } else {
+                        ctx
+                    };
+                    ctx = ctx.with_python_interpreter(python_interpreter.clone());
+
+                    {
+                        let mut rt = self.runtime.write().await;
+                        rt.set_block_vars(host, task.merged_block_vars());
+                        rt.set_task_vars(host, task.vars.clone());
+                    }
+
+                    let task_result = task
+                        .execute(
+                            &ctx,
+                            &self.runtime,
+                            &self.handlers,
+                            &self.notified_handlers,
+                            &self.parallelization_manager,
+                            &self.module_registry,
+                        )
+                        .await;
+
+                    let task_result = match task_result {
+                        Ok(result) => result,
+                        Err(e) => TaskResult {
+                            status: TaskStatus::Failed,
+                            changed: false,
+                            msg: Some(e.to_string()),
+                            result: None,
+                            diff: None,
+                        },
+                    };
+
+                    {
+                        let mut rt = self.runtime.write().await;
+                        rt.clear_task_vars(host);
+                        rt.clear_block_vars(host);
+                    }
+
+                    Self::record_task_outcome(
+                        self.recovery_manager.as_ref(),
+                        tx_id.as_ref(),
+                        &task.name,
+                        host,
+                        &task_result,
                     )
                     .await;
 
-                let task_result = match task_result {
-                    Ok(result) => result,
-                    Err(e) => TaskResult {
-                        status: TaskStatus::Failed,
-                        changed: false,
-                        msg: Some(e.to_string()),
-                        result: None,
-                        diff: None,
-                    },
-                };
-                Self::record_task_outcome(
-                    self.recovery_manager.as_ref(),
-                    tx_id.as_ref(),
-                    &task.name,
-                    host,
-                    &task_result,
-                )
-                .await;
+                    update_host_result_for_task(
+                        &mut host_result,
+                        task,
+                        &task_result,
+                        &mut block_states,
+                        &block_meta,
+                    );
+                }
 
-                apply_task_result(&mut host_result, &task_result);
+                finalize_blocks_for_task_index(
+                    &mut host_result,
+                    task,
+                    task_index,
+                    &mut block_states,
+                    &block_meta,
+                );
             }
 
             let mut results = HashMap::with_capacity(1);
@@ -305,38 +303,40 @@ impl Executor {
         let mut connections = HashMap::with_capacity(hosts.len());
         let mut python_interpreters = HashMap::with_capacity(hosts.len());
 
-        for host in hosts {
-            match self.get_connection_for_host(host).await {
-                Ok(conn) => {
-                    connections.insert(host.clone(), conn);
-                    python_interpreters
-                        .insert(host.clone(), self.get_python_interpreter(host).await);
-                }
-                Err(e) => {
-                    base_results.insert(
-                        host.clone(),
-                        HostResult {
-                            host: host.clone(),
-                            stats: ExecutionStats {
-                                unreachable: 1,
-                                ..Default::default()
+        if requires_connection {
+            for host in hosts {
+                match self.get_connection_for_host(host).await {
+                    Ok(conn) => {
+                        connections.insert(host.clone(), conn);
+                        python_interpreters
+                            .insert(host.clone(), self.get_python_interpreter(host).await);
+                    }
+                    Err(e) => {
+                        base_results.insert(
+                            host.clone(),
+                            HostResult {
+                                host: host.clone(),
+                                stats: ExecutionStats {
+                                    unreachable: 1,
+                                    ..Default::default()
+                                },
+                                failed: false,
+                                unreachable: true,
                             },
-                            failed: false,
-                            unreachable: true,
-                        },
-                    );
-                    warn!("Host unreachable: {} ({})", host, e);
+                        );
+                        warn!("Host unreachable: {} ({})", host, e);
+                    }
                 }
             }
         }
 
         // Avoid cloning entire task list - use Arc slice instead
-        let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
+        let tasks: Arc<[Task]> = tasks.to_vec().into();
         let results = Arc::new(Mutex::new(base_results));
 
         let handles: Vec<_> = hosts
             .iter()
-            .filter(|host| connections.contains_key(*host))
+            .filter(|host| !requires_connection || connections.contains_key(*host))
             .map(|host| {
                 let host = host.clone();
                 let tasks = Arc::clone(&tasks);
@@ -349,7 +349,6 @@ impl Executor {
                 let module_registry = Arc::clone(&self.module_registry);
                 let recovery_manager = self.recovery_manager.clone();
                 let tx_id = tx_id.clone();
-                let config_become = config_become;
                 let config_become_method = config_become_method.clone();
                 let config_become_user = config_become_user.clone();
                 let config_become_password = config_become_password.clone();
@@ -359,6 +358,7 @@ impl Executor {
                     .cloned()
                     .unwrap_or_else(|| "/usr/bin/python3".to_string());
                 let callback = self.event_callback.clone();
+                let block_meta = block_meta.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -369,72 +369,107 @@ impl Executor {
                         failed: false,
                         unreachable: false,
                     };
+                    let mut block_states: HashMap<String, BlockState> = HashMap::new();
 
-                    for task in tasks.iter() {
-                        if host_result.failed || host_result.unreachable {
-                            break;
+                    for (task_index, task) in tasks.iter().enumerate() {
+                        if !host_result.failed && !host_result.unreachable {
+                            ensure_block_states_for_task(task, &mut block_states);
                         }
+                        let should_run = should_run_task_for_host(
+                            task,
+                            host_result.failed,
+                            host_result.unreachable,
+                            &block_states,
+                        );
 
-                        // Apply become precedence: task > config
-                        let effective_become = task.r#become || config_become;
-                        let effective_become_user = task
-                            .become_user
-                            .clone()
-                            .unwrap_or_else(|| config_become_user.clone());
+                        if should_run {
+                            // Apply become precedence: task > config
+                            let effective_become = task.r#become || config_become;
+                            let effective_become_user = task
+                                .become_user
+                                .clone()
+                                .unwrap_or_else(|| config_become_user.clone());
 
-                        let mut ctx = ExecutionContext::new(host.clone())
-                            .with_check_mode(check_mode)
-                            .with_diff_mode(diff_mode)
-                            .with_verbosity(verbosity)
-                            .with_become(effective_become)
-                            .with_become_method(config_become_method.clone())
-                            .with_become_user(effective_become_user)
-                            .with_become_password(config_become_password.clone());
+                            let mut ctx = ExecutionContext::new(host.clone())
+                                .with_check_mode(check_mode)
+                                .with_diff_mode(diff_mode)
+                                .with_verbosity(verbosity)
+                                .with_become(effective_become)
+                                .with_become_method(config_become_method.clone())
+                                .with_become_user(effective_become_user)
+                                .with_become_password(config_become_password.clone());
 
-                        if let Some(conn) = connection.clone() {
-                            ctx = ctx.with_connection(conn);
-                        }
-                        ctx = ctx.with_python_interpreter(python_interpreter.clone());
+                            if let Some(conn) = connection.clone() {
+                                ctx = ctx.with_connection(conn);
+                            }
+                            ctx = ctx.with_python_interpreter(python_interpreter.clone());
 
-                        let task_result = task
-                            .execute(
-                                &ctx,
-                                &runtime,
-                                &handlers,
-                                &notified,
-                                &parallelization_local,
-                                &module_registry,
+                            {
+                                let mut rt = runtime.write().await;
+                                rt.set_block_vars(&host, task.merged_block_vars());
+                                rt.set_task_vars(&host, task.vars.clone());
+                            }
+
+                            let task_result = task
+                                .execute(
+                                    &ctx,
+                                    &runtime,
+                                    &handlers,
+                                    &notified,
+                                    &parallelization_local,
+                                    &module_registry,
+                                )
+                                .await;
+                            let task_result = match task_result {
+                                Ok(result) => result,
+                                Err(e) => TaskResult {
+                                    status: TaskStatus::Failed,
+                                    changed: false,
+                                    msg: Some(e.to_string()),
+                                    result: None,
+                                    diff: None,
+                                },
+                            };
+
+                            {
+                                let mut rt = runtime.write().await;
+                                rt.clear_task_vars(&host);
+                                rt.clear_block_vars(&host);
+                            }
+
+                            if let Some(cb) = &callback {
+                                cb(ExecutionEvent::HostTaskComplete(
+                                    host.clone(),
+                                    task.name.clone(),
+                                    task_result.clone(),
+                                ));
+                            }
+
+                            Self::record_task_outcome(
+                                recovery_manager.as_ref(),
+                                tx_id.as_ref(),
+                                &task.name,
+                                &host,
+                                &task_result,
                             )
                             .await;
-                        let task_result = match task_result {
-                            Ok(result) => result,
-                            Err(e) => TaskResult {
-                                status: TaskStatus::Failed,
-                                changed: false,
-                                msg: Some(e.to_string()),
-                                result: None,
-                                diff: None,
-                            },
-                        };
 
-                        if let Some(cb) = &callback {
-                            cb(ExecutionEvent::HostTaskComplete(
-                                host.clone(),
-                                task.name.clone(),
-                                task_result.clone(),
-                            ));
+                            update_host_result_for_task(
+                                &mut host_result,
+                                task,
+                                &task_result,
+                                &mut block_states,
+                                &block_meta,
+                            );
                         }
 
-                        Self::record_task_outcome(
-                            recovery_manager.as_ref(),
-                            tx_id.as_ref(),
-                            &task.name,
-                            &host,
-                            &task_result,
-                        )
-                        .await;
-
-                        apply_task_result(&mut host_result, &task_result);
+                        finalize_blocks_for_task_index(
+                            &mut host_result,
+                            task,
+                            task_index,
+                            &mut block_states,
+                            &block_meta,
+                        );
                     }
 
                     results.lock().await.insert(host, host_result);
@@ -574,11 +609,194 @@ impl Executor {
     }
 }
 
-fn apply_task_result(host_result: &mut HostResult, task_result: &TaskResult) {
-    update_stats(&mut host_result.stats, task_result);
+#[derive(Debug, Default, Clone)]
+struct BlockState {
+    failed: bool,
+    rescue_failed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct BlockMeta {
+    parent: Option<String>,
+    parent_role: Option<BlockRole>,
+    has_rescue: bool,
+    last_index: usize,
+}
+
+fn collect_block_meta(tasks: &[Task]) -> HashMap<String, BlockMeta> {
+    let mut meta = HashMap::new();
+    for (index, task) in tasks.iter().enumerate() {
+        for (depth, ctx) in task.block_stack.iter().enumerate() {
+            let entry = meta.entry(ctx.id.clone()).or_insert(BlockMeta {
+                parent: None,
+                parent_role: None,
+                has_rescue: false,
+                last_index: index,
+            });
+            if entry.last_index < index {
+                entry.last_index = index;
+            }
+            if ctx.role == BlockRole::Rescue {
+                entry.has_rescue = true;
+            }
+            if depth > 0 && entry.parent.is_none() {
+                let parent_ctx = &task.block_stack[depth - 1];
+                entry.parent = Some(parent_ctx.id.clone());
+                entry.parent_role = Some(parent_ctx.role);
+            }
+        }
+    }
+    meta
+}
+
+fn ensure_block_states_for_task(task: &Task, block_states: &mut HashMap<String, BlockState>) {
+    for ctx in &task.block_stack {
+        block_states.entry(ctx.id.clone()).or_default();
+    }
+}
+
+fn should_run_task_for_host(
+    task: &Task,
+    host_failed: bool,
+    host_unreachable: bool,
+    block_states: &HashMap<String, BlockState>,
+) -> bool {
+    if host_unreachable {
+        return false;
+    }
+
+    if task.block_stack.is_empty() {
+        return !host_failed;
+    }
+
+    let mut has_always = false;
+    for ctx in &task.block_stack {
+        let Some(state) = block_states.get(&ctx.id) else {
+            return false;
+        };
+        match ctx.role {
+            BlockRole::Normal => {
+                if state.failed || state.rescue_failed {
+                    return false;
+                }
+            }
+            BlockRole::Rescue => {
+                if !state.failed || state.rescue_failed {
+                    return false;
+                }
+            }
+            BlockRole::Always => {
+                has_always = true;
+            }
+        }
+    }
+
+    if host_failed {
+        return has_always;
+    }
+
+    true
+}
+
+fn update_host_result_for_task(
+    host_result: &mut HostResult,
+    task: &Task,
+    task_result: &TaskResult,
+    block_states: &mut HashMap<String, BlockState>,
+    block_meta: &HashMap<String, BlockMeta>,
+) {
+    let mut stats_result = task_result.clone();
+    if task_result.status == TaskStatus::Failed {
+        if let Some(last_ctx) = task.block_stack.last() {
+            if last_ctx.role == BlockRole::Normal {
+                let rescued = task.block_stack.iter().any(|ctx| {
+                    block_meta
+                        .get(&ctx.id)
+                        .map(|meta| meta.has_rescue)
+                        .unwrap_or(false)
+                });
+                if rescued {
+                    stats_result.status = TaskStatus::Ok;
+                }
+            }
+        }
+    }
+    update_stats(&mut host_result.stats, &stats_result);
+
+    if task_result.status == TaskStatus::Unreachable {
+        host_result.unreachable = true;
+        return;
+    }
+
+    if let Some(last_ctx) = task.block_stack.last() {
+        let state = block_states.entry(last_ctx.id.clone()).or_default();
+        match last_ctx.role {
+            BlockRole::Normal => {
+                if task_result.status == TaskStatus::Failed {
+                    state.failed = true;
+                }
+            }
+            BlockRole::Rescue => {
+                if task_result.status == TaskStatus::Failed {
+                    state.rescue_failed = true;
+                }
+            }
+            BlockRole::Always => {
+                if task_result.status == TaskStatus::Failed {
+                    state.rescue_failed = true;
+                }
+            }
+        }
+        return;
+    }
+
     if task_result.status == TaskStatus::Failed {
         host_result.failed = true;
-    } else if task_result.status == TaskStatus::Unreachable {
-        host_result.unreachable = true;
+    }
+}
+
+fn finalize_blocks_for_task_index(
+    host_result: &mut HostResult,
+    task: &Task,
+    task_index: usize,
+    block_states: &mut HashMap<String, BlockState>,
+    block_meta: &HashMap<String, BlockMeta>,
+) {
+    if task.block_stack.is_empty() {
+        return;
+    }
+
+    for ctx in task.block_stack.iter().rev() {
+        let Some(meta) = block_meta.get(&ctx.id) else {
+            continue;
+        };
+        if meta.last_index != task_index {
+            continue;
+        }
+
+        let Some(state) = block_states.remove(&ctx.id) else {
+            continue;
+        };
+
+        let block_failed = if meta.has_rescue {
+            state.rescue_failed
+        } else {
+            state.failed || state.rescue_failed
+        };
+
+        if !block_failed {
+            continue;
+        }
+
+        if let Some(parent_id) = &meta.parent {
+            let parent_state = block_states.entry(parent_id.clone()).or_default();
+            match meta.parent_role.unwrap_or(BlockRole::Normal) {
+                BlockRole::Normal => parent_state.failed = true,
+                BlockRole::Rescue => parent_state.rescue_failed = true,
+                BlockRole::Always => parent_state.rescue_failed = true,
+            }
+        } else {
+            host_result.failed = true;
+        }
     }
 }

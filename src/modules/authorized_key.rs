@@ -58,6 +58,14 @@ impl KeyState {
     }
 }
 
+impl std::str::FromStr for KeyState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        KeyState::from_str(s)
+    }
+}
+
 impl fmt::Display for KeyState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -182,14 +190,14 @@ impl AuthorizedKey {
         let mut parts = Vec::new();
 
         if let Some(ref opts) = self.options {
-            parts.push(opts.clone());
+            parts.push(opts.as_str());
         }
 
-        parts.push(self.key_type.clone());
-        parts.push(self.key_data.clone());
+        parts.push(self.key_type.as_str());
+        parts.push(self.key_data.as_str());
 
         if let Some(ref comment) = self.comment {
-            parts.push(comment.clone());
+            parts.push(comment.as_str());
         }
 
         parts.join(" ")
@@ -292,6 +300,9 @@ impl AuthorizedKeyModule {
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
             }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
         options
     }
@@ -378,7 +389,7 @@ impl AuthorizedKeyModule {
         let conn = connection.clone();
         let path = path.to_string();
 
-        let content = std::thread::scope(|s| {
+        let downloaded_bytes = std::thread::scope(|s| {
             s.spawn(|| {
                 handle.block_on(async {
                     let remote_path = Path::new(&path);
@@ -393,7 +404,7 @@ impl AuthorizedKeyModule {
             .unwrap()
         });
 
-        match content {
+        match downloaded_bytes {
             Some(data) => {
                 let content_str = String::from_utf8_lossy(&data);
                 Ok(content_str.lines().map(|s| s.to_string()).collect())
@@ -423,7 +434,7 @@ impl AuthorizedKeyModule {
 
         let conn = connection.clone();
         let path_clone = path.to_string();
-        let content = if lines.is_empty() {
+        let file_content = if lines.is_empty() {
             String::new()
         } else {
             format!("{}\n", lines.join("\n"))
@@ -447,7 +458,7 @@ impl AuthorizedKeyModule {
                     transfer_opts = transfer_opts.with_mode(0o600);
                     transfer_opts = transfer_opts.with_create_dirs();
 
-                    conn.upload_content(content.as_bytes(), remote_path, Some(transfer_opts))
+                    conn.upload_content(file_content.as_bytes(), remote_path, Some(transfer_opts))
                         .await
                 })
             })
@@ -520,6 +531,7 @@ impl AuthorizedKeyModule {
     }
 
     /// Execute locally using filesystem operations
+    #[allow(clippy::too_many_arguments)]
     fn execute_local(
         context: &ModuleContext,
         user: &str,
@@ -618,13 +630,13 @@ impl AuthorizedKeyModule {
 
         // Write the file
         let new_content: Vec<String> = existing_keys.iter().map(|k| k.to_line()).collect();
-        let content = if new_content.is_empty() {
+        let file_content = if new_content.is_empty() {
             String::new()
         } else {
             format!("{}\n", new_content.join("\n"))
         };
 
-        fs::write(auth_keys_path, content)?;
+        fs::write(auth_keys_path, file_content)?;
         fs::set_permissions(auth_keys_path, fs::Permissions::from_mode(0o600))?;
 
         let action = if state == KeyState::Present {
@@ -676,6 +688,7 @@ impl AuthorizedKeyModule {
     }
 
     /// Execute on a remote host via connection
+    #[allow(clippy::too_many_arguments)]
     fn execute_remote(
         context: &ModuleContext,
         user: &str,

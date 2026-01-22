@@ -32,7 +32,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::secrets::{SecretManager, VaultBackend, SecretConfig};
 //!
 //! // Create a secret manager with Vault backend
@@ -48,6 +51,8 @@
 //!
 //! // Access secret values with no_log protection
 //! let password = secret.get_sensitive("password")?;
+//! # Ok(())
+//! # }
 //! ```
 
 mod backend;
@@ -97,7 +102,10 @@ use tokio::sync::RwLock;
 ///
 /// ## Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::secrets::{SecretManager, SecretConfig};
 ///
 /// let config = SecretConfig::vault()
@@ -110,6 +118,8 @@ use tokio::sync::RwLock;
 /// // Fetch a secret (cached automatically)
 /// let db_secret = manager.get("secret/data/database").await?;
 /// let password = db_secret.get_sensitive("password")?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct SecretManager {
     /// The secret backend (Vault, AWS, etc.)
@@ -147,7 +157,7 @@ impl SecretManager {
                     .vault
                     .as_ref()
                     .ok_or_else(|| SecretError::Configuration("Vault config required".into()))?;
-                Arc::new(VaultBackend::new(vault_config.clone()).await?)
+                Arc::new(VaultBackend::new(vault_config.clone().into()).await?)
             }
             SecretBackendType::AwsSecretsManager => {
                 let aws_config = config
@@ -162,14 +172,9 @@ impl SecretManager {
             config.cache.clone().unwrap_or_default(),
         )));
 
-        let rotator = if let Some(rotation_config) = &config.rotation {
-            Some(Arc::new(SecretRotator::new(
-                rotation_config.clone(),
-                backend.clone(),
-            )))
-        } else {
-            None
-        };
+        let rotator = config.rotation.as_ref().map(|rotation_config| {
+            Arc::new(SecretRotator::new(rotation_config.clone(), backend.clone()))
+        });
 
         let no_log_registry = Arc::new(NoLogRegistry::new());
 
@@ -375,7 +380,7 @@ impl SecretManager {
 
     /// Register sensitive values from a secret in the no_log registry.
     fn register_sensitive_values(&self, secret: &Secret) {
-        for (_, value) in secret.data() {
+        for value in secret.data().values() {
             if let SecretValue::String(s) = value {
                 self.no_log_registry.register(s.clone());
             }

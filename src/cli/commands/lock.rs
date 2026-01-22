@@ -271,3 +271,106 @@ impl LockArgs {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn create_playbook(path: &std::path::Path) {
+        std::fs::write(
+            path,
+            r#"---
+- name: Test playbook
+  hosts: localhost
+  tasks:
+    - name: noop
+      debug:
+        msg: "ok"
+"#,
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_lock_create_update_verify_clean() {
+        let temp = tempdir().unwrap();
+        let playbook = temp.path().join("playbook.yml");
+        create_playbook(&playbook);
+
+        let create_args = LockArgs {
+            subcommand: None,
+            playbook: playbook.clone(),
+            lockfile: None,
+            update: false,
+            check: false,
+        };
+        create_args.execute().await.unwrap();
+        let lockfile_path = Lockfile::default_path(&playbook);
+        assert!(lockfile_path.exists());
+
+        let check_args = LockArgs {
+            subcommand: None,
+            playbook: playbook.clone(),
+            lockfile: None,
+            update: false,
+            check: true,
+        };
+        check_args.execute().await.unwrap();
+
+        let update_args = LockArgs {
+            subcommand: None,
+            playbook: playbook.clone(),
+            lockfile: None,
+            update: true,
+            check: false,
+        };
+        update_args.execute().await.unwrap();
+
+        let info_args = LockArgs {
+            subcommand: Some(LockSubcommand::Info),
+            playbook: playbook.clone(),
+            lockfile: None,
+            update: false,
+            check: false,
+        };
+        info_args.execute().await.unwrap();
+
+        let verify_args = LockArgs {
+            subcommand: Some(LockSubcommand::Verify),
+            playbook: playbook.clone(),
+            lockfile: None,
+            update: false,
+            check: false,
+        };
+        verify_args.execute().await.unwrap();
+
+        let clean_args = LockArgs {
+            subcommand: Some(LockSubcommand::Clean),
+            playbook,
+            lockfile: None,
+            update: false,
+            check: false,
+        };
+        clean_args.execute().await.unwrap();
+        assert!(!lockfile_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_lock_check_missing_lockfile_errors() {
+        let temp = tempdir().unwrap();
+        let playbook = temp.path().join("playbook.yml");
+        create_playbook(&playbook);
+
+        let args = LockArgs {
+            subcommand: None,
+            playbook,
+            lockfile: None,
+            update: false,
+            check: true,
+        };
+
+        let result = args.execute().await;
+        assert!(result.is_err());
+    }
+}

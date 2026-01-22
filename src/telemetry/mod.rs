@@ -23,8 +23,12 @@
 //!
 //! # Quick Start
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::telemetry::{TelemetryConfig, TelemetryBuilder};
+//! # let host = "localhost";
 //!
 //! // Initialize telemetry with default settings
 //! let telemetry = TelemetryBuilder::new()
@@ -35,6 +39,8 @@
 //!
 //! // Use tracing macros for instrumentation
 //! tracing::info!(host = %host, "Connecting to target");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Features
@@ -76,11 +82,16 @@ static TELEMETRY: OnceLock<TelemetryGuard> = OnceLock::new();
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::telemetry::{init_telemetry, TelemetryConfig};
 ///
 /// let config = TelemetryConfig::default();
 /// init_telemetry(config)?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn init_telemetry(config: TelemetryConfig) -> crate::error::Result<()> {
     let guard = TelemetryBuilder::from_config(config).build()?;

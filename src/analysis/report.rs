@@ -2,9 +2,7 @@
 //!
 //! This module provides reporting capabilities for static analysis results.
 
-use super::{
-    AnalysisCategory, AnalysisFinding, ComplexityMetrics, DependencyGraph, Severity,
-};
+use super::{AnalysisCategory, AnalysisFinding, ComplexityMetrics, DependencyGraph, Severity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -120,8 +118,11 @@ impl AnalysisReport {
             output.push('\n');
         }
 
-        output.push_str(&format!("\nSummary:\n"));
-        output.push_str(&format!("  Total findings: {}\n", self.summary.total_findings));
+        output.push_str("\nSummary:\n");
+        output.push_str(&format!(
+            "  Total findings: {}\n",
+            self.summary.total_findings
+        ));
         output.push_str(&format!(
             "  Health score: {:.1}/100\n",
             self.summary.health_score
@@ -169,7 +170,10 @@ impl AnalysisReport {
             output.push_str(&format!("  Plays: {}\n", metrics.play_count));
             output.push_str(&format!("  Tasks: {}\n", metrics.task_count));
             output.push_str(&format!("  Handlers: {}\n", metrics.handler_count));
-            output.push_str(&format!("  Max Nesting Depth: {}\n", metrics.max_nesting_depth));
+            output.push_str(&format!(
+                "  Max Nesting Depth: {}\n",
+                metrics.max_nesting_depth
+            ));
             output.push_str(&format!(
                 "  Cyclomatic Complexity: {}\n",
                 metrics.cyclomatic_complexity
@@ -251,8 +255,10 @@ impl AnalysisReportBuilder {
 
     /// Build the report
     pub fn build(self) -> AnalysisReport {
-        let mut summary = ReportSummary::default();
-        summary.total_findings = self.findings.len();
+        let mut summary = ReportSummary {
+            total_findings: self.findings.len(),
+            ..Default::default()
+        };
 
         // Count by severity
         for finding in &self.findings {
@@ -314,13 +320,13 @@ fn calculate_health_score(
         score = (score * 0.7) + (metrics.maintainability_index * 0.3);
     }
 
-    score.max(0.0).min(100.0)
+    score.clamp(0.0, 100.0)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::SourceLocation;
+    use super::*;
 
     #[test]
     fn test_report_builder() {

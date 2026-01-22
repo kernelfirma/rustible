@@ -11,6 +11,8 @@
 //! - Performance characteristics
 //! - Edge cases (single host, single task)
 
+#![cfg(not(tarpaulin))]
+
 use std::time::{Duration, Instant};
 
 use rustible::executor::playbook::{Play, Playbook};
@@ -282,6 +284,7 @@ async fn test_free_strategy_failure_isolation() {
     assert_eq!(results.len(), 3);
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_free_strategy_with_skipped_tasks() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3"]);
@@ -1185,6 +1188,7 @@ async fn test_complex_linear_workflow() {
     assert!(results.contains_key("db1"));
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_mixed_success_failure_strategies() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3", "host4"]);
@@ -1279,6 +1283,7 @@ async fn test_execution_stats_accuracy() {
     assert!(summary.skipped > 0);
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_stats_aggregation_multiple_plays() {
     let runtime = create_runtime_with_hosts(vec!["host1"]);
@@ -2045,6 +2050,7 @@ async fn test_concurrent_host_state_isolation() {
 // Timestamp-Based Execution Order Verification Tests
 // ============================================================================
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_linear_strategy_execution_order_with_timing() {
     // Verify linear strategy executes tasks in order with timing evidence
@@ -2120,6 +2126,7 @@ async fn test_free_strategy_allows_concurrent_execution() {
     println!("Free strategy duration: {:?}", duration);
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_execution_timing_with_multiple_tasks() {
     // Test execution timing across multiple tasks and hosts

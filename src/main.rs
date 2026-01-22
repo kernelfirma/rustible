@@ -63,6 +63,7 @@ async fn main() -> Result<()> {
             args.execute().await?;
             0
         }
+        Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
     };
 
     std::process::exit(exit_code);
@@ -487,9 +488,78 @@ async fn validate_playbook(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::output::OutputFormatter;
+    use std::collections::HashMap;
+    use std::io::Write;
+    use std::sync::Arc;
+    use tempfile::{tempdir, NamedTempFile};
+    use tokio::sync::RwLock;
+
+    fn test_context() -> CommandContext {
+        let config = Config::default();
+        CommandContext {
+            config,
+            output: OutputFormatter::new(false, false, 0),
+            inventory_path: None,
+            extra_vars: Vec::new(),
+            verbosity: 0,
+            check_mode: false,
+            diff_mode: false,
+            limit: None,
+            forks: 1,
+            timeout: 30,
+            connections: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
 
     #[test]
     fn test_version() {
         assert!(!VERSION.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_init_project_creates_files() {
+        let temp = tempdir().unwrap();
+        let mut ctx = test_context();
+        let exit = init_project(temp.path(), "basic", &mut ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+        assert!(temp.path().join("inventory/hosts.yml").exists());
+        assert!(temp.path().join("playbooks/site.yml").exists());
+        assert!(temp.path().join("rustible.cfg").exists());
+        assert!(temp.path().join(".gitignore").exists());
+    }
+
+    #[tokio::test]
+    async fn test_validate_playbook_missing_file() {
+        let temp = tempdir().unwrap();
+        let missing = temp.path().join("missing.yml");
+        let mut ctx = test_context();
+        let exit = validate_playbook(&missing, &mut ctx).await.unwrap();
+
+        assert_eq!(exit, 1);
+    }
+
+    #[tokio::test]
+    async fn test_validate_playbook_success() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"---
+- name: Test playbook
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Debug task
+      debug:
+        msg: "hello"
+"#
+        )
+        .unwrap();
+
+        let mut ctx = test_context();
+        let exit = validate_playbook(file.path(), &mut ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
     }
 }

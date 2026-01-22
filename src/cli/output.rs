@@ -34,12 +34,12 @@ impl TaskStatus {
     pub fn colored_string(&self) -> String {
         match self {
             TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
-            TaskStatus::Changed => format!("~ {}", "changed").yellow().to_string(),
-            TaskStatus::Skipped => format!("- {}", "skipping").cyan().to_string(),
+            TaskStatus::Changed => format!("✎ {}", "changed").yellow().to_string(),
+            TaskStatus::Skipped => format!("↷ {}", "skipping").cyan().to_string(),
             TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
-            TaskStatus::Unreachable => format!("✖ {}", "unreachable").red().bold().to_string(),
+            TaskStatus::Unreachable => format!("✘ {}", "unreachable").red().bold().to_string(),
             TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
-            TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
+            TaskStatus::Ignored => format!("⊘ {}", "ignored").blue().to_string(),
         }
     }
 
@@ -303,9 +303,23 @@ impl OutputFormatter {
             println!("\n{} {}", header, stars);
         }
 
-        for (host, host_stats) in &stats.hosts {
+        // Calculate max host length for alignment (min 30)
+        let max_host_len = stats
+            .hosts
+            .keys()
+            .map(|h| h.len())
+            .max()
+            .unwrap_or(0)
+            .max(30);
+
+        // Sort hosts alphabetically
+        let mut sorted_hosts: Vec<_> = stats.hosts.keys().collect();
+        sorted_hosts.sort();
+
+        for host in sorted_hosts {
+            let host_stats = &stats.hosts[host];
             let line = format!(
-                "{:<30} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
+                "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
                 host,
                 host_stats.ok,
                 host_stats.changed,
@@ -313,7 +327,8 @@ impl OutputFormatter {
                 host_stats.failed,
                 host_stats.skipped,
                 host_stats.rescued,
-                host_stats.ignored
+                host_stats.ignored,
+                width = max_host_len
             );
 
             if self.use_color {
@@ -334,7 +349,9 @@ impl OutputFormatter {
                     }
                 };
 
-                print!("{:<30} : ", host_colored);
+                // Manual padding to ensure proper visual alignment with ANSI codes
+                let padding = " ".repeat(max_host_len.saturating_sub(host.len()));
+                print!("{}{}: ", host_colored, padding);
                 print!("{} ", fmt_stat("ok", host_stats.ok, colored::Color::Green));
                 print!(
                     "{} ",
@@ -492,6 +509,20 @@ impl OutputFormatter {
         } else {
             eprintln!("ERROR: {}", message);
         }
+    }
+
+    /// Print a diagnostic message without extra prefixes
+    pub fn diagnostic(&self, message: &str) {
+        if self.json_mode {
+            let err = serde_json::json!({
+                "type": "diagnostic",
+                "message": message
+            });
+            eprintln!("{}", serde_json::to_string(&err).unwrap());
+            return;
+        }
+
+        eprintln!("{}", message);
     }
 
     /// Print a warning message
@@ -884,6 +915,12 @@ mod tests {
         // It should contain the text
         assert!(TaskStatus::Ok.colored_string().contains("ok"));
         assert!(TaskStatus::Changed.colored_string().contains("changed"));
+
+        // Verify new icons
+        assert!(TaskStatus::Changed.colored_string().contains("✎"));
+        assert!(TaskStatus::Skipped.colored_string().contains("↷"));
+        assert!(TaskStatus::Unreachable.colored_string().contains("✘"));
+        assert!(TaskStatus::Ignored.colored_string().contains("⊘"));
     }
 
     #[test]

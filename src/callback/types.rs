@@ -902,7 +902,7 @@ fn generate_uuid() -> String {
         ((rand_part >> 16) & 0xFFFF) as u16,
         (rand_part & 0x0FFF) as u16,
         (0x8000 | (rand_part & 0x3FFF)) as u16,
-        rand_part & 0xFFFFFFFFFFFF
+        rand_part & 0xFFFF_FFFF_FFFF
     )
 }
 

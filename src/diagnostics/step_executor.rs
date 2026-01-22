@@ -60,6 +60,7 @@ impl StepState {
 /// Action to take during step execution
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum StepAction {
     /// Continue to next task and pause
     Step,
@@ -90,13 +91,8 @@ pub enum StepAction {
     /// Inspect current state
     Inspect,
     /// No action (waiting for input)
+    #[default]
     None,
-}
-
-impl Default for StepAction {
-    fn default() -> Self {
-        StepAction::None
-    }
 }
 
 impl StepAction {
@@ -119,10 +115,14 @@ impl StepAction {
             "i" | "inspect" | "vars" => Some(StepAction::Inspect),
             _ => {
                 // Check for repeat command: repeat N or rN
-                if cmd.starts_with("repeat ") {
-                    cmd[7..].parse().ok().map(StepAction::Repeat)
-                } else if cmd.starts_with('r') && cmd.len() > 1 {
-                    cmd[1..].parse().ok().map(StepAction::Repeat)
+                if let Some(repeat_count) = cmd.strip_prefix("repeat ") {
+                    repeat_count.parse().ok().map(StepAction::Repeat)
+                } else if let Some(repeat_count) = cmd.strip_prefix('r') {
+                    if repeat_count.is_empty() {
+                        None
+                    } else {
+                        repeat_count.parse().ok().map(StepAction::Repeat)
+                    }
                 } else {
                     None
                 }
@@ -132,7 +132,7 @@ impl StepAction {
 
     /// Get help text for available commands
     pub fn help() -> &'static str {
-        r#"Step execution commands:
+        r"Step execution commands:
   s, step, n, next    - Execute current task and pause
   sh, step-host       - Step to next task on same host
   c, continue, run    - Continue running all tasks
@@ -146,7 +146,7 @@ impl StepAction {
   r, retry            - Retry the last failed task
   e, edit             - Edit current task (interactive)
   i, inspect, vars    - Inspect current variables
-  q, quit, abort      - Abort execution"#
+  q, quit, abort      - Abort execution"
     }
 }
 
@@ -481,13 +481,13 @@ impl StepExecutor {
         }
 
         let state = *self.state.read();
-        match state {
+        matches!(
+            state,
             StepState::Running
-            | StepState::RunningToBreakpoint
-            | StepState::RunningToPlayEnd
-            | StepState::RunningToHostEnd => true,
-            _ => false,
-        }
+                | StepState::RunningToBreakpoint
+                | StepState::RunningToPlayEnd
+                | StepState::RunningToHostEnd
+        )
     }
 }
 

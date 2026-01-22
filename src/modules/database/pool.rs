@@ -13,7 +13,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::modules::database::pool::{DatabasePool, PoolConfig};
 //!
 //! let config = PoolConfig::default()
@@ -23,6 +26,8 @@
 //!
 //! let pool = DatabasePool::new("mysql://user:pass@localhost/db", config).await?;
 //! let result = pool.execute("SELECT 1").await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use parking_lot::RwLock;

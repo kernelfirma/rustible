@@ -3,9 +3,9 @@
 //! Handles parsing of the runtime.yml file that provides runtime configuration
 //! including plugin routing, deprecations, and required Ansible versions.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 
 use super::CollectionResult;
 
@@ -65,6 +65,14 @@ impl RuntimeConfig {
     /// Get filter routing for a specific filter
     pub fn get_filter_routing(&self, name: &str) -> Option<&RoutingEntry> {
         self.plugin_routing.filters.get(name)
+    }
+}
+
+impl std::str::FromStr for RuntimeConfig {
+    type Err = super::CollectionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RuntimeConfig::from_str(s)
     }
 }
 

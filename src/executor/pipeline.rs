@@ -133,7 +133,7 @@ impl BranchHistory {
         BranchPrediction {
             likelihood,
             confidence,
-            should_speculate: confidence > 0.6 && (likelihood > 0.7 || likelihood < 0.3),
+            should_speculate: confidence > 0.6 && !(0.3..=0.7).contains(&likelihood),
         }
     }
 }

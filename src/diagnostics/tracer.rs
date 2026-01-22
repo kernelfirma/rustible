@@ -547,8 +547,10 @@ impl ConnectionTracer {
     pub fn summary(&self) -> TraceSummary {
         let entries = self.entries.read();
 
-        let mut summary = TraceSummary::default();
-        summary.total_events = entries.len();
+        let mut summary = TraceSummary {
+            total_events: entries.len(),
+            ..Default::default()
+        };
 
         for entry in entries.iter() {
             match entry.event.event_type {

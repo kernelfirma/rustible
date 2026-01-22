@@ -8,6 +8,8 @@
 //! - max_fail_percentage with serial execution
 //! - Edge cases (zero hosts, single host, batch size larger than hosts)
 
+#![cfg(not(tarpaulin))]
+
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::task::Task;
@@ -31,6 +33,7 @@ fn create_runtime_with_hosts(hosts: Vec<&str>) -> RuntimeContext {
 // Fixed Batch Size Tests
 // ============================================================================
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_serial_fixed_one_host_at_a_time() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3", "host4"]);
@@ -452,6 +455,7 @@ async fn test_serial_with_host_pinned_strategy() {
 // max_fail_percentage Tests
 // ============================================================================
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_serial_with_max_fail_percentage_not_exceeded() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3", "host4"]);
@@ -498,6 +502,7 @@ async fn test_serial_with_max_fail_percentage_not_exceeded() {
     }
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_serial_with_max_fail_percentage_exceeded() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3", "host4"]);
@@ -536,6 +541,7 @@ async fn test_serial_with_max_fail_percentage_exceeded() {
     assert!(failed_count > 0, "Some hosts should have failed");
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_serial_max_fail_percentage_zero() {
     // max_fail_percentage: 0 means abort on first failure
@@ -779,6 +785,7 @@ async fn test_serial_with_conditional_tasks() {
     }
 }
 
+#[cfg_attr(tarpaulin, ignore)]
 #[tokio::test]
 async fn test_serial_multiple_plays() {
     let runtime = create_runtime_with_hosts(vec!["host1", "host2", "host3", "host4"]);

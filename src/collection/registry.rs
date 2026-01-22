@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::{Collection, CollectionError, CollectionResult, Fqcn};
 use super::loader::{CollectionLoader, CollectionSearchPath};
+use super::{Collection, CollectionError, CollectionResult, Fqcn};
 
 /// Builder for CollectionRegistry
 pub struct CollectionRegistryBuilder {
@@ -29,15 +29,15 @@ impl CollectionRegistryBuilder {
 
     /// Add a search path
     pub fn with_search_path(mut self, path: impl Into<PathBuf>) -> Self {
-        self.search_paths.push(CollectionSearchPath::new(path.into()));
+        self.search_paths
+            .push(CollectionSearchPath::new(path.into()));
         self
     }
 
     /// Add a search path with priority
     pub fn with_search_path_priority(mut self, path: impl Into<PathBuf>, priority: u32) -> Self {
-        self.search_paths.push(
-            CollectionSearchPath::new(path.into()).with_priority(priority)
-        );
+        self.search_paths
+            .push(CollectionSearchPath::new(path.into()).with_priority(priority));
         self
     }
 
@@ -140,22 +140,20 @@ impl CollectionRegistry {
     pub async fn resolve_module(&self, fqcn: &Fqcn) -> CollectionResult<PathBuf> {
         let collection = self.get_by_fqcn(fqcn).await?;
 
-        collection.get_module_path(&fqcn.resource)
+        collection
+            .get_module_path(&fqcn.resource)
             .cloned()
-            .ok_or_else(|| CollectionError::ModuleNotFound {
-                fqcn: fqcn.full(),
-            })
+            .ok_or_else(|| CollectionError::ModuleNotFound { fqcn: fqcn.full() })
     }
 
     /// Resolve a role by FQCN
     pub async fn resolve_role(&self, fqcn: &Fqcn) -> CollectionResult<PathBuf> {
         let collection = self.get_by_fqcn(fqcn).await?;
 
-        collection.get_role_path(&fqcn.resource)
+        collection
+            .get_role_path(&fqcn.resource)
             .cloned()
-            .ok_or_else(|| CollectionError::RoleNotFound {
-                fqcn: fqcn.full(),
-            })
+            .ok_or_else(|| CollectionError::RoleNotFound { fqcn: fqcn.full() })
     }
 
     /// Resolve a plugin by FQCN and type
@@ -166,7 +164,8 @@ impl CollectionRegistry {
     ) -> CollectionResult<PathBuf> {
         let collection = self.get_by_fqcn(fqcn).await?;
 
-        collection.get_plugin_path(plugin_type, &fqcn.resource)
+        collection
+            .get_plugin_path(plugin_type, &fqcn.resource)
             .cloned()
             .ok_or_else(|| CollectionError::PluginNotFound {
                 plugin_type: plugin_type.to_string(),

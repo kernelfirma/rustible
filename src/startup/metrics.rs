@@ -194,11 +194,7 @@ impl StartupMetrics {
         }
 
         eprintln!();
-        eprintln!(
-            "  {:20} {:>8.2}ms",
-            "TOTAL",
-            total.as_secs_f64() * 1000.0
-        );
+        eprintln!("  {:20} {:>8.2}ms", "TOTAL", total.as_secs_f64() * 1000.0);
         eprintln!();
     }
 
@@ -361,7 +357,12 @@ mod tests {
         let json = metrics.to_json();
 
         assert!(json["total_ms"].as_f64().unwrap() > 0.0);
-        assert!(json["phases"]["Config Loading"]["duration_ms"].as_f64().unwrap() > 0.0);
+        assert!(
+            json["phases"]["Config Loading"]["duration_ms"]
+                .as_f64()
+                .unwrap()
+                > 0.0
+        );
     }
 
     #[test]

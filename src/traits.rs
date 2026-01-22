@@ -31,9 +31,12 @@ use crate::vars::Variables;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::traits::{Module, ModuleArgs, ExecutionContext};
-/// use rustible::modules::ModuleResult;
+/// use rustible::traits::ModuleResult;
 /// use async_trait::async_trait;
 ///
 /// #[derive(Debug)]
@@ -54,6 +57,8 @@ use crate::vars::Variables;
 ///         Ok(ModuleResult::changed("File copied successfully"))
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[async_trait]
 pub trait Module: Send + Sync + Debug {

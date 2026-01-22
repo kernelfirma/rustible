@@ -34,6 +34,14 @@ impl UserState {
     }
 }
 
+impl std::str::FromStr for UserState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UserState::from_str(s)
+    }
+}
+
 /// Information about a user
 #[derive(Debug, Clone)]
 pub struct UserInfo {
@@ -58,6 +66,9 @@ impl UserModule {
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
             }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
         options
     }
@@ -69,19 +80,25 @@ impl UserModule {
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
         let options = Self::get_exec_options(context);
+        let connection = connection.clone();
+        let command = command.to_string();
+        let fut = async move { connection.execute(&command, Some(options)).await };
 
         // Use tokio runtime to execute async command
         // Use thread::scope to avoid nested runtime issues when called from async context
-        let handle = Handle::try_current()
-            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?;
-
-        let connection = connection.clone();
-        let command = command.to_string();
-        let result = std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(async { connection.execute(&command, Some(options)).await }))
-                .join()
-                .unwrap()
-        })
+        let result = if let Ok(handle) = Handle::try_current() {
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join()).map_err(|_| {
+                ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+            })?
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
+                })?;
+            rt.block_on(fut)
+        }
         .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
 
         Ok((result.success, result.stdout, result.stderr))
@@ -132,7 +149,7 @@ impl UserModule {
         let groups = if groups_success {
             groups_stdout
                 .split(':')
-                .last()
+                .next_back()
                 .unwrap_or("")
                 .split_whitespace()
                 .map(|s| s.to_string())
@@ -153,6 +170,7 @@ impl UserModule {
     }
 
     /// Create a user via connection
+    #[allow(clippy::too_many_arguments)]
     fn create_user_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,
@@ -231,6 +249,7 @@ impl UserModule {
     }
 
     /// Modify a user via connection
+    #[allow(clippy::too_many_arguments)]
     fn modify_user_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,
@@ -373,7 +392,7 @@ impl UserModule {
     ) -> ModuleResult<()> {
         // Use a temporary file to avoid exposing password in process list via echo
         let temp_path = format!("/tmp/.ansible_passwd_{}", Uuid::new_v4());
-        let content = format!("{}:{}", name, password);
+        let passwd_entry = format!("{}:{}", name, password);
 
         // Upload content to temp file with 600 permissions
         let mut transfer_opts = TransferOptions::new();
@@ -384,14 +403,14 @@ impl UserModule {
 
         let conn_clone = connection.clone();
         let temp_path_clone = temp_path.clone();
-        let content_clone = content.clone();
+        let entry_clone = passwd_entry.clone();
 
         std::thread::scope(|s| {
             s.spawn(|| {
                 handle.block_on(async {
                     conn_clone
                         .upload_content(
-                            content_clone.as_bytes(),
+                            entry_clone.as_bytes(),
                             Path::new(&temp_path_clone),
                             Some(transfer_opts),
                         )
@@ -466,6 +485,7 @@ impl UserModule {
     }
 
     /// Generate SSH key via connection
+    #[allow(clippy::too_many_arguments)]
     fn generate_ssh_key_via_connection(
         connection: &Arc<dyn Connection + Send + Sync>,
         name: &str,

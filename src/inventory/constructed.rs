@@ -39,8 +39,13 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::inventory::constructed::{ConstructedPlugin, ConstructedConfig};
+//! # use rustible::inventory::Inventory;
+//! # let base_inventory = Inventory::new();
 //!
 //! // Create configuration
 //! let config = ConstructedConfig::builder()
@@ -51,7 +56,9 @@
 //!
 //! // Apply to existing inventory
 //! let plugin = ConstructedPlugin::new(config)?;
-//! let enhanced_inventory = plugin.process(base_inventory).await?;
+//! let enhanced_inventory = plugin.process(base_inventory)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Expression Syntax
@@ -316,7 +323,7 @@ impl ConstructedConfigBuilder {
         self.config
             .group_parents
             .entry(child_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(parent.into());
         self
     }
@@ -543,7 +550,7 @@ impl ExpressionEvaluator {
         for part in parts.iter().skip(1) {
             current = match current {
                 serde_yaml::Value::Mapping(ref map) => map
-                    .get(&serde_yaml::Value::String(part.to_string()))
+                    .get(serde_yaml::Value::String(part.to_string()))
                     .cloned()
                     .unwrap_or(serde_yaml::Value::Null),
                 _ => serde_yaml::Value::Null,
@@ -700,10 +707,10 @@ impl ExpressionEvaluator {
 
     fn parse_not_operator(expr: &str) -> Option<&str> {
         let expr = expr.trim();
-        if expr.starts_with("not ") {
-            Some(expr[4..].trim())
-        } else if expr.starts_with("!") {
-            Some(expr[1..].trim())
+        if let Some(stripped) = expr.strip_prefix("not ") {
+            Some(stripped.trim())
+        } else if let Some(stripped) = expr.strip_prefix('!') {
+            Some(stripped.trim())
         } else {
             None
         }
@@ -748,7 +755,7 @@ impl ExpressionEvaluator {
             }
             serde_yaml::Value::Mapping(map) => {
                 let item_str = Self::value_to_string(&item_value);
-                Ok(map.contains_key(&serde_yaml::Value::String(item_str)))
+                Ok(map.contains_key(serde_yaml::Value::String(item_str)))
             }
             _ => Ok(false),
         }

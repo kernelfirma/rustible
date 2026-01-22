@@ -115,9 +115,10 @@ const JUNOS_COMMIT_NS: &str = "http://xml.juniper.net/junos/*/junos-commit";
 // ============================================================================
 
 /// Configuration format for JunOS
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConfigFormat {
     /// Hierarchical text format (default JunOS format)
+    #[default]
     Text,
     /// Set commands format (e.g., "set system host-name router01")
     Set,
@@ -153,16 +154,11 @@ impl ConfigFormat {
     }
 }
 
-impl Default for ConfigFormat {
-    fn default() -> Self {
-        ConfigFormat::Text
-    }
-}
-
 /// Configuration load operation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LoadOperation {
     /// Merge configuration with existing
+    #[default]
     Merge,
     /// Replace matching configuration
     Replace,
@@ -185,12 +181,6 @@ impl LoadOperation {
                 s
             ))),
         }
-    }
-}
-
-impl Default for LoadOperation {
-    fn default() -> Self {
-        LoadOperation::Merge
     }
 }
 
@@ -229,7 +219,7 @@ impl CommitOptions {
 
     /// Set confirm timeout (minutes until auto-rollback)
     pub fn with_confirm_timeout(mut self, minutes: u32) -> Self {
-        if minutes >= 1 && minutes <= 65535 {
+        if (1..=65535).contains(&minutes) {
             self.confirm_timeout = Some(minutes);
         }
         self
@@ -348,19 +338,14 @@ pub struct JunosNetconfTransport {
 }
 
 /// NETCONF protocol version
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum NetconfVersion {
     /// NETCONF 1.0 (RFC 4741, EOM framing)
+    #[default]
     V1_0,
     /// NETCONF 1.1 (RFC 6241, chunked framing)
     #[allow(dead_code)]
     V1_1,
-}
-
-impl Default for NetconfVersion {
-    fn default() -> Self {
-        NetconfVersion::V1_0
-    }
 }
 
 impl JunosNetconfTransport {
@@ -541,7 +526,7 @@ impl JunosNetconfTransport {
         }
 
         if let Some(timeout) = options.confirm_timeout {
-            commit_attrs.push(format!("<confirmed/>"));
+            commit_attrs.push("<confirmed/>".to_string());
             commit_attrs.push(format!(
                 "<confirm-timeout>{}</confirm-timeout>",
                 timeout * 60
@@ -599,7 +584,7 @@ impl JunosNetconfTransport {
 
     /// Validate candidate configuration
     pub async fn validate(&self) -> ConnectionResult<NetconfResponse> {
-        let operation = r#"<validate><source><candidate/></source></validate>"#;
+        let operation = "<validate><source><candidate/></source></validate>";
         self.send_rpc(operation).await
     }
 
@@ -860,7 +845,7 @@ impl JunosConfig {
 
         // Parse commit confirm timeout
         let commit_confirm = if let Some(timeout) = params.get_u32("commit_confirm")? {
-            if timeout < 1 || timeout > 65535 {
+            if !(1..=65535).contains(&timeout) {
                 return Err(ModuleError::InvalidParameter(
                     "commit_confirm must be 1-65535 minutes".to_string(),
                 ));
@@ -929,6 +914,7 @@ impl JunosConfigModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {

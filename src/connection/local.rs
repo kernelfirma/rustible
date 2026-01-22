@@ -12,6 +12,9 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::{debug, trace};
 
+use crate::security::BecomeValidator;
+use crate::utils::shell_escape;
+
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
     TransferOptions,
@@ -42,7 +45,19 @@ impl LocalConnection {
     }
 
     /// Build the command with options
-    fn build_command(&self, command: &str, options: &ExecuteOptions) -> Command {
+    fn build_command(&self, command: &str, options: &ExecuteOptions) -> ConnectionResult<Command> {
+        if options.escalate {
+            let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
+            BecomeValidator::new()
+                .validate_username(escalate_user)
+                .map_err(|e| {
+                    ConnectionError::InvalidConfig(format!(
+                        "Invalid escalation user '{}': {}",
+                        escalate_user, e
+                    ))
+                })?;
+        }
+
         let mut cmd = if options.escalate {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
@@ -100,7 +115,7 @@ impl LocalConnection {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        cmd
+        Ok(cmd)
     }
 }
 
@@ -129,7 +144,7 @@ impl Connection for LocalConnection {
         let options = options.unwrap_or_default();
         debug!(command = %command, "Executing local command");
 
-        let mut cmd = self.build_command(command, &options);
+        let mut cmd = self.build_command(command, &options)?;
 
         // Spawn the process
         let mut child = cmd.spawn().map_err(|e| {
@@ -482,7 +497,21 @@ impl LocalConnection {
             (None, None) => return Ok(()),
         };
 
-        let command = format!("chown {} {}", ownership, path.display());
+        let path_str = path.to_string_lossy();
+        BecomeValidator::new()
+            .validate_path(&path_str)
+            .map_err(|e| {
+                ConnectionError::InvalidConfig(format!(
+                    "Invalid ownership path '{}': {}",
+                    path_str, e
+                ))
+            })?;
+
+        let command = format!(
+            "chown {} {}",
+            shell_escape(&ownership),
+            shell_escape(&path_str)
+        );
         let result = self
             .execute(
                 &command,
@@ -519,6 +548,22 @@ pub async fn execute_local_with_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_build_command_rejects_invalid_user() {
+        let conn = LocalConnection::new();
+        let options = ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let result = conn.build_command("echo hello", &options);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_set_ownership_rejects_invalid_path() {
+        let conn = LocalConnection::new();
+        let path = Path::new("/tmp/bad;rm -rf /");
+        let result = conn.set_ownership(path, Some("root"), None).await;
+        assert!(matches!(result, Err(ConnectionError::InvalidConfig(_))));
+    }
 
     #[tokio::test]
     async fn test_local_execute() {

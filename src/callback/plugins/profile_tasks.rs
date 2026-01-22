@@ -41,8 +41,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::profile_tasks::{ProfileTasksCallback, ProfileTasksConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::plugins::{ProfileTasksCallback, ProfileTasksConfig, SortOrder};
 //!
 //! // Create with default config (shows all tasks)
 //! let profiler = ProfileTasksCallback::new();
@@ -60,7 +63,9 @@
 //! let profiler = ProfileTasksCallback::with_config(config);
 //!
 //! // Use with executor
-//! executor.add_callback(Box::new(profiler));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -1125,6 +1130,7 @@ mod tests {
         assert_eq!(key, "Install nginx:webserver1");
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_callback_lifecycle() {
         let profiler = ProfileTasksCallback::with_config(ProfileTasksConfig {

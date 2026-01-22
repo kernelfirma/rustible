@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use super::config::NotificationConfig;
@@ -195,7 +194,10 @@ impl NotificationManager {
     ///
     /// This is useful when you don't want notification delivery to block
     /// the main execution flow.
-    pub fn notify_async(&self, event: NotificationEvent) -> tokio::task::JoinHandle<NotificationResult<()>>
+    pub fn notify_async(
+        &self,
+        event: NotificationEvent,
+    ) -> tokio::task::JoinHandle<NotificationResult<()>>
     where
         Self: 'static,
     {
@@ -221,13 +223,8 @@ impl NotificationManager {
                     continue;
                 }
 
-                let result = send_with_retry_static(
-                    backend.as_ref(),
-                    &event,
-                    retries,
-                    retry_delay,
-                )
-                .await;
+                let result =
+                    send_with_retry_static(backend.as_ref(), &event, retries, retry_delay).await;
 
                 match result {
                     Ok(()) => success_count += 1,
@@ -264,7 +261,8 @@ impl NotificationManager {
         host_stats: std::collections::HashMap<String, super::HostStats>,
         failures: Option<Vec<super::FailureInfo>>,
     ) -> NotificationResult<()> {
-        let event = NotificationEvent::playbook_complete(playbook, success, duration, host_stats, failures);
+        let event =
+            NotificationEvent::playbook_complete(playbook, success, duration, host_stats, failures);
         self.notify(&event).await
     }
 
@@ -333,7 +331,47 @@ async fn send_with_retry_static(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::notify::test_support::{EnvGuard, ENV_LOCK};
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    const NOTIFY_ENV_KEYS: &[&str] = &[
+        "RUSTIBLE_NOTIFY_ON_SUCCESS",
+        "RUSTIBLE_NOTIFY_ON_FAILURE",
+        "RUSTIBLE_NOTIFY_TEMPLATE",
+        "RUSTIBLE_NOTIFY_TIMEOUT",
+        "RUSTIBLE_NOTIFY_RETRIES",
+        "RUSTIBLE_NOTIFY_RETRY_DELAY",
+        "RUSTIBLE_SLACK_WEBHOOK_URL",
+        "RUSTIBLE_SLACK_CHANNEL",
+        "RUSTIBLE_SLACK_USERNAME",
+        "RUSTIBLE_SLACK_ICON_EMOJI",
+        "RUSTIBLE_SLACK_MENTION_ON_FAILURE",
+        "RUSTIBLE_SLACK_INCLUDE_HOST_STATS",
+        "RUSTIBLE_SLACK_INCLUDE_FAILURES",
+        "RUSTIBLE_SMTP_HOST",
+        "RUSTIBLE_SMTP_FROM",
+        "RUSTIBLE_SMTP_TO",
+        "RUSTIBLE_SMTP_PORT",
+        "RUSTIBLE_SMTP_TLS",
+        "RUSTIBLE_SMTP_CC",
+        "RUSTIBLE_SMTP_USER",
+        "RUSTIBLE_SMTP_PASSWORD",
+        "RUSTIBLE_MAIL_SUBJECT_PREFIX",
+        "RUSTIBLE_MAIL_HTML",
+        "RUSTIBLE_WEBHOOK_URL",
+        "RUSTIBLE_WEBHOOK_METHOD",
+        "RUSTIBLE_WEBHOOK_HEADERS",
+        "RUSTIBLE_WEBHOOK_AUTH_TOKEN",
+        "RUSTIBLE_WEBHOOK_BASIC_AUTH",
+        "RUSTIBLE_WEBHOOK_VERIFY_SSL",
+        "RUSTIBLE_WEBHOOK_TEMPLATE",
+    ];
+
+    fn clear_notify_env(guard: &mut EnvGuard) {
+        for key in NOTIFY_ENV_KEYS {
+            guard.remove(key);
+        }
+    }
 
     /// Mock notifier for testing.
     #[derive(Debug)]
@@ -399,6 +437,9 @@ mod tests {
     #[tokio::test]
     async fn test_manager_from_env() {
         // Without env vars set, should create manager with no backends
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mut guard = EnvGuard::new();
+        clear_notify_env(&mut guard);
         let manager = NotificationManager::from_env();
         assert!(!manager.has_backends());
     }

@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Integration tests for parallel host execution
 //!
 //! This test suite covers:
@@ -355,7 +356,6 @@ async fn test_single_host_failure_linear_strategy() {
 }
 
 #[tokio::test]
-#[ignore = "Known issue with failure counting in free strategy execution"]
 async fn test_multiple_host_failures_free_strategy() {
     let runtime = create_parallel_runtime(6);
     let executor = create_executor_with_forks(runtime, 6, ExecutionStrategy::Free);
@@ -427,7 +427,6 @@ async fn test_ignore_errors_with_parallel_execution() {
 }
 
 #[tokio::test]
-#[ignore = "Known issue with failure propagation in executor"]
 async fn test_failure_propagation_stops_failed_host() {
     let runtime = create_parallel_runtime(3);
     let executor = create_executor_with_forks(runtime, 3, ExecutionStrategy::Linear);
@@ -461,11 +460,12 @@ async fn test_failure_propagation_stops_failed_host() {
         // host2 should have fewer ok/changed tasks than other hosts
     }
 
-    // Other hosts should complete all tasks
+    // Other hosts should run the conditional task as skipped and complete the rest
     for (host, result) in &results {
         if host != "host2" {
             assert!(!result.failed);
-            assert!(result.stats.ok >= 3 || result.stats.changed >= 3);
+            assert!(result.stats.ok + result.stats.changed >= 2);
+            assert!(result.stats.skipped >= 1);
         }
     }
 }
@@ -533,7 +533,6 @@ async fn test_stats_aggregation_basic() {
 }
 
 #[tokio::test]
-#[ignore = "Known issue with stats aggregation and failure counting"]
 async fn test_stats_aggregation_with_failures() {
     let runtime = create_parallel_runtime(4);
     let executor = create_executor_with_forks(runtime, 4, ExecutionStrategy::Linear);
@@ -1076,7 +1075,6 @@ async fn test_parallel_with_handlers() {
 }
 
 #[tokio::test]
-#[ignore = "Known issue with conditional group execution"]
 async fn test_parallel_execution_with_conditional_groups() {
     let mut runtime = RuntimeContext::new();
     runtime.add_host("web1".to_string(), Some("webservers"));

@@ -217,10 +217,10 @@ impl TaskHashBuilder {
     pub fn file_content(mut self, path: &PathBuf) -> StateResult<Self> {
         if path.exists() {
             let content = std::fs::read(path).map_err(|e| {
-                StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read file for hashing: {}", e),
-                ))
+                StateError::Io(std::io::Error::other(format!(
+                    "Failed to read file for hashing: {}",
+                    e
+                )))
             })?;
             self.hasher.update(b"file:");
             self.hasher.update(path.to_string_lossy().as_bytes());
@@ -247,10 +247,10 @@ impl TaskHashBuilder {
         // Hash both template content and variables
         if template_path.exists() {
             let content = std::fs::read(template_path).map_err(|e| {
-                StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read template for hashing: {}", e),
-                ))
+                StateError::Io(std::io::Error::other(format!(
+                    "Failed to read template for hashing: {}",
+                    e
+                )))
             })?;
             self.hasher.update(b"template:");
             self.hasher.update(&content);
@@ -371,6 +371,7 @@ impl StateHashCache {
     }
 
     /// Store a task result in the cache
+    #[allow(clippy::too_many_arguments)]
     pub fn store(
         &self,
         host: &str,

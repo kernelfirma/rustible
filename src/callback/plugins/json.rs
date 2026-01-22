@@ -325,8 +325,11 @@ impl HostStats {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::JsonCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::JsonCallback;
 ///
 /// // Create with default settings (stdout, compact JSON)
 /// let callback = JsonCallback::new();
@@ -340,6 +343,8 @@ impl HostStats {
 /// let callback = JsonCallback::builder()
 ///     .output_file("/var/log/rustible/execution.jsonl")
 ///     .build();
+/// # Ok(())
+/// # }
 /// ```
 pub struct JsonCallback {
     /// Output writer (thread-safe, supports stdout, stderr, or file)
@@ -671,14 +676,19 @@ impl ExecutionCallback for JsonCallback {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::JsonCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::JsonCallback;
 ///
 /// let callback = JsonCallback::builder()
 ///     .pretty(true)
 ///     .verbosity(2)
 ///     .output_file("/var/log/rustible.jsonl")
 ///     .build();
+/// # Ok(())
+/// # }
 /// ```
 pub struct JsonCallbackBuilder {
     pretty: bool,

@@ -4,7 +4,7 @@
 //! within modified lines, making it easier to see exactly what changed
 //! when only a small portion of a line was modified.
 
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 use similar::{ChangeTag, TextDiff};
 
 /// Word diff result containing highlighted old and new lines
@@ -151,13 +151,16 @@ pub fn lines_are_similar(old: &str, new: &str) -> bool {
     let new_chars: Vec<char> = new.chars().collect();
 
     // Check common prefix
-    let common_prefix = old_chars.iter()
+    let common_prefix = old_chars
+        .iter()
         .zip(new_chars.iter())
         .take_while(|(a, b)| a == b)
         .count();
 
     // Check common suffix
-    let common_suffix = old_chars.iter().rev()
+    let common_suffix = old_chars
+        .iter()
+        .rev()
         .zip(new_chars.iter().rev())
         .take_while(|(a, b)| a == b)
         .count();
@@ -221,13 +224,16 @@ fn common_chars_count(a: &str, b: &str) -> usize {
     let mut common = 0;
 
     // Count common prefix
-    common += a_chars.iter()
+    common += a_chars
+        .iter()
         .zip(b_chars.iter())
         .take_while(|(x, y)| x == y)
         .count();
 
     // Count common suffix (avoiding double-counting)
-    let suffix_common = a_chars.iter().rev()
+    let suffix_common = a_chars
+        .iter()
+        .rev()
         .zip(b_chars.iter().rev())
         .take_while(|(x, y)| x == y)
         .count();
@@ -265,14 +271,19 @@ mod tests {
     fn test_word_diff_word_level() {
         let diff = WordDiff::word_level("the quick brown fox", "the slow brown fox", false);
         assert!(diff.has_changes);
-        assert!(diff.old_highlighted.contains("[-quick]") || diff.old_highlighted.contains("quick"));
+        assert!(
+            diff.old_highlighted.contains("[-quick]") || diff.old_highlighted.contains("quick")
+        );
         assert!(diff.new_highlighted.contains("[+slow]") || diff.new_highlighted.contains("slow"));
     }
 
     #[test]
     fn test_lines_are_similar() {
         assert!(lines_are_similar("hello world", "hello World"));
-        assert!(lines_are_similar("server_name old.com;", "server_name new.com;"));
+        assert!(lines_are_similar(
+            "server_name old.com;",
+            "server_name new.com;"
+        ));
         assert!(!lines_are_similar("completely different", "another thing"));
         assert!(!lines_are_similar("", "something"));
     }

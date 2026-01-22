@@ -1,8 +1,9 @@
 //! Infrastructure Provisioning Module
 //!
 //! This module provides declarative infrastructure provisioning capabilities,
-//! enabling Rustible to substitute for both Ansible and Terraform. It adds
-//! native infrastructure provisioning using cloud provider APIs.
+//! enabling Rustible to complement Ansible with Terraform-like provisioning for
+//! a limited set of resources. It adds native infrastructure provisioning using
+//! cloud provider APIs.
 //!
 //! ## Core Concepts
 //!
@@ -60,7 +61,8 @@
 //!       cidr_block: "10.0.1.0/24"
 //! ```
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! use rustible::prelude::*;
 //! use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
 //!
 //! #[tokio::main]

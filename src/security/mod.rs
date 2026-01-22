@@ -42,10 +42,14 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::security::{
 //!     BecomeValidator, PasswordCache, AuditLogger, LeastPrivilegePolicy,
 //! };
+//! # let password = "secret";
 //!
 //! // Validate escalation request
 //! let validator = BecomeValidator::new();
@@ -53,12 +57,14 @@
 //! validator.validate_method("sudo")?;
 //!
 //! // Cache password with TTL
-//! let cache = PasswordCache::new(Duration::from_secs(300));
+//! let cache = PasswordCache::new();
 //! cache.store("host1", "root", password);
 //!
 //! // Log privileged operation
 //! let logger = AuditLogger::new();
-//! logger.log_escalation("host1", "root", "apt install nginx");
+//! logger.log_escalation_start("host1", "root", "sudo", "apt install nginx");
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod audit;
@@ -66,6 +72,7 @@ pub mod input;
 pub mod password_cache;
 pub mod path;
 pub mod rate_limit;
+pub mod secret;
 pub mod template;
 pub mod validation;
 
@@ -85,7 +92,8 @@ pub use path::{
     validate_path_no_traversal, validate_path_strict, validate_path_within_base, PathSecurityError,
 };
 pub use rate_limit::{RateLimiter, RateLimiterConfig};
-pub use template::{TemplateSecurityPolicy, TemplateSanitizer};
+pub use secret::{SecretBytes, SecretString};
+pub use template::{TemplateSanitizer, TemplateSecurityPolicy};
 pub use validation::{BecomeValidator, ValidationResult};
 
 /// Errors that can occur during security operations
@@ -206,6 +214,14 @@ impl EscalationMethod {
             self,
             EscalationMethod::Sudo | EscalationMethod::Su | EscalationMethod::Doas
         )
+    }
+}
+
+impl std::str::FromStr for EscalationMethod {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        EscalationMethod::from_str(s).ok_or(())
     }
 }
 
@@ -344,12 +360,7 @@ impl LeastPrivilegePolicy {
     }
 
     /// Validate an escalation request against the policy
-    pub fn validate_request(
-        &self,
-        user: &str,
-        method: &str,
-        command: &str,
-    ) -> SecurityResult<()> {
+    pub fn validate_request(&self, user: &str, method: &str, command: &str) -> SecurityResult<()> {
         if !self.is_user_allowed(user) {
             return Err(SecurityError::PolicyDenied(format!(
                 "User '{}' is not allowed by policy",
@@ -376,7 +387,10 @@ impl LeastPrivilegePolicy {
 }
 
 /// Enhanced ExecuteOptions with security features
-#[derive(Debug, Clone)]
+///
+/// The escalation password is stored in a `SecretString` which automatically
+/// zeroes memory on drop, preventing secret leakage.
+#[derive(Clone, Default)]
 pub struct SecureExecuteOptions {
     /// Working directory for the command
     pub cwd: Option<String>,
@@ -396,30 +410,14 @@ pub struct SecureExecuteOptions {
     /// Method for privilege escalation
     pub escalate_method: Option<String>,
 
-    /// Password for privilege escalation (stored securely)
-    escalate_password: Option<String>,
+    /// Password for privilege escalation (stored in SecretString for auto-zeroization)
+    escalate_password: Option<SecretString>,
 
     /// Custom flags for the escalation method
     pub escalate_flags: Option<String>,
 
     /// Whether this operation has been validated
     validated: bool,
-}
-
-impl Default for SecureExecuteOptions {
-    fn default() -> Self {
-        Self {
-            cwd: None,
-            env: std::collections::HashMap::new(),
-            timeout: None,
-            escalate: false,
-            escalate_user: None,
-            escalate_method: None,
-            escalate_password: None,
-            escalate_flags: None,
-            validated: false,
-        }
-    }
 }
 
 impl SecureExecuteOptions {
@@ -459,9 +457,9 @@ impl SecureExecuteOptions {
         Ok(self)
     }
 
-    /// Set the escalation password (stored securely)
-    pub fn with_password(mut self, password: String) -> Self {
-        self.escalate_password = Some(password);
+    /// Set the escalation password (stored in SecretString for auto-zeroization)
+    pub fn with_password(mut self, password: impl Into<String>) -> Self {
+        self.escalate_password = Some(SecretString::new(password));
         self
     }
 
@@ -473,7 +471,7 @@ impl SecureExecuteOptions {
 
     /// Get the password (for internal use only)
     pub(crate) fn password(&self) -> Option<&str> {
-        self.escalate_password.as_deref()
+        self.escalate_password.as_ref().map(|s| s.expose())
     }
 
     /// Check if options have been validated
@@ -481,15 +479,9 @@ impl SecureExecuteOptions {
         self.validated
     }
 
-    /// Clear the password from memory
+    /// Clear the password from memory (happens automatically on drop via SecretString)
     pub fn clear_password(&mut self) {
-        if let Some(ref mut pwd) = self.escalate_password {
-            // Overwrite with zeros before dropping
-            let bytes = unsafe { pwd.as_bytes_mut() };
-            for byte in bytes.iter_mut() {
-                *byte = 0;
-            }
-        }
+        // SecretString handles zeroization automatically when dropped
         self.escalate_password = None;
     }
 }
@@ -511,12 +503,6 @@ impl std::fmt::Debug for SecureExecuteOptions {
             .field("escalate_flags", &self.escalate_flags)
             .field("validated", &self.validated)
             .finish()
-    }
-}
-
-impl Drop for SecureExecuteOptions {
-    fn drop(&mut self) {
-        self.clear_password();
     }
 }
 
@@ -563,8 +549,7 @@ mod tests {
 
     #[test]
     fn test_secure_execute_options_password_redaction() {
-        let options = SecureExecuteOptions::new()
-            .with_password("secret_password".to_string());
+        let options = SecureExecuteOptions::new().with_password("secret_password".to_string());
 
         let debug_output = format!("{:?}", options);
         assert!(debug_output.contains("[REDACTED]"));

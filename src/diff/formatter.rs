@@ -6,11 +6,11 @@
 //! - Inline word-level diff highlighting
 
 use colored::Colorize;
-use similar::{ChangeTag, TextDiff};
+use similar::TextDiff;
 
 use super::stats::DiffStats;
-use super::word_diff::{pair_similar_lines, lines_are_similar, WordDiff};
-use super::{generate_diff, DiffHunk, DiffLine, DiffResult, ChangeType};
+use super::word_diff::{lines_are_similar, pair_similar_lines, WordDiff};
+use super::{generate_diff, ChangeType, DiffHunk, DiffLine};
 
 /// Diff output format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -35,7 +35,10 @@ impl std::str::FromStr for DiffFormat {
             "side-by-side" | "sidebyside" | "side" | "s" => Ok(DiffFormat::SideBySide),
             "context" | "c" => Ok(DiffFormat::Context),
             "minimal" | "m" => Ok(DiffFormat::Minimal),
-            _ => Err(format!("Unknown diff format: {}. Valid options: unified, side-by-side, context, minimal", s)),
+            _ => Err(format!(
+                "Unknown diff format: {}. Valid options: unified, side-by-side, context, minimal",
+                s
+            )),
         }
     }
 }
@@ -180,13 +183,7 @@ impl DiffFormatter {
         old_label: Option<&str>,
         new_label: Option<&str>,
     ) -> String {
-        let diff_result = generate_diff(
-            old,
-            new,
-            old_label,
-            new_label,
-            self.options.context_lines,
-        );
+        let diff_result = generate_diff(old, new, old_label, new_label, self.options.context_lines);
 
         if !diff_result.has_changes() {
             return String::new();
@@ -224,10 +221,7 @@ impl DiffFormatter {
     fn format_hunk_header(&self, hunk: &DiffHunk) -> String {
         let header = format!(
             "@@ -{},{} +{},{} @@",
-            hunk.old_start,
-            hunk.old_count,
-            hunk.new_start,
-            hunk.new_count
+            hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count
         );
 
         if self.options.use_color {
@@ -304,7 +298,8 @@ impl DiffFormatter {
             match (del_opt, ins_opt) {
                 (Some(del), Some(ins)) if lines_are_similar(del, ins) => {
                     // Word-level diff for similar lines
-                    let word_diff = WordDiff::new(del.trim_end(), ins.trim_end(), self.options.use_color);
+                    let word_diff =
+                        WordDiff::new(del.trim_end(), ins.trim_end(), self.options.use_color);
 
                     if self.options.use_color {
                         output.push(format!("{}{}", "-".red(), word_diff.old_highlighted));
@@ -339,13 +334,7 @@ impl DiffFormatter {
         match line.change_type {
             ChangeType::Delete => self.format_delete_line(content),
             ChangeType::Insert => self.format_insert_line(content),
-            ChangeType::Equal => {
-                if self.options.use_color {
-                    format!(" {}", content)
-                } else {
-                    format!(" {}", content)
-                }
-            }
+            ChangeType::Equal => format!(" {}", content),
         }
     }
 
@@ -406,7 +395,6 @@ impl DiffFormatter {
         }
 
         // Process changes
-        let mut old_idx = 0;
         let mut new_idx = 0;
         let mut stats = DiffStats::default();
 
@@ -415,23 +403,31 @@ impl DiffFormatter {
                 match op.tag() {
                     similar::DiffTag::Equal => {
                         for i in op.old_range() {
-                            let left = self.truncate_line(old_lines.get(i).unwrap_or(&""), half_width);
-                            let right = self.truncate_line(new_lines.get(new_idx + (i - op.old_range().start)).unwrap_or(&""), half_width);
+                            let left =
+                                self.truncate_line(old_lines.get(i).unwrap_or(&""), half_width);
+                            let right = self.truncate_line(
+                                new_lines
+                                    .get(new_idx + (i - op.old_range().start))
+                                    .unwrap_or(&""),
+                                half_width,
+                            );
 
-                            let line = format!("{:width$} | {:width$}", left, right, width = half_width);
+                            let line =
+                                format!("{:width$} | {:width$}", left, right, width = half_width);
                             output.push(line);
                         }
                         new_idx += op.old_range().len();
                     }
                     similar::DiffTag::Delete => {
                         for i in op.old_range() {
-                            let left = self.truncate_line(old_lines.get(i).unwrap_or(&""), half_width);
+                            let left =
+                                self.truncate_line(old_lines.get(i).unwrap_or(&""), half_width);
                             stats.deletions += 1;
 
                             let line = if self.options.use_color {
                                 format!(
                                     "{:width$} | {:width$}",
-                                    format!("{}", left).red(),
+                                    left.to_string().red(),
                                     "",
                                     width = half_width
                                 )
@@ -443,14 +439,15 @@ impl DiffFormatter {
                     }
                     similar::DiffTag::Insert => {
                         for i in op.new_range() {
-                            let right = self.truncate_line(new_lines.get(i).unwrap_or(&""), half_width);
+                            let right =
+                                self.truncate_line(new_lines.get(i).unwrap_or(&""), half_width);
                             stats.insertions += 1;
 
                             let line = if self.options.use_color {
                                 format!(
                                     "{:width$} | {:width$}",
                                     "",
-                                    format!("{}", right).green(),
+                                    right.to_string().green(),
                                     width = half_width
                                 )
                             } else {
@@ -467,14 +464,20 @@ impl DiffFormatter {
                         for i in 0..max_len {
                             let left = if i < old_range.len() {
                                 stats.deletions += 1;
-                                self.truncate_line(old_lines.get(old_range.start + i).unwrap_or(&""), half_width)
+                                self.truncate_line(
+                                    old_lines.get(old_range.start + i).unwrap_or(&""),
+                                    half_width,
+                                )
                             } else {
                                 String::new()
                             };
 
                             let right = if i < new_range.len() {
                                 stats.insertions += 1;
-                                self.truncate_line(new_lines.get(new_range.start + i).unwrap_or(&""), half_width)
+                                self.truncate_line(
+                                    new_lines.get(new_range.start + i).unwrap_or(&""),
+                                    half_width,
+                                )
                             } else {
                                 String::new()
                             };
@@ -482,8 +485,16 @@ impl DiffFormatter {
                             let line = if self.options.use_color {
                                 format!(
                                     "{:width$} | {:width$}",
-                                    if !left.is_empty() { left.red().to_string() } else { left },
-                                    if !right.is_empty() { right.green().to_string() } else { right },
+                                    if !left.is_empty() {
+                                        left.red().to_string()
+                                    } else {
+                                        left
+                                    },
+                                    if !right.is_empty() {
+                                        right.green().to_string()
+                                    } else {
+                                        right
+                                    },
                                     width = half_width
                                 )
                             } else {
@@ -527,13 +538,7 @@ impl DiffFormatter {
         new_label: Option<&str>,
     ) -> String {
         // Context diff format (similar to diff -c)
-        let diff_result = generate_diff(
-            old,
-            new,
-            old_label,
-            new_label,
-            self.options.context_lines,
-        );
+        let diff_result = generate_diff(old, new, old_label, new_label, self.options.context_lines);
 
         if !diff_result.has_changes() {
             return String::new();
@@ -559,7 +564,11 @@ impl DiffFormatter {
 
         for hunk in &diff_result.hunks {
             // Old section
-            let old_range = format!("*** {},{} ****", hunk.old_start, hunk.old_start + hunk.old_count - 1);
+            let old_range = format!(
+                "*** {},{} ****",
+                hunk.old_start,
+                hunk.old_start + hunk.old_count - 1
+            );
             if self.options.use_color {
                 output.push(old_range.red().to_string());
             } else {
@@ -569,7 +578,11 @@ impl DiffFormatter {
             for line in &hunk.lines {
                 match line.change_type {
                     ChangeType::Delete => {
-                        let prefix = if self.options.use_color { "- ".red().to_string() } else { "- ".to_string() };
+                        let prefix = if self.options.use_color {
+                            "- ".red().to_string()
+                        } else {
+                            "- ".to_string()
+                        };
                         output.push(format!("{}{}", prefix, line.content.trim_end()));
                     }
                     ChangeType::Equal => {
@@ -580,7 +593,11 @@ impl DiffFormatter {
             }
 
             // New section
-            let new_range = format!("--- {},{} ----", hunk.new_start, hunk.new_start + hunk.new_count - 1);
+            let new_range = format!(
+                "--- {},{} ----",
+                hunk.new_start,
+                hunk.new_start + hunk.new_count - 1
+            );
             if self.options.use_color {
                 output.push(new_range.green().to_string());
             } else {
@@ -590,7 +607,11 @@ impl DiffFormatter {
             for line in &hunk.lines {
                 match line.change_type {
                     ChangeType::Insert => {
-                        let prefix = if self.options.use_color { "+ ".green().to_string() } else { "+ ".to_string() };
+                        let prefix = if self.options.use_color {
+                            "+ ".green().to_string()
+                        } else {
+                            "+ ".to_string()
+                        };
                         output.push(format!("{}{}", prefix, line.content.trim_end()));
                     }
                     ChangeType::Equal => {
@@ -684,12 +705,8 @@ mod tests {
     #[test]
     fn test_format_with_labels() {
         let formatter = DiffFormatter::new(DiffOptions::default().with_color(false));
-        let output = formatter.format_with_labels(
-            "old\n",
-            "new\n",
-            Some("old.txt"),
-            Some("new.txt"),
-        );
+        let output =
+            formatter.format_with_labels("old\n", "new\n", Some("old.txt"), Some("new.txt"));
 
         assert!(output.contains("--- old.txt"));
         assert!(output.contains("+++ new.txt"));
@@ -697,10 +714,22 @@ mod tests {
 
     #[test]
     fn test_diff_format_from_str() {
-        assert_eq!("unified".parse::<DiffFormat>().unwrap(), DiffFormat::Unified);
-        assert_eq!("side-by-side".parse::<DiffFormat>().unwrap(), DiffFormat::SideBySide);
-        assert_eq!("context".parse::<DiffFormat>().unwrap(), DiffFormat::Context);
-        assert_eq!("minimal".parse::<DiffFormat>().unwrap(), DiffFormat::Minimal);
+        assert_eq!(
+            "unified".parse::<DiffFormat>().unwrap(),
+            DiffFormat::Unified
+        );
+        assert_eq!(
+            "side-by-side".parse::<DiffFormat>().unwrap(),
+            DiffFormat::SideBySide
+        );
+        assert_eq!(
+            "context".parse::<DiffFormat>().unwrap(),
+            DiffFormat::Context
+        );
+        assert_eq!(
+            "minimal".parse::<DiffFormat>().unwrap(),
+            DiffFormat::Minimal
+        );
         assert!("invalid".parse::<DiffFormat>().is_err());
     }
 }

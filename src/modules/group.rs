@@ -32,6 +32,14 @@ impl GroupState {
     }
 }
 
+impl std::str::FromStr for GroupState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        GroupState::from_str(s)
+    }
+}
+
 /// Information about a group
 #[derive(Debug, Clone)]
 pub struct GroupInfo {
@@ -51,6 +59,9 @@ impl GroupModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options

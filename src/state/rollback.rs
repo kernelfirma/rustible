@@ -644,7 +644,7 @@ impl RollbackExecutor {
     pub fn dry_run(&self, plan: &RollbackPlan) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("=== Rollback Plan Dry Run ===\n"));
+        output.push_str("=== Rollback Plan Dry Run ===\n");
         output.push_str(&format!("Plan ID: {}\n", plan.id));
         output.push_str(&format!("Actions: {}\n", plan.actions.len()));
         output.push_str(&format!("Hosts affected: {}\n", plan.hosts_affected));

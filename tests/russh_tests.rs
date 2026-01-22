@@ -120,6 +120,26 @@ fn get_ssh_test_key() -> PathBuf {
         })
 }
 
+/// Get SSH jump host configuration from environment
+fn get_ssh_test_jump_config(prefix: &str, default_user: &str) -> Option<(String, u16, String)> {
+    let host = std::env::var(format!("{}_HOST", prefix)).ok()?;
+    let port = std::env::var(format!("{}_PORT", prefix))
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(22);
+    let user = std::env::var(format!("{}_USER", prefix))
+        .ok()
+        .unwrap_or_else(|| default_user.to_string());
+    Some((host, port, user))
+}
+
+/// Get SSH jump host private key path from environment
+fn get_ssh_test_jump_key(prefix: &str) -> PathBuf {
+    std::env::var(format!("{}_KEY", prefix))
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| get_ssh_test_key())
+}
+
 // ============================================================================
 // MOCK RUSSH CONNECTION FOR UNIT TESTS
 // ============================================================================
@@ -1441,6 +1461,12 @@ mod integration_tests {
     }
 
     /// Test SSH connection through a proxy/jump host
+    ///
+    /// Requires environment variables:
+    /// - RUSTIBLE_SSH_TEST_JUMP_HOST: SSH jump host hostname
+    /// - RUSTIBLE_SSH_TEST_JUMP_PORT: SSH jump host port (default: 22)
+    /// - RUSTIBLE_SSH_TEST_JUMP_USER: SSH jump host username (default: same as target)
+    /// - RUSTIBLE_SSH_TEST_JUMP_KEY: SSH jump host private key path (optional)
     #[tokio::test]
     #[ignore = "Requires SSH infrastructure with jump host"]
     async fn test_russh_proxy_jump() {
@@ -1449,8 +1475,125 @@ mod integration_tests {
             return;
         }
 
-        // TODO: Test proxy jump
-        eprintln!("Would test proxy jump");
+        let (host, port, user) = get_ssh_test_config().expect("SSH test config required");
+        let (jump_host, jump_port, jump_user) =
+            match get_ssh_test_jump_config("RUSTIBLE_SSH_TEST_JUMP", &user) {
+                Some(config) => config,
+                None => {
+                    eprintln!("Skipping: No jump host configured");
+                    return;
+                }
+            };
+
+        let target_key = get_ssh_test_key();
+        let jump_key = get_ssh_test_jump_key("RUSTIBLE_SSH_TEST_JUMP");
+
+        let mut config = ConnectionConfig::default();
+
+        let mut jump_config = HostConfig::new()
+            .hostname(&jump_host)
+            .port(jump_port)
+            .user(&jump_user);
+        if jump_key.exists() {
+            jump_config = jump_config.identity_file(jump_key.to_string_lossy().to_string());
+        }
+        config.add_host("jump1", jump_config);
+
+        let mut target_config = HostConfig::new().hostname(&host).port(port).user(&user);
+        if target_key.exists() {
+            target_config = target_config.identity_file(target_key.to_string_lossy().to_string());
+        }
+        target_config.proxy_jump = Some("jump1".to_string());
+        config.add_host(&host, target_config);
+
+        let conn = RusshConnection::connect(&host, port, &user, None, &config)
+            .await
+            .expect("Failed to connect via jump host");
+
+        let result = conn.execute("whoami", None).await.unwrap();
+        assert!(result.success);
+        assert!(result.stdout.trim().contains(&user));
+
+        conn.close().await.unwrap();
+    }
+
+    /// Test SSH connection through a multi-hop proxy/jump chain
+    ///
+    /// Requires environment variables:
+    /// - RUSTIBLE_SSH_TEST_JUMP_HOST: First jump host hostname
+    /// - RUSTIBLE_SSH_TEST_JUMP_PORT: First jump host port (default: 22)
+    /// - RUSTIBLE_SSH_TEST_JUMP_USER: First jump host username (default: same as target)
+    /// - RUSTIBLE_SSH_TEST_JUMP_KEY: First jump host private key path (optional)
+    /// - RUSTIBLE_SSH_TEST_JUMP2_HOST: Second jump host hostname
+    /// - RUSTIBLE_SSH_TEST_JUMP2_PORT: Second jump host port (default: 22)
+    /// - RUSTIBLE_SSH_TEST_JUMP2_USER: Second jump host username (default: same as target)
+    /// - RUSTIBLE_SSH_TEST_JUMP2_KEY: Second jump host private key path (optional)
+    #[tokio::test]
+    #[ignore = "Requires SSH infrastructure with multi-hop jump hosts"]
+    async fn test_russh_proxy_jump_multi() {
+        if !has_ssh_infrastructure() {
+            eprintln!("Skipping: No SSH infrastructure available");
+            return;
+        }
+
+        let (host, port, user) = get_ssh_test_config().expect("SSH test config required");
+        let (jump_host, jump_port, jump_user) =
+            match get_ssh_test_jump_config("RUSTIBLE_SSH_TEST_JUMP", &user) {
+                Some(config) => config,
+                None => {
+                    eprintln!("Skipping: No jump host configured");
+                    return;
+                }
+            };
+        let (jump2_host, jump2_port, jump2_user) =
+            match get_ssh_test_jump_config("RUSTIBLE_SSH_TEST_JUMP2", &user) {
+                Some(config) => config,
+                None => {
+                    eprintln!("Skipping: No second jump host configured");
+                    return;
+                }
+            };
+
+        let target_key = get_ssh_test_key();
+        let jump_key = get_ssh_test_jump_key("RUSTIBLE_SSH_TEST_JUMP");
+        let jump2_key = get_ssh_test_jump_key("RUSTIBLE_SSH_TEST_JUMP2");
+
+        let mut config = ConnectionConfig::default();
+
+        let mut jump_config = HostConfig::new()
+            .hostname(&jump_host)
+            .port(jump_port)
+            .user(&jump_user);
+        if jump_key.exists() {
+            jump_config = jump_config.identity_file(jump_key.to_string_lossy().to_string());
+        }
+        config.add_host("jump1", jump_config);
+
+        let mut jump2_config = HostConfig::new()
+            .hostname(&jump2_host)
+            .port(jump2_port)
+            .user(&jump2_user);
+        if jump2_key.exists() {
+            jump2_config = jump2_config.identity_file(jump2_key.to_string_lossy().to_string());
+        }
+        config.add_host("jump2", jump2_config);
+
+        let mut target_config = HostConfig::new().hostname(&host).port(port).user(&user);
+        if target_key.exists() {
+            target_config = target_config.identity_file(target_key.to_string_lossy().to_string());
+        }
+        target_config.proxy_jump = Some("jump1,jump2".to_string());
+        config.add_host(&host, target_config);
+
+        let conn = RusshConnection::connect(&host, port, &user, None, &config)
+            .await
+            .expect("Failed to connect via multi-hop jump hosts");
+
+        let result = conn.execute("whoami", None).await.unwrap();
+        assert!(result.success);
+        assert!(result.stdout.trim().contains(&user));
+
+        conn.close().await.unwrap();
     }
 
     /// Test connection retry behavior

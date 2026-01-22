@@ -248,48 +248,52 @@ pub async fn list_playbooks(
 fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
     let playbook_path = Path::new(playbook);
 
-    // Helper to check if a path is safe (within base path)
-    let is_safe_path = |full_path: &Path, base_path: &Path| -> bool {
-        if let (Ok(canonical_full), Ok(canonical_base)) =
-            (full_path.canonicalize(), base_path.canonicalize())
-        {
-            canonical_full.starts_with(canonical_base)
-        } else {
-            false
+    // Helper to validate if a path is within allowed search paths
+    let validate_path = |path: &Path| -> ApiResult<()> {
+        let canonical_path = path
+            .canonicalize()
+            .map_err(|e| ApiError::Internal(format!("Failed to resolve path: {}", e)))?;
+
+        for base in search_paths {
+            // Canonicalize base path to handle symlinks and relative paths
+            if let Ok(canonical_base) = Path::new(base).canonicalize() {
+                if canonical_path.starts_with(&canonical_base) {
+                    return Ok(());
+                }
+            }
         }
+        Err(ApiError::Forbidden(format!(
+            "Access denied to playbook outside search paths: {}",
+            path.display()
+        )))
     };
 
-    // Search in configured paths
-    for base_path_str in search_paths {
-        let base_path = Path::new(base_path_str);
-
-        // Construct potential full path
-        let full_path = base_path.join(playbook_path);
-
-        // Check exact match
-        if full_path.exists() && is_safe_path(&full_path, base_path) {
-            return Ok(full_path.to_string_lossy().to_string());
+    // If it's an absolute path, check if it exists and is allowed
+    if playbook_path.is_absolute() {
+        if playbook_path.exists() {
+            validate_path(playbook_path)?;
+            return Ok(playbook.to_string());
         }
-
-        // Try with .yml extension
-        let with_yml = full_path.with_extension("yml");
-        if with_yml.exists() && is_safe_path(&with_yml, base_path) {
-            return Ok(with_yml.to_string_lossy().to_string());
-        }
-
-        // Try with .yaml extension
-        let with_yaml = full_path.with_extension("yaml");
-        if with_yaml.exists() && is_safe_path(&with_yaml, base_path) {
-            return Ok(with_yaml.to_string_lossy().to_string());
-        }
+        return Err(ApiError::NotFound(format!(
+            "Playbook not found: {}",
+            playbook
+        )));
     }
 
-    // If it's an absolute path, check if it's within any allowed search path
-    if playbook_path.is_absolute() && playbook_path.exists() {
-        for base_path_str in search_paths {
-            let base_path = Path::new(base_path_str);
-            if is_safe_path(playbook_path, base_path) {
-                return Ok(playbook_path.to_string_lossy().to_string());
+    // Search in configured paths
+    for base_path in search_paths {
+        let base = Path::new(base_path);
+
+        let candidates = [
+            base.join(playbook),
+            base.join(playbook).with_extension("yml"),
+            base.join(playbook).with_extension("yaml"),
+        ];
+
+        for full_path in candidates {
+            if full_path.exists() {
+                validate_path(&full_path)?;
+                return Ok(full_path.to_string_lossy().to_string());
             }
         }
     }
@@ -716,47 +720,83 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_find_playbook_traversal() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        let safe_dir = root.join("playbooks");
-        let secret_dir = root.join("secret");
+    fn test_find_playbook_valid_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let search_path = temp_dir.path().join("playbooks");
+        fs::create_dir(&search_path).unwrap();
 
-        fs::create_dir(&safe_dir).unwrap();
-        fs::create_dir(&secret_dir).unwrap();
+        // Create a valid playbook
+        let valid_playbook = search_path.join("site.yml");
+        fs::write(&valid_playbook, "- hosts: all").unwrap();
 
-        let safe_playbook = safe_dir.join("deploy.yml");
-        let secret_playbook = secret_dir.join("pwn.yml");
+        let search_paths = vec![search_path.to_str().unwrap().to_string()];
 
-        fs::write(&safe_playbook, "- hosts: all").unwrap();
-        fs::write(&secret_playbook, "- hosts: all").unwrap();
-
-        let search_paths = vec![safe_dir.to_str().unwrap().to_string()];
-
-        // 1. Test Absolute Path Bypass (Fixed)
-        // Should be denied because it is not inside any search path
-        let result = find_playbook(&search_paths, secret_playbook.to_str().unwrap());
-        assert!(
-            result.is_err(),
-            "Security: Absolute path outside search path should be denied"
+        // Test finding by relative path
+        let result = find_playbook(&search_paths, "site.yml");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            valid_playbook.to_string_lossy().to_string()
         );
 
-        // 2. Test Path Traversal (Fixed)
-        // "../secret/pwn.yml"
-        let traversal = "../secret/pwn.yml";
+        // Test finding by absolute path
+        let result = find_playbook(&search_paths, valid_playbook.to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_playbook_path_traversal() {
+        let temp_dir = TempDir::new().unwrap();
+        let search_path = temp_dir.path().join("playbooks");
+        fs::create_dir(&search_path).unwrap();
+
+        // Create a secret file outside search path
+        let secret_file = temp_dir.path().join("secret.yml");
+        fs::write(&secret_file, "secret data").unwrap();
+
+        let search_paths = vec![search_path.to_str().unwrap().to_string()];
+
+        // Test traversal via relative path
+        // playbooks/../secret.yml
+        let traversal = "../secret.yml";
         let result = find_playbook(&search_paths, traversal);
-        assert!(result.is_err(), "Security: Path traversal should be denied");
 
-        // 3. Test Valid Path
-        let valid = "deploy.yml";
-        let result = find_playbook(&search_paths, valid);
-        assert!(result.is_ok(), "Valid path should be allowed");
+        // Should fail with Forbidden or NotFound (depending on how join works vs exists)
+        // ../secret.yml joined with /tmp/.../playbooks becomes /tmp/.../playbooks/../secret.yml -> /tmp/.../secret.yml
+        // It exists. But validation should forbid it.
+        assert!(matches!(result, Err(ApiError::Forbidden(_))));
 
-        // 4. Test Valid Absolute Path (if within search path)
-        let result = find_playbook(&search_paths, safe_playbook.to_str().unwrap());
-        assert!(
-            result.is_ok(),
-            "Valid absolute path inside search path should be allowed"
-        );
+        // Test absolute path outside search path
+        let result = find_playbook(&search_paths, secret_file.to_str().unwrap());
+        assert!(matches!(result, Err(ApiError::Forbidden(_))));
+    }
+
+    #[test]
+    fn test_find_playbook_symlink_traversal() {
+        // This test requires unix symlinks
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let temp_dir = TempDir::new().unwrap();
+            let search_path = temp_dir.path().join("playbooks");
+            fs::create_dir(&search_path).unwrap();
+
+            let secret_file = temp_dir.path().join("secret.yml");
+            fs::write(&secret_file, "secret").unwrap();
+
+            // Create a symlink inside search path pointing outside
+            // playbooks/link.yml -> ../secret.yml
+            let link_path = search_path.join("link.yml");
+            symlink(&secret_file, &link_path).unwrap();
+
+            let search_paths = vec![search_path.to_str().unwrap().to_string()];
+
+            // Trying to access the symlink
+            let result = find_playbook(&search_paths, "link.yml");
+
+            // Canonicalization resolves the link to outside search path
+            assert!(matches!(result, Err(ApiError::Forbidden(_))));
+        }
     }
 }

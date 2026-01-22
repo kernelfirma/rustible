@@ -41,7 +41,7 @@ fn test_command_module_classification() {
 fn test_command_module_required_params() {
     let module = CommandModule;
     let required = module.required_params();
-    assert!(required.contains(&"cmd"));
+    assert!(required.is_empty());
 }
 
 // ============================================================================

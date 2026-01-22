@@ -213,7 +213,6 @@ fn test_basic_anchor_and_alias() {
 }
 
 #[test]
-#[ignore = "YAML merge key handling differs from expectations"]
 fn test_anchor_with_merge_key() {
     let yaml = r#"
 ---
@@ -303,7 +302,6 @@ fn test_anchor_in_list() {
 // ============================================================================
 
 #[test]
-#[ignore = "Ansible boolean yes/no handling differs from expectations"]
 fn test_ansible_boolean_yes_no() {
     let yaml = r#"
 ---
@@ -363,7 +361,6 @@ fn test_ansible_boolean_on_off() {
 }
 
 #[test]
-#[ignore = "Ansible boolean true/false string handling differs from expectations"]
 fn test_ansible_boolean_true_false_string() {
     let yaml = r#"
 ---

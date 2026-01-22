@@ -28,7 +28,7 @@ pub enum PluginConfigError {
 pub type PluginConfigResult<T> = Result<T, PluginConfigError>;
 
 /// Main plugin configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PluginConfig {
     /// Plugin name (e.g., "aws_ec2", "azure_rm", "gcp_compute", "docker")
     pub plugin: String,
@@ -64,22 +64,6 @@ pub struct PluginConfig {
     /// Additional plugin-specific options
     #[serde(default, flatten)]
     pub extra: HashMap<String, serde_yaml::Value>,
-}
-
-impl Default for PluginConfig {
-    fn default() -> Self {
-        Self {
-            plugin: String::new(),
-            regions: Vec::new(),
-            filters: HashMap::new(),
-            keyed_groups: Vec::new(),
-            hostnames: Vec::new(),
-            compose: ComposeConfig::default(),
-            strict: false,
-            cache_ttl: 0,
-            extra: HashMap::new(),
-        }
-    }
 }
 
 impl PluginConfig {

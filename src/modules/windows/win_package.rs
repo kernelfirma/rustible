@@ -134,7 +134,7 @@ try {
 
     /// Install Chocolatey if not present
     fn generate_choco_install_script() -> &'static str {
-        r#"
+        r"
 $result = @{changed=$false}
 try {
     $null = Get-Command choco.exe -ErrorAction Stop
@@ -145,7 +145,7 @@ try {
     $result.changed = $true
 }
 $result | ConvertTo-Json -Compress
-"#
+"
     }
 
     /// Check if package is installed via Chocolatey

@@ -23,7 +23,7 @@
 
 use super::{Lookup, LookupContext, LookupError, LookupResult};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// File lookup plugin for reading file contents
 #[derive(Debug, Clone, Default)]
@@ -48,7 +48,7 @@ impl FileLookup {
     }
 
     /// Validate that a path is safe to read
-    fn validate_path(&self, path: &PathBuf) -> LookupResult<()> {
+    fn validate_path(&self, path: &Path) -> LookupResult<()> {
         // Check for null bytes (path injection attack)
         if path.to_string_lossy().contains('\0') {
             return Err(LookupError::InvalidArguments(
@@ -125,39 +125,35 @@ impl Lookup for FileLookup {
 
             // Read the file
             match fs::read_to_string(&path) {
-                Ok(mut content) => {
+                Ok(mut file_content) => {
                     if lstrip {
-                        content = content.trim_start().to_string();
+                        file_content = file_content.trim_start().to_string();
                     }
                     if rstrip {
-                        content = content.trim_end().to_string();
+                        file_content = file_content.trim_end().to_string();
                     }
-                    results.push(content);
+                    results.push(file_content);
                 }
-                Err(e) => {
-                    match error_mode {
-                        "ignore" => continue,
-                        "warn" => {
-                            tracing::warn!("Failed to read file '{}': {}", path.display(), e);
-                            continue;
-                        }
-                        _ => {
-                            if e.kind() == std::io::ErrorKind::NotFound {
-                                return Err(LookupError::FileNotFound(path));
-                            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                return Err(LookupError::PermissionDenied(path.display().to_string()));
-                            }
-                            return Err(LookupError::Io(e));
-                        }
+                Err(e) => match error_mode {
+                    "ignore" => continue,
+                    "warn" => {
+                        tracing::warn!("Failed to read file '{}': {}", path.display(), e);
+                        continue;
                     }
-                }
+                    _ => {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            return Err(LookupError::FileNotFound(path));
+                        } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            return Err(LookupError::PermissionDenied(path.display().to_string()));
+                        }
+                        return Err(LookupError::Io(e));
+                    }
+                },
             }
         }
 
         if results.is_empty() && context.fail_on_error {
-            return Err(LookupError::Other(
-                "No files could be read".to_string(),
-            ));
+            return Err(LookupError::Other("No files could be read".to_string()));
         }
 
         Ok(results)
@@ -225,7 +221,10 @@ mod tests {
         let context = LookupContext::default();
 
         let result = lookup.lookup(
-            &[temp1.path().to_str().unwrap(), temp2.path().to_str().unwrap()],
+            &[
+                temp1.path().to_str().unwrap(),
+                temp2.path().to_str().unwrap(),
+            ],
             &context,
         );
         assert!(result.is_ok());
@@ -247,7 +246,10 @@ mod tests {
         let lookup = FileLookup::new();
         let context = LookupContext::new().with_fail_on_error(false);
 
-        let result = lookup.lookup(&["/nonexistent/path/to/file.txt", "errors=ignore"], &context);
+        let result = lookup.lookup(
+            &["/nonexistent/path/to/file.txt", "errors=ignore"],
+            &context,
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }

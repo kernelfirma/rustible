@@ -92,6 +92,14 @@ impl ArchiveFormat {
     }
 }
 
+impl std::str::FromStr for ArchiveFormat {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ArchiveFormat::from_str(s)
+    }
+}
+
 /// Module for creating archives
 pub struct ArchiveModule;
 

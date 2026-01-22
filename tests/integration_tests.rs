@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Comprehensive integration tests for Rustible
 //!
 //! These tests cover end-to-end playbook execution scenarios including:
@@ -816,7 +817,8 @@ http_port=80
       children:
         webservers:
           hosts:
-            web1: {}
+            web1:
+              ansible_connection: local
           vars:
             web_port: 80
 "#,

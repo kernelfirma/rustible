@@ -31,8 +31,22 @@
 //! {{ data | dict2items }}
 //! ```
 
+use minijinja::value::ValueKind;
 use minijinja::{Environment, Value};
 use std::collections::{BTreeMap, HashSet};
+
+trait ValueSeqExt {
+    fn as_seq(&self) -> Option<Vec<Value>>;
+}
+
+impl ValueSeqExt for Value {
+    fn as_seq(&self) -> Option<Vec<Value>> {
+        match self.kind() {
+            ValueKind::Seq | ValueKind::Iterable => self.try_iter().ok().map(|iter| iter.collect()),
+            _ => None,
+        }
+    }
+}
 
 /// Register all collection filters with the given environment.
 pub fn register_filters(env: &mut Environment<'static>) {
@@ -86,15 +100,15 @@ fn combine(
         let mut result = BTreeMap::new();
 
         // First, add all keys from base
-        for key in base_obj.keys() {
-            if let Some(val) = base_obj.get(&key) {
+        if let Some(iter) = base_obj.try_iter_pairs() {
+            for (key, val) in iter {
                 result.insert(key.to_string(), val);
             }
         }
 
         // Then, overlay/merge keys from other
-        for key in other_obj.keys() {
-            if let Some(other_val) = other_obj.get(&key) {
+        if let Some(iter) = other_obj.try_iter_pairs() {
+            for (key, other_val) in iter {
                 let key_str = key.to_string();
                 let merged_val = if recursive {
                     if let Some(base_val) = result.get(&key_str).cloned() {
@@ -120,13 +134,13 @@ fn merge_values(base: Value, other: Value, list_merge: &str) -> Value {
         (Some(base_obj), Some(other_obj)) => {
             // Both are dicts, merge recursively
             let mut result = BTreeMap::new();
-            for key in base_obj.keys() {
-                if let Some(val) = base_obj.get(&key) {
+            if let Some(iter) = base_obj.try_iter_pairs() {
+                for (key, val) in iter {
                     result.insert(key.to_string(), val);
                 }
             }
-            for key in other_obj.keys() {
-                if let Some(other_val) = other_obj.get(&key) {
+            if let Some(iter) = other_obj.try_iter_pairs() {
+                for (key, other_val) in iter {
                     let key_str = key.to_string();
                     let merged = if let Some(base_val) = result.get(&key_str).cloned() {
                         merge_values(base_val, other_val, list_merge)
@@ -143,13 +157,13 @@ fn merge_values(base: Value, other: Value, list_merge: &str) -> Value {
             if let (Some(base_seq), Some(other_seq)) = (base.as_seq(), other.as_seq()) {
                 match list_merge {
                     "append" => {
-                        let mut result: Vec<Value> = base_seq.iter().collect();
-                        result.extend(other_seq.iter());
+                        let mut result = base_seq;
+                        result.extend(other_seq);
                         Value::from(result)
                     }
                     "prepend" => {
-                        let mut result: Vec<Value> = other_seq.iter().collect();
-                        result.extend(base_seq.iter());
+                        let mut result = other_seq;
+                        result.extend(base_seq);
                         Value::from(result)
                     }
                     "append_rp" => {
@@ -157,18 +171,22 @@ fn merge_values(base: Value, other: Value, list_merge: &str) -> Value {
                         let other_set: HashSet<String> =
                             other_seq.iter().map(|v| v.to_string()).collect();
                         let mut result: Vec<Value> = base_seq
-                            .iter()
+                            .into_iter()
                             .filter(|v| !other_set.contains(&v.to_string()))
                             .collect();
-                        result.extend(other_seq.iter());
+                        result.extend(other_seq);
                         Value::from(result)
                     }
                     "prepend_rp" => {
                         // Prepend with remove duplicates from base that exist in other
                         let other_set: HashSet<String> =
                             other_seq.iter().map(|v| v.to_string()).collect();
-                        let mut result: Vec<Value> = other_seq.iter().collect();
-                        result.extend(base_seq.iter().filter(|v| !other_set.contains(&v.to_string())));
+                        let mut result = other_seq;
+                        result.extend(
+                            base_seq
+                                .into_iter()
+                                .filter(|v| !other_set.contains(&v.to_string())),
+                        );
                         Value::from(result)
                     }
                     "keep" => base,
@@ -203,7 +221,7 @@ fn union(list1: Value, list2: Value) -> Vec<Value> {
         for item in seq1.iter() {
             let key = item.to_string();
             if seen.insert(key) {
-                result.push(item);
+                result.push(item.clone());
             }
         }
     }
@@ -212,7 +230,7 @@ fn union(list1: Value, list2: Value) -> Vec<Value> {
         for item in seq2.iter() {
             let key = item.to_string();
             if seen.insert(key) {
-                result.push(item);
+                result.push(item.clone());
             }
         }
     }
@@ -245,6 +263,7 @@ fn difference(list1: Value, list2: Value) -> Vec<Value> {
         .map(|s| {
             s.iter()
                 .filter(|v| !set2.contains(&v.to_string()))
+                .cloned()
                 .collect()
         })
         .unwrap_or_default()
@@ -272,7 +291,12 @@ fn intersect(list1: Value, list2: Value) -> Vec<Value> {
 
     list1
         .as_seq()
-        .map(|s| s.iter().filter(|v| set2.contains(&v.to_string())).collect())
+        .map(|s| {
+            s.iter()
+                .filter(|v| set2.contains(&v.to_string()))
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -306,7 +330,7 @@ fn symmetric_difference(list1: Value, list2: Value) -> Vec<Value> {
     if let Some(seq1) = list1.as_seq() {
         for item in seq1.iter() {
             if !set2.contains(&item.to_string()) {
-                result.push(item);
+                result.push(item.clone());
             }
         }
     }
@@ -314,7 +338,7 @@ fn symmetric_difference(list1: Value, list2: Value) -> Vec<Value> {
     if let Some(seq2) = list2.as_seq() {
         for item in seq2.iter() {
             if !set1.contains(&item.to_string()) {
-                result.push(item);
+                result.push(item.clone());
             }
         }
     }
@@ -349,7 +373,7 @@ fn unique(list: Value, case_sensitive: Option<bool>) -> Vec<Value> {
                 item.to_string().to_lowercase()
             };
             if seen.insert(key) {
-                result.push(item);
+                result.push(item.clone());
             }
         }
     }
@@ -372,7 +396,12 @@ fn unique(list: Value, case_sensitive: Option<bool>) -> Vec<Value> {
 ///
 /// Compatible with Ansible's `flatten` filter.
 fn flatten(list: Value, levels: Option<i64>) -> Vec<Value> {
-    fn flatten_recursive(value: &Value, depth: i64, max_depth: Option<i64>, result: &mut Vec<Value>) {
+    fn flatten_recursive(
+        value: &Value,
+        depth: i64,
+        max_depth: Option<i64>,
+        result: &mut Vec<Value>,
+    ) {
         if let Some(max) = max_depth {
             if depth > max {
                 result.push(value.clone());
@@ -382,7 +411,7 @@ fn flatten(list: Value, levels: Option<i64>) -> Vec<Value> {
 
         if let Some(seq) = value.as_seq() {
             for item in seq.iter() {
-                flatten_recursive(&item, depth + 1, max_depth, result);
+                flatten_recursive(item, depth + 1, max_depth, result);
             }
         } else {
             result.push(value.clone());
@@ -416,7 +445,7 @@ fn zip_filter(list1: Value, list2: Value) -> Vec<Value> {
         (Some(s1), Some(s2)) => s1
             .iter()
             .zip(s2.iter())
-            .map(|(a, b)| Value::from(vec![a, b]))
+            .map(|(a, b)| Value::from(vec![a.clone(), b.clone()]))
             .collect(),
         _ => Vec::new(),
     }
@@ -436,14 +465,8 @@ fn zip_filter(list1: Value, list2: Value) -> Vec<Value> {
 fn zip_longest(list1: Value, list2: Value, fillvalue: Option<Value>) -> Vec<Value> {
     let fillvalue = fillvalue.unwrap_or(Value::from(()));
 
-    let seq1: Vec<Value> = list1
-        .as_seq()
-        .map(|s| s.iter().collect())
-        .unwrap_or_default();
-    let seq2: Vec<Value> = list2
-        .as_seq()
-        .map(|s| s.iter().collect())
-        .unwrap_or_default();
+    let seq1 = list1.as_seq().unwrap_or_default();
+    let seq2 = list2.as_seq().unwrap_or_default();
 
     let max_len = seq1.len().max(seq2.len());
     let mut result = Vec::new();
@@ -477,17 +500,13 @@ fn dict2items(dict: Value, key_name: Option<String>, value_name: Option<String>)
     let value_name = value_name.unwrap_or_else(|| "value".to_string());
 
     if let Some(obj) = dict.as_object() {
-        obj.iter()
-            .map(|(k, v)| {
-                Value::from_iter([
-                    (key_name.clone(), k),
-                    (value_name.clone(), v),
-                ])
-            })
-            .collect()
-    } else {
-        Vec::new()
+        if let Some(iter) = obj.try_iter_pairs() {
+            return iter
+                .map(|(k, v)| Value::from_iter([(key_name.clone(), k), (value_name.clone(), v)]))
+                .collect();
+        }
     }
+    Vec::new()
 }
 
 /// Convert list of key-value pairs to dictionary.
@@ -514,8 +533,8 @@ fn items2dict(list: Value, key_name: Option<String>, value_name: Option<String>)
         for item in seq.iter() {
             if let Some(obj) = item.as_object() {
                 if let (Some(k), Some(v)) = (
-                    obj.get(&Value::from(key_name.clone())),
-                    obj.get(&Value::from(value_name.clone())),
+                    obj.get_value(&Value::from(key_name.clone())),
+                    obj.get_value(&Value::from(value_name.clone())),
                 ) {
                     result.insert(k.to_string(), v);
                 }
@@ -547,10 +566,10 @@ fn subelements(list: Value, key: String) -> Vec<Value> {
     if let Some(seq) = list.as_seq() {
         for item in seq.iter() {
             if let Some(obj) = item.as_object() {
-                if let Some(sub) = obj.get(&Value::from(key.clone())) {
+                if let Some(sub) = obj.get_value(&Value::from(key.clone())) {
                     if let Some(sub_seq) = sub.as_seq() {
                         for sub_item in sub_seq.iter() {
-                            result.push(Value::from(vec![item.clone(), sub_item]));
+                            result.push(Value::from(vec![item.clone(), sub_item.clone()]));
                         }
                     }
                 }
@@ -581,13 +600,13 @@ fn groupby(list: Value, attr: String) -> Vec<Value> {
 
         for item in seq.iter() {
             let key = if let Some(obj) = item.as_object() {
-                obj.get(&Value::from(attr.clone()))
+                obj.get_value(&Value::from(attr.clone()))
                     .map(|v| v.to_string())
                     .unwrap_or_default()
             } else {
                 String::new()
             };
-            groups.entry(key).or_default().push(item);
+            groups.entry(key).or_default().push(item.clone());
         }
 
         groups
@@ -622,7 +641,7 @@ fn map_attribute(list: Value, attr: String, default: Option<Value>) -> Vec<Value
         seq.iter()
             .map(|item| {
                 if let Some(obj) = item.as_object() {
-                    obj.get(&Value::from(attr.clone()))
+                    obj.get_value(&Value::from(attr.clone()))
                         .unwrap_or_else(|| default.clone())
                 } else {
                     default.clone()
@@ -655,7 +674,7 @@ fn selectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
         seq.iter()
             .filter(|item| {
                 if let Some(obj) = item.as_object() {
-                    if let Some(attr_val) = obj.get(&Value::from(attr.clone())) {
+                    if let Some(attr_val) = obj.get_value(&Value::from(attr.clone())) {
                         apply_test(&attr_val, test.as_deref(), value.as_ref())
                     } else {
                         false
@@ -664,6 +683,7 @@ fn selectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
                     false
                 }
             })
+            .cloned()
             .collect()
     } else {
         Vec::new()
@@ -691,7 +711,7 @@ fn rejectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
         seq.iter()
             .filter(|item| {
                 if let Some(obj) = item.as_object() {
-                    if let Some(attr_val) = obj.get(&Value::from(attr.clone())) {
+                    if let Some(attr_val) = obj.get_value(&Value::from(attr.clone())) {
                         !apply_test(&attr_val, test.as_deref(), value.as_ref())
                     } else {
                         true
@@ -700,6 +720,7 @@ fn rejectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
                     true
                 }
             })
+            .cloned()
             .collect()
     } else {
         Vec::new()
@@ -708,17 +729,17 @@ fn rejectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
 
 fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool {
     match test {
-        Some("equalto") | Some("==") | Some("eq") => {
-            compare.map(|c| val.to_string() == c.to_string()).unwrap_or(false)
-        }
-        Some("ne") | Some("!=") => {
-            compare.map(|c| val.to_string() != c.to_string()).unwrap_or(true)
-        }
+        Some("equalto" | "==" | "eq") => compare
+            .map(|c| val.to_string() == c.to_string())
+            .unwrap_or(false),
+        Some("ne" | "!=") => compare
+            .map(|c| val.to_string() != c.to_string())
+            .unwrap_or(true),
         Some("defined") => !val.is_undefined(),
         Some("undefined") => val.is_undefined(),
-        Some("none") | Some("null") => val.is_none(),
-        Some("true") | Some("truthy") => val.is_true(),
-        Some("false") | Some("falsy") => !val.is_true(),
+        Some("none" | "null") => val.is_none(),
+        Some("true" | "truthy") => val.is_true(),
+        Some("false" | "falsy") => !val.is_true(),
         Some("in") => {
             if let Some(list) = compare.and_then(|c| c.as_seq()) {
                 list.iter().any(|item| item.to_string() == val.to_string())
@@ -728,9 +749,14 @@ fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool 
         }
         Some("contains") => {
             if let Some(seq) = val.as_seq() {
-                compare.map(|c| seq.iter().any(|item| item.to_string() == c.to_string())).unwrap_or(false)
+                compare
+                    .map(|c| seq.iter().any(|item| item.to_string() == c.to_string()))
+                    .unwrap_or(false)
             } else if let Some(s) = val.as_str() {
-                compare.and_then(|c| c.as_str()).map(|substr| s.contains(substr)).unwrap_or(false)
+                compare
+                    .and_then(|c| c.as_str())
+                    .map(|substr| s.contains(substr))
+                    .unwrap_or(false)
             } else {
                 false
             }
@@ -750,14 +776,8 @@ fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool 
 ///
 /// All combinations of elements from both lists.
 fn product(list1: Value, list2: Value) -> Vec<Value> {
-    let seq1: Vec<Value> = list1
-        .as_seq()
-        .map(|s| s.iter().collect())
-        .unwrap_or_default();
-    let seq2: Vec<Value> = list2
-        .as_seq()
-        .map(|s| s.iter().collect())
-        .unwrap_or_default();
+    let seq1 = list1.as_seq().unwrap_or_default();
+    let seq2 = list2.as_seq().unwrap_or_default();
 
     let mut result = Vec::new();
     for a in &seq1 {
@@ -783,7 +803,7 @@ fn batch(list: Value, size: i64, fill: Option<Value>) -> Vec<Value> {
     let size = size.max(1) as usize;
 
     if let Some(seq) = list.as_seq() {
-        let items: Vec<Value> = seq.iter().collect();
+        let items = seq;
         let mut result = Vec::new();
 
         for chunk in items.chunks(size) {
@@ -816,11 +836,15 @@ fn batch(list: Value, size: i64, fill: Option<Value>) -> Vec<Value> {
 /// The sliced portion of the list.
 fn slice_filter(list: Value, start: i64, end: Option<i64>, step: Option<i64>) -> Vec<Value> {
     if let Some(seq) = list.as_seq() {
-        let items: Vec<Value> = seq.iter().collect();
+        let items = seq;
         let len = items.len() as i64;
 
         // Handle negative indices
-        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
+        let start = if start < 0 {
+            (len + start).max(0)
+        } else {
+            start.min(len)
+        } as usize;
         let end = end
             .map(|e| if e < 0 { (len + e).max(0) } else { e.min(len) } as usize)
             .unwrap_or(len as usize);
@@ -907,10 +931,7 @@ mod tests {
         let nested = Value::from(vec![
             Value::from(1),
             Value::from(vec![Value::from(2), Value::from(3)]),
-            Value::from(vec![
-                Value::from(4),
-                Value::from(vec![Value::from(5)]),
-            ]),
+            Value::from(vec![Value::from(4), Value::from(vec![Value::from(5)])]),
         ]);
 
         let result = flatten(nested, None);

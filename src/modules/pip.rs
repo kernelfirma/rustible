@@ -36,6 +36,14 @@ impl PipState {
     }
 }
 
+impl std::str::FromStr for PipState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PipState::from_str(s)
+    }
+}
+
 /// Configuration for pip operations
 #[derive(Debug, Clone)]
 struct PipConfig {
@@ -97,10 +105,8 @@ impl PipConfig {
                         ModuleError::InvalidParameter(format!("Invalid umask: {}", s))
                     })?,
                 )
-            } else if let Some(n) = umask_val.as_u64() {
-                Some(n as u32)
             } else {
-                None
+                umask_val.as_u64().map(|n| n as u32)
             }
         } else {
             None

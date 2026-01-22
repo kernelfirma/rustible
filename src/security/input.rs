@@ -139,15 +139,16 @@ impl InputValidator {
 
 /// Sanitize a string for safe use as a shell argument.
 ///
-/// This function wraps the input in single quotes and escapes any
-/// embedded single quotes, making it safe to pass to shell commands.
+/// This function wraps the input in single quotes when needed and escapes any
+/// embedded single quotes, making it safe to pass to shell commands. Inputs
+/// that only contain safe characters are returned as-is.
 ///
 /// # Examples
 ///
 /// ```
 /// use rustible::security::sanitize_shell_arg;
 ///
-/// assert_eq!(sanitize_shell_arg("hello"), "'hello'");
+/// assert_eq!(sanitize_shell_arg("hello"), "hello");
 /// assert_eq!(sanitize_shell_arg("it's"), "'it'\\''s'");
 /// assert_eq!(sanitize_shell_arg("$(whoami)"), "'$(whoami)'");
 /// ```
@@ -274,7 +275,9 @@ pub fn validate_hostname(host: &str) -> SecurityResult<()> {
 /// ```
 pub fn validate_url(url: &str) -> SecurityResult<()> {
     if url.is_empty() {
-        return Err(SecurityError::InvalidInput("URL cannot be empty".to_string()));
+        return Err(SecurityError::InvalidInput(
+            "URL cannot be empty".to_string(),
+        ));
     }
 
     if url.len() > 2048 {
@@ -311,7 +314,9 @@ pub fn validate_url(url: &str) -> SecurityResult<()> {
     }
 
     // Basic URL structure validation
-    let allowed_schemes = ["http://", "https://", "git://", "ssh://", "ftp://", "sftp://"];
+    let allowed_schemes = [
+        "http://", "https://", "git://", "ssh://", "ftp://", "sftp://",
+    ];
     let has_valid_scheme = allowed_schemes.iter().any(|s| lower_url.starts_with(s));
 
     if !has_valid_scheme {

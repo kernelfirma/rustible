@@ -82,7 +82,7 @@ impl TagExpression {
         // Handle parentheses
         if input.starts_with('(') && input.ends_with(')') {
             // Check if these are matching parens
-            let inner = &input[1..input.len()-1];
+            let inner = &input[1..input.len() - 1];
             let mut depth = 0;
             let mut all_inner = true;
             for ch in inner.chars() {
@@ -103,14 +103,7 @@ impl TagExpression {
             }
         }
 
-        // Split by OR (lowest precedence) - comma
-        let or_parts = Self::split_by_operator(input, ',');
-        if or_parts.len() > 1 {
-            let exprs: Result<Vec<_>, _> = or_parts.iter().map(|s| Self::parse(s)).collect();
-            return Ok(TagExpression::Or(exprs?));
-        }
-
-        // Split by AND (higher precedence) - & or +
+        // Split by AND (lowest precedence) - & or +
         let and_parts = Self::split_by_operator(input, '&');
         if and_parts.len() > 1 {
             let exprs: Result<Vec<_>, _> = and_parts.iter().map(|s| Self::parse(s)).collect();
@@ -122,6 +115,13 @@ impl TagExpression {
         if and_parts.len() > 1 {
             let exprs: Result<Vec<_>, _> = and_parts.iter().map(|s| Self::parse(s)).collect();
             return Ok(TagExpression::And(exprs?));
+        }
+
+        // Split by OR (higher precedence) - comma
+        let or_parts = Self::split_by_operator(input, ',');
+        if or_parts.len() > 1 {
+            let exprs: Result<Vec<_>, _> = or_parts.iter().map(|s| Self::parse(s)).collect();
+            return Ok(TagExpression::Or(exprs?));
         }
 
         // Handle NOT - ! or not: prefix
@@ -183,7 +183,9 @@ impl TagExpression {
                     "all" => true,
                     "tagged" => !task_tags.is_empty(),
                     "untagged" => task_tags.is_empty(),
-                    _ => task_tags.iter().any(|t| t.as_ref().eq_ignore_ascii_case(tag)),
+                    _ => task_tags
+                        .iter()
+                        .any(|t| t.as_ref().eq_ignore_ascii_case(tag)),
                 }
             }
             TagExpression::Not(inner) => !inner.matches(task_tags),
@@ -289,7 +291,7 @@ mod tests {
         assert!(matches!(expr, TagExpression::Not(_)));
 
         assert!(expr.matches(&["deploy"]));
-        assert!(expr.matches(&[]));
+        assert!(expr.matches(&[] as &[&str]));
         assert!(!expr.matches(&["debug"]));
     }
 
@@ -330,7 +332,7 @@ mod tests {
         let expr = TagExpression::parse("all").unwrap();
 
         assert!(expr.matches(&["deploy"]));
-        assert!(expr.matches(&[]));
+        assert!(expr.matches(&[] as &[&str]));
         assert!(expr.matches(&["anything", "else"]));
     }
 
@@ -340,14 +342,14 @@ mod tests {
 
         assert!(expr.matches(&["deploy"]));
         assert!(expr.matches(&["any", "tags"]));
-        assert!(!expr.matches(&[]));
+        assert!(!expr.matches(&[] as &[&str]));
     }
 
     #[test]
     fn test_special_tag_untagged() {
         let expr = TagExpression::parse("untagged").unwrap();
 
-        assert!(expr.matches(&[]));
+        assert!(expr.matches(&[] as &[&str]));
         assert!(!expr.matches(&["deploy"]));
     }
 
@@ -425,7 +427,9 @@ mod tests {
 
     #[test]
     fn test_parse_tag_args_multiple() {
-        let result = parse_tag_args(&["deploy".to_string(), "web".to_string()]).unwrap().unwrap();
+        let result = parse_tag_args(&["deploy".to_string(), "web".to_string()])
+            .unwrap()
+            .unwrap();
         assert!(matches!(result, TagExpression::Or(_)));
         assert!(result.matches(&["deploy"]));
         assert!(result.matches(&["web"]));

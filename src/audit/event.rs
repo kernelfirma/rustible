@@ -11,8 +11,10 @@ use std::time::SystemTime;
 /// Severity level for audit events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AuditSeverity {
     /// Informational events (routine operations)
+    #[default]
     Info,
     /// Warning events (potential issues)
     Warning,
@@ -30,12 +32,6 @@ impl fmt::Display for AuditSeverity {
             AuditSeverity::Error => write!(f, "ERROR"),
             AuditSeverity::Critical => write!(f, "CRITICAL"),
         }
-    }
-}
-
-impl Default for AuditSeverity {
-    fn default() -> Self {
-        AuditSeverity::Info
     }
 }
 
@@ -85,6 +81,7 @@ impl fmt::Display for AuditCategory {
 /// Outcome of an audited operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AuditOutcome {
     /// Operation completed successfully
     Success,
@@ -95,6 +92,7 @@ pub enum AuditOutcome {
     /// Operation was skipped
     Skipped,
     /// Operation outcome is unknown
+    #[default]
     Unknown,
 }
 
@@ -107,12 +105,6 @@ impl fmt::Display for AuditOutcome {
             AuditOutcome::Skipped => write!(f, "SKIPPED"),
             AuditOutcome::Unknown => write!(f, "UNKNOWN"),
         }
-    }
-}
-
-impl Default for AuditOutcome {
-    fn default() -> Self {
-        AuditOutcome::Unknown
     }
 }
 
@@ -255,11 +247,7 @@ impl AuditEvent {
     pub fn package_management(packages: &[String], action: &str) -> Self {
         Self::new(
             AuditCategory::PackageManagement,
-            format!(
-                "Package {}: {}",
-                action,
-                packages.join(", ")
-            ),
+            format!("Package {}: {}", action, packages.join(", ")),
         )
     }
 
@@ -375,7 +363,9 @@ impl AuditEvent {
             module,
             self.outcome,
             if self.privileged { "PRIVILEGED" } else { "" }
-        ).trim_end().to_string()
+        )
+        .trim_end()
+        .to_string()
     }
 }
 
@@ -495,6 +485,7 @@ mod system_time_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
 
     #[test]
     fn test_command_execution_event() {
@@ -521,8 +512,8 @@ mod tests {
 
     #[test]
     fn test_privilege_escalation_event() {
-        let event = AuditEvent::privilege_escalation("sudo", Some("root".to_string()))
-            .with_host("server1");
+        let event =
+            AuditEvent::privilege_escalation("sudo", Some("root".to_string())).with_host("server1");
 
         assert_eq!(event.category, AuditCategory::PrivilegeEscalation);
         assert_eq!(event.severity, AuditSeverity::Critical);
@@ -550,9 +541,56 @@ mod tests {
             .with_metadata("size", serde_json::json!(1024));
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("FILE_MODIFICATION"));
+        assert!(json.contains("\"category\":\"file_modification\""));
 
         let deserialized: AuditEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.category, AuditCategory::FileModification);
+    }
+
+    #[test]
+    fn test_truncate_string() {
+        let short = "short";
+        assert_eq!(truncate_string(short, 10), "short");
+
+        let long = "abcdefghijklmnopqrstuvwxyz";
+        assert_eq!(truncate_string(long, 10), "abcdefg...");
+    }
+
+    #[test]
+    fn test_format_timestamp_epoch() {
+        let formatted = format_timestamp(&UNIX_EPOCH);
+        assert_eq!(formatted, "1970-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_format_timestamp_offset() {
+        let time = UNIX_EPOCH + Duration::from_secs(3661);
+        let formatted = format_timestamp(&time);
+        assert!(formatted.contains("T01:01:01.000Z"));
+    }
+
+    #[test]
+    fn test_days_to_ymd_basic() {
+        assert_eq!(days_to_ymd(0), (1970, 1, 1));
+        assert_eq!(days_to_ymd(365), (1971, 1, 1));
+    }
+
+    #[test]
+    fn test_is_leap_year_rules() {
+        assert!(is_leap_year(2000));
+        assert!(!is_leap_year(1900));
+        assert!(is_leap_year(2024));
+    }
+
+    #[test]
+    fn test_log_line_privileged_marker() {
+        let event = AuditEvent::command_execution("echo hello")
+            .with_host("server1")
+            .with_module("command")
+            .with_privilege("sudo", Some("root".to_string()))
+            .success();
+
+        let line = event.to_log_line();
+        assert!(line.contains("PRIVILEGED"));
     }
 }

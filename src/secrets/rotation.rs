@@ -418,8 +418,8 @@ impl SecretRotator {
         let metadata = secret.metadata();
 
         if let Some(updated_time) = metadata.updated_time {
-            let last_rotation = chrono::DateTime::from_timestamp(updated_time, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
+            let last_rotation =
+                chrono::DateTime::from_timestamp(updated_time, 0).unwrap_or_else(chrono::Utc::now);
             let age = chrono::Utc::now().signed_duration_since(last_rotation);
             let threshold = chrono::Duration::from_std(policy.interval)
                 .unwrap_or_else(|_| chrono::Duration::days(30));
@@ -637,7 +637,9 @@ mod tests {
         if let SecretValue::String(t) = token {
             assert!(!t.is_empty());
             // Should be URL-safe base64
-            assert!(t.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+            assert!(t
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
         } else {
             panic!("Expected string value");
         }
@@ -670,15 +672,14 @@ mod tests {
 
     #[test]
     fn test_rotation_config_builder() {
-        let config = RotationConfig::auto(Duration::from_secs(3600))
-            .with_policy(
-                "secret/database/*",
-                RotationPolicy {
-                    interval: Duration::from_secs(86400),
-                    secret_type: SecretType::DatabaseCredentials,
-                    ..Default::default()
-                },
-            );
+        let config = RotationConfig::auto(Duration::from_secs(3600)).with_policy(
+            "secret/database/*",
+            RotationPolicy {
+                interval: Duration::from_secs(86400),
+                secret_type: SecretType::DatabaseCredentials,
+                ..Default::default()
+            },
+        );
 
         assert!(config.enabled);
         assert!(config.policies.contains_key("secret/database/*"));

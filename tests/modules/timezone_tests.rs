@@ -166,12 +166,12 @@ fn test_timezone_with_underscores() {
         "America/Los_Angeles",
         "America/Sao_Paulo",
         "America/Argentina/Buenos_Aires",
-        "America/Indiana/Indianapolis",
+        "America/North_Dakota/Center",
     ];
 
     for tz in timezones_with_underscores {
         assert!(
-            tz.contains('_'),
+            tz.split('/').any(|segment| segment.contains('_')),
             "Timezone '{}' should contain underscore",
             tz
         );

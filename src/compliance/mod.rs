@@ -17,17 +17,22 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
-//! use rustible::compliance::{ComplianceScanner, CisScanner, ComplianceContext};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::compliance::{ComplianceContext, ComplianceScanner, CisScanner};
+//! # let connection = std::sync::Arc::new(rustible::connection::local::LocalConnection::new());
 //!
 //! let scanner = CisScanner::new();
 //! let context = ComplianceContext::new(connection);
-//! let report = scanner.scan(&context).await?;
+//! let findings = scanner.scan(&context).await?;
 //!
-//! println!("Compliance Score: {:.1}%", report.compliance_score());
-//! for finding in report.findings() {
+//! println!("Findings: {}", findings.len());
+//! for finding in &findings {
 //!     println!("{}: {}", finding.severity, finding.description);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod checks;
@@ -45,7 +50,9 @@ use std::sync::Arc;
 use thiserror::Error;
 
 // Re-export main types
-pub use checks::{CheckCategory, CheckResult, ComplianceCheck, FileCheck, ServiceCheck, SysctlCheck};
+pub use checks::{
+    CheckCategory, CheckResult, ComplianceCheck, FileCheck, ServiceCheck, SysctlCheck,
+};
 pub use cis::CisScanner;
 pub use pci_dss::PciDssScanner;
 pub use report::{ComplianceReport, ComplianceReportBuilder, ReportFormat};
@@ -125,10 +132,10 @@ impl Severity {
     /// Returns the color code for terminal output
     pub fn color_code(&self) -> &'static str {
         match self {
-            Severity::Info => "\x1b[36m",    // Cyan
-            Severity::Low => "\x1b[32m",     // Green
-            Severity::Medium => "\x1b[33m",  // Yellow
-            Severity::High => "\x1b[91m",    // Light Red
+            Severity::Info => "\x1b[36m",     // Cyan
+            Severity::Low => "\x1b[32m",      // Green
+            Severity::Medium => "\x1b[33m",   // Yellow
+            Severity::High => "\x1b[91m",     // Light Red
             Severity::Critical => "\x1b[31m", // Red
         }
     }
@@ -390,11 +397,7 @@ impl ComplianceContext {
         self.facts
             .get("os_family")
             .and_then(|v| v.as_str())
-            .or_else(|| {
-                self.facts
-                    .get("ansible_os_family")
-                    .and_then(|v| v.as_str())
-            })
+            .or_else(|| self.facts.get("ansible_os_family").and_then(|v| v.as_str()))
     }
 
     /// Get the distribution name from facts
@@ -587,7 +590,10 @@ impl ScannerRegistry {
     }
 
     /// Run all registered scanners
-    pub async fn scan_all(&self, context: &ComplianceContext) -> ComplianceResult<ComplianceReport> {
+    pub async fn scan_all(
+        &self,
+        context: &ComplianceContext,
+    ) -> ComplianceResult<ComplianceReport> {
         let mut builder = ComplianceReportBuilder::new();
 
         for (framework, scanner) in &self.scanners {

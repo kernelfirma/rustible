@@ -927,12 +927,17 @@ fn zipmap_filter(keys: Value, values: Value) -> Result<Value, MiniJinjaError> {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use minijinja::Environment;
 /// use rustible::provisioning::template_functions::register_infrastructure_functions;
 ///
 /// let mut env = Environment::new();
 /// register_infrastructure_functions(&mut env);
+/// # Ok(())
+/// # }
 /// ```
 pub fn register_infrastructure_functions(env: &mut Environment<'static>) {
     // Register functions

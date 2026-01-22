@@ -9,8 +9,11 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::recovery::checkpoint::{CheckpointStore, CheckpointConfig, PlaybookState};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::recovery::checkpoint::{Checkpoint, CheckpointConfig, CheckpointStore, PlaybookState};
 //!
 //! // Configure checkpointing
 //! let config = CheckpointConfig {
@@ -20,7 +23,7 @@
 //!     ..Default::default()
 //! };
 //!
-//! let store = CheckpointStore::new(config);
+//! let mut store = CheckpointStore::new(config);
 //!
 //! // Create checkpoint
 //! let state = PlaybookState::new("deploy.yml");
@@ -28,6 +31,8 @@
 //!
 //! // Resume later
 //! let checkpoint = store.load(&id)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

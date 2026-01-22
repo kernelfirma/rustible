@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Property-based fuzz tests for the Rustible callback system.
 //!
 //! These tests use proptest to generate random inputs and verify that the callback

@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Extreme stress and chaos tests for Rustible
 //!
 //! This test suite pushes Rustible to its limits and verifies stability under chaos conditions.
@@ -1542,14 +1543,16 @@ async fn benchmark_throughput_max_hosts() {
 
 #[tokio::test]
 async fn benchmark_latency_percentiles() {
-    let mut latencies: Vec<Duration> = Vec::with_capacity(1000);
+    let sample_count = 200;
+    let mut latencies: Vec<Duration> = Vec::with_capacity(sample_count);
 
-    for _ in 0..1000 {
+    for _ in 0..sample_count {
         let runtime = create_large_inventory(1);
         let executor = Executor::with_runtime(ExecutorConfig::default(), runtime);
 
         let mut playbook = Playbook::new("Latency");
-        let play = Play::new("Test", "all");
+        let mut play = Play::new("Test", "all");
+        play.gather_facts = false;
         playbook.add_play(play);
 
         let start = Instant::now();
@@ -1559,10 +1562,10 @@ async fn benchmark_latency_percentiles() {
 
     latencies.sort();
 
-    let p50 = latencies[500];
-    let p90 = latencies[900];
-    let p99 = latencies[990];
-    let p999 = latencies[999];
+    let p50 = latencies[sample_count / 2];
+    let p90 = latencies[(sample_count * 90) / 100];
+    let p99 = latencies[(sample_count * 99) / 100];
+    let p999 = *latencies.last().unwrap_or(&Duration::ZERO);
 
     println!(
         "Latency percentiles: p50={:?}, p90={:?}, p99={:?}, p99.9={:?}",

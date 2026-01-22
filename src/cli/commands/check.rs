@@ -35,6 +35,10 @@ pub struct CheckArgs {
     #[arg(long)]
     pub vault_password_file: Option<PathBuf>,
 
+    /// Ask for SSH password
+    #[arg(short = 'k', long = "ask-pass")]
+    pub ask_pass: bool,
+
     /// Become (sudo/su)
     #[arg(short = 'b', long)]
     pub r#become: bool,
@@ -72,6 +76,7 @@ impl CheckArgs {
             step: false,
             ask_vault_pass: self.ask_vault_pass,
             vault_password_file: self.vault_password_file.clone(),
+            ask_pass: self.ask_pass,
             r#become: self.r#become,
             become_method: self.r#become_method.clone(),
             become_user: self.r#become_user.clone(),

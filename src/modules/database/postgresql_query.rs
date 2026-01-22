@@ -70,11 +70,11 @@ impl QueryConfig {
         // Parse named_args from JSON object
         let named_args = if let Some(serde_json::Value::Object(obj)) = params.get("named_args") {
             obj.iter()
-                .filter_map(|(k, v)| {
+                .map(|(k, v)| {
                     if let serde_json::Value::String(s) = v {
-                        Some((k.clone(), s.clone()))
+                        (k.clone(), s.clone())
                     } else {
-                        Some((k.clone(), v.to_string()))
+                        (k.clone(), v.to_string())
                     }
                 })
                 .collect()
@@ -154,6 +154,9 @@ impl PostgresqlQueryModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         options
@@ -228,10 +231,7 @@ impl PostgresqlQueryModule {
         processed_sql = Self::substitute_named_args(&processed_sql, &config.named_args);
 
         // Build psql command
-        let mut psql_opts = Vec::new();
-
-        // Connection options
-        psql_opts.push(config.conn.build_psql_args(&config.db));
+        let mut psql_opts = vec![config.conn.build_psql_args(&config.db)];
 
         // Output formatting for machine parsing
         psql_opts.push("-t".to_string()); // Tuples only
@@ -365,13 +365,12 @@ impl PostgresqlQueryModule {
                     config.db
                 ))
                 .with_data("query", serde_json::json!(sql)));
-            } else {
-                return Ok(ModuleOutput::changed(format!(
-                    "Would execute script '{}' on database '{}'",
-                    config.path_to_script.as_deref().unwrap_or(""),
-                    config.db
-                )));
             }
+            return Ok(ModuleOutput::changed(format!(
+                "Would execute script '{}' on database '{}'",
+                config.path_to_script.as_deref().unwrap_or(""),
+                config.db
+            )));
         }
 
         // Execute query or script

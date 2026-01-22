@@ -177,6 +177,14 @@ impl PackageManager {
     }
 }
 
+impl std::str::FromStr for PackageManager {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PackageManager::from_str(s)
+    }
+}
+
 /// Desired state for a package
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageState {
@@ -196,6 +204,14 @@ impl PackageState {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for PackageState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PackageState::from_str(s)
     }
 }
 

@@ -80,7 +80,10 @@ impl SpanExt for Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::telemetry::spans::create_playbook_span;
 /// use tracing::Instrument;
 ///
@@ -93,6 +96,8 @@ impl SpanExt for Span {
 ///     .instrument(span)
 ///     .await;
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub fn create_playbook_span(name: &str, path: Option<&str>) -> Span {
     info_span!(
@@ -129,20 +134,26 @@ pub fn create_play_span(name: &str, hosts_pattern: &str) -> Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::telemetry::spans::create_task_span;
 /// use tracing::Instrument;
 ///
 /// async fn execute_task(name: &str, module: &str, host: &str) {
 ///     let span = create_task_span(name, module, host);
+///     let span_for_record = span.clone();
 ///
-///     async {
+///     async move {
 ///         // Task execution logic
-///         span.record("status", "ok");
+///         span_for_record.record("status", "ok");
 ///     }
 ///     .instrument(span)
 ///     .await;
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub fn create_task_span(name: &str, module: &str, host: &str) -> Span {
     info_span!(
@@ -181,7 +192,10 @@ pub fn create_module_span(module: &str, host: &str) -> Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::telemetry::spans::create_connection_span;
 /// use tracing::Instrument;
 ///
@@ -194,6 +208,8 @@ pub fn create_module_span(module: &str, host: &str) -> Span {
 ///     .instrument(span)
 ///     .await;
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub fn create_connection_span(host: &str, port: u16, connection_type: &str) -> Span {
     info_span!(
@@ -430,21 +446,32 @@ pub fn create_remote_span(local_span: &Span, remote_host: &str, operation: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Once;
+
+    fn init_tracing() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        });
+    }
 
     #[test]
     fn test_create_playbook_span() {
+        init_tracing();
         let span = create_playbook_span("test-playbook", Some("/path/to/playbook.yml"));
         assert!(!span.is_disabled());
     }
 
     #[test]
     fn test_create_task_span() {
+        init_tracing();
         let span = create_task_span("Install nginx", "apt", "web-server");
         assert!(!span.is_disabled());
     }
 
     #[test]
     fn test_create_connection_span() {
+        init_tracing();
         let span = create_connection_span("192.168.1.1", 22, "ssh");
         assert!(!span.is_disabled());
     }
@@ -463,6 +490,7 @@ mod tests {
 
     #[test]
     fn test_file_transfer_span() {
+        init_tracing();
         let span = create_file_transfer_span(
             "server1",
             "/local/file.txt",

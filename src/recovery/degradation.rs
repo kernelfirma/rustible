@@ -8,17 +8,39 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::recovery::degradation::{CircuitBreaker, CircuitBreakerConfig, GracefulDegradation};
+//! # async fn connect_to_host() -> std::io::Result<()> { Ok(()) }
+//! # fn use_connection(_conn: ()) {}
+//! # fn use_fallback() {}
+//! # fn handle_error(_err: std::io::Error) {}
 //!
 //! let breaker = CircuitBreaker::new("ssh-connection", CircuitBreakerConfig::default());
 //!
 //! // Execute with circuit breaker protection
-//! match breaker.call(|| connect_to_host()).await {
-//!     Ok(conn) => use_connection(conn),
-//!     Err(e) if breaker.is_open() => use_fallback(),
-//!     Err(e) => handle_error(e),
+//! if breaker.allow_request().await {
+//!     match connect_to_host().await {
+//!         Ok(conn) => {
+//!             breaker.record_success().await;
+//!             use_connection(conn);
+//!         }
+//!         Err(e) => {
+//!             breaker.record_failure().await;
+//!             if breaker.is_open().await {
+//!                 use_fallback();
+//!             } else {
+//!                 handle_error(e);
+//!             }
+//!         }
+//!     }
+//! } else {
+//!     use_fallback();
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -32,8 +54,10 @@ use tracing::{debug, info, warn};
 /// Level of degradation for the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DegradationLevel {
     /// Normal operation, all features available
+    #[default]
     Normal,
     /// Minor degradation, non-critical features may be limited
     Minor,
@@ -45,28 +69,18 @@ pub enum DegradationLevel {
     Critical,
 }
 
-impl Default for DegradationLevel {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
 /// State of a circuit breaker
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CircuitState {
     /// Circuit is closed, requests flow normally
+    #[default]
     Closed,
     /// Circuit is open, requests are rejected immediately
     Open,
     /// Circuit is half-open, testing if service recovered
     HalfOpen,
-}
-
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 /// Configuration for circuit breaker
@@ -498,6 +512,7 @@ mod tests {
         assert!(!breaker.allow_request().await);
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_circuit_breaker_half_open() {
         let config = CircuitBreakerConfig {

@@ -21,6 +21,7 @@
 //! ```
 
 use minijinja::{Environment, Value};
+use serde::Deserialize;
 
 /// Register all serialization filters with the given environment.
 pub fn register_filters(env: &mut Environment<'static>) {
@@ -80,7 +81,8 @@ fn to_nice_json(value: Value, indent: Option<usize>) -> String {
 /// Format JSON with custom indentation.
 fn format_json_with_indent(value: &serde_json::Value, indent: usize) -> String {
     let mut buf = Vec::new();
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(&" ".repeat(indent).into_bytes());
+    let indent_bytes = " ".repeat(indent).into_bytes();
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     if serde::Serialize::serialize(value, &mut ser).is_ok() {
         String::from_utf8(buf).unwrap_or_else(|_| "null".to_string())
@@ -161,7 +163,7 @@ fn to_nice_yaml(value: Value, indent: Option<usize>, _width: Option<usize>) -> S
 /// Compatible with Ansible's `from_yaml` filter.
 fn from_yaml(input: String) -> Value {
     serde_yaml::from_str::<serde_yaml::Value>(&input)
-        .map(yaml_to_minijinja_value)
+        .map(|value| yaml_to_minijinja_value(&value))
         .unwrap_or(Value::UNDEFINED)
 }
 
@@ -203,9 +205,11 @@ fn json_to_minijinja_value(json: serde_json::Value) -> Value {
             }
         }
         serde_json::Value::String(s) => Value::from(s),
-        serde_json::Value::Array(arr) => {
-            Value::from(arr.into_iter().map(json_to_minijinja_value).collect::<Vec<_>>())
-        }
+        serde_json::Value::Array(arr) => Value::from(
+            arr.into_iter()
+                .map(json_to_minijinja_value)
+                .collect::<Vec<_>>(),
+        ),
         serde_json::Value::Object(obj) => {
             let items: Vec<(String, Value)> = obj
                 .into_iter()

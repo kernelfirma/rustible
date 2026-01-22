@@ -77,17 +77,23 @@ impl AwsSecretsManagerBackend {
     ) -> SecretResult<R> {
         // In a production implementation, this would use AWS SigV4 signing
         // For now, we'll use environment credentials if available
-        let access_key = self.config.access_key_id.clone().or_else(|| {
-            std::env::var("AWS_ACCESS_KEY_ID").ok()
-        });
+        let access_key = self
+            .config
+            .access_key_id
+            .clone()
+            .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok());
 
-        let secret_key = self.config.secret_access_key.clone().or_else(|| {
-            std::env::var("AWS_SECRET_ACCESS_KEY").ok()
-        });
+        let secret_key = self
+            .config
+            .secret_access_key
+            .clone()
+            .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok());
 
-        let session_token = self.config.session_token.clone().or_else(|| {
-            std::env::var("AWS_SESSION_TOKEN").ok()
-        });
+        let session_token = self
+            .config
+            .session_token
+            .clone()
+            .or_else(|| std::env::var("AWS_SESSION_TOKEN").ok());
 
         // Build the request
         let body = serde_json::to_string(payload)?;
@@ -102,8 +108,10 @@ impl AwsSecretsManagerBackend {
         if let (Some(access_key), Some(secret_key)) = (&access_key, &secret_key) {
             // In production, use proper AWS SigV4 signing
             // This is a placeholder that shows the concept
-            request = request
-                .header("X-Amz-Date", chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string());
+            request = request.header(
+                "X-Amz-Date",
+                chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string(),
+            );
 
             if let Some(token) = &session_token {
                 request = request.header("X-Amz-Security-Token", token);
@@ -149,12 +157,10 @@ impl AwsSecretsManagerBackend {
                 "LimitExceededException" | "RequestLimitExceeded" => {
                     SecretError::RateLimited(error.message.unwrap_or_default())
                 }
-                "EncryptionFailure" | "DecryptionFailure" => {
-                    SecretError::Backend {
-                        message: error.message.unwrap_or_default(),
-                        status_code: Some(status.as_u16()),
-                    }
-                }
+                "EncryptionFailure" | "DecryptionFailure" => SecretError::Backend {
+                    message: error.message.unwrap_or_default(),
+                    status_code: Some(status.as_u16()),
+                },
                 _ => SecretError::Backend {
                     message: format!("{}: {}", error_type, error.message.unwrap_or_default()),
                     status_code: Some(status.as_u16()),
@@ -338,7 +344,9 @@ impl AwsSecretsManagerBackend {
             data.insert("value".to_string(), SecretValue::Binary(secret_binary));
             data
         } else {
-            return Err(SecretError::InvalidFormat("No secret data in response".into()));
+            return Err(SecretError::InvalidFormat(
+                "No secret data in response".into(),
+            ));
         };
 
         let mut metadata = SecretMetadata::default();

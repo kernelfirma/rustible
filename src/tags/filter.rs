@@ -86,7 +86,10 @@ impl TagFilter {
         let task_tag_strs: Vec<&str> = task_tags.iter().map(|s| s.as_str()).collect();
 
         // Handle 'always' tag - runs unless explicitly skipped
-        if task_tags.iter().any(|t| t.eq_ignore_ascii_case(special::ALWAYS)) {
+        if task_tags
+            .iter()
+            .any(|t| t.eq_ignore_ascii_case(special::ALWAYS))
+        {
             // Check if 'always' is explicitly in skip_tags
             if let Some(ref skip_expr) = self.skip_tags {
                 let always_explicitly_skipped = matches!(
@@ -106,10 +109,14 @@ impl TagFilter {
         }
 
         // Handle 'never' tag - never runs unless explicitly included
-        if task_tags.iter().any(|t| t.eq_ignore_ascii_case(special::NEVER)) {
+        if task_tags
+            .iter()
+            .any(|t| t.eq_ignore_ascii_case(special::NEVER))
+        {
             // Check if 'never' is explicitly in include_tags
             if let Some(ref include_expr) = self.include_tags {
-                let never_explicitly_included = self.expression_contains_tag(include_expr, special::NEVER);
+                let never_explicitly_included =
+                    self.expression_contains_tag(include_expr, special::NEVER);
                 if !never_explicitly_included {
                     return false;
                 }
@@ -133,12 +140,14 @@ impl TagFilter {
         // Check if include_tags match
         if let Some(ref include_expr) = self.include_tags {
             // Handle 'untagged' special case
-            if self.expression_contains_tag(include_expr, special::UNTAGGED) && task_tags.is_empty() {
+            if self.expression_contains_tag(include_expr, special::UNTAGGED) && task_tags.is_empty()
+            {
                 return true;
             }
 
             // Handle 'tagged' special case
-            if self.expression_contains_tag(include_expr, special::TAGGED) && !task_tags.is_empty() {
+            if self.expression_contains_tag(include_expr, special::TAGGED) && !task_tags.is_empty()
+            {
                 return true;
             }
 
@@ -301,10 +310,7 @@ mod tests {
 
     #[test]
     fn test_multiple_include_tags() {
-        let filter = TagFilter::new().with_tags(vec![
-            "deploy".to_string(),
-            "web".to_string(),
-        ]);
+        let filter = TagFilter::new().with_tags(vec!["deploy".to_string(), "web".to_string()]);
 
         assert!(filter.should_run(&["deploy".to_string()]));
         assert!(filter.should_run(&["web".to_string()]));
