@@ -60,6 +60,157 @@ use crate::provisioning::traits::{ChangeType, ResourceDiff};
 use super::dependency::{DependencyError, DependencyGraph, DependencyKind, DependencyNode};
 
 // ============================================================================
+// State Comparison
+// ============================================================================
+
+/// Result of comparing desired state against actual (current) state.
+///
+/// This struct encapsulates the full comparison between what the configuration
+/// declares and what exists in the provisioning state, enabling Terraform-like
+/// plan output with real diffs from providers.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StateComparison {
+    /// Resources that will be created (exist in desired but not in current state)
+    pub to_create: Vec<String>,
+
+    /// Resources that will be updated (exist in both but differ)
+    pub to_update: Vec<String>,
+
+    /// Resources that will be replaced (require destroy + create)
+    pub to_replace: Vec<String>,
+
+    /// Resources that will be deleted (exist in current state but not in desired)
+    pub to_delete: Vec<String>,
+
+    /// Resources that are unchanged
+    pub unchanged: Vec<String>,
+
+    /// Detailed plans for each resource
+    pub plans: Vec<ResourcePlan>,
+
+    /// Summary statistics
+    pub summary: ComparisonSummary,
+}
+
+/// Summary statistics for a state comparison
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ComparisonSummary {
+    /// Total resources in desired state
+    pub total_desired: usize,
+
+    /// Total resources in current state
+    pub total_current: usize,
+
+    /// Number of resources to create
+    pub create_count: usize,
+
+    /// Number of resources to update
+    pub update_count: usize,
+
+    /// Number of resources to replace
+    pub replace_count: usize,
+
+    /// Number of resources to delete
+    pub delete_count: usize,
+
+    /// Number of unchanged resources
+    pub unchanged_count: usize,
+}
+
+impl StateComparison {
+    /// Creates a new empty state comparison
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns true if there are any changes required
+    pub fn has_changes(&self) -> bool {
+        !self.to_create.is_empty()
+            || !self.to_update.is_empty()
+            || !self.to_replace.is_empty()
+            || !self.to_delete.is_empty()
+    }
+
+    /// Returns the total number of changes
+    pub fn change_count(&self) -> usize {
+        self.to_create.len() + self.to_update.len() + self.to_replace.len() + self.to_delete.len()
+    }
+
+    /// Formats the comparison as a human-readable plan output
+    pub fn format_plan(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("\nResource Graph Plan:\n");
+        output.push_str("====================\n\n");
+
+        if !self.has_changes() {
+            output.push_str("No changes. Your infrastructure matches the configuration.\n");
+            return output;
+        }
+
+        for plan in &self.plans {
+            if plan.action == ResourceAction::NoOp {
+                continue;
+            }
+
+            let symbol = match plan.action {
+                ResourceAction::Create => "+",
+                ResourceAction::Update => "~",
+                ResourceAction::Replace => "-/+",
+                ResourceAction::Delete => "-",
+                ResourceAction::NoOp => " ",
+            };
+
+            output.push_str(&format!("{} {}\n", symbol, plan.resource_id));
+
+            if let Some(reason) = &plan.reason {
+                output.push_str(&format!("    # {}\n", reason));
+            }
+
+            for (path, change) in &plan.changes {
+                let old_str = change
+                    .old
+                    .as_ref()
+                    .map(|v| format_yaml_value(v))
+                    .unwrap_or_else(|| "(not set)".to_string());
+                let new_str = change
+                    .new
+                    .as_ref()
+                    .map(|v| format_yaml_value(v))
+                    .unwrap_or_else(|| "(not set)".to_string());
+
+                output.push_str(&format!("    {} = {} -> {}\n", path, old_str, new_str));
+            }
+
+            output.push('\n');
+        }
+
+        output.push_str(&format!(
+            "Plan: {} to add, {} to change, {} to replace, {} to destroy.\n",
+            self.summary.create_count,
+            self.summary.update_count,
+            self.summary.replace_count,
+            self.summary.delete_count
+        ));
+
+        output
+    }
+}
+
+/// Formats a YAML value for display in plan output
+fn format_yaml_value(value: &serde_yaml::Value) -> String {
+    match value {
+        serde_yaml::Value::Null => "null".to_string(),
+        serde_yaml::Value::Bool(b) => b.to_string(),
+        serde_yaml::Value::Number(n) => n.to_string(),
+        serde_yaml::Value::String(s) => format!("\"{}\"", s),
+        serde_yaml::Value::Sequence(_) => "[...]".to_string(),
+        serde_yaml::Value::Mapping(_) => "{...}".to_string(),
+        serde_yaml::Value::Tagged(t) => format_yaml_value(&t.value),
+    }
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -506,6 +657,72 @@ impl ResourceGraph {
         }
 
         Ok(plans)
+    }
+
+    /// Compares desired state against current state and returns a structured comparison.
+    ///
+    /// This method provides a comprehensive view of what changes will be made,
+    /// including summary statistics and formatted output suitable for Terraform-like
+    /// plan displays.
+    #[cfg(feature = "provisioning")]
+    pub async fn compare(
+        &self,
+        state: &ProvisioningState,
+        providers: Option<&ProviderRegistry>,
+    ) -> ResourceGraphResult<StateComparison> {
+        let plans = self.plan(state, providers).await?;
+
+        let mut comparison = StateComparison::new();
+        comparison.summary.total_desired = self.len();
+        comparison.summary.total_current = state.resources.len();
+
+        for plan in &plans {
+            match plan.action {
+                ResourceAction::Create => {
+                    comparison.to_create.push(plan.resource_id.clone());
+                    comparison.summary.create_count += 1;
+                }
+                ResourceAction::Update => {
+                    comparison.to_update.push(plan.resource_id.clone());
+                    comparison.summary.update_count += 1;
+                }
+                ResourceAction::Replace => {
+                    comparison.to_replace.push(plan.resource_id.clone());
+                    comparison.summary.replace_count += 1;
+                }
+                ResourceAction::Delete => {
+                    comparison.to_delete.push(plan.resource_id.clone());
+                    comparison.summary.delete_count += 1;
+                }
+                ResourceAction::NoOp => {
+                    comparison.unchanged.push(plan.resource_id.clone());
+                    comparison.summary.unchanged_count += 1;
+                }
+            }
+        }
+
+        comparison.plans = plans;
+        Ok(comparison)
+    }
+
+    /// Compares desired state against current state (non-provisioning version).
+    ///
+    /// Returns a comparison where all resources are marked as unchanged since
+    /// actual state comparison requires the provisioning feature.
+    #[cfg(not(feature = "provisioning"))]
+    pub fn compare(&self) -> ResourceGraphResult<StateComparison> {
+        let plans = self.plan()?;
+
+        let mut comparison = StateComparison::new();
+        comparison.summary.total_desired = self.len();
+
+        for plan in &plans {
+            comparison.unchanged.push(plan.resource_id.clone());
+            comparison.summary.unchanged_count += 1;
+        }
+
+        comparison.plans = plans;
+        Ok(comparison)
     }
 
     /// Generates an execution plan for all resources.
@@ -1216,5 +1433,175 @@ mod tests {
 
         let back: ResourceGraphFile = graph.into();
         assert_eq!(back.resources.len(), 2);
+    }
+
+    #[test]
+    fn test_state_comparison_new() {
+        let comparison = StateComparison::new();
+        assert!(!comparison.has_changes());
+        assert_eq!(comparison.change_count(), 0);
+        assert!(comparison.to_create.is_empty());
+        assert!(comparison.to_update.is_empty());
+        assert!(comparison.to_replace.is_empty());
+        assert!(comparison.to_delete.is_empty());
+    }
+
+    #[test]
+    fn test_state_comparison_has_changes() {
+        let mut comparison = StateComparison::new();
+        assert!(!comparison.has_changes());
+
+        comparison.to_create.push("resource1".to_string());
+        assert!(comparison.has_changes());
+        assert_eq!(comparison.change_count(), 1);
+    }
+
+    #[test]
+    fn test_state_comparison_format_plan_no_changes() {
+        let comparison = StateComparison::new();
+        let output = comparison.format_plan();
+        assert!(output.contains("No changes"));
+    }
+
+    #[test]
+    fn test_state_comparison_format_plan_with_changes() {
+        let mut comparison = StateComparison::new();
+        comparison.to_create.push("web_server".to_string());
+        comparison.summary.create_count = 1;
+        comparison.plans.push(ResourcePlan {
+            resource_id: "web_server".to_string(),
+            action: ResourceAction::Create,
+            reason: Some("Resource not found in state".to_string()),
+            changes: HashMap::new(),
+        });
+
+        let output = comparison.format_plan();
+        assert!(output.contains("+ web_server"));
+        assert!(output.contains("1 to add"));
+    }
+
+    #[test]
+    fn test_comparison_summary_default() {
+        let summary = ComparisonSummary::default();
+        assert_eq!(summary.total_desired, 0);
+        assert_eq!(summary.total_current, 0);
+        assert_eq!(summary.create_count, 0);
+        assert_eq!(summary.update_count, 0);
+        assert_eq!(summary.replace_count, 0);
+        assert_eq!(summary.delete_count, 0);
+        assert_eq!(summary.unchanged_count, 0);
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_compare_empty_graph_empty_state() {
+        let graph = ResourceGraph::new();
+        let state = ProvisioningState::new();
+
+        let comparison = graph.compare(&state, None).await.unwrap();
+        assert!(!comparison.has_changes());
+        assert_eq!(comparison.summary.total_desired, 0);
+        assert_eq!(comparison.summary.total_current, 0);
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_compare_detects_creates() {
+        let mut graph = ResourceGraph::new();
+        graph
+            .add_resource(Resource::new("web", "aws_instance"))
+            .unwrap();
+        graph.add_resource(Resource::new("db", "aws_rds")).unwrap();
+
+        let state = ProvisioningState::new();
+        let comparison = graph.compare(&state, None).await.unwrap();
+
+        assert!(comparison.has_changes());
+        assert_eq!(comparison.summary.create_count, 2);
+        assert_eq!(comparison.to_create.len(), 2);
+        assert!(comparison.to_create.contains(&"web".to_string()));
+        assert!(comparison.to_create.contains(&"db".to_string()));
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_compare_detects_deletes() {
+        let graph = ResourceGraph::new();
+        let mut state = ProvisioningState::new();
+
+        let id = ResourceId::new("aws_instance", "orphan");
+        state.add_resource(ResourceState::new(
+            id,
+            "i-12345",
+            "aws",
+            json!({}),
+            json!({}),
+        ));
+
+        let comparison = graph.compare(&state, None).await.unwrap();
+        assert!(comparison.has_changes());
+        assert_eq!(comparison.summary.delete_count, 1);
+        assert_eq!(comparison.to_delete.len(), 1);
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_compare_detects_updates() {
+        let mut graph = ResourceGraph::new();
+        let desired = serde_yaml::to_value(json!({ "instance_type": "t3.large" })).unwrap();
+        graph
+            .add_resource(Resource::new("web", "aws_instance").with_desired(desired))
+            .unwrap();
+
+        let mut state = ProvisioningState::new();
+        let id = ResourceId::new("aws_instance", "web");
+        state.add_resource(ResourceState::new(
+            id,
+            "i-12345",
+            "aws",
+            json!({ "instance_type": "t3.small" }),
+            json!({ "instance_type": "t3.small" }),
+        ));
+
+        let comparison = graph.compare(&state, None).await.unwrap();
+        assert!(comparison.has_changes());
+        assert_eq!(comparison.summary.update_count, 1);
+        assert_eq!(comparison.to_update.len(), 1);
+        assert!(comparison.to_update.contains(&"web".to_string()));
+    }
+
+    #[cfg(feature = "provisioning")]
+    #[tokio::test]
+    async fn test_compare_unchanged_resources() {
+        let mut graph = ResourceGraph::new();
+        let desired = serde_yaml::to_value(json!({ "instance_type": "t3.small" })).unwrap();
+        graph
+            .add_resource(Resource::new("web", "aws_instance").with_desired(desired))
+            .unwrap();
+
+        let mut state = ProvisioningState::new();
+        let id = ResourceId::new("aws_instance", "web");
+        state.add_resource(ResourceState::new(
+            id,
+            "i-12345",
+            "aws",
+            json!({ "instance_type": "t3.small" }),
+            json!({ "instance_type": "t3.small" }),
+        ));
+
+        let comparison = graph.compare(&state, None).await.unwrap();
+        assert!(!comparison.has_changes());
+        assert_eq!(comparison.summary.unchanged_count, 1);
+        assert_eq!(comparison.unchanged.len(), 1);
+    }
+
+    #[test]
+    fn test_format_yaml_value() {
+        assert_eq!(format_yaml_value(&serde_yaml::Value::Null), "null");
+        assert_eq!(format_yaml_value(&serde_yaml::Value::Bool(true)), "true");
+        assert_eq!(
+            format_yaml_value(&serde_yaml::Value::String("test".to_string())),
+            "\"test\""
+        );
     }
 }

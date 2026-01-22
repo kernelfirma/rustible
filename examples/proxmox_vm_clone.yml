@@ -1,0 +1,45 @@
+---
+# Proxmox VM clone example.
+# Required vars: api_url, api_token_id, api_token_secret, node, vmid, clone_from
+# Safe check_mode: run with --check to validate parameters; clone is skipped.
+# TLS options (optional): validate_certs, tls_server_name, ca_cert_path
+# Token format: user@realm!token
+
+- name: Proxmox VM clone
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    api_url: "https://pve.example:8006"
+    api_token_id: "root@pam!token"
+    api_token_secret: "REDACTED"
+    node: "pve1"
+    clone_from: 9000
+    vmid: 1100
+    vm_name: "web-01"
+    clone_full: true
+    clone_storage: "local-lvm"
+    clone_target_node: "pve1"
+    clone_pool: "prod"
+    clone_snapname: "clean"
+    # validate_certs: false
+    # tls_server_name: "pve.example"
+    # ca_cert_path: "/etc/ssl/certs/pve-ca.pem"
+  tasks:
+    - name: Clone template to new VM
+      proxmox_vm:
+        api_url: "{{ api_url }}"
+        api_token_id: "{{ api_token_id }}"
+        api_token_secret: "{{ api_token_secret }}"
+        node: "{{ node }}"
+        vmid: "{{ vmid }}"
+        state: cloned
+        clone_from: "{{ clone_from }}"
+        clone_full: "{{ clone_full }}"
+        clone_storage: "{{ clone_storage }}"
+        clone_target_node: "{{ clone_target_node }}"
+        clone_pool: "{{ clone_pool }}"
+        clone_snapname: "{{ clone_snapname }}"
+        clone:
+          name: "{{ vm_name }}"
+          description: "Cloned by Rustible"

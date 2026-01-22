@@ -1,7 +1,7 @@
 //! Proxmox VM lifecycle module (API-driven, local execution).
 
 use crate::modules::{
-    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use reqwest::blocking::Client;
@@ -351,6 +351,8 @@ struct ProxmoxVmConfig {
     wait: WaitConfig,
     /// Validate create/clone/delete params against allowlists
     strict_params: bool,
+    /// Desired VM configuration fields for idempotent updates
+    config_params: Option<HashMap<String, String>>,
     /// TLS configuration for custom CA and server name
     tls: TlsConfig,
 }
@@ -390,6 +392,18 @@ impl ProxmoxVmConfig {
         let validate_certs = params.get_bool_or("validate_certs", true);
         let strict_params = params.get_bool_or("strict_params", true);
 
+        let config_params = if let Some(value) = params.get("config") {
+            Some(parse_string_map("config", value)?)
+        } else {
+            None
+        };
+
+        if strict_params {
+            if let Some(ref config_params) = config_params {
+                validate_config_params(config_params)?;
+            }
+        }
+
         // TLS configuration
         let tls_server_name = params.get_string("tls_server_name")?;
         let ca_cert_path = params.get_string("ca_cert_path")?;
@@ -421,6 +435,7 @@ impl ProxmoxVmConfig {
                 interval_secs: wait_interval,
             },
             strict_params,
+            config_params,
             tls: TlsConfig {
                 server_name: tls_server_name,
                 ca_cert_path,
@@ -466,6 +481,53 @@ impl VmPowerState {
 struct VmStatus {
     power_state: VmPowerState,
     raw: Value,
+}
+
+#[derive(Debug, Clone)]
+struct ConfigChange {
+    key: String,
+    current: Option<String>,
+    desired: String,
+}
+
+#[derive(Debug, Clone)]
+struct VmConfigDiff {
+    changes: Vec<ConfigChange>,
+    update_params: HashMap<String, String>,
+}
+
+impl VmConfigDiff {
+    fn is_empty(&self) -> bool {
+        self.changes.is_empty()
+    }
+
+    fn to_diff(&self) -> Diff {
+        let mut before = Vec::new();
+        let mut after = Vec::new();
+
+        for change in &self.changes {
+            let current = change.current.as_deref().unwrap_or("(unset)");
+            before.push(format!("{}: {}", change.key, current));
+            after.push(format!("{}: {}", change.key, change.desired));
+        }
+
+        Diff::new(before.join("\n"), after.join("\n"))
+    }
+
+    fn to_value(&self) -> Value {
+        let items: Vec<Value> = self
+            .changes
+            .iter()
+            .map(|change| {
+                json!({
+                    "key": change.key,
+                    "from": change.current,
+                    "to": change.desired,
+                })
+            })
+            .collect();
+        Value::Array(items)
+    }
 }
 
 /// Task completion information from UPID polling
@@ -836,6 +898,88 @@ fn fetch_status_optional(
     }))
 }
 
+fn fetch_vm_config(client: &Client, config: &ProxmoxVmConfig) -> ModuleResult<Value> {
+    let url = api_url(
+        config,
+        &format!("nodes/{}/qemu/{}/config", config.node, config.vmid),
+    );
+    let response = request_json(
+        client,
+        Method::GET,
+        &url,
+        &config.token_id,
+        &config.token_secret,
+        None,
+    )?;
+
+    response
+        .get("data")
+        .cloned()
+        .ok_or_else(|| ModuleError::ParseError("Proxmox response missing data".to_string()))
+}
+
+fn normalize_config_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(if *value {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        }),
+        Value::Null => None,
+        other => Some(other.to_string()),
+    }
+}
+
+fn diff_vm_config(
+    current: &Value,
+    desired: &HashMap<String, String>,
+) -> ModuleResult<VmConfigDiff> {
+    let current_map = current.as_object().ok_or_else(|| {
+        ModuleError::ParseError("Proxmox response data is not an object".to_string())
+    })?;
+
+    let mut changes = Vec::new();
+    let mut update_params = HashMap::new();
+
+    for (key, desired_value) in desired {
+        let current_value = current_map.get(key).and_then(normalize_config_value);
+        if current_value.as_deref() != Some(desired_value.as_str()) {
+            changes.push(ConfigChange {
+                key: key.clone(),
+                current: current_value.clone(),
+                desired: desired_value.clone(),
+            });
+            update_params.insert(key.clone(), desired_value.clone());
+        }
+    }
+
+    Ok(VmConfigDiff {
+        changes,
+        update_params,
+    })
+}
+
+fn update_vm_config(
+    client: &Client,
+    config: &ProxmoxVmConfig,
+    updates: &HashMap<String, String>,
+) -> ModuleResult<Value> {
+    let url = api_url(
+        config,
+        &format!("nodes/{}/qemu/{}/config", config.node, config.vmid),
+    );
+    request_json(
+        client,
+        Method::POST,
+        &url,
+        &config.token_id,
+        &config.token_secret,
+        Some(updates),
+    )
+}
+
 fn perform_action(client: &Client, config: &ProxmoxVmConfig, action: &str) -> ModuleResult<Value> {
     let url = api_url(
         config,
@@ -957,6 +1101,29 @@ fn parse_string_map(field: &str, value: &Value) -> ModuleResult<HashMap<String, 
     }
 
     Ok(map)
+}
+
+fn is_allowed_config_key(key: &str) -> bool {
+    key != "vmid" && ALLOWED_CREATE_PARAMS.contains(&key)
+}
+
+fn validate_config_params(params: &HashMap<String, String>) -> ModuleResult<()> {
+    let unknown: Vec<&String> = params
+        .keys()
+        .filter(|k| !is_allowed_config_key(k.as_str()))
+        .collect();
+
+    if unknown.is_empty() {
+        Ok(())
+    } else {
+        let mut unknown_sorted: Vec<&str> = unknown.iter().map(|s| s.as_str()).collect();
+        unknown_sorted.sort();
+
+        Err(ModuleError::InvalidParameter(format!(
+            "Unknown config parameter(s): {}. Set strict_params=false to allow pass-through.",
+            unknown_sorted.join(", ")
+        )))
+    }
 }
 
 /// Validate parameter keys against an allowlist
@@ -1263,6 +1430,7 @@ impl Module for ProxmoxVmModule {
         params.insert("create", json!({}));
         params.insert("clone", json!({}));
         params.insert("delete", json!({}));
+        params.insert("config", json!({}));
         params.insert("timeout", json!(DEFAULT_TIMEOUT_SECS));
         params.insert("validate_certs", json!(true));
         params
@@ -1292,7 +1460,37 @@ impl Module for ProxmoxVmModule {
             }
             DesiredState::Present => {
                 if status_opt.is_some() {
-                    ModuleOutput::ok("VM already exists")
+                    if let Some(desired_config) =
+                        config.config_params.as_ref().filter(|cfg| !cfg.is_empty())
+                    {
+                        let current_config = fetch_vm_config(&client, &config)?;
+                        let diff = diff_vm_config(&current_config, desired_config)?;
+
+                        if diff.is_empty() {
+                            ModuleOutput::ok("VM already exists and matches desired config")
+                        } else if context.check_mode {
+                            let mut output =
+                                ModuleOutput::changed("VM config would be updated (check mode)")
+                                    .with_data("action", json!("update"))
+                                    .with_data("config_changes", diff.to_value());
+                            if context.diff_mode {
+                                output = output.with_diff(diff.to_diff());
+                            }
+                            output
+                        } else {
+                            let response = update_vm_config(&client, &config, &diff.update_params)?;
+                            let mut output = ModuleOutput::changed("VM config update requested")
+                                .with_data("action", json!("update"))
+                                .with_data("config_changes", diff.to_value())
+                                .with_data("action_response", response.clone());
+                            if context.diff_mode {
+                                output = output.with_diff(diff.to_diff());
+                            }
+                            handle_task_wait(&client, &config, &response, output)?
+                        }
+                    } else {
+                        ModuleOutput::ok("VM already exists")
+                    }
                 } else if context.check_mode {
                     let _ = build_create_params(&config, params)?;
                     ModuleOutput::changed("VM would be created (check mode)")
@@ -1548,6 +1746,35 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_config_params_unknown() {
+        let mut params = HashMap::new();
+        params.insert("bad_param".to_string(), "value".to_string());
+
+        let result = validate_config_params(&params);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Unknown config parameter(s)"));
+        assert!(msg.contains("bad_param"));
+    }
+
+    #[test]
+    fn test_diff_vm_config_detects_changes() {
+        let current = json!({
+            "memory": "1024",
+            "cores": 2,
+            "onboot": 1,
+        });
+        let mut desired = HashMap::new();
+        desired.insert("memory".to_string(), "2048".to_string());
+        desired.insert("cores".to_string(), "2".to_string());
+        desired.insert("onboot".to_string(), "1".to_string());
+
+        let diff = diff_vm_config(&current, &desired).unwrap();
+        assert_eq!(diff.changes.len(), 1);
+        assert_eq!(diff.update_params.get("memory"), Some(&"2048".to_string()));
+    }
+
+    #[test]
     fn test_build_create_params_auto_name() {
         let config = ProxmoxVmConfig {
             api_base: "https://pve.example/api2/json".to_string(),
@@ -1561,6 +1788,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable for this test
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
@@ -1584,6 +1812,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable for this test
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
@@ -1636,6 +1865,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true, // Enable strict validation
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
@@ -1670,6 +1900,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable strict validation
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
@@ -1703,6 +1934,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true,
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
@@ -1736,6 +1968,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true,
+            config_params: None,
             tls: TlsConfig::default(),
         };
 
