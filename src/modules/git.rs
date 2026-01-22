@@ -22,27 +22,27 @@ struct SshConfig {
 impl SshConfig {
     /// Build the GIT_SSH_COMMAND environment variable
     fn build_ssh_command(&self) -> Option<String> {
-        let mut parts = vec!["ssh".to_string()];
+        let mut parts: Vec<std::borrow::Cow<'_, str>> = vec![std::borrow::Cow::Borrowed("ssh")];
 
         if let Some(key) = &self.key_file {
-            parts.push("-i".to_string());
-            parts.push(shell_escape(key).into_owned());
+            parts.push(std::borrow::Cow::Borrowed("-i"));
+            parts.push(shell_escape(key));
             // Disable other key sources when using specific key
-            parts.push("-o".to_string());
-            parts.push(shell_escape("IdentitiesOnly=yes").into_owned());
+            parts.push(std::borrow::Cow::Borrowed("-o"));
+            parts.push(shell_escape("IdentitiesOnly=yes"));
         }
 
         if self.accept_hostkey {
-            parts.push("-o".to_string());
-            parts.push(shell_escape("StrictHostKeyChecking=no").into_owned());
-            parts.push("-o".to_string());
-            parts.push(shell_escape("UserKnownHostsFile=/dev/null").into_owned());
+            parts.push(std::borrow::Cow::Borrowed("-o"));
+            parts.push(shell_escape("StrictHostKeyChecking=no"));
+            parts.push(std::borrow::Cow::Borrowed("-o"));
+            parts.push(shell_escape("UserKnownHostsFile=/dev/null"));
         }
 
         if let Some(opts) = &self.ssh_opts {
             // Options might contain spaces, so we should escape them to be safe
             // when git passes them to the shell
-            parts.push(shell_escape(opts).into_owned());
+            parts.push(shell_escape(opts));
         }
 
         if parts.len() > 1 {
@@ -294,6 +294,7 @@ impl GitModule {
     }
 
     /// Clone a git repository
+    #[allow(clippy::too_many_arguments)]
     fn clone_repo(
         repo: &str,
         dest: &str,
@@ -408,6 +409,7 @@ impl GitModule {
     }
 
     /// Update (pull) a git repository
+    #[allow(clippy::too_many_arguments)]
     fn update_repo(
         dest: &str,
         version: Option<&str>,
@@ -740,14 +742,13 @@ impl Module for GitModule {
             )?;
 
             // Verify GPG signature if requested
-            if verify_commit && changed {
-                if !Self::verify_commit(&dest, &new_version, &gpg_whitelist)? {
+            if verify_commit && changed
+                && !Self::verify_commit(&dest, &new_version, &gpg_whitelist)? {
                     return Err(ModuleError::ExecutionFailed(format!(
                         "GPG signature verification failed for commit {}",
                         new_version
                     )));
                 }
-            }
 
             if changed {
                 // Build detailed diff output

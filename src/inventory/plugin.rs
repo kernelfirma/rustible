@@ -17,16 +17,20 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::inventory::plugin::{InventoryPluginFactory, InventoryPluginConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::inventory::plugin::{InventoryPlugin, InventoryPluginFactory, InventoryPluginConfig};
 //!
 //! // Create a plugin with configuration
 //! let config = InventoryPluginConfig::new()
 //!     .with_option("region", "us-east-1")
-//!     .with_cache_ttl(Duration::from_secs(300));
+//!     .with_cache_ttl(std::time::Duration::from_secs(300));
 //!
 //! let plugin = InventoryPluginFactory::create("aws_ec2", config)?;
-//! let inventory = plugin.get_inventory().await?;
+//! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;
@@ -1290,7 +1294,7 @@ impl InventoryCache {
 
         let cache_file = cache_dir.join(format!("{}.json", key));
         let json = inventory_to_json(inventory)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         tokio::fs::write(cache_file, serde_json::to_string_pretty(&json)?).await
     }
@@ -1517,14 +1521,12 @@ pub fn parse_json_inventory(
         for (key, value) in map {
             if key == "_meta" {
                 // Handle host variables from _meta
-                if let Some(hostvars) = value.get("hostvars") {
-                    if let serde_json::Value::Object(vars_map) = hostvars {
-                        for (host_name, vars) in vars_map {
-                            if let Some(host) = inventory.get_host_mut(host_name) {
-                                if let serde_json::Value::Object(var_obj) = vars {
-                                    for (k, v) in var_obj {
-                                        host.set_var(k, json_to_yaml(v));
-                                    }
+                if let Some(serde_json::Value::Object(vars_map)) = value.get("hostvars") {
+                    for (host_name, vars) in vars_map {
+                        if let Some(host) = inventory.get_host_mut(host_name) {
+                            if let serde_json::Value::Object(var_obj) = vars {
+                                for (k, v) in var_obj {
+                                    host.set_var(k, json_to_yaml(v));
                                 }
                             }
                         }

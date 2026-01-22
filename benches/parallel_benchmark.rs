@@ -820,6 +820,7 @@ fn bench_optimal_forks(c: &mut Criterion) {
 
                     let handles: Vec<_> = (0..hosts)
                         .flat_map(|h| {
+                            let sem = Arc::clone(&sem);
                             (0..tasks_per_host).map(move |t| {
                                 let sem = Arc::clone(&sem);
                                 tokio::spawn(async move {

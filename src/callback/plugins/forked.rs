@@ -81,6 +81,7 @@ struct HostStats {
 
 /// Information about a fork slot.
 #[derive(Debug)]
+#[derive(Default)]
 struct ForkSlot {
     /// Host currently occupying this slot (if any)
     host: Option<String>,
@@ -90,15 +91,6 @@ struct ForkSlot {
     active: bool,
 }
 
-impl Default for ForkSlot {
-    fn default() -> Self {
-        Self {
-            host: None,
-            progress_bar: None,
-            active: false,
-        }
-    }
-}
 
 /// Configuration for the forked callback.
 #[derive(Debug, Clone)]
@@ -143,11 +135,16 @@ impl Default for ForkedConfig {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::ForkedCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ForkedCallback;
 ///
 /// let callback = ForkedCallback::new(5); // 5 parallel forks
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ForkedCallback {
@@ -184,8 +181,13 @@ impl ForkedCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = ForkedCallback::new(5);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new(forks: usize) -> Self {
@@ -347,8 +349,8 @@ impl ForkedCallback {
     }
 
     /// Formats the final recap line for a host.
-    fn format_recap_line(host: &str, stats: &HostStats, state: &HostState) -> String {
-        let host_display = match state {
+    fn format_recap_line(host: &str, stats: &HostStats, host_state: &HostState) -> String {
+        let host_display = match host_state {
             HostState::Failed | HostState::Unreachable => host.red().bold(),
             HostState::Completed if stats.changed > 0 => host.yellow(),
             HostState::Completed => host.green(),
@@ -356,7 +358,7 @@ impl ForkedCallback {
             _ => host.white(),
         };
 
-        let state_indicator = match state {
+        let state_indicator = match host_state {
             HostState::Failed => "[FAILED]".red().bold(),
             HostState::Unreachable => "[UNREACHABLE]".magenta().bold(),
             HostState::Skipped => "[SKIPPED]".cyan(),
@@ -437,7 +439,7 @@ impl ExecutionCallback for ForkedCallback {
     /// Called when a playbook ends - prints the final recap.
     async fn on_playbook_end(&self, name: &str, success: bool) {
         let stats = self.host_stats.read();
-        let states = self.host_states.read();
+        let host_states = self.host_states.read();
         let start_time = *self.start_time.read();
 
         // Clear any remaining progress bars
@@ -456,22 +458,22 @@ impl ExecutionCallback for ForkedCallback {
 
         for host in hosts {
             if let Some(host_stats) = stats.get(host) {
-                let state = states.get(host).unwrap_or(&HostState::Completed);
-                println!("{}", Self::format_recap_line(host, host_stats, state));
+                let host_state = host_states.get(host).unwrap_or(&HostState::Completed);
+                println!("{}", Self::format_recap_line(host, host_stats, host_state));
             }
         }
 
         // Print duration and status
         if let Some(start) = start_time {
             let duration = start.elapsed();
-            let status = if success {
+            let playbook_status = if success {
                 "completed successfully".green().bold()
             } else {
                 "failed".red().bold()
             };
 
             println!(
-                "\n{} {status} in {:.2}s",
+                "\n{} {playbook_status} in {:.2}s",
                 name.bright_white().bold(),
                 duration.as_secs_f64()
             );
@@ -494,11 +496,11 @@ impl ExecutionCallback for ForkedCallback {
     async fn on_play_start(&self, name: &str, hosts: &[String]) {
         // Initialize stats and states for all hosts in this play
         let mut stats = self.host_stats.write();
-        let mut states = self.host_states.write();
+        let mut host_states = self.host_states.write();
 
         for host in hosts {
             stats.entry(host.clone()).or_default();
-            states.insert(host.clone(), HostState::Pending);
+            host_states.insert(host.clone(), HostState::Pending);
         }
 
         // Update total hosts count

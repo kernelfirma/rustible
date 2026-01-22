@@ -45,29 +45,34 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{MinimalCallback, SkippyCallback, DiffCallback};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{MinimalCallback, SkippyCallback, DiffCallback};
 //!
 //! // Minimal output for CI
 //! let minimal = MinimalCallback::new();
-//! executor.with_callback(Box::new(minimal));
+//! # let _ = ();
 //!
 //! // Skippy - hide skipped tasks, show only changes/failures (great for large playbooks)
 //! let skippy = SkippyCallback::new();
-//! executor.with_callback(Box::new(skippy));
+//! # let _ = ();
 //!
 //! // Skippy with verbosity - show skipped task names
 //! let skippy_verbose = SkippyCallback::with_verbosity(1);
-//! executor.with_callback(Box::new(skippy_verbose));
+//! # let _ = ();
 //!
 //! // Show diffs for changed files
 //! let diff_callback = DiffCallback::new();
-//! executor.with_callback(Box::new(diff_callback));
+//! # let _ = ();
 //!
 //! // Combine callbacks with CompositeCallback
 //! let composite = CompositeCallback::new()
 //!     .with_callback(Box::new(MinimalCallback::new()))
 //!     .with_callback(Box::new(DiffCallback::new()));
+//! # Ok(())
+//! # }
 //! ```
 
 // ============================================================================

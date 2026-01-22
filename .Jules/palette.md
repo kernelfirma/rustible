@@ -13,3 +13,11 @@
 ## 2024-05-27 - [Aligned Task Status Labels]
 **Learning:** In CLI outputs with repetitive structured data (like task statuses), inconsistent label widths (e.g., "ok" vs "unreachable") create a "jagged" edge that increases cognitive load when scanning.
 **Action:** Use fixed-width padding for status labels to align subsequent data (hostnames) vertically, improving readability and scanability.
+
+## 2026-01-19 - [Semantic Emojis in Interactive Menus]
+**Learning:** Pure text menus in CLIs can feel dense and hard to scan quickly. Adding relevant semantic emojis (e.g., 🚀 for run, 🔍 for check) serves as a visual anchor that improves scanability and adds a touch of modern delight.
+**Action:** When designing `dialoguer` menus, prefix items with consistent, semantic emojis. Ensure spacing accounts for emoji width (often 2 chars) to maintain visual alignment.
+
+## 2024-05-22 - Consistent List Item Icons
+**Learning:** Adding consistent semantic emojis (e.g., 📖, 📄, 🏷️) to interactive list items significantly improves scannability and visual consistency with the main menu.
+**Action:** Always verify that interactive selection lists (Select, MultiSelect) use consistent icon prefixes for items, especially if the parent menu uses them.

@@ -4,7 +4,7 @@
 //! within modified lines, making it easier to see exactly what changed
 //! when only a small portion of a line was modified.
 
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 use similar::{ChangeTag, TextDiff};
 
 /// Word diff result containing highlighted old and new lines

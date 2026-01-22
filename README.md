@@ -1,15 +1,28 @@
 # Rustible
 
-Safe and fast async configuration management tool written in Rust. Drop-in replacement for Ansible delivering performance improvements.
+Safe and fast async configuration management tool.
 
-**Acknowledgment**: Rustible is inspired by Ansible's excellent design and playbook syntax. This project builds upon those proven concepts while leveraging Rust's performance and safety advantages.
+**Acknowledgment**: Rustible is inspired by Ansible and Terraform. This project builds upon those proven concepts while improving safety, reliability and speed.
 
 ## Why Rustible?
 
-- **High Performance**: Compiled Rust binary with connection pooling (Much faster than Ansible)
-- **Full Compatibility**: Identical YAML playbook syntax to Ansible
 - **Type Safety**: Compile-time configuration validation with superior error messages
+- **Full Compatibility**: Identical YAML playbook syntax to Ansible
+- **High Performance**: Compiled binary with connection pooling (Much faster than Ansible)
 - **Parallel Execution**: Concurrent task execution by default
+
+## Alpha Status
+
+Rustible is currently in alpha. Expect breaking changes, incomplete features, and evolving
+performance/security characteristics.
+
+- Terraform-like provisioning is experimental and limited in scope; Terraform integration
+  focuses on state inventory and workflow bridging, not full replacement.
+- Several feature flags remain stubbed or partial and require explicit
+  `experimental` opt-in (see `Cargo.toml`).
+- Security hardening and coverage gaps are tracked in `docs/ALPHA_READINESS_ISSUES.md`.
+- Maintainers can track release tasks in `docs/ALPHA_LAUNCH_CHECKLIST.md`.
+- Use in production environments only after validating against your own risk model.
 
 ## Quick Start
 
@@ -84,7 +97,7 @@ rustible init <PATH>          # Initialize new project
 
 ### Connection Methods
 
-- **SSH** (default): Pure Rust implementation via russh
+- **SSH** (default): Via russh
 - **Local**: Direct local execution
 - **Docker**: Container-based execution
 - **Kubernetes**: Pod execution (feature flag)
@@ -134,6 +147,7 @@ cargo build --features docker,kubernetes,aws
 | `docker` | Docker container support |
 | `kubernetes` | Kubernetes pod execution |
 | `aws` | AWS cloud modules |
+| `experimental` | Required opt-in for stubbed features (azure, gcp, database, winrm, reqwest) |
 
 ## Performance
 
@@ -151,17 +165,40 @@ Benchmarks demonstrate significant performance improvements:
 - [API Reference](docs/reference/README.md) - Module documentation
 - [Architecture](docs/architecture/ARCHITECTURE.md) - Technical design
 
-## Contributing
+## Testing
 
-Development workflow:
+### SSH Integration Tests (Ignored)
+
+Russh integration tests are ignored by default and require real SSH hosts.
+You can export the variables manually or source the helper script:
 
 ```bash
-cargo build              # Build project
-cargo test               # Run tests
-cargo clippy --all-features  # Lint code
+source scripts/ssh-test-env.sh
+cargo test test_russh_ -- --ignored
 ```
 
-All contributions should include tests and pass CI checks.
+Environment variables:
+
+- `RUSTIBLE_SSH_TEST_HOST` / `RUSTIBLE_SSH_TEST_PORT` / `RUSTIBLE_SSH_TEST_USER` / `RUSTIBLE_SSH_TEST_KEY`
+- `RUSTIBLE_SSH_TEST_JUMP_HOST` / `RUSTIBLE_SSH_TEST_JUMP_PORT` / `RUSTIBLE_SSH_TEST_JUMP_USER` / `RUSTIBLE_SSH_TEST_JUMP_KEY`
+- `RUSTIBLE_SSH_TEST_JUMP2_HOST` / `RUSTIBLE_SSH_TEST_JUMP2_PORT` / `RUSTIBLE_SSH_TEST_JUMP2_USER` / `RUSTIBLE_SSH_TEST_JUMP2_KEY` (multi-hop test)
+
+### Homelab Playbook Tests (Ignored)
+
+Run the homelab smoke playbook against real hosts:
+
+```bash
+export RUSTIBLE_HOMELAB_TESTS=1
+export RUSTIBLE_HOMELAB_INVENTORY=tests/fixtures/homelab_inventory.yml
+cargo test --test homelab_playbook_tests -- --ignored
+```
+
+## Contributing
+
+All contributions are welcome.
+
+See `CONTRIBUTING.md` for guidelines and `CODE_OF_CONDUCT.md` for community expectations.
+For security issues, see `SECURITY.md`.
 
 ## License
 

@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::Parser;
 use indexmap::IndexMap;
 use regex::Regex;
+use rustible::diagnostics::yaml_syntax_error;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -41,6 +42,10 @@ pub struct RunArgs {
     /// Vault password file
     #[arg(long)]
     pub vault_password_file: Option<PathBuf>,
+
+    /// Ask for SSH password
+    #[arg(short = 'k', long = "ask-pass")]
+    pub ask_pass: bool,
 
     /// Become (sudo/su)
     #[arg(short = 'b', long)]
@@ -118,37 +123,57 @@ impl RunArgs {
                 if let Some(sp) = spinner {
                     sp.finish_and_clear();
                 }
-                ctx.output
-                    .error(&format!("Failed to parse playbook: {}", e));
+                if let Some(rendered) = e.render_diagnostic() {
+                    ctx.output.diagnostic(&rendered);
+                } else {
+                    ctx.output
+                        .error(&format!("Failed to parse playbook: {}", e));
+                }
                 return Ok(1);
             }
         };
 
-        // Best-effort progress output: show plays and tasks (no-op in JSON mode).
-        // NOTE: The executor currently doesn't stream per-task events to the CLI, so this
-        // provides minimal Ansible-like headers without needing deep wiring.
-        for play in &playbook.plays {
-            let play_name = if play.name.is_empty() {
-                "Unnamed play"
-            } else {
-                play.name.as_str()
-            };
-            ctx.output.play_header(play_name);
+        // Setup event callback for real-time output
+        let output = ctx.output.clone();
+        let current_task_start = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let task_start_clone = current_task_start.clone();
 
-            for task in play
-                .pre_tasks
-                .iter()
-                .chain(play.tasks.iter())
-                .chain(play.post_tasks.iter())
-            {
-                let task_name = if task.name.is_empty() {
-                    task.module.as_str()
-                } else {
-                    task.name.as_str()
-                };
-                ctx.output.task_header(task_name);
+        let callback = std::sync::Arc::new(move |event: rustible::executor::ExecutionEvent| {
+            use rustible::executor::ExecutionEvent;
+            use rustible::executor::task::TaskStatus as ExecutorTaskStatus;
+            use crate::cli::output::TaskStatus as CliTaskStatus;
+
+            match event {
+                ExecutionEvent::PlayStart(name) => {
+                    let play_name = if name.is_empty() { "Unnamed play" } else { &name };
+                    output.play_header(play_name);
+                }
+                ExecutionEvent::TaskStart(name) => {
+                    output.task_header(&name);
+                    if let Ok(mut start) = task_start_clone.lock() {
+                        *start = Some(std::time::Instant::now());
+                    }
+                }
+                ExecutionEvent::HostTaskComplete(host, _, result) => {
+                    let status = match result.status {
+                        ExecutorTaskStatus::Ok => CliTaskStatus::Ok,
+                        ExecutorTaskStatus::Changed => CliTaskStatus::Changed,
+                        ExecutorTaskStatus::Failed => CliTaskStatus::Failed,
+                        ExecutorTaskStatus::Skipped => CliTaskStatus::Skipped,
+                        ExecutorTaskStatus::Unreachable => CliTaskStatus::Unreachable,
+                    };
+
+                    let duration = if let Ok(start) = task_start_clone.lock() {
+                        start.map(|s| s.elapsed())
+                    } else {
+                        None
+                    };
+
+                    output.task_result(&host, status, result.msg.as_deref(), duration);
+                }
+                _ => {}
             }
-        }
+        });
 
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
@@ -206,7 +231,23 @@ impl RunArgs {
             ctx.output
                 .plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
-            let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
+            let playbook_yaml: serde_yaml::Value = match serde_yaml::from_str(&playbook_content) {
+                Ok(value) => value,
+                Err(e) => {
+                    let (line, col) =
+                        e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
+                    let diagnostic = yaml_syntax_error(
+                        &self.playbook,
+                        &playbook_content,
+                        line,
+                        col,
+                        &e.to_string(),
+                    );
+                    ctx.output
+                        .diagnostic(&diagnostic.render_with_source(Some(&playbook_content)));
+                    return Ok(1);
+                }
+            };
             if let Some(plays) = playbook_yaml.as_sequence() {
                 let extra_vars_for_plan: std::collections::HashMap<String, serde_yaml::Value> =
                     ctx.parse_extra_vars()?;
@@ -224,6 +265,35 @@ impl RunArgs {
                 .warning("Running in CHECK MODE - no changes will be made");
         }
 
+        let has_extra_ssh_pass = extra_vars.contains_key("ansible_ssh_pass");
+        let has_inventory_ssh_pass = runtime.hosts().iter().any(|host| {
+            runtime
+                .get_var("ansible_ssh_pass", Some(host))
+                .is_some()
+        });
+        let ssh_password = if !has_extra_ssh_pass && !has_inventory_ssh_pass {
+            if self.ask_pass {
+                Some(Self::prompt_ssh_password(ctx)?)
+            } else {
+                crate::cli::env::ssh_password()
+            }
+        } else {
+            None
+        };
+        if let Some(password) = ssh_password {
+            extra_vars.insert("ansible_ssh_pass".to_string(), serde_json::json!(password));
+        }
+
+        let ask_become_pass = Self::should_prompt_become_password(
+            self.ask_become_pass,
+            ctx.config.privilege_escalation.become_ask_pass,
+        );
+        let become_password = if ask_become_pass {
+            Some(Self::prompt_become_password(ctx)?)
+        } else {
+            None
+        };
+
         // Build executor configuration from CLI args
         let executor_config = ExecutorConfig {
             forks: ctx.forks,
@@ -237,11 +307,12 @@ impl RunArgs {
             r#become: self.r#become,
             become_method: self.become_method.clone(),
             become_user: self.become_user.clone(),
-            become_password: None, // TODO: Implement --ask-become-pass
+            become_password,
         };
 
-        // Create executor with runtime context
-        let executor = Executor::with_runtime(executor_config, runtime);
+        // Create executor with runtime context and event callback
+        let executor = Executor::with_runtime(executor_config, runtime)
+            .with_event_callback(callback);
 
         // Run playbook using executor
         ctx.output
@@ -249,8 +320,12 @@ impl RunArgs {
         let results = match executor.run_playbook(&playbook).await {
             Ok(results) => results,
             Err(e) => {
-                ctx.output
-                    .error(&format!("Playbook execution failed: {}", e));
+                if let Some(rendered) = e.render_diagnostic() {
+                    ctx.output.diagnostic(&rendered);
+                } else {
+                    ctx.output
+                        .error(&format!("Playbook execution failed: {}", e));
+                }
                 return Ok(2);
             }
         };
@@ -907,6 +982,26 @@ impl RunArgs {
             .collect()
     }
 
+    fn should_prompt_become_password(ask_become_pass: bool, config_ask_pass: bool) -> bool {
+        ask_become_pass || config_ask_pass
+    }
+
+    fn prompt_ssh_password(ctx: &CommandContext) -> Result<String> {
+        ctx.output.flush();
+        let password = dialoguer::Password::new()
+            .with_prompt("SSH password")
+            .interact()?;
+        Ok(password)
+    }
+
+    fn prompt_become_password(ctx: &CommandContext) -> Result<String> {
+        ctx.output.flush();
+        let password = dialoguer::Password::new()
+            .with_prompt("Become password")
+            .interact()?;
+        Ok(password)
+    }
+
     /// Detect which module a task is using
     fn detect_module<'a>(
         &self,
@@ -1093,9 +1188,26 @@ mod tests {
     }
 
     #[test]
+    fn test_run_args_ask_become_pass_parsing() {
+        let args =
+            RunArgs::try_parse_from(["run", "playbook.yml", "--ask-become-pass"]).unwrap();
+        assert!(args.ask_become_pass);
+
+        let args = RunArgs::try_parse_from(["run", "playbook.yml", "-K"]).unwrap();
+        assert!(args.ask_become_pass);
+    }
+
+    #[test]
     fn test_run_args_plan_flag() {
         let args = RunArgs::try_parse_from(["run", "playbook.yml", "--plan"]).unwrap();
         assert!(args.plan);
+    }
+
+    #[test]
+    fn test_should_prompt_become_password_gating() {
+        assert!(RunArgs::should_prompt_become_password(true, false));
+        assert!(RunArgs::should_prompt_become_password(false, true));
+        assert!(!RunArgs::should_prompt_become_password(false, false));
     }
 
     #[test]

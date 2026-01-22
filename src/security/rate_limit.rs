@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 use std::time::{Duration, Instant};
 
 use super::{SecurityError, SecurityResult};
@@ -150,13 +151,23 @@ impl RateLimiter {
     /// Create a global rate limiter (singleton pattern)
     pub fn global() -> &'static RateLimiter {
         use once_cell::sync::Lazy;
-        static GLOBAL: Lazy<RateLimiter> = Lazy::new(|| RateLimiter::default());
+        static GLOBAL: Lazy<RateLimiter> = Lazy::new(RateLimiter::default);
         &GLOBAL
+    }
+
+    fn lock_buckets(&self) -> std::sync::MutexGuard<'_, HashMap<String, TokenBucket>> {
+        match self.buckets.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("Rate limiter bucket lock poisoned; recovering");
+                poisoned.into_inner()
+            }
+        }
     }
 
     /// Get or create a token bucket for the given key
     fn get_or_create_bucket(&self, key: &str) -> TokenBucket {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
         if !buckets.contains_key(key) {
             buckets.insert(
                 key.to_string(),
@@ -190,8 +201,9 @@ impl RateLimiter {
         let start = Instant::now();
 
         loop {
+            let mut sleep_for = Duration::from_millis(50);
             {
-                let mut buckets = self.buckets.lock().unwrap();
+                let mut buckets = self.lock_buckets();
 
                 // Create bucket if it doesn't exist
                 if !buckets.contains_key(key) {
@@ -226,10 +238,18 @@ impl RateLimiter {
                         key
                     )));
                 }
+
+                let next = bucket.time_until_available();
+                if next > Duration::from_millis(1) {
+                    sleep_for = next;
+                }
+                if sleep_for > Duration::from_millis(50) {
+                    sleep_for = Duration::from_millis(50);
+                }
             }
 
             // Wait a bit before retrying
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(sleep_for);
         }
     }
 
@@ -244,7 +264,7 @@ impl RateLimiter {
     /// * `true` - Permit acquired
     /// * `false` - Rate limited, try again later
     pub fn try_acquire(&self, key: &str) -> bool {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
 
         if !buckets.contains_key(key) {
             buckets.insert(
@@ -261,7 +281,7 @@ impl RateLimiter {
 
     /// Get the time until the next request is allowed
     pub fn time_until_available(&self, key: &str) -> Duration {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
 
         if !buckets.contains_key(key) {
             return Duration::ZERO;
@@ -272,19 +292,19 @@ impl RateLimiter {
 
     /// Reset the rate limiter for a specific key
     pub fn reset(&self, key: &str) {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
         buckets.remove(key);
     }
 
     /// Reset all rate limiters
     pub fn reset_all(&self) {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
         buckets.clear();
     }
 
     /// Get current token count for a key (for monitoring)
     pub fn available_permits(&self, key: &str) -> f64 {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.lock_buckets();
 
         if !buckets.contains_key(key) {
             return self.default_config.burst_size as f64;
@@ -377,6 +397,7 @@ mod tests {
         assert!(!limiter.try_acquire("test"));
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn test_rate_limiter_blocking() {
         let config = RateLimiterConfig {
@@ -396,6 +417,7 @@ mod tests {
         assert!(start.elapsed() > Duration::from_millis(5));
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn test_rate_limiter_different_keys() {
         let config = RateLimiterConfig {

@@ -127,6 +127,21 @@ pub enum Commands {
     /// Manage lockfile for reproducible playbook execution
     #[command(name = "lock")]
     Lock(commands::lock::LockArgs),
+
+    /// Explain an error code (like `rustc --explain`)
+    #[command(name = "explain")]
+    Explain(ExplainArgs),
+}
+
+/// Arguments for explain command
+#[derive(Parser, Debug, Clone)]
+pub struct ExplainArgs {
+    /// Error code to explain (e.g., E0001)
+    pub code: Option<String>,
+
+    /// List all error codes
+    #[arg(long)]
+    pub list: bool,
 }
 
 /// Arguments for init command
@@ -209,6 +224,14 @@ pub mod env {
     #[allow(dead_code)]
     pub fn ssh_private_key() -> Option<PathBuf> {
         env::var("RUSTIBLE_SSH_KEY").ok().map(PathBuf::from)
+    }
+
+    /// Get the SSH password from environment
+    #[allow(dead_code)]
+    pub fn ssh_password() -> Option<String> {
+        env::var("RUSTIBLE_SSH_PASSWORD")
+            .ok()
+            .or_else(|| env::var("RUSTIBLE_SSH_PASS").ok())
     }
 
     /// Get the remote user

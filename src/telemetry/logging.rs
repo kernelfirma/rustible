@@ -3,14 +3,10 @@
 //! This module provides a configurable logging layer that supports
 //! multiple output formats (pretty, compact, JSON) and destinations.
 
-use crate::telemetry::config::{LogFormat, LogLevel, LogRotation, LoggingConfig, RotationStrategy};
-use std::io;
+use crate::telemetry::config::{LogFormat, LogLevel, LoggingConfig};
 use std::path::Path;
-use std::sync::Arc;
 use tracing::Subscriber;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::fmt::time::SystemTime;
-use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -449,6 +445,7 @@ macro_rules! log_module {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_subscriber::Registry;
 
     #[test]
     fn test_logging_builder() {
@@ -470,5 +467,29 @@ mod tests {
         assert_eq!(LogLevel::from_verbosity(1), LogLevel::Info);
         assert_eq!(LogLevel::from_verbosity(2), LogLevel::Debug);
         assert_eq!(LogLevel::from_verbosity(3), LogLevel::Trace);
+    }
+
+    #[test]
+    fn test_build_layer_for_formats() {
+        let _pretty = LoggingBuilder::new()
+            .with_format(LogFormat::Pretty)
+            .build_layer::<Registry>();
+        let _compact = LoggingBuilder::new()
+            .with_format(LogFormat::Compact)
+            .build_layer::<Registry>();
+        let _json = LoggingBuilder::new()
+            .with_format(LogFormat::Json)
+            .build_layer::<Registry>();
+        let _full = LoggingBuilder::new()
+            .with_format(LogFormat::Full)
+            .build_layer::<Registry>();
+    }
+
+    #[test]
+    fn test_logging_layer_config_access() {
+        let config = LoggingConfig::default();
+        let layer = LoggingLayer::new(config.clone());
+        assert_eq!(layer.config().level, config.level);
+        assert_eq!(layer.config().format, config.format);
     }
 }

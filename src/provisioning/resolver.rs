@@ -15,7 +15,10 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::provisioning::resolver::{TemplateResolver, ResolverContext};
 //!
 //! let resolver = TemplateResolver::new();
@@ -24,6 +27,8 @@
 //!
 //! let result = resolver.resolve_string("{{ variables.vpc_cidr }}", &ctx)?;
 //! assert_eq!(result, "10.0.0.0/16");
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::{HashMap, HashSet};

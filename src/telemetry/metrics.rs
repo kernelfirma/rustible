@@ -3,7 +3,7 @@
 //! This module provides Prometheus-compatible metrics including counters,
 //! gauges, and histograms for monitoring Rustible execution.
 
-use crate::telemetry::config::{MetricsConfig, MetricsExporterType};
+use crate::telemetry::config::MetricsConfig;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};

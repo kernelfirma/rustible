@@ -1,6 +1,5 @@
 //! Error types for secret management.
 
-use std::fmt;
 use thiserror::Error;
 
 /// Result type for secret operations.

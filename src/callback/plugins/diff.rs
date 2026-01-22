@@ -131,8 +131,11 @@ struct DiffStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::diff::{DiffCallback, DiffConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{DiffCallback, DiffConfig};
 ///
 /// // Basic usage with defaults
 /// let callback = DiffCallback::new();
@@ -142,6 +145,8 @@ struct DiffStats {
 ///     .with_context_lines(5)
 ///     .with_color(true);
 /// let callback = DiffCallback::with_config(config);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct DiffCallback {
@@ -160,8 +165,13 @@ impl DiffCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = DiffCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -172,9 +182,14 @@ impl DiffCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = DiffConfig::default().with_context_lines(5);
     /// let callback = DiffCallback::with_config(config);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_config(config: DiffConfig) -> Self {
@@ -489,13 +504,18 @@ impl ExecutionCallback for DiffCallback {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::diff::{DiffCallback, CompositeCallback};
-/// use rustible::callback::plugins::minimal::MinimalCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{DiffCallback, CompositeCallback};
+/// use rustible::callback::MinimalCallback;
 ///
 /// let composite = CompositeCallback::new()
 ///     .with_callback(Box::new(MinimalCallback::new()))
 ///     .with_callback(Box::new(DiffCallback::new()));
+/// # Ok(())
+/// # }
 /// ```
 pub struct CompositeCallback {
     callbacks: Vec<Box<dyn ExecutionCallback>>,
@@ -603,13 +623,18 @@ impl ExecutionCallback for CompositeCallback {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::diff::generate_diff;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::generate_diff;
 ///
 /// let before = "line1\nline2\nline3";
 /// let after = "line1\nmodified\nline3";
 /// let diff = generate_diff(before, after, 3);
 /// println!("{}", diff);
+/// # Ok(())
+/// # }
 /// ```
 pub fn generate_diff(before: &str, after: &str, _context_lines: usize) -> String {
     let diff = TextDiff::from_lines(before, after);
@@ -649,11 +674,16 @@ pub fn generate_diff(before: &str, after: &str, _context_lines: usize) -> String
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::diff::has_changes;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::has_changes;
 ///
 /// assert!(has_changes("old", "new"));
 /// assert!(!has_changes("same", "same"));
+/// # Ok(())
+/// # }
 /// ```
 pub fn has_changes(before: &str, after: &str) -> bool {
     before != after

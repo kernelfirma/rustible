@@ -132,8 +132,11 @@ struct TaskState {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::ProgressCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ProgressCallback;
 ///
 /// // Create with default configuration
 /// let callback = ProgressCallback::new();
@@ -145,7 +148,9 @@ struct TaskState {
 /// };
 /// let callback = ProgressCallback::with_config(config);
 ///
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ProgressCallback {
@@ -442,18 +447,16 @@ impl ProgressCallback {
         if let Some(start_time) = *start {
             let duration = start_time.elapsed();
             let duration_str = Self::format_duration(duration);
-            let status = if success {
+            let playbook_status = if success {
                 if self.config.use_color {
                     "completed".green().bold().to_string()
                 } else {
                     "completed".to_string()
                 }
+            } else if self.config.use_color {
+                "failed".red().bold().to_string()
             } else {
-                if self.config.use_color {
-                    "failed".red().bold().to_string()
-                } else {
-                    "failed".to_string()
-                }
+                "failed".to_string()
             };
 
             println!();
@@ -461,11 +464,11 @@ impl ProgressCallback {
                 println!(
                     "Playbook {} {} in {}",
                     playbook_name.bright_white(),
-                    status,
+                    playbook_status,
                     duration_str.bright_yellow()
                 );
             } else {
-                println!("Playbook {} {} in {}", playbook_name, status, duration_str);
+                println!("Playbook {} {} in {}", playbook_name, playbook_status, duration_str);
             }
         }
     }

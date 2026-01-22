@@ -5,7 +5,7 @@ macro_rules! wide_event {
         $( $key:ident = $value:expr ),* $(,)?
     ) => {
         {
-            let decision = crate::logging::should_sample(
+            let decision = $crate::logging::should_sample(
                 &tracing::Level::INFO,
                 $event_name,
                 None

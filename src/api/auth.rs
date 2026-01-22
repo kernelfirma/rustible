@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use super::error::ApiError;
 use super::state::AppState;
@@ -27,7 +28,7 @@ pub struct AuthConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            secret: "rustible-default-secret-change-me".to_string(),
+            secret: Uuid::new_v4().to_string(),
             expiration_secs: 3600,
             issuer: "rustible".to_string(),
         }
@@ -150,10 +151,15 @@ impl JwtAuth {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// async fn protected_route(user: AuthenticatedUser) -> impl IntoResponse {
 ///     format!("Hello, {}!", user.claims.sub)
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct AuthenticatedUser {
     /// The validated JWT claims
@@ -322,5 +328,16 @@ mod tests {
 
         assert_eq!(new_claims.sub, claims.sub);
         assert!(new_claims.iat >= claims.iat);
+    }
+
+    #[test]
+    fn test_default_config_has_random_secret() {
+        let config1 = AuthConfig::default();
+        let config2 = AuthConfig::default();
+
+        // Should not be the old hardcoded value
+        assert_ne!(config1.secret, "rustible-default-secret-change-me");
+        // Should be random (different each time)
+        assert_ne!(config1.secret, config2.secret);
     }
 }

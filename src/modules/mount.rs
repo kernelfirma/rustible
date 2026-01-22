@@ -43,6 +43,14 @@ impl MountState {
     }
 }
 
+impl std::str::FromStr for MountState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        MountState::from_str(s)
+    }
+}
+
 /// Information about a mount entry
 #[derive(Debug, Clone)]
 pub struct MountEntry {
@@ -98,6 +106,9 @@ impl MountModule {
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
             }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
         options
     }
@@ -109,10 +120,28 @@ impl MountModule {
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String)> {
         let options = Self::get_exec_options(context);
+        let connection = connection.clone();
+        let command = command.to_string();
+        let fut = async move { connection.execute(&command, Some(options)).await };
 
-        let result = Handle::current()
-            .block_on(async { connection.execute(command, Some(options)).await })
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
+        let result = if let Ok(handle) = Handle::try_current() {
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join())
+                .map_err(|_| {
+                    ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+                })?
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to create tokio runtime: {}",
+                        e
+                    ))
+                })?;
+            rt.block_on(fut)
+        }
+        .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
 
         Ok((result.success, result.stdout, result.stderr))
     }
@@ -148,7 +177,7 @@ impl MountModule {
             return Ok(None);
         }
 
-        let parts: Vec<&str> = stdout.trim().split_whitespace().collect();
+        let parts: Vec<&str> = stdout.split_whitespace().collect();
         if parts.len() >= 4 {
             Ok(Some(MountEntry {
                 src: parts[0].to_string(),
@@ -182,7 +211,7 @@ impl MountModule {
     /// Write /etc/fstab content
     fn write_fstab(
         connection: &Arc<dyn Connection + Send + Sync>,
-        content: &str,
+        fstab_content: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Create a backup first
@@ -192,7 +221,7 @@ impl MountModule {
         // Write new content
         let cmd = format!(
             "cat << 'RUSTIBLE_EOF' > /etc/fstab\n{}\nRUSTIBLE_EOF",
-            content.trim()
+            fstab_content.trim()
         );
         let (success, _, stderr) = Self::execute_command(connection, &cmd, context)?;
 

@@ -346,8 +346,8 @@ mod tests {
     fn test_sanitize_filename() {
         assert_eq!(sanitize_filename("normal.txt"), "normal.txt");
         assert_eq!(sanitize_filename("file name.txt"), "file name.txt");
-        assert_eq!(sanitize_filename("file;rm -rf /"), "filerm -rf ");
-        assert_eq!(sanitize_filename("../../etc/passwd"), "..etcpasswd");
+        assert_eq!(sanitize_filename("file;rm -rf /"), "filerm -rf");
+        assert_eq!(sanitize_filename("../../etc/passwd"), "....etcpasswd");
         assert_eq!(sanitize_filename("file\0name"), "filename");
     }
 

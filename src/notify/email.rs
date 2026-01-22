@@ -7,11 +7,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use base64::Engine;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::config::EmailConfig;
 use super::error::{NotificationError, NotificationResult};
-use super::{FailureInfo, HostStats, NotificationEvent, Notifier};
+use super::{HostStats, NotificationEvent, Notifier};
 
 /// Email notification backend.
 #[derive(Debug)]
@@ -498,6 +498,7 @@ fn format_duration(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::notify::FailureInfo;
     use std::collections::HashMap;
 
     fn create_test_config() -> EmailConfig {

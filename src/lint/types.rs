@@ -10,10 +10,12 @@ use thiserror::Error;
 /// Severity level for lint issues.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Severity {
     /// Informational hint - style suggestion, not a problem.
     Hint,
     /// Warning - potential issue that should be reviewed.
+    #[default]
     Warning,
     /// Error - definite problem that will cause issues.
     Error,
@@ -32,11 +34,6 @@ impl std::fmt::Display for Severity {
     }
 }
 
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Warning
-    }
-}
 
 /// Category of lint rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

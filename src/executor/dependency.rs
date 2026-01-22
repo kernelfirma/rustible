@@ -12,7 +12,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::executor::dependency::{DependencyGraph, DependencyNode, DependencyKind};
 //!
 //! let mut graph = DependencyGraph::new();
@@ -32,6 +35,8 @@
 //!
 //! // Visualize
 //! println!("{}", graph.to_dot());
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -769,16 +774,16 @@ impl DependencyGraph {
                 NodeType::Play => ("{{", "}}"),
             };
             // Sanitize ID for Mermaid (replace special chars)
-            let safe_id = id.replace(':', "_").replace('-', "_");
+            let safe_id = id.replace([':', '-'], "_");
             output.push_str(&format!("    {}{}{}{};\n", safe_id, open, node.name, close));
         }
 
-        output.push_str("\n");
+        output.push('\n');
 
         // Define edges
         for edge in &self.edges {
-            let safe_from = edge.from.replace(':', "_").replace('-', "_");
-            let safe_to = edge.to.replace(':', "_").replace('-', "_");
+            let safe_from = edge.from.replace([':', '-'], "_");
+            let safe_to = edge.to.replace([':', '-'], "_");
             let arrow = match edge.kind {
                 DependencyKind::Explicit => "-->",
                 DependencyKind::Variable => "-.->",
@@ -807,7 +812,7 @@ impl DependencyGraph {
         output.push_str("Dependency Graph:\n");
         output.push_str(&format!("  Nodes: {}\n", self.nodes.len()));
         output.push_str(&format!("  Edges: {}\n", self.edges.len()));
-        output.push_str("\n");
+        output.push('\n');
 
         if let Ok(order) = self.topological_sort() {
             output.push_str("Execution Order:\n");

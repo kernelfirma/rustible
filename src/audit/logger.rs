@@ -37,8 +37,10 @@ pub type AuditLogResult<T> = Result<T, AuditLogError>;
 
 /// Format for audit log output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum AuditFormat {
     /// Single-line text format
+    #[default]
     Text,
     /// JSON format (one event per line)
     Json,
@@ -46,11 +48,6 @@ pub enum AuditFormat {
     Cef,
 }
 
-impl Default for AuditFormat {
-    fn default() -> Self {
-        AuditFormat::Text
-    }
-}
 
 /// Trait for audit log backends
 pub trait AuditLogger: Send + Sync {
@@ -213,10 +210,12 @@ impl fmt::Debug for FileLogger {
 
 /// Syslog facility for audit messages
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SyslogFacility {
     /// Security/authorization messages
     Auth,
     /// Security/authorization messages (private)
+    #[default]
     AuthPriv,
     /// System daemons
     Daemon,
@@ -249,11 +248,6 @@ impl SyslogFacility {
     }
 }
 
-impl Default for SyslogFacility {
-    fn default() -> Self {
-        SyslogFacility::AuthPriv
-    }
-}
 
 /// Syslog transport protocol
 #[derive(Debug, Clone)]
@@ -663,6 +657,7 @@ fn cef_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use std::path::PathBuf;
 
     #[test]
     fn test_file_logger() {
@@ -724,5 +719,22 @@ mod tests {
     #[test]
     fn test_cef_escape() {
         assert_eq!(cef_escape("a|b=c\\d"), "a\\|b\\=c\\\\d");
+    }
+
+    #[test]
+    fn test_file_logger_rotation() {
+        let temp = TempDir::new().unwrap();
+        let log_path = temp.path().join("audit.log");
+
+        std::fs::write(&log_path, "x".repeat(64)).unwrap();
+
+        let logger = FileLogger::with_options(&log_path, AuditFormat::Text, Some(10), 3).unwrap();
+        let event = AuditEvent::command_execution("echo test").success();
+        logger.log(&event).unwrap();
+        logger.flush().unwrap();
+
+        let rotated = PathBuf::from(format!("{}.1", log_path.display()));
+        assert!(rotated.exists());
+        assert!(log_path.exists());
     }
 }

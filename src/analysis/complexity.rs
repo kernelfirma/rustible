@@ -8,7 +8,6 @@ use super::{
 };
 use crate::playbook::{Play, Playbook, Task};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Complexity metrics for a playbook or component
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -188,9 +187,13 @@ impl ComplexityAnalyzer {
                 complexity += 1;
             }
             // Block adds complexity
-            if !task.block.is_empty() {
+            if task.block.as_deref().is_some_and(|block| !block.is_empty()) {
                 complexity += 1;
-                if !task.rescue.is_empty() {
+                if task
+                    .rescue
+                    .as_deref()
+                    .is_some_and(|rescue| !rescue.is_empty())
+                {
                     complexity += 1;
                 }
             }
@@ -267,20 +270,20 @@ impl ComplexityAnalyzer {
     fn task_depth(&self, task: &Task, current_depth: usize) -> usize {
         let mut max = current_depth;
 
-        if !task.block.is_empty() {
-            for block_task in &task.block {
+        if let Some(block) = task.block.as_deref() {
+            for block_task in block {
                 max = max.max(self.task_depth(block_task, current_depth + 1));
             }
         }
 
-        if !task.rescue.is_empty() {
-            for rescue_task in &task.rescue {
+        if let Some(rescue) = task.rescue.as_deref() {
+            for rescue_task in rescue {
                 max = max.max(self.task_depth(rescue_task, current_depth + 1));
             }
         }
 
-        if !task.always.is_empty() {
-            for always_task in &task.always {
+        if let Some(always) = task.always.as_deref() {
+            for always_task in always {
                 max = max.max(self.task_depth(always_task, current_depth + 1));
             }
         }
@@ -293,9 +296,11 @@ impl ComplexityAnalyzer {
         let mut count = 0;
 
         for task in tasks {
-            if !task.block.is_empty() {
-                count += 1;
-                count += self.count_blocks_recursive(&task.block);
+            if let Some(block) = task.block.as_deref() {
+                if !block.is_empty() {
+                    count += 1;
+                    count += self.count_blocks_recursive(block);
+                }
             }
         }
 
@@ -306,12 +311,18 @@ impl ComplexityAnalyzer {
         let mut count = 0;
 
         for task in tasks {
-            if !task.block.is_empty() {
-                count += 1;
-                count += self.count_blocks_recursive(&task.block);
+            if let Some(block) = task.block.as_deref() {
+                if !block.is_empty() {
+                    count += 1;
+                    count += self.count_blocks_recursive(block);
+                }
             }
-            count += self.count_blocks_recursive(&task.rescue);
-            count += self.count_blocks_recursive(&task.always);
+            if let Some(rescue) = task.rescue.as_deref() {
+                count += self.count_blocks_recursive(rescue);
+            }
+            if let Some(always) = task.always.as_deref() {
+                count += self.count_blocks_recursive(always);
+            }
         }
 
         count
@@ -330,7 +341,7 @@ impl ComplexityAnalyzer {
         let size_penalty = (metrics.task_count as f64 * 0.2).min(25.0);
 
         let index = 100.0 - complexity_penalty - depth_penalty - size_penalty;
-        index.max(0.0).min(100.0)
+        index.clamp(0.0, 100.0)
     }
 }
 

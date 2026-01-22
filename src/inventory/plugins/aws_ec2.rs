@@ -347,7 +347,7 @@ impl AwsEc2Plugin {
             };
 
             // Check if any filter value matches
-            if !filter_values.iter().any(|fv| *fv == value) {
+            if !filter_values.contains(&value) {
                 return false;
             }
         }

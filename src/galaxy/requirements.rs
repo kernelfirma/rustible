@@ -522,4 +522,82 @@ roles:
         assert!(yaml.contains("community.general"));
         assert!(yaml.contains("5.0.0"));
     }
+
+    #[test]
+    fn test_parse_source_variants() {
+        let yaml = r#"
+collections:
+  - name: community.general
+    source: ./local/path
+  - name: community.general
+    source: https://galaxy.ansible.com
+  - name: community.general
+    source: https://example.com/archive.tar.gz
+  - name: community.general
+    source: https://github.com/org/repo.git
+"#;
+        let requirements = RequirementsFile::from_str(yaml, "test.yml").unwrap();
+        assert_eq!(requirements.collections.len(), 4);
+        assert!(matches!(
+            requirements.collections[0].source,
+            Some(RequirementSource::Local(_))
+        ));
+        assert!(matches!(
+            requirements.collections[1].source,
+            Some(RequirementSource::Galaxy(_))
+        ));
+        assert!(matches!(
+            requirements.collections[2].source,
+            Some(RequirementSource::Url(_))
+        ));
+        assert!(matches!(
+            requirements.collections[3].source,
+            Some(RequirementSource::Git { .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_source_unknown_name() {
+        let yaml = r#"
+collections:
+  - source: https://example.com/custom.tar.gz
+"#;
+        let requirements = RequirementsFile::from_str(yaml, "test.yml").unwrap();
+        assert_eq!(requirements.collections.len(), 1);
+        assert_eq!(requirements.collections[0].name, "unknown");
+        assert!(matches!(
+            requirements.collections[0].source,
+            Some(RequirementSource::Url(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_from_path_not_found() {
+        let result = RequirementsFile::from_path("missing-requirements.yml").await;
+        assert!(matches!(
+            result,
+            Err(GalaxyError::RequirementsFileNotFound { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_write_to_file_round_trip() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let path = temp_dir.path().join("requirements.yml");
+
+        let mut requirements = RequirementsFile::new();
+        requirements.add_collection(
+            Requirement::collection("community.general").with_version("5.0.0"),
+        );
+        requirements
+            .write_to_file(&path)
+            .await
+            .expect("write requirements");
+
+        let loaded = RequirementsFile::from_path(&path)
+            .await
+            .expect("read requirements");
+        assert_eq!(loaded.collections.len(), 1);
+        assert_eq!(loaded.collections[0].name, "community.general");
+    }
 }

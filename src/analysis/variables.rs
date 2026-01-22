@@ -6,8 +6,7 @@
 use super::{
     helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
 };
-use crate::playbook::{Play, Playbook, Task, When};
-use crate::vars::Variables;
+use crate::playbook::{Play, Playbook};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -335,7 +334,7 @@ impl VariableAnalyzer {
         };
 
         // Play-level variables
-        for var_name in play.vars.keys() {
+        for var_name in play.vars.as_map().keys() {
             definitions.insert(
                 var_name.clone(),
                 VariableUsage::new(var_name, VariableScope::Play)
@@ -356,7 +355,7 @@ impl VariableAnalyzer {
             };
 
             // Task-level vars
-            for var_name in task.vars.keys() {
+            for var_name in task.vars.as_map().keys() {
                 definitions.insert(
                     var_name.clone(),
                     VariableUsage::new(var_name, VariableScope::Task)
@@ -421,7 +420,7 @@ impl VariableAnalyzer {
         usages: &mut HashMap<String, Vec<SourceLocation>>,
     ) {
         // Collect from play vars (values might reference other variables)
-        for value in play.vars.values() {
+        for value in play.vars.as_map().values() {
             let vars = helpers::extract_value_variables(value);
             let location = SourceLocation::new().with_play(play_idx, &play.name);
             let location = if let Some(f) = source_file {
@@ -480,7 +479,7 @@ impl VariableAnalyzer {
             }
 
             // From task vars (values)
-            for value in task.vars.values() {
+            for value in task.vars.as_map().values() {
                 let vars = helpers::extract_value_variables(value);
                 for var in vars {
                     usages.entry(var).or_default().push(location.clone());
@@ -529,12 +528,12 @@ impl VariableAnalyzer {
         let mut findings = Vec::new();
 
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            let play_vars: HashSet<_> = play.vars.keys().cloned().collect();
+            let play_vars: HashSet<_> = play.vars.as_map().keys().cloned().collect();
 
             let all_tasks = helpers::get_all_tasks(play);
             for (task_idx, task) in all_tasks.iter().enumerate() {
                 // Check if task vars shadow play vars
-                for var_name in task.vars.keys() {
+                for var_name in task.vars.as_map().keys() {
                     if play_vars.contains(var_name) {
                         let location = SourceLocation::new()
                             .with_play(play_idx, &play.name)
@@ -631,6 +630,7 @@ impl VariableAnalyzer {
     }
 
     /// Calculate Levenshtein distance between two strings
+    #[allow(clippy::needless_range_loop)]
     fn levenshtein_distance(a: &str, b: &str) -> usize {
         let a_chars: Vec<_> = a.chars().collect();
         let b_chars: Vec<_> = b.chars().collect();

@@ -186,7 +186,9 @@ fn urlsplit(url_str: String, component: Option<String>) -> Value {
 /// Compatible with Ansible's `urlencode` filter.
 fn urlencode_filter(input: String) -> String {
     // URL encoding for query strings
-    form_urlencoded::byte_serialize(input.as_bytes()).collect()
+    form_urlencoded::byte_serialize(input.as_bytes())
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 /// URL-decode a string.
@@ -262,14 +264,21 @@ fn unquote_filter(input: String) -> String {
 
 // Re-export url-encoding utilities
 mod form_urlencoded {
-    pub fn byte_serialize(bytes: &[u8]) -> impl Iterator<Item = &str> + '_ {
-        bytes.iter().flat_map(|&b| {
-            if matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~') {
-                vec![std::str::from_utf8(&[b]).unwrap()]
+    pub fn byte_serialize(bytes: &[u8]) -> impl Iterator<Item = String> + '_ {
+        bytes.iter().map(|&b| {
+            if matches!(
+                b,
+                b'A'..=b'Z'
+                    | b'a'..=b'z'
+                    | b'0'..=b'9'
+                    | b'-'
+                    | b'_'
+                    | b'.'
+                    | b'~'
+            ) {
+                (b as char).to_string()
             } else {
-                let hex = format!("%{:02X}", b);
-                // Leak is fine here for test/filter usage; in production you might want a different approach
-                vec![Box::leak(hex.into_boxed_str()) as &str]
+                format!("%{:02X}", b)
             }
         })
     }

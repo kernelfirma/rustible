@@ -184,7 +184,6 @@ pub fn powershell_escape_double_quoted(s: &str) -> Cow<'_, str> {
     // This function wraps in double quotes.
     // Unlike the others, this seems to be for partial string interpolation or specific use cases.
     // Original always allocated.
-
     let mut escaped = String::with_capacity(s.len() + 16);
     escaped.push('"');
     for c in s.chars() {

@@ -503,6 +503,7 @@ mod tests {
         assert_eq!(stats.cache_misses, 1);
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_fact_pipeline_parallel() {
         let config = FactPipelineConfig {

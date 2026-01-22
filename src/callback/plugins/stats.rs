@@ -43,8 +43,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::stats::{StatsCallback, StatsConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{StatsCallback, StatsConfig};
 //!
 //! // Create with default config
 //! let callback = StatsCallback::new();
@@ -61,6 +64,8 @@
 //! // After execution, export stats
 //! let json = callback.export_json();
 //! let prometheus = callback.export_prometheus();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -646,8 +651,8 @@ impl StatsCallback {
     /// Export current statistics as JSON.
     pub fn export_json(&self) -> String {
         let state = self.state.read();
-        if let Some(ref stats) = state.current_stats {
-            serde_json::to_string_pretty(stats).unwrap_or_else(|_| "{}".to_string())
+        if let Some(ref current_stats) = state.current_stats {
+            serde_json::to_string_pretty(current_stats).unwrap_or_else(|_| "{}".to_string())
         } else if let Some(last) = state.history.last() {
             serde_json::to_string_pretty(last).unwrap_or_else(|_| "{}".to_string())
         } else {
@@ -658,8 +663,8 @@ impl StatsCallback {
     /// Export current statistics as compact JSON (single line).
     pub fn export_json_compact(&self) -> String {
         let state = self.state.read();
-        if let Some(ref stats) = state.current_stats {
-            serde_json::to_string(stats).unwrap_or_else(|_| "{}".to_string())
+        if let Some(ref current_stats) = state.current_stats {
+            serde_json::to_string(current_stats).unwrap_or_else(|_| "{}".to_string())
         } else if let Some(last) = state.history.last() {
             serde_json::to_string(last).unwrap_or_else(|_| "{}".to_string())
         } else {
@@ -670,12 +675,12 @@ impl StatsCallback {
     /// Export current statistics in Prometheus exposition format.
     pub fn export_prometheus(&self) -> String {
         let state = self.state.read();
-        let stats = state
+        let current_stats = state
             .current_stats
             .as_ref()
             .or_else(|| state.history.last());
 
-        let Some(stats) = stats else {
+        let Some(playbook_stats) = current_stats else {
             return String::new();
         };
 
@@ -686,34 +691,34 @@ impl StatsCallback {
         output.push_str("# TYPE rustible_tasks_total counter\n");
         output.push_str(&format!(
             "rustible_tasks_total{{status=\"ok\"}} {}\n",
-            stats.total_ok
+            playbook_stats.total_ok
         ));
         output.push_str(&format!(
             "rustible_tasks_total{{status=\"changed\"}} {}\n",
-            stats.total_changed
+            playbook_stats.total_changed
         ));
         output.push_str(&format!(
             "rustible_tasks_total{{status=\"failed\"}} {}\n",
-            stats.total_failed
+            playbook_stats.total_failed
         ));
         output.push_str(&format!(
             "rustible_tasks_total{{status=\"skipped\"}} {}\n",
-            stats.total_skipped
+            playbook_stats.total_skipped
         ));
         output.push_str(&format!(
             "rustible_tasks_total{{status=\"unreachable\"}} {}\n",
-            stats.total_unreachable
+            playbook_stats.total_unreachable
         ));
 
         // Duration
-        if let Some(duration) = stats.duration_secs {
+        if let Some(duration) = playbook_stats.duration_secs {
             output.push_str(
                 "\n# HELP rustible_playbook_duration_seconds Total playbook execution time\n",
             );
             output.push_str("# TYPE rustible_playbook_duration_seconds gauge\n");
             output.push_str(&format!(
                 "rustible_playbook_duration_seconds{{playbook=\"{}\"}} {:.3}\n",
-                stats.playbook, duration
+                playbook_stats.playbook, duration
             ));
         }
 
@@ -722,14 +727,14 @@ impl StatsCallback {
         output.push_str("# TYPE rustible_success_rate gauge\n");
         output.push_str(&format!(
             "rustible_success_rate{{playbook=\"{}\"}} {:.2}\n",
-            stats.playbook,
-            stats.success_rate()
+            playbook_stats.playbook,
+            playbook_stats.success_rate()
         ));
 
         // Per-host stats
         output.push_str("\n# HELP rustible_host_tasks_total Tasks per host by status\n");
         output.push_str("# TYPE rustible_host_tasks_total counter\n");
-        for (host, host_stats) in &stats.hosts {
+        for (host, host_stats) in &playbook_stats.hosts {
             output.push_str(&format!(
                 "rustible_host_tasks_total{{host=\"{}\",status=\"ok\"}} {}\n",
                 host, host_stats.ok
@@ -755,7 +760,7 @@ impl StatsCallback {
         output.push_str("# TYPE rustible_module_duration_seconds_total counter\n");
         output.push_str("\n# HELP rustible_module_executions_total Executions per module\n");
         output.push_str("# TYPE rustible_module_executions_total counter\n");
-        for (module, module_stats) in &stats.module_stats {
+        for (module, module_stats) in &playbook_stats.module_stats {
             output.push_str(&format!(
                 "rustible_module_executions_total{{module=\"{}\"}} {}\n",
                 module, module_stats.count
@@ -776,7 +781,7 @@ impl StatsCallback {
             "\n# HELP rustible_classification_duration_seconds_total Time by module classification\n",
         );
         output.push_str("# TYPE rustible_classification_duration_seconds_total counter\n");
-        for (classification, class_stats) in &stats.classification_stats {
+        for (classification, class_stats) in &playbook_stats.classification_stats {
             output.push_str(&format!(
                 "rustible_classification_executions_total{{classification=\"{}\"}} {}\n",
                 classification, class_stats.count
@@ -789,7 +794,7 @@ impl StatsCallback {
         }
 
         // Histogram buckets if available
-        if let Some(ref histogram) = stats.duration_histogram {
+        if let Some(ref histogram) = playbook_stats.duration_histogram {
             output.push_str(
                 "\n# HELP rustible_task_duration_seconds Task execution duration histogram\n",
             );
@@ -819,7 +824,7 @@ impl StatsCallback {
         }
 
         // Memory stats if available
-        if let Some(snapshot) = stats.memory_snapshots.last() {
+        if let Some(snapshot) = playbook_stats.memory_snapshots.last() {
             if let Some(rss) = snapshot.rss_bytes {
                 output.push_str("\n# HELP rustible_memory_rss_bytes Resident set size in bytes\n");
                 output.push_str("# TYPE rustible_memory_rss_bytes gauge\n");
@@ -839,36 +844,39 @@ impl StatsCallback {
     /// Get a summary string suitable for logging.
     pub fn summary(&self) -> String {
         let state = self.state.read();
-        let stats = state
+        let current_stats = state
             .current_stats
             .as_ref()
             .or_else(|| state.history.last());
 
-        let Some(stats) = stats else {
+        let Some(playbook_stats) = current_stats else {
             return "No statistics available".to_string();
         };
 
         let mut summary = String::new();
-        summary.push_str(&format!("Playbook: {}\n", stats.playbook));
+        summary.push_str(&format!("Playbook: {}\n", playbook_stats.playbook));
 
-        if let Some(duration) = stats.duration_secs {
+        if let Some(duration) = playbook_stats.duration_secs {
             summary.push_str(&format!("Duration: {:.2}s\n", duration));
         }
 
         summary.push_str(&format!(
             "Tasks: {} total, {} ok, {} changed, {} failed, {} skipped\n",
-            stats.total_tasks,
-            stats.total_ok,
-            stats.total_changed,
-            stats.total_failed,
-            stats.total_skipped
+            playbook_stats.total_tasks,
+            playbook_stats.total_ok,
+            playbook_stats.total_changed,
+            playbook_stats.total_failed,
+            playbook_stats.total_skipped
         ));
 
-        summary.push_str(&format!("Success Rate: {:.1}%\n", stats.success_rate()));
+        summary.push_str(&format!(
+            "Success Rate: {:.1}%\n",
+            playbook_stats.success_rate()
+        ));
 
-        if !stats.module_stats.is_empty() {
+        if !playbook_stats.module_stats.is_empty() {
             summary.push_str("\nTop modules by execution time:\n");
-            let mut modules: Vec<_> = stats.module_stats.iter().collect();
+            let mut modules: Vec<_> = playbook_stats.module_stats.iter().collect();
             modules.sort_by(|a, b| b.1.total_duration_ms.cmp(&a.1.total_duration_ms));
 
             for (module, module_stats) in modules.iter().take(5) {
@@ -905,8 +913,8 @@ impl StatsCallback {
     fn maybe_snapshot_memory(&self) {
         let mut state = self.state.write();
         if state.config.track_memory {
-            if let Some(ref mut stats) = state.current_stats {
-                stats.memory_snapshots.push(MemorySnapshot::take());
+            if let Some(ref mut current_stats) = state.current_stats {
+                current_stats.memory_snapshots.push(MemorySnapshot::take());
             }
         }
     }
@@ -918,19 +926,19 @@ impl StatsCallback {
 
         let classification = state.get_classification(module);
 
-        let Some(ref mut stats) = state.current_stats else {
+        let Some(ref mut current_stats) = state.current_stats else {
             return;
         };
 
         // Update per-module stats
-        let module_stats = stats
+        let module_stats = current_stats
             .module_stats
             .entry(module.to_string())
             .or_insert_with(|| ModuleStats::with_classification(classification));
         module_stats.record(result, duration_ms);
 
         // Update classification stats
-        let class_stats = stats
+        let class_stats = current_stats
             .classification_stats
             .entry(classification.to_string())
             .or_default();
@@ -1017,9 +1025,9 @@ impl ExecutionCallback for StatsCallback {
 
         state.play_start = Some(Instant::now());
 
-        if let Some(ref mut stats) = state.current_stats {
-            stats.current_play = Some(name.to_string());
-            stats.plays.push(PlayStats {
+        if let Some(ref mut current_stats) = state.current_stats {
+            current_stats.current_play = Some(name.to_string());
+            current_stats.plays.push(PlayStats {
                 name: name.to_string(),
                 hosts: hosts.to_vec(),
                 duration_ms: None,
@@ -1040,10 +1048,10 @@ impl ExecutionCallback for StatsCallback {
             .play_start
             .map(|start| start.elapsed().as_millis() as u64);
 
-        if let Some(ref mut stats) = state.current_stats {
-            stats.current_play = None;
+        if let Some(ref mut current_stats) = state.current_stats {
+            current_stats.current_play = None;
 
-            if let Some(play) = stats.plays.last_mut() {
+            if let Some(play) = current_stats.plays.last_mut() {
                 play.duration_ms = duration_ms;
                 play.success = success;
             }
@@ -1072,33 +1080,33 @@ impl ExecutionCallback for StatsCallback {
 
         let duration_ms = duration.as_millis() as u64;
 
-        let Some(ref mut stats) = state.current_stats else {
+        let Some(ref mut current_stats) = state.current_stats else {
             return;
         };
 
         // Update total counters
-        stats.total_tasks += 1;
+        current_stats.total_tasks += 1;
         if result.result.skipped {
-            stats.total_skipped += 1;
+            current_stats.total_skipped += 1;
         } else if !result.result.success {
-            stats.total_failed += 1;
+            current_stats.total_failed += 1;
         } else if result.result.changed {
-            stats.total_changed += 1;
+            current_stats.total_changed += 1;
         } else {
-            stats.total_ok += 1;
+            current_stats.total_ok += 1;
         }
 
         // Update per-host stats
-        let host_stats = stats.hosts.entry(result.host.clone()).or_default();
+        let host_stats = current_stats.hosts.entry(result.host.clone()).or_default();
         host_stats.record(&result.result, duration);
 
         // Update histogram if enabled
-        if let Some(ref mut histogram) = stats.duration_histogram {
+        if let Some(ref mut histogram) = current_stats.duration_histogram {
             histogram.record(duration_ms);
         }
 
         // Update current play task count
-        if let Some(play) = stats.plays.last_mut() {
+        if let Some(play) = current_stats.plays.last_mut() {
             play.task_count += 1;
         }
     }

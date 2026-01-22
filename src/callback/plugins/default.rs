@@ -37,8 +37,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::DefaultCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::DefaultCallback;
 //!
 //! // Create with default settings
 //! let callback = DefaultCallback::new();
@@ -54,7 +57,9 @@
 //!     .show_diff(true)
 //!     .build();
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -212,11 +217,16 @@ impl Default for DefaultCallbackConfig {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::DefaultCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::DefaultCallback;
 ///
 /// let callback = DefaultCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct DefaultCallback {
@@ -247,8 +257,13 @@ impl DefaultCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = DefaultCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new() -> Self {
         Self::with_config(DefaultCallbackConfig::default())
@@ -262,13 +277,18 @@ impl DefaultCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = DefaultCallbackConfig {
     ///     verbosity: 2,
     ///     no_color: true,
     ///     ..Default::default()
     /// };
     /// let callback = DefaultCallback::with_config(config);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn with_config(config: DefaultCallbackConfig) -> Self {
         // Respect NO_COLOR environment variable
@@ -583,25 +603,23 @@ impl ExecutionCallback for DefaultCallback {
             let duration = start.elapsed();
             let duration_str = Self::format_duration(duration);
 
-            let status = if success {
+            let playbook_status = if success {
                 if self.use_color() {
                     "completed".green().bold().to_string()
                 } else {
                     "completed".to_string()
                 }
+            } else if self.use_color() {
+                "failed".red().bold().to_string()
             } else {
-                if self.use_color() {
-                    "failed".red().bold().to_string()
-                } else {
-                    "failed".to_string()
-                }
+                "failed".to_string()
             };
 
             println!();
             if self.use_color() {
-                println!("Playbook {} in {}", status, duration_str.bright_white());
+                println!("Playbook {} in {}", playbook_status, duration_str.bright_white());
             } else {
-                println!("Playbook {} in {}", status, duration_str);
+                println!("Playbook {} in {}", playbook_status, duration_str);
             }
         }
 

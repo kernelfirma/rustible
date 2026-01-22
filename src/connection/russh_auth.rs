@@ -37,13 +37,18 @@ use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
 use russh::client::{self, Handle, Handler, KeyboardInteractiveAuthResponse, Session};
+use russh::keys::agent::client::AgentClient;
+use russh::keys::{
+    self, check_known_hosts_path, Algorithm, EcdsaCurve, PrivateKey, PrivateKeyWithHashAlg,
+    PublicKey,
+};
 use russh::ChannelId;
-use russh_keys::agent::client::AgentClient;
-use russh_keys::check_known_hosts_path;
-use russh_keys::key::{KeyPair, PublicKey};
 
 use super::config::{expand_path, HostConfig};
 use super::ConnectionError;
+
+/// Alias to preserve the previous KeyPair naming in public APIs.
+pub type KeyPair = PrivateKey;
 
 // ============================================================================
 // Key Types and Detection
@@ -104,13 +109,15 @@ impl KeyType {
 
     /// Get key type from a loaded key pair
     pub fn from_key_pair(key: &KeyPair) -> Option<Self> {
-        let name = key.name();
-        match name {
-            "ssh-ed25519" => Some(KeyType::Ed25519),
-            "ssh-rsa" | "rsa-sha2-256" | "rsa-sha2-512" => Some(KeyType::Rsa),
-            "ecdsa-sha2-nistp256" => Some(KeyType::EcdsaP256),
-            "ecdsa-sha2-nistp384" => Some(KeyType::EcdsaP384),
-            "ecdsa-sha2-nistp521" => Some(KeyType::EcdsaP521),
+        match key.algorithm() {
+            Algorithm::Ed25519 | Algorithm::SkEd25519 => Some(KeyType::Ed25519),
+            Algorithm::Rsa { .. } => Some(KeyType::Rsa),
+            Algorithm::Ecdsa { curve } => match curve {
+                EcdsaCurve::NistP256 => Some(KeyType::EcdsaP256),
+                EcdsaCurve::NistP384 => Some(KeyType::EcdsaP384),
+                EcdsaCurve::NistP521 => Some(KeyType::EcdsaP521),
+            },
+            Algorithm::SkEcdsaSha2NistP256 => Some(KeyType::EcdsaP256),
             _ => None,
         }
     }
@@ -313,18 +320,18 @@ impl KeyLoader {
 
         // Try loading with passphrase first if we have one
         let result = if let Some(passphrase) = &self.passphrase {
-            russh_keys::load_secret_key(path, Some(passphrase)).or_else(|e| {
+            keys::load_secret_key(path, Some(passphrase)).or_else(|e| {
                 let error_msg = e.to_string().to_lowercase();
                 // If passphrase was wrong, try without (maybe key isn't encrypted)
                 if error_msg.contains("decrypt") || error_msg.contains("mac") {
-                    russh_keys::load_secret_key(path, None)
+                    keys::load_secret_key(path, None)
                 } else {
                     Err(e)
                 }
             })
         } else {
             // Try without passphrase first
-            russh_keys::load_secret_key(path, None)
+            keys::load_secret_key(path, None)
         };
 
         result.map_err(|e| {
@@ -355,11 +362,18 @@ impl KeyLoader {
         let key_type = KeyType::from_key_pair(&key);
         let was_encrypted = self.passphrase.is_some();
 
+        let comment = key.comment();
+        let comment = if comment.is_empty() {
+            None
+        } else {
+            Some(comment.to_string())
+        };
+
         let info = KeyInfo {
             path: path.to_path_buf(),
             key_type,
             was_encrypted,
-            comment: None, // Could extract from key if available
+            comment,
         };
 
         Ok((key, info))
@@ -609,7 +623,9 @@ impl AuthConfig {
 
     /// Add SSH agent authentication
     pub fn with_agent(mut self) -> Self {
-        self.methods.push(AuthMethod::Agent);
+        if !self.methods.iter().any(|method| matches!(method, AuthMethod::Agent)) {
+            self.methods.push(AuthMethod::Agent);
+        }
         self
     }
 
@@ -638,6 +654,21 @@ pub enum AuthResult {
     Partial,
     /// Server disconnected during authentication
     Disconnected,
+}
+
+fn map_auth_result(result: client::AuthResult) -> AuthResult {
+    match result {
+        client::AuthResult::Success => AuthResult::Success,
+        client::AuthResult::Failure { partial_success, .. } => map_partial_success(partial_success),
+    }
+}
+
+fn map_partial_success(partial_success: bool) -> AuthResult {
+    if partial_success {
+        AuthResult::Partial
+    } else {
+        AuthResult::Failure
+    }
 }
 
 /// Russh client handler implementation
@@ -706,7 +737,10 @@ impl Handler for RusshClientHandler {
     /// 2. Prompt the user for unknown keys
     /// 3. Never blindly accept all keys
     async fn check_server_key(&mut self, server_public_key: &PublicKey) -> Result<bool, Self::Error> {
-        trace!("Checking server key: {:?}", server_public_key.name());
+        trace!(
+            "Checking server key: {}",
+            server_public_key.algorithm().as_str()
+        );
 
         // Store the server key
         *self.server_key.lock().await = Some(server_public_key.clone());
@@ -942,13 +976,7 @@ impl RusshAuthenticator {
         debug!("Attempting 'none' authentication for user: {}", username);
 
         match handle.authenticate_none(username).await {
-            Ok(result) => {
-                if result {
-                    Ok(AuthResult::Success)
-                } else {
-                    Ok(AuthResult::Failure)
-                }
-            }
+            Ok(result) => Ok(map_auth_result(result)),
             Err(e) => Err(ConnectionError::AuthenticationFailed(format!(
                 "None authentication failed: {}",
                 e
@@ -966,13 +994,7 @@ impl RusshAuthenticator {
         debug!("Attempting password authentication for user: {}", username);
 
         match handle.authenticate_password(username, password).await {
-            Ok(result) => {
-                if result {
-                    Ok(AuthResult::Success)
-                } else {
-                    Ok(AuthResult::Failure)
-                }
-            }
+            Ok(result) => Ok(map_auth_result(result)),
             Err(e) => Err(ConnectionError::AuthenticationFailed(format!(
                 "Password authentication failed: {}",
                 e
@@ -998,19 +1020,16 @@ impl RusshAuthenticator {
         let key = load_private_key(&expanded_path, passphrase)?;
 
         // Get the best RSA hash algorithm if applicable
-        let hash_alg = handle.best_supported_rsa_hash().await.ok().flatten();
-
-        match handle
-            .authenticate_publickey(username, Arc::new(key), hash_alg)
+        let hash_alg = handle
+            .best_supported_rsa_hash()
             .await
-        {
-            Ok(result) => {
-                if result {
-                    Ok(AuthResult::Success)
-                } else {
-                    Ok(AuthResult::Failure)
-                }
-            }
+            .ok()
+            .flatten()
+            .flatten();
+        let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg);
+
+        match handle.authenticate_publickey(username, key_with_alg).await {
+            Ok(result) => Ok(map_auth_result(result)),
             Err(e) => Err(ConnectionError::AuthenticationFailed(format!(
                 "Public key authentication failed: {}",
                 e
@@ -1042,24 +1061,41 @@ impl RusshAuthenticator {
 
         debug!("Found {} identities in SSH agent", identities.len());
 
+        let rsa_hash = if identities.iter().any(|identity| identity.algorithm().is_rsa()) {
+            handle
+                .best_supported_rsa_hash()
+                .await
+                .ok()
+                .flatten()
+                .flatten()
+        } else {
+            None
+        };
+
         // Try each identity
         for identity in identities {
-            debug!("Trying agent identity: {:?}", identity.name());
+            let algorithm = identity.algorithm();
+            debug!(key_type = %algorithm.as_str(), "Trying agent identity");
 
-            // Create an agent signer for this identity
-            let agent_signer = AgentSigner::new(self.get_or_connect_agent().await?, identity.clone());
-
+            let hash_alg = if algorithm.is_rsa() { rsa_hash } else { None };
             match handle
-                .authenticate_publickey_with(username, Arc::new(agent_signer))
+                .authenticate_publickey_with(username, identity.clone(), hash_alg, agent)
                 .await
             {
-                Ok(result) if result => {
-                    debug!("SSH agent authentication succeeded");
-                    return Ok(AuthResult::Success);
-                }
-                Ok(_) => {
-                    debug!("Agent identity rejected, trying next...");
-                }
+                Ok(result) => match map_auth_result(result) {
+                    AuthResult::Success => {
+                        debug!("SSH agent authentication succeeded");
+                        return Ok(AuthResult::Success);
+                    }
+                    AuthResult::Partial => {
+                        debug!("SSH agent authentication partially succeeded");
+                        return Ok(AuthResult::Partial);
+                    }
+                    AuthResult::Failure => {
+                        debug!("Agent identity rejected, trying next...");
+                    }
+                    AuthResult::Disconnected => return Ok(AuthResult::Disconnected),
+                },
                 Err(e) => {
                     debug!("Agent auth error: {}, trying next identity...", e);
                 }
@@ -1081,46 +1117,47 @@ impl RusshAuthenticator {
             username
         );
 
-        // Start keyboard-interactive authentication
-        match handle
-            .authenticate_keyboard_interactive_start(username, None)
+        let mut response = handle
+            .authenticate_keyboard_interactive_start(username, None::<String>)
             .await
-        {
-            Ok(client::AuthResult::Success) => {
-                return Ok(AuthResult::Success);
-            }
-            Ok(client::AuthResult::Failure) => {
-                return Ok(AuthResult::Failure);
-            }
-            Ok(client::AuthResult::Partial { .. }) => {
-                // Need to respond to prompts
-            }
-            Ok(client::AuthResult::UnsupportedMethod) => {
-                debug!("Keyboard-interactive authentication not supported by server");
-                return Ok(AuthResult::Failure);
-            }
-            Err(e) => {
-                return Err(ConnectionError::AuthenticationFailed(format!(
+            .map_err(|e| {
+                ConnectionError::AuthenticationFailed(format!(
                     "Keyboard-interactive authentication failed: {}",
                     e
-                )));
-            }
-        }
+                ))
+            })?;
 
-        // Respond to prompts
-        let response = client::KeyboardInteractiveAuthResponse::Answers(responses);
-        match handle
-            .authenticate_keyboard_interactive_respond(response)
-            .await
-        {
-            Ok(client::AuthResult::Success) => Ok(AuthResult::Success),
-            Ok(client::AuthResult::Failure) => Ok(AuthResult::Failure),
-            Ok(client::AuthResult::Partial { .. }) => Ok(AuthResult::Partial),
-            Ok(client::AuthResult::UnsupportedMethod) => Ok(AuthResult::Failure),
-            Err(e) => Err(ConnectionError::AuthenticationFailed(format!(
-                "Keyboard-interactive authentication failed: {}",
-                e
-            ))),
+        loop {
+            match response {
+                KeyboardInteractiveAuthResponse::Success => return Ok(AuthResult::Success),
+                KeyboardInteractiveAuthResponse::Failure { partial_success, .. } => {
+                    return Ok(map_partial_success(partial_success));
+                }
+                KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                    let mut answers = Vec::with_capacity(prompts.len());
+                    if responses.is_empty() {
+                        answers.resize(prompts.len(), String::new());
+                    } else if responses.len() == 1 && prompts.len() > 1 {
+                        answers.extend(
+                            std::iter::repeat(responses[0].clone()).take(prompts.len()),
+                        );
+                    } else {
+                        for index in 0..prompts.len() {
+                            answers.push(responses.get(index).cloned().unwrap_or_default());
+                        }
+                    }
+
+                    response = handle
+                        .authenticate_keyboard_interactive_respond(answers)
+                        .await
+                        .map_err(|e| {
+                            ConnectionError::AuthenticationFailed(format!(
+                                "Keyboard-interactive authentication failed: {}",
+                                e
+                            ))
+                        })?;
+                }
+            }
         }
     }
 
@@ -1158,7 +1195,7 @@ pub fn load_private_key(path: &Path, passphrase: Option<&str>) -> Result<KeyPair
         )));
     }
 
-    russh_keys::load_secret_key(path, passphrase).map_err(|e| {
+    keys::load_secret_key(path, passphrase).map_err(|e| {
         ConnectionError::AuthenticationFailed(format!(
             "Failed to load private key from {:?}: {}",
             path, e
@@ -1173,7 +1210,7 @@ pub fn load_private_key_from_string(
 ) -> Result<KeyPair, ConnectionError> {
     debug!("Loading private key from string");
 
-    russh_keys::decode_secret_key(content, passphrase).map_err(|e| {
+    keys::decode_secret_key(content, passphrase).map_err(|e| {
         ConnectionError::AuthenticationFailed(format!("Failed to decode private key: {}", e))
     })
 }
@@ -1192,69 +1229,6 @@ pub fn default_identity_files() -> Vec<std::path::PathBuf> {
     .into_iter()
     .filter(|p| p.exists())
     .collect()
-}
-
-/// SSH agent signer that wraps an AgentClient for use with russh authentication
-///
-/// This implements the russh Signer trait to allow using SSH agent keys
-/// for public key authentication.
-pub struct AgentSigner {
-    /// The agent client
-    agent: AgentClient<tokio::net::UnixStream>,
-    /// The public key to sign with
-    public_key: PublicKey,
-}
-
-impl AgentSigner {
-    /// Create a new agent signer
-    pub fn new(agent: AgentClient<tokio::net::UnixStream>, public_key: PublicKey) -> Self {
-        Self { agent, public_key }
-    }
-}
-
-#[async_trait::async_trait]
-impl russh_keys::agent::client::AgentStream for tokio::net::UnixStream {
-    async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        use tokio::io::AsyncReadExt;
-        self.read(buf).await
-    }
-
-    async fn send(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        use tokio::io::AsyncWriteExt;
-        self.write(buf).await
-    }
-}
-
-impl russh::Signer for AgentSigner {
-    fn name(&self) -> &str {
-        self.public_key.name()
-    }
-
-    fn public_key(&self) -> &PublicKey {
-        &self.public_key
-    }
-
-    fn sign(&self, data: &[u8]) -> impl std::future::Future<Output = Result<russh_keys::signature::Signature, russh::Error>> + Send {
-        let public_key = self.public_key.clone();
-        let data = data.to_vec();
-
-        // We need to create a new agent connection for signing since we can't
-        // hold a mutable reference across the async boundary
-        async move {
-            let mut agent = AgentClient::connect_env()
-                .await
-                .map_err(|e| russh::Error::AgentFailure)?;
-
-            agent
-                .sign_request_signature(&public_key, &data)
-                .await
-                .map_err(|_| russh::Error::AgentFailure)
-        }
-    }
-
-    fn algorithm(&self) -> Option<&str> {
-        None // Let the library determine the algorithm
-    }
 }
 
 #[cfg(test)]

@@ -231,7 +231,7 @@ fn parse_config_sections(content: &str, platform: NetworkPlatform) -> Vec<Config
         }
 
         let indent = line.len() - line.trim_start().len();
-        let indent_level = if indent_char.len() > 0 {
+        let indent_level = if !indent_char.is_empty() {
             indent / indent_char.len()
         } else {
             0

@@ -20,6 +20,16 @@ use std::sync::Arc;
 pub struct ShellModule;
 
 impl ShellModule {
+    fn get_cmd_param(&self, params: &ModuleParams) -> ModuleResult<String> {
+        if let Some(cmd) = params.get_string("cmd")? {
+            return Ok(cmd);
+        }
+        if let Some(cmd) = params.get_string("_raw_params")? {
+            return Ok(cmd);
+        }
+        Err(ModuleError::MissingParameter("cmd".to_string()))
+    }
+
     /// Get shell executable and flag for local execution
     fn get_shell(&self, params: &ModuleParams) -> ModuleResult<(String, String)> {
         // Get shell executable
@@ -100,6 +110,9 @@ impl ShellModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         Ok(options)
@@ -189,14 +202,15 @@ impl ShellModule {
             return Ok(output);
         }
 
-        let cmd = params.get_string_required("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
 
         // In check mode, return what would happen
         if context.check_mode {
             return Ok(ModuleOutput::changed(format!(
                 "Would execute shell command: {}",
                 cmd
-            )));
+            ))
+            .with_command_output(Some(String::new()), Some(String::new()), Some(0)));
         }
 
         let (shell, flag) = self.get_shell(params)?;
@@ -254,12 +268,11 @@ impl ShellModule {
                     "Shell command executed successfully".to_string(),
                 )
                 .with_command_output(Some(stdout), Some(stderr), Some(rc)));
-            } else {
-                return Err(ModuleError::CommandFailed {
-                    code: rc,
-                    message: if stderr.is_empty() { stdout } else { stderr },
-                });
             }
+            return Err(ModuleError::CommandFailed {
+                code: rc,
+                message: if stderr.is_empty() { stdout } else { stderr },
+            });
         }
 
         // Execute the command
@@ -302,7 +315,7 @@ impl ShellModule {
     ) -> ModuleResult<ModuleOutput> {
         let params_clone = params.clone();
         let check_mode = context.check_mode;
-        let cmd = params.get_string_required("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
         let shell_cmd = self.build_shell_command(&cmd, params)?;
         let options = self.build_execute_options(params, context)?;
         let warn_on_stderr = params.get_bool_or("warn", true);
@@ -334,7 +347,12 @@ impl ShellModule {
                             return Ok(ModuleOutput::changed(format!(
                                 "Would execute shell command: {}",
                                 cmd
-                            )));
+                            ))
+                            .with_command_output(
+                                Some(String::new()),
+                                Some(String::new()),
+                                Some(0),
+                            ));
                         }
 
                         // Execute via connection
@@ -401,7 +419,14 @@ impl Module for ShellModule {
     }
 
     fn required_params(&self) -> &[&'static str] {
-        &["cmd"]
+        &[]
+    }
+
+    fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
+        if params.get("cmd").is_none() && params.get("_raw_params").is_none() {
+            return Err(ModuleError::MissingParameter("cmd".to_string()));
+        }
+        Ok(())
     }
 
     fn execute(
@@ -444,6 +469,19 @@ mod tests {
             "cmd".to_string(),
             serde_json::json!("echo 'hello world' | grep hello"),
         );
+
+        let context = ModuleContext::default();
+        let result = module.execute(&params, &context).unwrap();
+
+        assert!(result.changed);
+        assert!(result.stdout.as_ref().unwrap().contains("hello"));
+    }
+
+    #[test]
+    fn test_shell_with_raw_params() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("_raw_params".to_string(), serde_json::json!("echo hello"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();

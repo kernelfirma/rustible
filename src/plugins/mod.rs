@@ -21,7 +21,9 @@
 //!
 //! # Usage Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::plugins::filter::FilterRegistry;
 //! use rustible::plugins::lookup::prelude::*;
 //! use minijinja::Environment;
@@ -33,6 +35,8 @@
 //! // Use lookup plugins
 //! let registry = LookupRegistry::new();
 //! let context = LookupContext::default();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Creating Custom Plugins
@@ -41,8 +45,10 @@
 //!
 //! Filters are registered directly with the minijinja environment:
 //!
-//! ```rust,ignore
-//! use minijinja::{Environment, Value};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use minijinja::Environment;
 //!
 //! fn my_custom_filter(value: String) -> String {
 //!     value.to_uppercase()
@@ -50,13 +56,17 @@
 //!
 //! let mut env = Environment::new();
 //! env.add_filter("my_filter", my_custom_filter);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Custom Lookup
 //!
 //! Implement the [`lookup::LookupPlugin`] trait:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::plugins::lookup::prelude::*;
 //!
 //! #[derive(Debug, Default)]
@@ -75,6 +85,8 @@
 //!         Ok(vec![])
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod filter;

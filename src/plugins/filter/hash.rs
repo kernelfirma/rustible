@@ -129,7 +129,11 @@ fn password_hash(
             let hash = compute_sha256(&format!("{}${}", salt, password));
             format!("$5${}${}", salt, hash)
         }
-        "sha512" | _ => {
+        "sha512" => {
+            let hash = compute_sha512(&format!("{}${}", salt, password));
+            format!("$6${}${}", salt, hash)
+        }
+        _ => {
             let hash = compute_sha512(&format!("{}${}", salt, password));
             format!("$6${}${}", salt, hash)
         }
@@ -173,11 +177,8 @@ fn value_to_string(value: &Value) -> String {
 }
 
 fn compute_md5(data: &str) -> String {
-    use md5::Digest;
-    let mut hasher = md5::Md5::new();
-    hasher.update(data.as_bytes());
-    let result = hasher.finalize();
-    hex::encode(result)
+    let digest = md5::compute(data.as_bytes());
+    hex::encode(digest.0)
 }
 
 fn compute_sha1(data: &str) -> String {

@@ -330,7 +330,9 @@ async fn test_concurrent_runtime_access() {
             tokio::spawn(async move {
                 for j in 0..10 {
                     let mut ctx = rt.write().await;
+                    let host = format!("host_{}", i % 100);
                     ctx.set_task_var(
+                        &host,
                         format!("task_var_{}_{}", i, j),
                         serde_json::json!(format!("value_{}_{}", i, j)),
                     );

@@ -12,6 +12,9 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::{debug, trace};
 
+use crate::security::BecomeValidator;
+use crate::utils::shell_escape;
+
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
     TransferOptions,
@@ -42,7 +45,17 @@ impl LocalConnection {
     }
 
     /// Build the command with options
-    fn build_command(&self, command: &str, options: &ExecuteOptions) -> Command {
+    fn build_command(&self, command: &str, options: &ExecuteOptions) -> ConnectionResult<Command> {
+        if options.escalate {
+            let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
+            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
+                ConnectionError::InvalidConfig(format!(
+                    "Invalid escalation user '{}': {}",
+                    escalate_user, e
+                ))
+            })?;
+        }
+
         let mut cmd = if options.escalate {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
@@ -100,7 +113,7 @@ impl LocalConnection {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        cmd
+        Ok(cmd)
     }
 }
 
@@ -129,7 +142,7 @@ impl Connection for LocalConnection {
         let options = options.unwrap_or_default();
         debug!(command = %command, "Executing local command");
 
-        let mut cmd = self.build_command(command, &options);
+        let mut cmd = self.build_command(command, &options)?;
 
         // Spawn the process
         let mut child = cmd.spawn().map_err(|e| {
@@ -211,19 +224,71 @@ impl Connection for LocalConnection {
             })?;
         }
 
-        // Copy the file
-        fs::copy(local_path, remote_path).map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to copy {} to {}: {}",
-                local_path.display(),
-                remote_path.display(),
-                e
-            ))
-        })?;
-
-        // Set permissions if specified
+        // Use OpenOptions to set mode atomically at creation if possible
+        // This avoids race conditions where the file is created with default permissions
+        // and then chmodded, leaving a window of exposure.
+        #[cfg(unix)]
         if let Some(mode) = options.mode {
-            self.set_mode(remote_path, mode)?;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut open_options = fs::OpenOptions::new();
+            open_options.write(true).create(true).truncate(true);
+            open_options.mode(mode);
+
+            // Open destination file with correct mode
+            let mut dest_file = open_options.open(remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open/create destination {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            // Open source file
+            let mut src_file = fs::File::open(local_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open source {}: {}",
+                    local_path.display(),
+                    e
+                ))
+            })?;
+
+            // Copy content
+            std::io::copy(&mut src_file, &mut dest_file).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy content to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        } else {
+            // Fallback for non-Unix or when mode is not specified (preserves source perms via fs::copy)
+            fs::copy(local_path, remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy {} to {}: {}",
+                    local_path.display(),
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        }
+
+        #[cfg(not(unix))]
+        if let Some(_) = options.mode {
+            // Fallback for non-Unix where OpenOptionsExt is not available
+            // We still copy first then set mode, accepting the race condition
+            // as Windows permissions are different anyway.
+            fs::copy(local_path, remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to copy {} to {}: {}",
+                    local_path.display(),
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            if let Some(mode) = options.mode {
+                self.set_mode(remote_path, mode)?;
+            }
         }
 
         // Set owner/group if specified
@@ -269,18 +334,52 @@ impl Connection for LocalConnection {
             })?;
         }
 
-        // Write the content
-        fs::write(remote_path, content).map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to write to {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        // Use OpenOptions to set mode atomically at creation
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            use std::io::Write;
 
-        // Set permissions if specified
-        if let Some(mode) = options.mode {
-            self.set_mode(remote_path, mode)?;
+            let mut open_options = fs::OpenOptions::new();
+            open_options.write(true).create(true).truncate(true);
+
+            if let Some(mode) = options.mode {
+                open_options.mode(mode);
+            }
+
+            // Open/create file and write content
+            let mut file = open_options.open(remote_path).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to open/create {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            file.write_all(content).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to write to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Write the content
+            fs::write(remote_path, content).map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to write to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
+
+            // Set permissions if specified
+            if let Some(mode) = options.mode {
+                self.set_mode(remote_path, mode)?;
+            }
         }
 
         // Set owner/group if specified
@@ -396,7 +495,19 @@ impl LocalConnection {
             (None, None) => return Ok(()),
         };
 
-        let command = format!("chown {} {}", ownership, path.display());
+        let path_str = path.to_string_lossy();
+        BecomeValidator::new().validate_path(&path_str).map_err(|e| {
+            ConnectionError::InvalidConfig(format!(
+                "Invalid ownership path '{}': {}",
+                path_str, e
+            ))
+        })?;
+
+        let command = format!(
+            "chown {} {}",
+            shell_escape(&ownership),
+            shell_escape(&path_str)
+        );
         let result = self
             .execute(
                 &command,
@@ -433,6 +544,23 @@ pub async fn execute_local_with_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_build_command_rejects_invalid_user() {
+        let conn = LocalConnection::new();
+        let options =
+            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let result = conn.build_command("echo hello", &options);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_set_ownership_rejects_invalid_path() {
+        let conn = LocalConnection::new();
+        let path = Path::new("/tmp/bad;rm -rf /");
+        let result = conn.set_ownership(path, Some("root"), None).await;
+        assert!(matches!(result, Err(ConnectionError::InvalidConfig(_))));
+    }
 
     #[tokio::test]
     async fn test_local_execute() {

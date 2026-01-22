@@ -1,0 +1,59 @@
+---
+# Proxmox VM lifecycle basics.
+# Required vars: api_url, api_token_id, api_token_secret, node, vmid
+# Safe check_mode: run with --check to validate parameters; no API changes are made.
+# TLS options (optional): validate_certs, tls_server_name, ca_cert_path
+# Token format: user@realm!token
+# For LXC containers, use proxmox_lxc with the same API vars (hostname replaces name).
+
+- name: Proxmox VM basics
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    api_url: "https://pve.example:8006"
+    api_token_id: "root@pam!token"
+    api_token_secret: "REDACTED"
+    node: "pve1"
+    vmid: 100
+    # validate_certs: false
+    # tls_server_name: "pve.example"
+    # ca_cert_path: "/etc/ssl/certs/pve-ca.pem"
+  tasks:
+    - name: Get VM status
+      proxmox_vm:
+        api_url: "{{ api_url }}"
+        api_token_id: "{{ api_token_id }}"
+        api_token_secret: "{{ api_token_secret }}"
+        node: "{{ node }}"
+        vmid: "{{ vmid }}"
+        state: status
+
+    - name: Start VM
+      proxmox_vm:
+        api_url: "{{ api_url }}"
+        api_token_id: "{{ api_token_id }}"
+        api_token_secret: "{{ api_token_secret }}"
+        node: "{{ node }}"
+        vmid: "{{ vmid }}"
+        state: started
+
+    - name: Stop VM (shutdown)
+      proxmox_vm:
+        api_url: "{{ api_url }}"
+        api_token_id: "{{ api_token_id }}"
+        api_token_secret: "{{ api_token_secret }}"
+        node: "{{ node }}"
+        vmid: "{{ vmid }}"
+        state: stopped
+        stop_method: shutdown
+
+    - name: Delete VM (guarded)
+      proxmox_vm:
+        api_url: "{{ api_url }}"
+        api_token_id: "{{ api_token_id }}"
+        api_token_secret: "{{ api_token_secret }}"
+        node: "{{ node }}"
+        vmid: "{{ vmid }}"
+        state: absent
+      when: proxmox_confirm_delete | default(false)

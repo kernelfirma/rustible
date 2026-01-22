@@ -286,6 +286,23 @@ impl UnarchiveModule {
         path == pattern || path.contains(pattern)
     }
 
+    /// Validate that an archive entry path is safe (no traversal, no absolute)
+    fn validate_entry_path(path: &Path) -> bool {
+        if path.is_absolute() {
+            return false;
+        }
+
+        for component in path.components() {
+            match component {
+                std::path::Component::ParentDir => return false,
+                std::path::Component::Prefix(_) => return false,
+                std::path::Component::RootDir => return false,
+                _ => {}
+            }
+        }
+        true
+    }
+
     /// Extract a tar archive (optionally gzip-compressed)
     fn extract_tar(
         src: &Path,
@@ -314,6 +331,13 @@ impl UnarchiveModule {
             for entry in archive.entries()? {
                 let mut entry = entry?;
                 let entry_path = entry.path()?.into_owned();
+
+                // Security check: Prevent path traversal
+                if !Self::validate_entry_path(&entry_path) {
+                    skipped_count += 1;
+                    continue;
+                }
+
                 let entry_path_str = entry_path.to_string_lossy();
 
                 // Check exclusions
@@ -356,6 +380,13 @@ impl UnarchiveModule {
             for entry in archive.entries()? {
                 let mut entry = entry?;
                 let entry_path = entry.path()?.into_owned();
+
+                // Security check: Prevent path traversal
+                if !Self::validate_entry_path(&entry_path) {
+                    skipped_count += 1;
+                    continue;
+                }
+
                 let entry_path_str = entry_path.to_string_lossy();
 
                 // Check exclusions

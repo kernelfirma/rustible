@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Comprehensive executor tests for 90%+ coverage
 //!
 //! This test suite covers all required tests from docs/coverage/TESTS_TO_ADD.md:

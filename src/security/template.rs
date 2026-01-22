@@ -241,8 +241,8 @@ impl TemplateSanitizer {
         }
 
         // Check recursion depth (count nested template tags)
-        let mut depth = 0;
-        let mut max_depth = 0;
+        let mut depth: usize = 0;
+        let mut max_depth: usize = 0;
         for c in template.chars() {
             if c == '{' {
                 depth += 1;

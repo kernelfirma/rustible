@@ -505,7 +505,7 @@ impl EosConfig {
 
     /// Get the effective eAPI port
     fn effective_eapi_port(&self) -> u16 {
-        self.eapi_port.unwrap_or_else(|| {
+        self.eapi_port.unwrap_or({
             if self.eapi_use_ssl {
                 EAPI_DEFAULT_HTTPS_PORT
             } else {
@@ -534,6 +534,7 @@ impl EosConfigModule {
                 escalate: true,
                 escalate_user: context.become_user.clone(),
                 escalate_method: context.become_method.clone(),
+                escalate_password: context.become_password.clone(),
                 ..Default::default()
             })
         } else {
@@ -832,11 +833,11 @@ impl EosConfigModule {
 
         // Read from source file if specified
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
             })?;
 
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') && !trimmed.starts_with('#') {
                     config_commands.push(trimmed.to_string());
@@ -916,7 +917,7 @@ impl EosConfigModule {
         })?;
 
         // Read the config file content
-        let content = std::fs::read_to_string(src).map_err(|e| {
+        let source_contents = std::fs::read_to_string(src).map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
         })?;
 
@@ -946,7 +947,7 @@ impl EosConfigModule {
         }
 
         // Add configuration lines
-        for line in content.lines() {
+        for line in source_contents.lines() {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
                 commands.push(EapiCommand::Simple(trimmed.to_string()));
@@ -1077,11 +1078,11 @@ impl EosConfigModule {
 
         // Read from source file if specified
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file '{}': {}", src, e))
             })?;
 
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') && !trimmed.starts_with('#') {
                     config_commands.push(trimmed.to_string());
@@ -1451,10 +1452,10 @@ impl EosConfigModule {
         }
 
         if let Some(ref src) = config.src {
-            let content = std::fs::read_to_string(src).map_err(|e| {
+            let source_contents = std::fs::read_to_string(src).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file: {}", e))
             })?;
-            for line in content.lines() {
+            for line in source_contents.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('!') && !trimmed.starts_with('#') {
                     proposed_lines.push(trimmed.to_string());

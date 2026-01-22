@@ -36,16 +36,19 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::galaxy::{Galaxy, GalaxyConfig, RequirementsFile};
+//! ```rust,ignore,no_run
+//! use rustible::config::GalaxyConfig;
+//! use rustible::galaxy::{Galaxy, RequirementsFile};
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //!     // Create Galaxy client with default configuration
 //!     let galaxy = Galaxy::new(GalaxyConfig::default())?;
 //!
 //!     // Install a collection
-//!     galaxy.install_collection("community.general", Some("5.0.0")).await?;
+//!     galaxy
+//!         .install_collection("community.general", Some("5.0.0"), None)
+//!         .await?;
 //!
 //!     // Install from requirements.yml
 //!     let requirements = RequirementsFile::from_path("requirements.yml").await?;

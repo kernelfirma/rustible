@@ -67,7 +67,10 @@
 //!
 //! The inventory plugin system allows extending inventory sources:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::inventory::plugin::{
 //!     InventoryPluginFactory,
 //!     InventoryPluginConfig,
@@ -82,6 +85,8 @@
 //!
 //! let plugin = InventoryPluginFactory::create("aws_ec2", config)?;
 //! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Pattern Matching
@@ -462,7 +467,7 @@ impl Inventory {
 
         if let serde_yaml::Value::Mapping(map) = data {
             // Check if this is an "all" wrapper
-            if let Some(all) = map.get(&serde_yaml::Value::String("all".to_string())) {
+            if let Some(all) = map.get(serde_yaml::Value::String("all".to_string())) {
                 self.parse_yaml_group("all", all)?;
             } else {
                 // Parse as flat structure
@@ -486,12 +491,13 @@ impl Inventory {
 
         if let serde_yaml::Value::Mapping(map) = value {
             // Parse hosts
-            if let Some(hosts) = map.get(&serde_yaml::Value::String("hosts".to_string())) {
-                if let serde_yaml::Value::Mapping(hosts_map) = hosts {
-                    for (host_key, host_value) in hosts_map {
-                        if let serde_yaml::Value::String(host_name) = host_key {
-                            // Check if host already exists
-                            let host_exists = self.hosts.contains_key(host_name);
+            if let Some(serde_yaml::Value::Mapping(hosts_map)) =
+                map.get(serde_yaml::Value::String("hosts".to_string()))
+            {
+                for (host_key, host_value) in hosts_map {
+                    if let serde_yaml::Value::String(host_name) = host_key {
+                        // Check if host already exists
+                        let host_exists = self.hosts.contains_key(host_name);
 
                             if host_exists {
                                 // Host exists - just add it to this group and merge vars
@@ -550,34 +556,33 @@ impl Inventory {
 
                                 self.hosts.insert(host_name.clone(), host);
                             }
-                        }
                     }
                 }
             }
 
             // Parse children
-            if let Some(children) = map.get(&serde_yaml::Value::String("children".to_string())) {
-                if let serde_yaml::Value::Mapping(children_map) = children {
-                    for (child_key, child_value) in children_map {
-                        if let serde_yaml::Value::String(child_name) = child_key {
-                            // Get mutable reference to group and add child
-                            if let Some(g) = self.groups.get_mut(name) {
-                                g.add_child(child_name.clone());
-                            }
-                            self.parse_yaml_group(child_name, child_value)?;
+            if let Some(serde_yaml::Value::Mapping(children_map)) =
+                map.get(serde_yaml::Value::String("children".to_string()))
+            {
+                for (child_key, child_value) in children_map {
+                    if let serde_yaml::Value::String(child_name) = child_key {
+                        // Get mutable reference to group and add child
+                        if let Some(g) = self.groups.get_mut(name) {
+                            g.add_child(child_name.clone());
                         }
+                        self.parse_yaml_group(child_name, child_value)?;
                     }
                 }
             }
 
             // Parse vars
-            if let Some(vars) = map.get(&serde_yaml::Value::String("vars".to_string())) {
-                if let serde_yaml::Value::Mapping(vars_map) = vars {
-                    for (var_key, var_value) in vars_map {
-                        if let serde_yaml::Value::String(key) = var_key {
-                            if let Some(g) = self.groups.get_mut(name) {
-                                g.set_var(key.clone(), var_value.clone());
-                            }
+            if let Some(serde_yaml::Value::Mapping(vars_map)) =
+                map.get(serde_yaml::Value::String("vars".to_string()))
+            {
+                for (var_key, var_value) in vars_map {
+                    if let serde_yaml::Value::String(key) = var_key {
+                        if let Some(g) = self.groups.get_mut(name) {
+                            g.set_var(key.clone(), var_value.clone());
                         }
                     }
                 }
@@ -1038,14 +1043,8 @@ impl Inventory {
             return Ok(self.hosts.values().collect());
         }
 
-        // Handle complex patterns with operators
-        if pattern.contains(':') {
-            return self.parse_complex_pattern(pattern);
-        }
-
         // Handle regex pattern
-        if pattern.starts_with('~') {
-            let regex_str = &pattern[1..];
+        if let Some(regex_str) = pattern.strip_prefix('~') {
             let regex = Regex::new(regex_str)
                 .map_err(|_| InventoryError::InvalidPattern(pattern.to_string()))?;
 
@@ -1054,6 +1053,14 @@ impl Inventory {
                 .values()
                 .filter(|h| regex.is_match(&h.name))
                 .collect());
+        }
+
+        // Handle complex patterns with operators
+        if pattern.contains(':') {
+            let parts = split_pattern(pattern);
+            if parts.len() > 1 {
+                return self.parse_complex_pattern(pattern);
+            }
         }
 
         // Handle glob/wildcard pattern
@@ -1101,15 +1108,13 @@ impl Inventory {
                 continue;
             }
 
-            if part.starts_with('&') {
+            if let Some(sub_pattern) = part.strip_prefix('&') {
                 // Intersection
-                let sub_pattern = &part[1..];
                 let sub_hosts = self.get_hosts_for_pattern(sub_pattern)?;
                 let sub_set: HashSet<&str> = sub_hosts.iter().map(|h| h.name.as_str()).collect();
                 result = result.intersection(&sub_set).cloned().collect();
-            } else if part.starts_with('!') {
+            } else if let Some(sub_pattern) = part.strip_prefix('!') {
                 // Exclusion
-                let sub_pattern = &part[1..];
                 let sub_hosts = self.get_hosts_for_pattern(sub_pattern)?;
                 for host in sub_hosts {
                     result.remove(host.name.as_str());
@@ -1358,11 +1363,7 @@ fn json_to_yaml(value: &serde_json::Value) -> serde_yaml::Value {
                 serde_yaml::Value::Number(i.into())
             } else if let Some(f) = n.as_f64() {
                 // Convert float to integer if it has no fractional part
-                if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-                    serde_yaml::Value::Number((f as i64).into())
-                } else {
-                    serde_yaml::Value::Number((f as i64).into())
-                }
+                serde_yaml::Value::Number((f as i64).into())
             } else {
                 serde_yaml::Value::Number(0.into())
             }

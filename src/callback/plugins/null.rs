@@ -20,12 +20,17 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::NullCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::NullCallback;
 //!
 //! // Silent execution - no console output
 //! let callback = NullCallback;
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Performance
@@ -54,19 +59,25 @@ use crate::traits::{ExecutionCallback, ExecutionResult};
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::NullCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{JsonCallback, NullCallback};
 ///
 /// // For silent execution
-/// let executor = Executor::new()
-///     .with_callback(Box::new(NullCallback));
+/// let _callback = NullCallback;
 ///
 /// // Combine with file-based callback for logging without console output
-/// let file_callback = JsonCallback::to_file("execution.json");
-/// let callbacks = vec![
-///     Box::new(NullCallback) as Box<dyn ExecutionCallback>,
+/// let file_callback = JsonCallback::builder()
+///     .output_file("execution.json")
+///     .build();
+/// let callbacks: Vec<Box<dyn ExecutionCallback>> = vec![
+///     Box::new(NullCallback),
 ///     Box::new(file_callback),
 /// ];
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct NullCallback;
@@ -79,8 +90,13 @@ impl NullCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = NullCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[inline]
     #[must_use]

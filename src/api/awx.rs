@@ -16,7 +16,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::api::awx::{AwxCompatHandler, JobLaunchRequest};
 //!
 //! let handler = AwxCompatHandler::new(state);
@@ -29,6 +32,8 @@
 //! };
 //!
 //! let response = handler.launch_job_template(1, request).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use chrono::{DateTime, Utc};

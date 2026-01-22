@@ -163,11 +163,7 @@ impl UserConfig {
 
         let groups = params.get_vec_string("groups")?.unwrap_or_default();
 
-        let conn_limit = if let Some(limit) = params.get_i64("conn_limit")? {
-            Some(limit as i32)
-        } else {
-            None
-        };
+        let conn_limit = params.get_i64("conn_limit")?.map(|limit| limit as i32);
 
         // Parse connection config
         let ssl_mode = if let Some(mode) = params.get_string("ssl_mode")? {
@@ -245,6 +241,9 @@ impl PostgresqlUserModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         options
@@ -378,11 +377,7 @@ impl PostgresqlUserModule {
 
         // Add password
         if let Some(ref password) = config.password {
-            if config.encrypted || password.starts_with("md5") {
-                options.push(format!("PASSWORD '{}'", password.replace('\'', "''")));
-            } else {
-                options.push(format!("PASSWORD '{}'", password.replace('\'', "''")));
-            }
+            options.push(format!("PASSWORD '{}'", password.replace('\'', "''")));
         }
 
         // Add connection limit

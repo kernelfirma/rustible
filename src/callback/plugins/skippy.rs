@@ -169,8 +169,11 @@ enum TaskHostStatus {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::SkippyCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::SkippyCallback;
 ///
 /// // Default: hide all skipped tasks
 /// let callback = SkippyCallback::new();
@@ -185,6 +188,8 @@ enum TaskHostStatus {
 ///     ..Default::default()
 /// };
 /// let callback = SkippyCallback::with_config(config);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SkippyCallback {
@@ -566,7 +571,7 @@ impl ExecutionCallback for SkippyCallback {
         // Print duration
         if let Some(start) = *start_time {
             let duration = start.elapsed();
-            let status = if success {
+            let playbook_status = if success {
                 if self.config.use_color {
                     "ok".green().bold().to_string()
                 } else {
@@ -587,7 +592,7 @@ impl ExecutionCallback for SkippyCallback {
             println!(
                 "\nPlaybook '{}' finished: {} in {:.2}s",
                 playbook_display,
-                status,
+                playbook_status,
                 duration.as_secs_f64()
             );
         }
@@ -639,7 +644,7 @@ impl ExecutionCallback for SkippyCallback {
         let mut stats = self.host_stats.write().await;
         let host_stats = stats.entry(result.host.clone()).or_default();
 
-        let status = if result.result.skipped {
+        let task_status = if result.result.skipped {
             host_stats.skipped += 1;
             let mut total = self.total_skipped.write().await;
             *total += 1;
@@ -664,7 +669,7 @@ impl ExecutionCallback for SkippyCallback {
         if let Some(task) = current.as_mut() {
             // Check if we need to print header immediately for failures
             let should_print_header =
-                matches!(status, TaskHostStatus::Failed | TaskHostStatus::Unreachable)
+                matches!(task_status, TaskHostStatus::Failed | TaskHostStatus::Unreachable)
                     && !task.header_printed;
 
             if should_print_header {
@@ -674,8 +679,8 @@ impl ExecutionCallback for SkippyCallback {
 
             let host_result = TaskHostResult {
                 host: result.host.clone(),
-                status,
-                message: if !result.result.success || status == TaskHostStatus::Unreachable {
+                status: task_status,
+                message: if !result.result.success || task_status == TaskHostStatus::Unreachable {
                     Some(result.result.message.clone())
                 } else {
                     None
@@ -684,7 +689,7 @@ impl ExecutionCallback for SkippyCallback {
             };
 
             // For failures, print immediately
-            if matches!(status, TaskHostStatus::Failed | TaskHostStatus::Unreachable) {
+            if matches!(task_status, TaskHostStatus::Failed | TaskHostStatus::Unreachable) {
                 println!("{}", self.format_host_result(&host_result));
             }
 

@@ -9,7 +9,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::recovery::rollback::{RollbackManager, StateChange};
 //!
 //! let mut manager = RollbackManager::new();
@@ -22,7 +25,13 @@
 //! })?;
 //!
 //! // On failure, rollback
-//! manager.execute_rollback(&context.id).await?;
+//! let plan = manager.create_rollback_plan(&context.id)?;
+//! for action in &plan.actions {
+//!     manager.execute_rollback_action(action).await?;
+//! }
+//! manager.complete_rollback(&context.id)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

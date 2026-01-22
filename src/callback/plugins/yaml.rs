@@ -36,8 +36,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{YamlCallback, YamlConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{YamlCallback, YamlConfig};
 //!
 //! // Default configuration
 //! let callback = YamlCallback::new();
@@ -50,7 +53,9 @@
 //!     .build();
 //! let callback = YamlCallback::with_config(config);
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -242,8 +247,11 @@ struct HostStats {
 ///
 /// ## Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{YamlCallback, YamlConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{YamlCallback, YamlConfig};
 ///
 /// // With default settings
 /// let callback = YamlCallback::new();
@@ -254,6 +262,8 @@ struct HostStats {
 ///     .indent_size(4)
 ///     .build();
 /// let callback = YamlCallback::with_config(config);
+/// # Ok(())
+/// # }
 /// ```
 pub struct YamlCallback {
     /// Plugin configuration
@@ -673,17 +683,17 @@ impl ExecutionCallback for YamlCallback {
         self.output_kv("playbook", &self.yaml_escape(name));
         self.output_kv_literal("duration", &self.format_duration(duration));
 
-        let status = if success { "success" } else { "failed" };
-        let status_str = if self.config.use_color {
+        let playbook_status = if success { "success" } else { "failed" };
+        let playbook_status_str = if self.config.use_color {
             if success {
-                status.green().to_string()
+                playbook_status.green().to_string()
             } else {
-                status.red().bold().to_string()
+                playbook_status.red().bold().to_string()
             }
         } else {
-            status.to_string()
+            playbook_status.to_string()
         };
-        self.output_kv_literal("status", &status_str);
+        self.output_kv_literal("status", &playbook_status_str);
 
         // Output per-host stats
         let stats = self.host_stats.read();
@@ -874,7 +884,7 @@ impl ExecutionCallback for YamlCallback {
             println!(
                 "{}# Handler triggered: {}",
                 indent,
-                name.bright_blue().to_string()
+                name.bright_blue()
             );
         } else {
             println!("{}# Handler triggered: {}", indent, name);
@@ -888,7 +898,7 @@ impl ExecutionCallback for YamlCallback {
             println!(
                 "{}# Facts gathered for: {}",
                 indent,
-                host.bright_green().to_string()
+                host.bright_green()
             );
         } else {
             println!("{}# Facts gathered for: {}", indent, host);

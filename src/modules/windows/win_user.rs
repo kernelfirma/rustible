@@ -198,7 +198,7 @@ $result | ConvertTo-Json -Compress
             .unwrap_or_else(|| "$params['NoPassword'] = $true".to_string());
 
         format!(
-            r#"
+            r"
 $username = {name}
 $result = @{{
     changed = $false
@@ -225,15 +225,15 @@ New-LocalUser @params
 $result.changed = $true
 
 $result | ConvertTo-Json -Compress
-"#,
+",
             name = powershell_escape(name),
             password_section = password_section,
             fullname = fullname
-                .map(|f| powershell_escape(f).into_owned())
-                .unwrap_or_else(|| "$null".to_string()),
+                .map(|f| powershell_escape(f))
+                .unwrap_or_else(|| "$null".to_string().into()),
             description = description
-                .map(|d| powershell_escape(d).into_owned())
-                .unwrap_or_else(|| "$null".to_string()),
+                .map(|d| powershell_escape(d))
+                .unwrap_or_else(|| "$null".to_string().into()),
             password_never_expires = if password_never_expires {
                 "true"
             } else {
@@ -299,7 +299,7 @@ $result | ConvertTo-Json -Compress
         }
 
         format!(
-            r#"
+            r"
 $username = {name}
 $changed = $false
 $result = @{{
@@ -310,7 +310,7 @@ $result = @{{
 
 $result.changed = $changed
 $result | ConvertTo-Json -Compress
-"#,
+",
             name = powershell_escape(name),
             sections = sections.join("\n\n")
         )
@@ -319,7 +319,7 @@ $result | ConvertTo-Json -Compress
     /// Generate PowerShell script to remove a user
     fn generate_remove_user_script(name: &str) -> String {
         format!(
-            r#"
+            r"
 $username = {name}
 $result = @{{
     changed = $false
@@ -332,7 +332,7 @@ if ($user) {{
 }}
 
 $result | ConvertTo-Json -Compress
-"#,
+",
             name = powershell_escape(name)
         )
     }
@@ -536,9 +536,8 @@ impl Module for WinUserModule {
             if user_exists {
                 return Ok(ModuleOutput::ok(format!("User '{}' exists", name))
                     .with_data("user", current_state));
-            } else {
-                return Ok(ModuleOutput::ok(format!("User '{}' does not exist", name)));
             }
+            return Ok(ModuleOutput::ok(format!("User '{}' does not exist", name)));
         }
 
         // Handle absent state

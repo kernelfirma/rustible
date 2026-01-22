@@ -14,7 +14,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::provisioning::state_backends::{BackendConfig, StateBackend};
 //!
 //! // Create a local backend
@@ -30,6 +33,8 @@
 //!
 //! // Save state
 //! backend.save(&state).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::path::PathBuf;
@@ -195,6 +200,8 @@ pub struct S3Backend {
     encrypt: bool,
     /// DynamoDB table for state locking (optional)
     dynamodb_table: Option<String>,
+    /// DynamoDB client for locking (optional)
+    dynamodb_client: Option<aws_sdk_dynamodb::Client>,
     /// AWS S3 client
     client: aws_sdk_s3::Client,
 }
@@ -215,6 +222,9 @@ impl S3Backend {
             .await;
 
         let client = aws_sdk_s3::Client::new(&config);
+        let dynamodb_client = dynamodb_table
+            .as_ref()
+            .map(|_| aws_sdk_dynamodb::Client::new(&config));
 
         Ok(Self {
             bucket,
@@ -222,6 +232,7 @@ impl S3Backend {
             region,
             encrypt,
             dynamodb_table,
+            dynamodb_client,
             client,
         })
     }
@@ -363,10 +374,15 @@ impl StateBackend for S3Backend {
         // DynamoDB locking requires the dynamodb_table to be configured
         if let Some(ref table) = self.dynamodb_table {
             // Return DynamoDB lock backend
-            Some(Arc::new(super::state_lock::DynamoDbLock::new(
-                table.clone(),
-                format!("{}/{}", self.bucket, self.key),
-            )))
+            if let Some(ref client) = self.dynamodb_client {
+                Some(Arc::new(super::state_lock::DynamoDbLock::new(
+                    table.clone(),
+                    format!("{}/{}", self.bucket, self.key),
+                    client.clone(),
+                )))
+            } else {
+                None
+            }
         } else {
             None
         }

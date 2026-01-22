@@ -33,13 +33,13 @@ impl TaskStatus {
     /// Get the colored string representation
     pub fn colored_string(&self) -> String {
         match self {
-            TaskStatus::Ok => "ok".green().to_string(),
-            TaskStatus::Changed => "changed".yellow().to_string(),
-            TaskStatus::Skipped => "skipping".cyan().to_string(),
-            TaskStatus::Failed => "failed".red().bold().to_string(),
-            TaskStatus::Unreachable => "unreachable".red().bold().to_string(),
-            TaskStatus::Rescued => "rescued".magenta().to_string(),
-            TaskStatus::Ignored => "ignored".blue().to_string(),
+            TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
+            TaskStatus::Changed => format!("~ {}", "changed").yellow().to_string(),
+            TaskStatus::Skipped => format!("- {}", "skipping").cyan().to_string(),
+            TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
+            TaskStatus::Unreachable => format!("✖ {}", "unreachable").red().bold().to_string(),
+            TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
+            TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
         }
     }
 
@@ -58,6 +58,7 @@ impl TaskStatus {
 }
 
 /// Output formatter for different output modes
+#[derive(Clone)]
 pub struct OutputFormatter {
     /// Use colored output
     use_color: bool,
@@ -232,10 +233,17 @@ impl OutputFormatter {
         }
 
         if let Some(d) = duration {
+            let duration_str = format_duration(d);
             if self.use_color {
-                print!("  {}", format_duration(d).dimmed());
+                if d.as_secs() >= 5 {
+                    print!("  {}", duration_str.red());
+                } else if d.as_secs() >= 1 {
+                    print!("  {}", duration_str.yellow());
+                } else {
+                    print!("  {}", duration_str.dimmed());
+                }
             } else {
-                print!("  {}", format_duration(d));
+                print!("  {}", duration_str);
             }
         }
 
@@ -295,9 +303,23 @@ impl OutputFormatter {
             println!("\n{} {}", header, stars);
         }
 
-        for (host, host_stats) in &stats.hosts {
+        // Calculate max host length for alignment (min 30)
+        let max_host_len = stats
+            .hosts
+            .keys()
+            .map(|h| h.len())
+            .max()
+            .unwrap_or(0)
+            .max(30);
+
+        // Sort hosts alphabetically
+        let mut sorted_hosts: Vec<_> = stats.hosts.keys().collect();
+        sorted_hosts.sort();
+
+        for host in sorted_hosts {
+            let host_stats = &stats.hosts[host];
             let line = format!(
-                "{:<30} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
+                "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
                 host,
                 host_stats.ok,
                 host_stats.changed,
@@ -305,7 +327,8 @@ impl OutputFormatter {
                 host_stats.failed,
                 host_stats.skipped,
                 host_stats.rescued,
-                host_stats.ignored
+                host_stats.ignored,
+                width = max_host_len
             );
 
             if self.use_color {
@@ -326,7 +349,9 @@ impl OutputFormatter {
                     }
                 };
 
-                print!("{:<30} : ", host_colored);
+                // Manual padding to ensure proper visual alignment with ANSI codes
+                let padding = " ".repeat(max_host_len.saturating_sub(host.len()));
+                print!("{}{}: ", host_colored, padding);
                 print!("{} ", fmt_stat("ok", host_stats.ok, colored::Color::Green));
                 print!(
                     "{} ",
@@ -484,6 +509,20 @@ impl OutputFormatter {
         } else {
             eprintln!("ERROR: {}", message);
         }
+    }
+
+    /// Print a diagnostic message without extra prefixes
+    pub fn diagnostic(&self, message: &str) {
+        if self.json_mode {
+            let err = serde_json::json!({
+                "type": "diagnostic",
+                "message": message
+            });
+            eprintln!("{}", serde_json::to_string(&err).unwrap());
+            return;
+        }
+
+        eprintln!("{}", message);
     }
 
     /// Print a warning message

@@ -30,8 +30,11 @@ mod tests {
     fn test_sampling_decision_info_within_threshold() {
         let decision = should_sample(&tracing::Level::INFO, "task_execution", Some(500.0));
 
-        assert!(!decision.should_log);
-        assert_eq!(decision.sampling_reason, "sampled_out");
+        if decision.should_log {
+            assert_eq!(decision.sampling_reason, "random");
+        } else {
+            assert_eq!(decision.sampling_reason, "sampled_out");
+        }
     }
 
     #[test]

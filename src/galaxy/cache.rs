@@ -327,4 +327,86 @@ mod tests {
         assert!(config.cache_dir.ends_with("rustible/galaxy"));
         assert_eq!(config.ttl_seconds, 86400 * 7);
     }
+
+    fn test_cache_config(temp_dir: &tempfile::TempDir) -> GalaxyCacheConfig {
+        GalaxyCacheConfig {
+            cache_dir: temp_dir.path().to_path_buf(),
+            max_size: 0,
+            ttl_seconds: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_collection() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let cache = GalaxyCache::new(test_cache_config(&temp_dir)).expect("cache");
+
+        let data = b"collection data";
+        let path = cache
+            .store_collection("community.general", "1.0.0", data, None)
+            .await
+            .expect("store collection");
+        assert!(path.exists());
+
+        let cached = cache
+            .get_collection("community.general", "1.0.0")
+            .await
+            .expect("get collection")
+            .expect("cached collection");
+        assert_eq!(cached.name, "community.general");
+        assert_eq!(cached.version, "1.0.0");
+
+        let latest = cache
+            .get_latest_collection("community.general")
+            .await
+            .expect("get latest")
+            .expect("latest collection");
+        assert_eq!(latest.version, "1.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_role() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let cache = GalaxyCache::new(test_cache_config(&temp_dir)).expect("cache");
+
+        let data = b"role data";
+        let path = cache
+            .store_role("geerlingguy.nginx", "2.0.0", data, None)
+            .await
+            .expect("store role");
+        assert!(path.exists());
+
+        let cached = cache
+            .get_role("geerlingguy.nginx", "2.0.0")
+            .await
+            .expect("get role")
+            .expect("cached role");
+        assert_eq!(cached.name, "geerlingguy.nginx");
+        assert_eq!(cached.version, "2.0.0");
+
+        let latest = cache
+            .get_latest_role("geerlingguy.nginx")
+            .await
+            .expect("get latest role")
+            .expect("latest role");
+        assert_eq!(latest.version, "2.0.0");
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let cache = GalaxyCache::new(test_cache_config(&temp_dir)).expect("cache");
+
+        let dummy_path = temp_dir.path().join("collections/test/1.0.0.tar.gz");
+        if let Some(parent) = dummy_path.parent() {
+            std::fs::create_dir_all(parent).expect("create dummy parent");
+        }
+        std::fs::write(&dummy_path, b"data").expect("write dummy");
+        assert!(dummy_path.exists());
+
+        cache.clear().expect("clear cache");
+        assert!(temp_dir.path().exists());
+        let mut entries = std::fs::read_dir(temp_dir.path()).expect("read dir");
+        assert!(entries.next().is_none(), "expected empty cache dir");
+    }
 }

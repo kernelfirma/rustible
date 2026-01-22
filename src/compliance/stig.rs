@@ -5,8 +5,8 @@
 
 use super::checks::*;
 use super::{
-    CheckInfo, CheckStatus, ComplianceContext, ComplianceError, ComplianceFramework,
-    ComplianceResult, ComplianceScanner, Finding, Severity,
+    CheckInfo, ComplianceContext, ComplianceError, ComplianceFramework, ComplianceResult,
+    ComplianceScanner, Finding, Severity,
 };
 use async_trait::async_trait;
 

@@ -40,7 +40,7 @@ fn test_shell_module_classification() {
 fn test_shell_module_required_params() {
     let module = ShellModule;
     let required = module.required_params();
-    assert!(required.contains(&"cmd"));
+    assert!(required.is_empty());
 }
 
 // ============================================================================

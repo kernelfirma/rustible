@@ -14,7 +14,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::plugins::lookup::prelude::*;
 //!
 //! // Create registry with built-in lookups
@@ -31,13 +34,18 @@
 //! let options = LookupOptions::new()
 //!     .with_option("default", "fallback_value");
 //! let value = registry.lookup_with_options("env", &["MAYBE_SET"], &options, &context)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Creating Custom Lookups
 //!
 //! Implement [`LookupPlugin`] to create custom lookups:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::plugins::lookup::prelude::*;
 //!
 //! #[derive(Debug, Default)]
@@ -62,6 +70,8 @@
 //!         Ok(terms.iter().map(|t| serde_json::json!(t.to_uppercase())).collect())
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -194,9 +204,9 @@ impl LookupOptions {
 
     /// Get a string option
     pub fn get_string(&self, key: &str) -> Option<String> {
-        self.options.get(key).and_then(|v| match v {
-            serde_json::Value::String(s) => Some(s.clone()),
-            _ => Some(v.to_string().trim_matches('"').to_string()),
+        self.options.get(key).map(|v| match v {
+            serde_json::Value::String(s) => s.clone(),
+            _ => v.to_string().trim_matches('"').to_string(),
         })
     }
 

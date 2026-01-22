@@ -6,7 +6,6 @@
 use parking_lot::RwLock;
 use std::collections::HashSet;
 use std::fmt;
-use std::ops::Deref;
 use std::sync::Arc;
 
 /// A string wrapper that prevents the value from being logged.
@@ -17,7 +16,10 @@ use std::sync::Arc;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::secrets::SensitiveString;
 ///
 /// let password = SensitiveString::new("secret123");
@@ -27,6 +29,8 @@ use std::sync::Arc;
 ///
 /// // Access the actual value
 /// let actual_value = password.expose();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct SensitiveString {

@@ -23,7 +23,16 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::Playbook;
+//! # let playbook = Playbook::parse(r#"- hosts: all
+//! #   tasks:
+//! #     - name: Ping
+//! #       ping: {}
+//! # "#, None)?;
 //! use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy};
 //!
 //! // Configure the executor
@@ -42,6 +51,8 @@
 //! // Get summary statistics
 //! let stats = Executor::summarize_results(&results);
 //! println!("OK: {}, Changed: {}, Failed: {}", stats.ok, stats.changed, stats.failed);
+//! # Ok(())
+//! # }
 //! ```
 
 /// Include handler for dynamic task inclusion.
@@ -122,8 +133,9 @@ pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
 pub use resource_graph::{
-    AttributeChange, GraphNode, Resource, ResourceAction, ResourceGraph, ResourceGraphError,
-    ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput, ResourcePlan,
+    AttributeChange, ComparisonSummary, GraphNode, Resource, ResourceAction, ResourceGraph,
+    ResourceGraphError, ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput,
+    ResourcePlan, StateComparison,
 };
 
 pub use core::{EventCallback, ExecutionEvent, Executor, ExecutorConfig};

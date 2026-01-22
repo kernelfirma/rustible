@@ -13,11 +13,14 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,ignore
-//! use rustible::notify::{NotificationManager, NotificationConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::notify::{NotificationConfig, NotificationEvent, NotificationManager};
 //!
 //! // Create from environment variables
-//! let manager = NotificationManager::from_env()?;
+//! let manager = NotificationManager::from_env();
 //!
 //! // Or with explicit configuration
 //! let config = NotificationConfig::builder()
@@ -28,12 +31,16 @@
 //! let manager = NotificationManager::new(config);
 //!
 //! // Send a notification
-//! manager.notify(NotificationEvent::PlaybookComplete {
+//! manager.notify(&NotificationEvent::PlaybookComplete {
 //!     playbook: "deploy.yml".to_string(),
 //!     success: true,
 //!     duration_secs: 45.2,
 //!     host_stats: Default::default(),
+//!     timestamp: "2024-01-01T00:00:00Z".to_string(),
+//!     failures: None,
 //! }).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Environment Variables
@@ -72,6 +79,8 @@ mod manager;
 mod slack;
 mod template;
 mod webhook;
+#[cfg(test)]
+mod test_support;
 
 pub use config::{
     EmailConfig, NotificationConfig, NotificationConfigBuilder, SlackConfig, WebhookConfig,
@@ -330,8 +339,10 @@ impl FailureInfo {
 /// Notification severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Severity {
     /// Informational notification
+    #[default]
     Info,
     /// Warning notification
     Warning,
@@ -341,11 +352,6 @@ pub enum Severity {
     Critical,
 }
 
-impl Default for Severity {
-    fn default() -> Self {
-        Self::Info
-    }
-}
 
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

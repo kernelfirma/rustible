@@ -65,13 +65,18 @@ impl HandlerBuilder for Handler {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::handlers::{new_handler, HandlerBuilder};
 ///
 /// let handler = new_handler("restart nginx", "service")
 ///     .with_arg("name", "nginx")
 ///     .with_arg("state", "restarted")
 ///     .with_listen("restart web services");
+/// # Ok(())
+/// # }
 /// ```
 pub fn new_handler(name: impl Into<String>, module: impl Into<String>) -> Handler {
     Handler {

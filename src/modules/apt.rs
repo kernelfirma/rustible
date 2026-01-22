@@ -50,6 +50,14 @@ impl AptState {
     }
 }
 
+impl std::str::FromStr for AptState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AptState::from_str(s)
+    }
+}
+
 /// Upgrade mode for apt
 #[derive(Debug, Clone, PartialEq)]
 pub enum UpgradeMode {
@@ -76,6 +84,14 @@ impl UpgradeMode {
                 s
             ))),
         }
+    }
+}
+
+impl std::str::FromStr for UpgradeMode {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UpgradeMode::from_str(s)
     }
 }
 
@@ -196,47 +212,47 @@ impl AptParams {
     }
 
     /// Build apt-get options based on parameters
-    fn build_apt_options(&self) -> Vec<String> {
-        let mut opts = vec!["-y".to_string()];
+    fn build_apt_options(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        let mut opts: Vec<std::borrow::Cow<'_, str>> = vec![std::borrow::Cow::Borrowed("-y")];
 
         // dpkg options
         if !self.dpkg_options.is_empty() {
             for opt in self.dpkg_options.split(',') {
-                opts.push(format!("-o Dpkg::Options::=--{}", opt.trim()));
+                opts.push(format!("-o Dpkg::Options::=--{}", opt.trim()).into());
             }
         }
 
         // install_recommends
         if let Some(install_recommends) = self.install_recommends {
             if !install_recommends {
-                opts.push("--no-install-recommends".to_string());
+                opts.push(std::borrow::Cow::Borrowed("--no-install-recommends"));
             } else {
-                opts.push("--install-recommends".to_string());
+                opts.push(std::borrow::Cow::Borrowed("--install-recommends"));
             }
         }
 
         // default_release
         if let Some(ref release) = self.default_release {
-            opts.push("-t".to_string());
-            opts.push(shell_escape(release).into_owned());
+            opts.push(std::borrow::Cow::Borrowed("-t"));
+            opts.push(shell_escape(release));
         }
 
         // force
         if self.force {
-            opts.push("--allow-unauthenticated".to_string());
-            opts.push("--allow-downgrades".to_string());
-            opts.push("--allow-remove-essential".to_string());
-            opts.push("--allow-change-held-packages".to_string());
+            opts.push(std::borrow::Cow::Borrowed("--allow-unauthenticated"));
+            opts.push(std::borrow::Cow::Borrowed("--allow-downgrades"));
+            opts.push(std::borrow::Cow::Borrowed("--allow-remove-essential"));
+            opts.push(std::borrow::Cow::Borrowed("--allow-change-held-packages"));
         }
 
         // allow_downgrade
         if self.allow_downgrade && !self.force {
-            opts.push("--allow-downgrades".to_string());
+            opts.push(std::borrow::Cow::Borrowed("--allow-downgrades"));
         }
 
         // allow_unauthenticated
         if self.allow_unauthenticated && !self.force {
-            opts.push("--allow-unauthenticated".to_string());
+            opts.push(std::borrow::Cow::Borrowed("--allow-unauthenticated"));
         }
 
         opts
@@ -259,6 +275,9 @@ impl AptModule {
                 .clone()
                 .or_else(|| Some("root".to_string()));
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         if let Some(ref work_dir) = context.work_dir {
@@ -346,9 +365,7 @@ impl AptModule {
         }
 
         // Check the age of the apt cache
-        let cmd = format!(
-            "stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || stat -c %Y /var/cache/apt/pkgcache.bin 2>/dev/null || echo 0"
-        );
+        let cmd = "stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || stat -c %Y /var/cache/apt/pkgcache.bin 2>/dev/null || echo 0".to_string();
 
         match conn.execute(&cmd, options).await {
             Ok(result) if result.success => {
@@ -396,10 +413,7 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages
-            .iter()
-            .map(|p| shell_escape(p).into_owned())
-            .collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let only_upgrade_flag = if apt_params.only_upgrade {
@@ -436,10 +450,7 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages
-            .iter()
-            .map(|p| shell_escape(p).into_owned())
-            .collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let purge_flag = if apt_params.purge { "--purge" } else { "" };
@@ -472,10 +483,7 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages
-            .iter()
-            .map(|p| shell_escape(p).into_owned())
-            .collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(
@@ -505,10 +513,7 @@ impl AptModule {
         apt_params: &AptParams,
         options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
-        let pkg_list: Vec<String> = packages
-            .iter()
-            .map(|p| shell_escape(p).into_owned())
-            .collect();
+        let pkg_list: Vec<std::borrow::Cow<'_, str>> = packages.iter().map(|p| shell_escape(p)).collect();
         let apt_opts = apt_params.build_apt_options().join(" ");
 
         let cmd = format!(
@@ -1264,13 +1269,14 @@ mod tests {
         };
 
         let opts = apt_params.build_apt_options();
-        assert!(opts.contains(&"-y".to_string()));
-        assert!(opts.contains(&"-o Dpkg::Options::=--force-confdef".to_string()));
-        assert!(opts.contains(&"-o Dpkg::Options::=--force-confold".to_string()));
-        assert!(opts.contains(&"--no-install-recommends".to_string()));
-        assert!(opts.contains(&"-t".to_string()));
-        assert!(opts.contains(&"stable".to_string()));
-        assert!(opts.contains(&"--allow-downgrades".to_string()));
+        let opts_str: Vec<String> = opts.iter().map(|s| s.to_string()).collect();
+        assert!(opts_str.contains(&"-y".to_string()));
+        assert!(opts_str.contains(&"-o Dpkg::Options::=--force-confdef".to_string()));
+        assert!(opts_str.contains(&"-o Dpkg::Options::=--force-confold".to_string()));
+        assert!(opts_str.contains(&"--no-install-recommends".to_string()));
+        assert!(opts_str.contains(&"-t".to_string()));
+        assert!(opts_str.contains(&"stable".to_string()));
+        assert!(opts_str.contains(&"--allow-downgrades".to_string()));
     }
 
     #[test]
@@ -1297,10 +1303,11 @@ mod tests {
         };
 
         let opts = apt_params.build_apt_options();
-        assert!(opts.contains(&"--allow-unauthenticated".to_string()));
-        assert!(opts.contains(&"--allow-downgrades".to_string()));
-        assert!(opts.contains(&"--allow-remove-essential".to_string()));
-        assert!(opts.contains(&"--allow-change-held-packages".to_string()));
+        let opts_str: Vec<String> = opts.iter().map(|s| s.to_string()).collect();
+        assert!(opts_str.contains(&"--allow-unauthenticated".to_string()));
+        assert!(opts_str.contains(&"--allow-downgrades".to_string()));
+        assert!(opts_str.contains(&"--allow-remove-essential".to_string()));
+        assert!(opts_str.contains(&"--allow-change-held-packages".to_string()));
     }
 
     #[test]

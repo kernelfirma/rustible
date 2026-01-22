@@ -13,8 +13,8 @@ use crate::utils::shell_escape;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
-use tokio::runtime::Handle;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Module for rendering templates
 pub struct TemplateModule;
@@ -48,6 +48,139 @@ impl TemplateModule {
         }
 
         serde_json::Value::Object(ctx_map)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_remote(
+        conn: Arc<dyn crate::connection::Connection + Send + Sync>,
+        dest_path: PathBuf,
+        dest: String,
+        src_name: String,
+        rendered: String,
+        backup: bool,
+        backup_suffix: String,
+        mode: Option<u32>,
+        check_mode: bool,
+        diff_mode: bool,
+    ) -> ModuleResult<ModuleOutput> {
+        let current_content = if conn.path_exists(&dest_path).await.unwrap_or(false) {
+            conn.download_content(&dest_path)
+                .await
+                .ok()
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+        } else {
+            None
+        };
+
+        let needs_update = match &current_content {
+            Some(content) => content != &rendered,
+            None => true,
+        };
+
+        if !needs_update {
+            // Check if only permissions need updating
+            let perm_changed = if let Some(m) = mode {
+                if let Ok(stat) = conn.stat(&dest_path).await {
+                    (stat.mode & 0o7777) != m
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if perm_changed {
+                if check_mode {
+                    return Ok(ModuleOutput::changed(format!(
+                        "Would change permissions on '{}'",
+                        dest
+                    )));
+                }
+                // Set permissions via chmod command on remote
+                let chmod_cmd = format!("chmod {:o} {}", mode.unwrap(), shell_escape(&dest));
+                conn.execute(&chmod_cmd, None).await.map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to set permissions: {}", e))
+                })?;
+                return Ok(ModuleOutput::changed(format!(
+                    "Changed permissions on '{}'",
+                    dest
+                )));
+            }
+
+            return Ok(ModuleOutput::ok(format!(
+                "Template '{}' is already up to date",
+                dest
+            )));
+        }
+
+        // In check mode, return what would happen
+        if check_mode {
+            let diff = if diff_mode {
+                let before = current_content.unwrap_or_default();
+                Some(Diff::new(before, rendered.clone()))
+            } else {
+                None
+            };
+
+            let mut output = ModuleOutput::changed(format!(
+                "Would render template '{}' to '{}'",
+                src_name, dest
+            ));
+
+            if let Some(d) = diff {
+                output = output.with_diff(d);
+            }
+
+            return Ok(output);
+        }
+
+        // Create backup if requested (via remote command)
+        let backup_file = if backup && current_content.is_some() {
+            let backup_path = format!("{}{}", dest, backup_suffix);
+            let cp_cmd = format!("cp {} {}", shell_escape(&dest), shell_escape(&backup_path));
+            conn.execute(&cp_cmd, None).await.map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to create backup: {}", e))
+            })?;
+            Some(backup_path)
+        } else {
+            None
+        };
+
+        // Build transfer options
+        let transfer_opts = TransferOptions {
+            mode,
+            create_dirs: true,
+            backup: false, // We already handled backup above
+            ..Default::default()
+        };
+
+        // Upload rendered content to remote
+        conn.upload_content(rendered.as_bytes(), &dest_path, Some(transfer_opts))
+            .await
+            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload template: {}", e)))?;
+
+        let mut output =
+            ModuleOutput::changed(format!("Rendered template '{}' to '{}'", src_name, dest));
+
+        if let Some(backup_path) = backup_file {
+            output = output.with_data("backup_file", serde_json::json!(backup_path));
+        }
+
+        // Get file info from remote
+        if let Ok(stat) = conn.stat(&dest_path).await {
+            output = output
+                .with_data("dest", serde_json::json!(dest))
+                .with_data("src", serde_json::json!(src_name))
+                .with_data("size", serde_json::json!(stat.size))
+                .with_data(
+                    "mode",
+                    serde_json::json!(format!("{:o}", stat.mode & 0o7777)),
+                )
+                .with_data("uid", serde_json::json!(stat.uid))
+                .with_data("gid", serde_json::json!(stat.gid));
+        }
+
+        Ok(output)
     }
 
     fn render_template(
@@ -247,7 +380,7 @@ impl Module for TemplateModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         let src = params.get_string("src")?;
-        let content = params.get_string("content")?;
+        let inline_content = params.get_string("content")?;
         let dest = params.get_string_required("dest")?;
         let dest_path = Path::new(&dest);
         let backup = params.get_bool_or("backup", false);
@@ -258,7 +391,7 @@ impl Module for TemplateModule {
         let extra_vars = params.get("vars");
 
         // Get template content from either src file or content parameter
-        let (template_content, src_name) = match (&src, &content) {
+        let (template_content, src_name) = match (&src, &inline_content) {
             (Some(src_path_str), _) => {
                 let src_path = Path::new(src_path_str);
                 if !src_path.exists() {
@@ -267,8 +400,8 @@ impl Module for TemplateModule {
                         src_path_str
                     )));
                 }
-                let content = fs::read_to_string(src_path).map_err(ModuleError::Io)?;
-                (content, src_path_str.clone())
+                let file_content = fs::read_to_string(src_path).map_err(ModuleError::Io)?;
+                (file_content, src_path_str.clone())
             }
             (None, Some(content_str)) => (content_str.clone(), "<inline>".to_string()),
             (None, None) => {
@@ -286,144 +419,43 @@ impl Module for TemplateModule {
         // Check if we have a connection for remote execution
         if let Some(ref conn) = context.connection {
             // Remote execution via async connection
-            let handle = Handle::try_current().map_err(|e| {
-                ModuleError::ExecutionFailed(format!("No tokio runtime available: {}", e))
-            })?;
+            let conn = conn.clone();
+            let dest_path = dest_path.to_path_buf();
+            let dest = dest.clone();
+            let src_name = src_name.clone();
+            let rendered = rendered.clone();
+            let backup_suffix = backup_suffix.clone();
+            let check_mode = context.check_mode;
+            let diff_mode = context.diff_mode;
 
-            // Get current content from remote to check if update is needed
-            let current_content = handle.block_on(async {
-                if conn.path_exists(dest_path).await.unwrap_or(false) {
-                    conn.download_content(dest_path)
-                        .await
-                        .ok()
-                        .and_then(|bytes| String::from_utf8(bytes).ok())
-                } else {
-                    None
-                }
-            });
-
-            let needs_update = match &current_content {
-                Some(content) => content != &rendered,
-                None => true,
-            };
-
-            if !needs_update {
-                // Check if only permissions need updating
-                let perm_changed = if let Some(m) = mode {
-                    let stat_result = handle.block_on(async { conn.stat(dest_path).await });
-                    if let Ok(stat) = stat_result {
-                        (stat.mode & 0o7777) != m
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                };
-
-                if perm_changed {
-                    if context.check_mode {
-                        return Ok(ModuleOutput::changed(format!(
-                            "Would change permissions on '{}'",
-                            dest
-                        )));
-                    }
-                    // Set permissions via chmod command on remote
-                    let chmod_cmd = format!("chmod {:o} {}", mode.unwrap(), shell_escape(&dest));
-                    handle
-                        .block_on(async { conn.execute(&chmod_cmd, None).await })
+            std::thread::scope(|s| {
+                s.spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
                         .map_err(|e| {
                             ModuleError::ExecutionFailed(format!(
-                                "Failed to set permissions: {}",
+                                "Failed to create runtime: {}",
                                 e
                             ))
                         })?;
-                    return Ok(ModuleOutput::changed(format!(
-                        "Changed permissions on '{}'",
-                        dest
-                    )));
-                }
 
-                return Ok(ModuleOutput::ok(format!(
-                    "Template '{}' is already up to date",
-                    dest
-                )));
-            }
-
-            // In check mode, return what would happen
-            if context.check_mode {
-                let diff = if context.diff_mode {
-                    let before = current_content.unwrap_or_default();
-                    Some(Diff::new(before, rendered.clone()))
-                } else {
-                    None
-                };
-
-                let mut output = ModuleOutput::changed(format!(
-                    "Would render template '{}' to '{}'",
-                    src_name, dest
-                ));
-
-                if let Some(d) = diff {
-                    output = output.with_diff(d);
-                }
-
-                return Ok(output);
-            }
-
-            // Create backup if requested (via remote command)
-            let backup_file = if backup && current_content.is_some() {
-                let backup_path = format!("{}{}", dest, backup_suffix);
-                let cp_cmd = format!("cp {} {}", shell_escape(&dest), shell_escape(&backup_path));
-                handle
-                    .block_on(async { conn.execute(&cp_cmd, None).await })
-                    .map_err(|e| {
-                        ModuleError::ExecutionFailed(format!("Failed to create backup: {}", e))
-                    })?;
-                Some(backup_path)
-            } else {
-                None
-            };
-
-            // Build transfer options
-            let transfer_opts = TransferOptions {
-                mode,
-                create_dirs: true,
-                backup: false, // We already handled backup above
-                ..Default::default()
-            };
-
-            // Upload rendered content to remote
-            handle
-                .block_on(async {
-                    conn.upload_content(rendered.as_bytes(), dest_path, Some(transfer_opts))
-                        .await
+                    rt.block_on(Self::execute_remote(
+                        conn,
+                        dest_path,
+                        dest,
+                        src_name,
+                        rendered,
+                        backup,
+                        backup_suffix,
+                        mode,
+                        check_mode,
+                        diff_mode,
+                    ))
                 })
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to upload template: {}", e))
-                })?;
-
-            let mut output =
-                ModuleOutput::changed(format!("Rendered template '{}' to '{}'", src_name, dest));
-
-            if let Some(backup_path) = backup_file {
-                output = output.with_data("backup_file", serde_json::json!(backup_path));
-            }
-
-            // Get file info from remote
-            if let Ok(stat) = handle.block_on(async { conn.stat(dest_path).await }) {
-                output = output
-                    .with_data("dest", serde_json::json!(dest))
-                    .with_data("src", serde_json::json!(src_name))
-                    .with_data("size", serde_json::json!(stat.size))
-                    .with_data(
-                        "mode",
-                        serde_json::json!(format!("{:o}", stat.mode & 0o7777)),
-                    )
-                    .with_data("uid", serde_json::json!(stat.uid))
-                    .with_data("gid", serde_json::json!(stat.gid));
-            }
-
-            Ok(output)
+                .join()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
+            })
         } else {
             // Local execution (no connection)
             Self::execute_local(

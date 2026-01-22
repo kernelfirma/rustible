@@ -52,40 +52,63 @@
 //!
 //! ## Quick Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
 //! use rustible::prelude::*;
+//! use rustible::executor::{Executor, ExecutorConfig, Playbook as ExecPlaybook};
+//! use rustible::executor::runtime::RuntimeContext;
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //!     // Load inventory
-//!     let inventory = Inventory::from_file("inventory.yml").await?;
+//!     let inventory = Inventory::load("inventory.yml")?;
+//!     let runtime = RuntimeContext::from_inventory(&inventory);
 //!
 //!     // Load and parse playbook
-//!     let playbook = Playbook::from_file("playbook.yml").await?;
+//!     let playbook = ExecPlaybook::parse(r#"- hosts: all
+//!   tasks:
+//!     - name: Ping
+//!       ping: {}
+//! "#, None)?;
 //!
 //!     // Create executor with default settings
-//!     let executor = PlaybookExecutor::new()
-//!         .with_inventory(inventory)
-//!         .with_parallelism(10)
-//!         .build()?;
+//!     let executor = Executor::with_runtime(ExecutorConfig::default(), runtime);
 //!
 //!     // Execute playbook
-//!     let result = executor.run(&playbook).await?;
+//!     let result = executor.run_playbook(&playbook).await?;
 //!
 //!     // Report results
-//!     println!("{}", result.summary());
+//!     let stats = Executor::summarize_results(&result);
+//!     println!("OK: {}, Changed: {}, Failed: {}", stats.ok, stats.changed, stats.failed);
 //!     Ok(())
 //! }
 //! ```
 
 // Clippy configuration
 #![warn(clippy::all)]
-// Enable pedantic for local development, CI allows these
-#![warn(clippy::pedantic)]
+// Keep pedantic lints opt-in to avoid noisy warnings in normal builds.
+#![allow(clippy::pedantic)]
+// Many async signatures are intentionally async for trait compatibility.
+#![allow(clippy::unused_async)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::should_implement_trait)]
 // Development-time allowances
 #![allow(dead_code)]
 #![allow(unused_variables)]
+
+#[cfg(all(feature = "azure", not(feature = "experimental")))]
+compile_error!("Feature 'azure' is experimental. Enable with --features experimental,azure");
+
+#[cfg(all(feature = "gcp", not(feature = "experimental")))]
+compile_error!("Feature 'gcp' is experimental. Enable with --features experimental,gcp");
+
+#[cfg(all(feature = "database", not(feature = "experimental")))]
+compile_error!("Feature 'database' is experimental. Enable with --features experimental,database");
+
+#[cfg(all(feature = "winrm", not(feature = "experimental")))]
+compile_error!("Feature 'winrm' is experimental. Enable with --features experimental,winrm");
+
+#[cfg(all(feature = "reqwest", not(feature = "experimental")))]
+compile_error!("Feature 'reqwest' is experimental. Enable with --features experimental,reqwest");
 
 // Re-export commonly used items in prelude
 pub mod prelude {
@@ -102,20 +125,25 @@ pub mod prelude {
     //!
     //! # Example
     //!
-    //! ```rust,ignore
+    //! ```rust,ignore,no_run
     //! use rustible::prelude::*;
+    //! use rustible::executor::{ExecutorConfig, Playbook as ExecPlaybook};
+    //! use rustible::executor::runtime::RuntimeContext;
     //!
     //! #[tokio::main]
-    //! async fn main() -> Result<()> {
-    //!     let inventory = Inventory::from_file("inventory.yml").await?;
-    //!     let playbook = Playbook::from_file("playbook.yml").await?;
+    //! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    //!     let inventory = Inventory::load("inventory.yml")?;
+    //!     let runtime = RuntimeContext::from_inventory(&inventory);
     //!
-    //!     let executor = PlaybookExecutor::new()
-    //!         .with_inventory(inventory)
-    //!         .with_parallelism(10)
-    //!         .build()?;
+    //!     let playbook = ExecPlaybook::parse(r#"- hosts: all
+    //!   tasks:
+    //!     - name: Ping
+    //!       ping: {}
+    //! "#, None)?;
     //!
-    //!     let result = executor.run(&playbook).await?;
+    //!     let executor = PlaybookExecutor::with_runtime(ExecutorConfig::default(), runtime);
+    //!
+    //!     let result = executor.run_playbook(&playbook).await?;
     //!     Ok(())
     //! }
     //! ```
@@ -202,6 +230,9 @@ pub mod utils;
 /// including host vars, group vars, play vars, and extra vars from the command line.
 pub mod vars;
 
+/// Retry utilities with backoff and jitter strategies.
+pub mod retry;
+
 // ============================================================================
 // Playbook Components
 // ============================================================================
@@ -246,6 +277,9 @@ pub mod roles;
 /// handles task parsing, loop expansion, conditional evaluation, and
 /// delegation to modules for execution.
 pub mod tasks;
+
+/// Tag filtering and inheritance for task selection.
+pub mod tags;
 
 // ============================================================================
 // Infrastructure
@@ -298,8 +332,16 @@ pub mod inventory;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::executor::{Executor, ExecutorConfig};
+/// # use rustible::executor::Playbook;
+/// # let playbook = Playbook::parse(r#"- hosts: all
+/// #   tasks:
+/// #     - name: Ping
+/// #       ping: {}
+/// # "#, None)?;
 ///
 /// let config = ExecutorConfig {
 ///     forks: 10,
@@ -309,6 +351,8 @@ pub mod inventory;
 ///
 /// let executor = Executor::new(config);
 /// let results = executor.run_playbook(&playbook).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub mod executor;
 
@@ -346,8 +390,13 @@ pub mod strategy;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::cache::{CacheManager, CacheConfig};
+/// # use indexmap::IndexMap;
+/// # let mut gathered_facts = IndexMap::new();
+/// # gathered_facts.insert("os".to_string(), serde_json::json!("linux"));
 ///
 /// // Create a cache manager with production settings
 /// let cache = CacheManager::with_config(CacheConfig::production());
@@ -361,8 +410,17 @@ pub mod strategy;
 /// // Get cache statistics
 /// let status = cache.status();
 /// println!("Cache hit rate: {:.2}%", status.facts_hit_rate * 100.0);
+/// # Ok(())
+/// # }
 /// ```
 pub mod cache;
+
+// ============================================================================
+// Startup Optimization
+// ============================================================================
+
+/// Startup profiling and lazy initialization helpers.
+pub mod startup;
 
 // ============================================================================
 // Modules (Built-in task implementations)
@@ -383,8 +441,11 @@ pub mod cache;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::modules::{ModuleRegistry, ModuleContext, ModuleParams};
+/// # let context = ModuleContext::new();
 ///
 /// let registry = ModuleRegistry::with_builtins();
 /// let params: ModuleParams = serde_json::from_value(serde_json::json!({
@@ -393,6 +454,8 @@ pub mod cache;
 /// }))?;
 ///
 /// let result = registry.execute("apt", &params, &context)?;
+/// # Ok(())
+/// # }
 /// ```
 pub mod modules;
 
@@ -406,6 +469,36 @@ pub mod modules;
 /// a syntax compatible with Ansible's Jinja2 templates. Supports filters,
 /// tests, and custom extensions.
 pub mod template;
+
+// ============================================================================
+// Plugins and Lookups
+// ============================================================================
+
+/// Lookup plugins for resolving dynamic values at runtime.
+pub mod lookup;
+
+/// Plugin registries for filters and lookup providers.
+pub mod plugins;
+
+// ============================================================================
+// Security
+// ============================================================================
+
+/// Security utilities for privilege escalation validation and input hardening.
+pub mod security;
+
+// ============================================================================
+// Compliance and Audit
+// ============================================================================
+
+/// Compliance checks and reporting utilities.
+pub mod compliance;
+
+/// Audit logging for security-relevant events.
+pub mod audit;
+
+/// Advanced secret backends and rotation utilities.
+pub mod secrets;
 
 // ============================================================================
 // Vault (Encrypted secrets management)
@@ -438,6 +531,12 @@ pub mod config;
 /// including human-readable console output and machine-parseable formats.
 pub mod output;
 
+/// Diff formatting for change reporting.
+pub mod diff;
+
+/// Notification system for execution events.
+pub mod notify;
+
 // ============================================================================
 // Callback Plugins
 // ============================================================================
@@ -467,6 +566,16 @@ pub mod callback;
 pub mod diagnostics;
 
 // ============================================================================
+// Static Analysis and Linting
+// ============================================================================
+
+/// Static analysis utilities for playbook correctness and security.
+pub mod analysis;
+
+/// Linting and best-practices checks for playbooks.
+pub mod lint;
+
+// ============================================================================
 // Metrics and Observability
 // ============================================================================
 
@@ -481,6 +590,9 @@ pub mod metrics;
 /// Provides wide-event logging with JSON output, trace ID propagation,
 /// and intelligent sampling for queryable analytics.
 pub mod logging;
+
+/// Telemetry configuration and instrumentation utilities.
+pub mod telemetry;
 
 // ============================================================================
 // State Management
@@ -503,7 +615,8 @@ pub mod recovery;
 ///
 /// This module provides Terraform-like capabilities for provisioning infrastructure
 /// resources via cloud provider APIs. It enables Rustible to serve as a unified
-/// replacement for both Ansible and Terraform.
+/// companion to Ansible with Terraform-like provisioning for supported
+/// resources, not a full Terraform replacement.
 ///
 /// # Features
 ///
@@ -534,7 +647,9 @@ pub mod recovery;
 ///       cidr_block: "10.0.1.0/24"
 /// ```
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
 ///
 /// let config = InfrastructureConfig::from_file("infrastructure.yml").await?;
@@ -546,6 +661,8 @@ pub mod recovery;
 ///
 /// // Apply changes
 /// let result = executor.apply(&plan).await?;
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "provisioning")]
 pub mod provisioning;
@@ -569,7 +686,7 @@ pub mod provisioning;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
 /// use rustible::api::{ApiServer, ApiConfig};
 ///
 /// #[tokio::main]
@@ -581,6 +698,13 @@ pub mod provisioning;
 /// ```
 #[cfg(feature = "api")]
 pub mod api;
+
+// ============================================================================
+// Collections (Ansible Compatibility)
+// ============================================================================
+
+/// Ansible collection parsing and resolution utilities.
+pub mod collection;
 
 // ============================================================================
 // Galaxy Support (Ansible Galaxy integration)
@@ -600,11 +724,12 @@ pub mod api;
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::galaxy::{Galaxy, GalaxyConfig, RequirementsFile};
+/// ```rust,ignore,no_run
+/// use rustible::config::GalaxyConfig;
+/// use rustible::galaxy::{Galaxy, RequirementsFile};
 ///
 /// #[tokio::main]
-/// async fn main() -> Result<()> {
+/// async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 ///     // Create Galaxy client with default configuration
 ///     let config = GalaxyConfig::default();
 ///     let galaxy = Galaxy::new(config)?;
@@ -636,7 +761,9 @@ pub mod galaxy;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::lockfile::{Lockfile, LockfileManager};
 ///
 /// // Create lockfile for a playbook
@@ -645,6 +772,8 @@ pub mod galaxy;
 /// // Verify playbook matches locked state
 /// let manager = LockfileManager::new("playbook.yml").frozen(true);
 /// manager.verify("playbook.yml")?;
+/// # Ok(())
+/// # }
 /// ```
 pub mod lockfile;
 

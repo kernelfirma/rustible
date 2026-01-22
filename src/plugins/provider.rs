@@ -11,8 +11,14 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::plugins::provider::{Provider, ProviderMetadata, ModuleDescriptor, ProviderCapability};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::plugins::provider::{
+//!     ModuleContext, ModuleDescriptor, ModuleOutput, ModuleParams, Provider, ProviderCapability,
+//!     ProviderError, ProviderMetadata,
+//! };
 //!
 //! struct AwsProvider;
 //!
@@ -37,10 +43,12 @@
 //!         module: &str,
 //!         params: ModuleParams,
 //!         ctx: ModuleContext,
-//!     ) -> Result<ModuleOutput, ProviderError> {
+//!     ) -> std::result::Result<ModuleOutput, ProviderError> {
 //!         todo!()
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;

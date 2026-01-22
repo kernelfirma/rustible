@@ -113,7 +113,7 @@ fn test_apt_module_parallelization_host_exclusive() {
 fn test_apt_module_required_params() {
     let module = AptModule;
     let required = module.required_params();
-    assert!(required.contains(&"name"));
+    assert!(required.is_empty());
 }
 
 // ============================================================================

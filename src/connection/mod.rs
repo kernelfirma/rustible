@@ -26,7 +26,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::connection::{ConnectionBuilder, ExecuteOptions};
 //!
 //! // Create a connection to a remote host
@@ -45,6 +48,8 @@
 //!     .with_cwd("/opt/app")
 //!     .with_escalation(Some("root".into()));
 //! let result = conn.execute("systemctl restart myservice", Some(opts)).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 /// Connection configuration types.
@@ -63,13 +68,9 @@ pub(crate) mod ssh_common;
 #[cfg(feature = "russh")]
 pub mod russh;
 
-// russh_auth: Advanced authentication module (currently disabled)
-// The russh_auth module was designed for advanced authentication scenarios but
-// needs updating for russh 0.45 API changes (Signer trait, AuthResult enum).
-// Core authentication (agent, key, password) is implemented directly in russh.rs.
-// If advanced features are needed, this module can be updated later.
-// #[cfg(feature = "russh")]
-// pub mod russh_auth;
+/// Advanced authentication helpers for russh.
+#[cfg(feature = "russh")]
+pub mod russh_auth;
 
 /// Connection pooling for russh connections.
 #[cfg(feature = "russh")]
@@ -128,14 +129,12 @@ pub use russh::{
     ConnectionGroup, ConnectionMetrics, HighPerformanceConnectionFactory, PendingCommand,
     PipelinedExecutor, RusshConnection, RusshConnectionBuilder,
 };
-// TODO: russh_auth needs updating for russh 0.45 API changes
-// #[cfg(feature = "russh")]
-// pub use russh_auth::{
-//     AuthConfig, AuthMethod, AuthResult, RusshAuthenticator, RusshClientHandler,
-//     KeyLoader, KeyType, KeyError, KeyInfo,
-//     connect_to_agent, load_private_key, load_private_key_from_string,
-//     default_identity_files, standard_key_locations, is_key_encrypted,
-// };
+#[cfg(feature = "russh")]
+pub use russh_auth::{
+    default_identity_files, connect_to_agent, is_key_encrypted, load_private_key,
+    load_private_key_from_string, standard_key_locations, AuthConfig, AuthMethod, AuthResult,
+    KeyError, KeyInfo, KeyLoader, KeyType, RusshAuthenticator, RusshClientHandler,
+};
 #[cfg(feature = "russh")]
 pub use russh_pool::{
     HealthCheckResult, HostUtilization, PoolConfig, PoolStats as RusshPoolStats,
@@ -1185,7 +1184,7 @@ impl ConnectionBuilder {
                 "docker" => ConnectionType::Docker {
                     container: self.host.clone(),
                 },
-                "ssh" | _ => ConnectionType::Ssh {
+                _ => ConnectionType::Ssh {
                     host: self.host.clone(),
                     port: self.port.unwrap_or(22),
                     user: self.user.clone().unwrap_or_else(whoami),

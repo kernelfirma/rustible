@@ -40,17 +40,24 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::executor::work_stealing::{WorkStealingScheduler, WorkStealingConfig, WorkItem};
+//! # let hosts = vec!["host1".to_string(), "host2".to_string()];
+//! # let worker_id = 0usize;
+//! # fn estimate_cost(_host: &String) -> u32 { 1 }
+//! # fn process(_work: WorkItem<String>) {}
 //!
 //! // Create scheduler with default configuration
 //! let scheduler = WorkStealingScheduler::new(WorkStealingConfig::default());
 //!
 //! // Submit work items with automatic load balancing
-//! for host in hosts {
-//!     let item = WorkItem::new(host)
+//! for host in &hosts {
+//!     let item = WorkItem::new(host.clone())
 //!         .with_priority(5)
-//!         .with_weight(estimate_cost(&host));
+//!         .with_weight(estimate_cost(host));
 //!     scheduler.submit_balanced(item);
 //! }
 //!
@@ -70,13 +77,19 @@
 //! let stats = scheduler.stats();
 //! println!("Processed: {}, Stolen: {}", stats.items_processed, stats.items_stolen);
 //! println!("Load imbalance: {:.2}", stats.load_imbalance());
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Configuration Presets
 //!
 //! The scheduler provides configuration presets for common workload types:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::WorkStealingConfig;
 //! // For I/O-bound work (SSH operations, file transfers)
 //! let config = WorkStealingConfig::for_io_bound();
 //!
@@ -90,13 +103,20 @@
 //!     batch_steal: true,
 //!     spin_count: 32,
 //! };
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Work Item Prioritization
 //!
 //! Work items can be assigned priorities and weights for smart scheduling:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::work_stealing::WorkItem;
+//! # let task = "task_cleanup";
 //! // High priority, expensive operation
 //! let critical = WorkItem::new(task)
 //!     .with_priority(10)  // Higher = more urgent
@@ -106,13 +126,20 @@
 //! let background = WorkItem::new(task)
 //!     .with_priority(1)
 //!     .with_weight(1);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Statistics and Monitoring
 //!
 //! Monitor scheduler performance with built-in statistics:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+//! # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
 //! let stats = scheduler.stats();
 //!
 //! // Load distribution across queues
@@ -123,6 +150,8 @@
 //!
 //! // Load balance quality (0.0 = perfect, 1.0 = all work on one queue)
 //! println!("Load imbalance: {:.2}", stats.load_imbalance());
+//! # Ok(())
+//! # }
 //! ```
 
 use parking_lot::Mutex;
@@ -144,8 +173,12 @@ use tracing::trace;
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::executor::work_stealing::WorkItem;
+/// # let expensive_task = "expensive_task";
 ///
 /// // Create a simple work item
 /// let item = WorkItem::new("process_host_1");
@@ -154,6 +187,8 @@ use tracing::trace;
 /// let important = WorkItem::new(expensive_task)
 ///     .with_priority(10)  // High priority
 ///     .with_weight(100);  // Expensive operation
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct WorkItem<T> {
@@ -174,10 +209,16 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let item = WorkItem::new("task_data");
-    /// assert_eq!(item.priority, 0);
-    /// assert_eq!(item.weight, 1);
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::WorkItem;
+/// let item = WorkItem::new("task_data");
+/// assert_eq!(item.priority, 0);
+/// assert_eq!(item.weight, 1);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(payload: T) -> Self {
         Self {
@@ -198,10 +239,17 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let urgent = WorkItem::new(task).with_priority(255);
-    /// let normal = WorkItem::new(task).with_priority(128);
-    /// let background = WorkItem::new(task).with_priority(0);
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::WorkItem;
+/// # let task = "task_data";
+/// let urgent = WorkItem::new(task).with_priority(255);
+/// let normal = WorkItem::new(task).with_priority(128);
+/// let background = WorkItem::new(task).with_priority(0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn with_priority(mut self, priority: u8) -> Self {
         self.priority = priority;
@@ -219,12 +267,19 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// // A simple ping operation (cheap)
-    /// let ping = WorkItem::new(host).with_weight(1);
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::WorkItem;
+/// # let host = "host1";
+/// // A simple ping operation (cheap)
+/// let ping = WorkItem::new(host).with_weight(1);
     ///
     /// // A complex deployment (expensive)
     /// let deploy = WorkItem::new(host).with_weight(100);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn with_weight(mut self, weight: u32) -> Self {
         self.weight = weight;
@@ -311,7 +366,10 @@ impl<T> WorkQueue<T> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::executor::work_stealing::WorkStealingConfig;
 ///
 /// // Use defaults (auto-detect CPU count)
@@ -327,6 +385,8 @@ impl<T> WorkQueue<T> {
 ///     batch_steal: true,
 ///     spin_count: 64,
 /// };
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct WorkStealingConfig {
@@ -374,10 +434,16 @@ impl WorkStealingConfig {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let scheduler = WorkStealingScheduler::new(
-    ///     WorkStealingConfig::for_io_bound()
-    /// );
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+/// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
+///     WorkStealingConfig::for_io_bound()
+/// );
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn for_io_bound() -> Self {
         Self {
@@ -403,10 +469,16 @@ impl WorkStealingConfig {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let scheduler = WorkStealingScheduler::new(
-    ///     WorkStealingConfig::for_cpu_bound()
-    /// );
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+/// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
+///     WorkStealingConfig::for_cpu_bound()
+/// );
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn for_cpu_bound() -> Self {
         Self {
@@ -436,9 +508,15 @@ impl WorkStealingConfig {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::executor::work_stealing::{WorkStealingScheduler, WorkStealingConfig, WorkItem};
 /// use std::sync::Arc;
+/// # let task = "task_payload".to_string();
+/// # let worker_id = 0usize;
+/// # fn process(_payload: String) {}
 ///
 /// let scheduler = Arc::new(WorkStealingScheduler::new(
 ///     WorkStealingConfig::for_io_bound()
@@ -452,6 +530,8 @@ impl WorkStealingConfig {
 ///     process(item.payload);
 ///     scheduler.item_processed();
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct WorkStealingScheduler<T> {
     /// Per-worker queues
@@ -518,7 +598,7 @@ impl<T: Send + Sync + Clone + 'static> WorkStealingScheduler<T> {
 
         // Distribute items across queues based on weight
         let num_queues = self.queues.len();
-        let items_per_queue = (items.len() + num_queues - 1) / num_queues;
+        let items_per_queue = items.len().div_ceil(num_queues);
 
         for (i, item) in items.into_iter().enumerate() {
             let queue_idx = i / items_per_queue.max(1);
@@ -679,7 +759,12 @@ impl<T: Send + Sync + Clone + 'static> WorkStealingScheduler<T> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+/// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
 /// let stats = scheduler.stats();
 ///
 /// // Check if work is well-distributed
@@ -689,6 +774,8 @@ impl<T: Send + Sync + Clone + 'static> WorkStealingScheduler<T> {
 ///
 /// // Monitor stealing efficiency
 /// println!("Steal ratio: {:.1}%", stats.steal_ratio() * 100.0);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct WorkStealingStats {
@@ -718,14 +805,21 @@ impl WorkStealingStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let stats = scheduler.stats();
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+/// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
+/// let stats = scheduler.stats();
     /// match stats.load_imbalance() {
     ///     x if x < 0.1 => println!("Excellent balance"),
     ///     x if x < 0.3 => println!("Good balance"),
     ///     x if x < 0.5 => println!("Moderate imbalance"),
     ///     _ => println!("High imbalance - consider tuning"),
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn load_imbalance(&self) -> f64 {
         if self.queue_weights.is_empty() {
@@ -764,9 +858,16 @@ impl WorkStealingStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let stats = scheduler.stats();
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+/// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
+/// let stats = scheduler.stats();
     /// println!("Steal ratio: {:.1}%", stats.steal_ratio() * 100.0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn steal_ratio(&self) -> f64 {
         if self.items_processed == 0 {

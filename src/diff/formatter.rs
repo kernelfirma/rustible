@@ -6,11 +6,11 @@
 //! - Inline word-level diff highlighting
 
 use colored::Colorize;
-use similar::{ChangeTag, TextDiff};
+use similar::TextDiff;
 
 use super::stats::DiffStats;
 use super::word_diff::{pair_similar_lines, lines_are_similar, WordDiff};
-use super::{generate_diff, DiffHunk, DiffLine, DiffResult, ChangeType};
+use super::{generate_diff, DiffHunk, DiffLine, ChangeType};
 
 /// Diff output format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -339,13 +339,7 @@ impl DiffFormatter {
         match line.change_type {
             ChangeType::Delete => self.format_delete_line(content),
             ChangeType::Insert => self.format_insert_line(content),
-            ChangeType::Equal => {
-                if self.options.use_color {
-                    format!(" {}", content)
-                } else {
-                    format!(" {}", content)
-                }
-            }
+            ChangeType::Equal => format!(" {}", content),
         }
     }
 
@@ -406,7 +400,6 @@ impl DiffFormatter {
         }
 
         // Process changes
-        let mut old_idx = 0;
         let mut new_idx = 0;
         let mut stats = DiffStats::default();
 
@@ -431,7 +424,7 @@ impl DiffFormatter {
                             let line = if self.options.use_color {
                                 format!(
                                     "{:width$} | {:width$}",
-                                    format!("{}", left).red(),
+                                    left.to_string().red(),
                                     "",
                                     width = half_width
                                 )
@@ -450,7 +443,7 @@ impl DiffFormatter {
                                 format!(
                                     "{:width$} | {:width$}",
                                     "",
-                                    format!("{}", right).green(),
+                                    right.to_string().green(),
                                     width = half_width
                                 )
                             } else {

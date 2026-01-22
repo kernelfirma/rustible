@@ -14,12 +14,14 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::audit::{AuditEvent, AuditManager, FileLogger};
 //!
 //! // Create an audit manager with file logging
 //! let mut manager = AuditManager::new();
-//! manager.add_logger(Box::new(FileLogger::new("/var/log/rustible/audit.log")?));
+//! manager.add_logger(std::sync::Arc::new(FileLogger::new("/var/log/rustible/audit.log")?));
 //!
 //! // Log a command execution event
 //! let event = AuditEvent::command_execution("apt-get update")
@@ -29,6 +31,8 @@
 //!     .success();
 //!
 //! manager.log(event)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Security Considerations

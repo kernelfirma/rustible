@@ -146,6 +146,14 @@ impl GalaxyMetadata {
     }
 }
 
+impl std::str::FromStr for GalaxyMetadata {
+    type Err = super::CollectionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        GalaxyMetadata::from_str(s)
+    }
+}
+
 /// Checks if a version string is valid (allows partial semver)
 fn is_valid_version(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
