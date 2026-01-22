@@ -78,9 +78,9 @@ mod filter;
 mod manager;
 mod slack;
 mod template;
-mod webhook;
 #[cfg(test)]
 mod test_support;
+mod webhook;
 
 pub use config::{
     EmailConfig, NotificationConfig, NotificationConfigBuilder, SlackConfig, WebhookConfig,
@@ -351,7 +351,6 @@ pub enum Severity {
     /// Critical notification
     Critical,
 }
-
 
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

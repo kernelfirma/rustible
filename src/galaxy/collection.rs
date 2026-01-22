@@ -572,8 +572,7 @@ mod tests {
         }
 
         let mut buffer = Vec::new();
-        let encoder =
-            flate2::write::GzEncoder::new(&mut buffer, flate2::Compression::default());
+        let encoder = flate2::write::GzEncoder::new(&mut buffer, flate2::Compression::default());
         let mut tar = tar::Builder::new(encoder);
         tar.append_dir_all(root_name, &root_path)
             .expect("append dir");
@@ -604,10 +603,11 @@ mod tests {
   }
 }"#;
         let mut file = std::fs::File::create(&manifest_path).expect("create manifest");
-        file.write_all(manifest.as_bytes())
-            .expect("write manifest");
+        file.write_all(manifest.as_bytes()).expect("write manifest");
 
-        let collection = Collection::from_path(temp_dir.path()).await.expect("collection");
+        let collection = Collection::from_path(temp_dir.path())
+            .await
+            .expect("collection");
         assert_eq!(collection.namespace, "community");
         assert_eq!(collection.name, "general");
         assert_eq!(collection.version, "1.2.3");

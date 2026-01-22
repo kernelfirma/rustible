@@ -102,26 +102,34 @@ impl BestPracticesChecker {
         match name {
             None => {
                 if config.should_run_rule("B001", RuleCategory::BestPractices, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
-                        "B001",
-                        "unnamed-play",
-                        Severity::Warning,
-                        RuleCategory::BestPractices,
-                        "Play does not have a name",
-                        Location::file(path).with_play(play_idx, None),
-                    ).with_suggestion("Add a descriptive 'name' to the play for better readability"));
+                    result.add_issue(
+                        LintIssue::new(
+                            "B001",
+                            "unnamed-play",
+                            Severity::Warning,
+                            RuleCategory::BestPractices,
+                            "Play does not have a name",
+                            Location::file(path).with_play(play_idx, None),
+                        )
+                        .with_suggestion(
+                            "Add a descriptive 'name' to the play for better readability",
+                        ),
+                    );
                 }
             }
             Some(name) if name.trim().is_empty() => {
                 if config.should_run_rule("B002", RuleCategory::BestPractices, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
-                        "B002",
-                        "empty-play-name",
-                        Severity::Warning,
-                        RuleCategory::BestPractices,
-                        "Play has an empty name",
-                        Location::file(path).with_play(play_idx, None),
-                    ).with_suggestion("Provide a meaningful name for the play"));
+                    result.add_issue(
+                        LintIssue::new(
+                            "B002",
+                            "empty-play-name",
+                            Severity::Warning,
+                            RuleCategory::BestPractices,
+                            "Play has an empty name",
+                            Location::file(path).with_play(play_idx, None),
+                        )
+                        .with_suggestion("Provide a meaningful name for the play"),
+                    );
                 }
             }
             _ => {}
@@ -143,7 +151,10 @@ impl BestPracticesChecker {
             .and_then(|v| {
                 if v.is_bool() {
                     v.as_bool()
-                } else { v.as_str().map(|s| matches!(s.to_lowercase().as_str(), "true" | "yes")) }
+                } else {
+                    v.as_str()
+                        .map(|s| matches!(s.to_lowercase().as_str(), "true" | "yes"))
+                }
             })
             .unwrap_or(true); // default is true
 
@@ -155,17 +166,22 @@ impl BestPracticesChecker {
             .map(|s| s.len())
             .sum();
 
-        if gather_facts && task_count == 0
-            && config.should_run_rule("B003", RuleCategory::BestPractices, Severity::Hint) {
-                result.add_issue(LintIssue::new(
+        if gather_facts
+            && task_count == 0
+            && config.should_run_rule("B003", RuleCategory::BestPractices, Severity::Hint)
+        {
+            result.add_issue(
+                LintIssue::new(
                     "B003",
                     "gather-facts-no-tasks",
                     Severity::Hint,
                     RuleCategory::BestPractices,
                     "Play gathers facts but has no tasks",
                     Location::file(path).with_play(play_idx, play_name.map(String::from)),
-                ).with_suggestion("Consider setting 'gather_facts: false' or adding tasks"));
-            }
+                )
+                .with_suggestion("Consider setting 'gather_facts: false' or adding tasks"),
+            );
+        }
     }
 
     /// Check a single task.
@@ -192,35 +208,55 @@ impl BestPracticesChecker {
         result.tasks_analyzed += 1;
 
         // Check task name
-        self.check_task_name(task_name, task_idx, play_idx, play_name, path, config, result);
+        self.check_task_name(
+            task_name, task_idx, play_idx, play_name, path, config, result,
+        );
 
         // Check for command/shell usage
-        self.check_command_usage(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_command_usage(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for deprecated features
-        self.check_deprecated_features(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_deprecated_features(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for git with version
-        self.check_git_pinning(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_git_pinning(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for proper use of become
-        self.check_become_usage(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_become_usage(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for relative paths in certain modules
-        self.check_path_usage(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_path_usage(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for handlers without notify
-        self.check_handler_names(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_handler_names(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Check for retries without until
-        self.check_retry_usage(task_map, task_idx, play_idx, play_name, task_name, path, config, result);
+        self.check_retry_usage(
+            task_map, task_idx, play_idx, play_name, task_name, path, config, result,
+        );
 
         // Recursively check block tasks
         for block_key in &["block", "rescue", "always"] {
-            if let Some(block_tasks) = task_map.get(serde_yaml::Value::String(block_key.to_string())) {
+            if let Some(block_tasks) =
+                task_map.get(serde_yaml::Value::String(block_key.to_string()))
+            {
                 if let Some(block_list) = block_tasks.as_sequence() {
                     for (block_idx, block_task) in block_list.iter().enumerate() {
-                        self.check_task(block_task, block_idx, play_idx, play_name, path, config, result);
+                        self.check_task(
+                            block_task, block_idx, play_idx, play_name, path, config, result,
+                        );
                     }
                 }
             }
@@ -242,44 +278,53 @@ impl BestPracticesChecker {
         match name {
             None => {
                 if config.should_run_rule("B004", RuleCategory::BestPractices, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
-                        "B004",
-                        "unnamed-task",
-                        Severity::Warning,
-                        RuleCategory::BestPractices,
-                        "Task does not have a name",
-                        Location::file(path)
-                            .with_play(play_idx, play_name.map(String::from))
-                            .with_task(task_idx, None),
-                    ).with_suggestion("Add a descriptive 'name' to the task"));
+                    result.add_issue(
+                        LintIssue::new(
+                            "B004",
+                            "unnamed-task",
+                            Severity::Warning,
+                            RuleCategory::BestPractices,
+                            "Task does not have a name",
+                            Location::file(path)
+                                .with_play(play_idx, play_name.map(String::from))
+                                .with_task(task_idx, None),
+                        )
+                        .with_suggestion("Add a descriptive 'name' to the task"),
+                    );
                 }
             }
             Some(name) if name.trim().is_empty() => {
                 if config.should_run_rule("B005", RuleCategory::BestPractices, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
-                        "B005",
-                        "empty-task-name",
-                        Severity::Warning,
-                        RuleCategory::BestPractices,
-                        "Task has an empty name",
-                        Location::file(path)
-                            .with_play(play_idx, play_name.map(String::from))
-                            .with_task(task_idx, None),
-                    ).with_suggestion("Provide a meaningful name for the task"));
+                    result.add_issue(
+                        LintIssue::new(
+                            "B005",
+                            "empty-task-name",
+                            Severity::Warning,
+                            RuleCategory::BestPractices,
+                            "Task has an empty name",
+                            Location::file(path)
+                                .with_play(play_idx, play_name.map(String::from))
+                                .with_task(task_idx, None),
+                        )
+                        .with_suggestion("Provide a meaningful name for the task"),
+                    );
                 }
             }
             Some(name) if !name.starts_with(|c: char| c.is_uppercase()) => {
                 if config.should_run_rule("B006", RuleCategory::BestPractices, Severity::Hint) {
-                    result.add_issue(LintIssue::new(
-                        "B006",
-                        "lowercase-task-name",
-                        Severity::Hint,
-                        RuleCategory::BestPractices,
-                        "Task name should start with an uppercase letter",
-                        Location::file(path)
-                            .with_play(play_idx, play_name.map(String::from))
-                            .with_task(task_idx, Some(name.to_string())),
-                    ).with_suggestion("Capitalize the first letter of the task name"));
+                    result.add_issue(
+                        LintIssue::new(
+                            "B006",
+                            "lowercase-task-name",
+                            Severity::Hint,
+                            RuleCategory::BestPractices,
+                            "Task name should start with an uppercase letter",
+                            Location::file(path)
+                                .with_play(play_idx, play_name.map(String::from))
+                                .with_task(task_idx, Some(name.to_string())),
+                        )
+                        .with_suggestion("Capitalize the first letter of the task name"),
+                    );
                 }
             }
             _ => {}
@@ -303,21 +348,27 @@ impl BestPracticesChecker {
         if let Some(shell_args) = task.get(serde_yaml::Value::String("shell".to_string())) {
             let cmd = match shell_args {
                 serde_yaml::Value::String(s) => Some(s.as_str()),
-                serde_yaml::Value::Mapping(m) => {
-                    m.get(serde_yaml::Value::String("cmd".to_string()))
-                        .and_then(|v| v.as_str())
-                }
+                serde_yaml::Value::Mapping(m) => m
+                    .get(serde_yaml::Value::String("cmd".to_string()))
+                    .and_then(|v| v.as_str()),
                 _ => None,
             };
 
             if let Some(cmd) = cmd {
                 // Check for shell features
-                let shell_features = ['|', '>', '<', '&', ';', '$', '`', '(', ')', '{', '}', '*', '?', '[', ']'];
+                let shell_features = [
+                    '|', '>', '<', '&', ';', '$', '`', '(', ')', '{', '}', '*', '?', '[', ']',
+                ];
                 let uses_shell_features = cmd.chars().any(|c| shell_features.contains(&c));
 
                 if !uses_shell_features
-                    && config.should_run_rule("B007", RuleCategory::BestPractices, Severity::Warning) {
-                        result.add_issue(LintIssue::new(
+                    && config.should_run_rule(
+                        "B007",
+                        RuleCategory::BestPractices,
+                        Severity::Warning,
+                    )
+                {
+                    result.add_issue(LintIssue::new(
                             "B007",
                             "use-command-instead",
                             Severity::Warning,
@@ -327,7 +378,7 @@ impl BestPracticesChecker {
                                 .with_play(play_idx, play_name.map(String::from))
                                 .with_task(task_idx, task_name.map(String::from)),
                         ).with_suggestion("Replace 'shell' with 'command' for better security and performance"));
-                    }
+                }
             }
         }
 
@@ -341,11 +392,15 @@ impl BestPracticesChecker {
                     false
                 };
 
-                let has_changed_when = task.contains_key(serde_yaml::Value::String("changed_when".to_string()));
+                let has_changed_when =
+                    task.contains_key(serde_yaml::Value::String("changed_when".to_string()));
 
-                if !has_creates && !has_changed_when
-                    && config.should_run_rule("B008", RuleCategory::BestPractices, Severity::Hint) {
-                        result.add_issue(LintIssue::new(
+                if !has_creates
+                    && !has_changed_when
+                    && config.should_run_rule("B008", RuleCategory::BestPractices, Severity::Hint)
+                {
+                    result.add_issue(
+                        LintIssue::new(
                             "B008",
                             "command-not-idempotent",
                             Severity::Hint,
@@ -354,8 +409,12 @@ impl BestPracticesChecker {
                             Location::file(path)
                                 .with_play(play_idx, play_name.map(String::from))
                                 .with_task(task_idx, task_name.map(String::from)),
-                        ).with_suggestion("Add 'creates', 'removes', or 'changed_when' for idempotency"));
-                    }
+                        )
+                        .with_suggestion(
+                            "Add 'creates', 'removes', or 'changed_when' for idempotency",
+                        ),
+                    );
+                }
             }
         }
     }
@@ -376,13 +435,18 @@ impl BestPracticesChecker {
         // Check for deprecated with_* loops
         let deprecated_loops = [
             ("with_items", "Use 'loop' instead of 'with_items'"),
-            ("with_nested", "Use 'loop' with 'product' filter instead of 'with_nested'"),
+            (
+                "with_nested",
+                "Use 'loop' with 'product' filter instead of 'with_nested'",
+            ),
         ];
 
         for (loop_key, suggestion) in deprecated_loops {
             if task.contains_key(serde_yaml::Value::String(loop_key.to_string()))
-                && config.should_run_rule("B009", RuleCategory::Deprecation, Severity::Hint) {
-                    result.add_issue(LintIssue::new(
+                && config.should_run_rule("B009", RuleCategory::Deprecation, Severity::Hint)
+            {
+                result.add_issue(
+                    LintIssue::new(
                         "B009",
                         "deprecated-loop",
                         Severity::Hint,
@@ -391,14 +455,18 @@ impl BestPracticesChecker {
                         Location::file(path)
                             .with_play(play_idx, play_name.map(String::from))
                             .with_task(task_idx, task_name.map(String::from)),
-                    ).with_suggestion(suggestion));
-                }
+                    )
+                    .with_suggestion(suggestion),
+                );
+            }
         }
 
         // Check for sudo instead of become
         if task.contains_key(serde_yaml::Value::String("sudo".to_string()))
-            && config.should_run_rule("B010", RuleCategory::Deprecation, Severity::Warning) {
-                result.add_issue(LintIssue::new(
+            && config.should_run_rule("B010", RuleCategory::Deprecation, Severity::Warning)
+        {
+            result.add_issue(
+                LintIssue::new(
                     "B010",
                     "deprecated-sudo",
                     Severity::Warning,
@@ -407,8 +475,10 @@ impl BestPracticesChecker {
                     Location::file(path)
                         .with_play(play_idx, play_name.map(String::from))
                         .with_task(task_idx, task_name.map(String::from)),
-                ).with_suggestion("Replace 'sudo: yes' with 'become: yes'"));
-            }
+                )
+                .with_suggestion("Replace 'sudo: yes' with 'become: yes'"),
+            );
+        }
     }
 
     /// Check git module for version pinning.
@@ -426,11 +496,18 @@ impl BestPracticesChecker {
     ) {
         if let Some(git_args) = task.get(serde_yaml::Value::String("git".to_string())) {
             if let Some(args_map) = git_args.as_mapping() {
-                let has_version = args_map.contains_key(serde_yaml::Value::String("version".to_string()));
+                let has_version =
+                    args_map.contains_key(serde_yaml::Value::String("version".to_string()));
 
                 if !has_version
-                    && config.should_run_rule("B011", RuleCategory::BestPractices, Severity::Warning) {
-                        result.add_issue(LintIssue::new(
+                    && config.should_run_rule(
+                        "B011",
+                        RuleCategory::BestPractices,
+                        Severity::Warning,
+                    )
+                {
+                    result.add_issue(
+                        LintIssue::new(
                             "B011",
                             "git-no-version",
                             Severity::Warning,
@@ -439,8 +516,10 @@ impl BestPracticesChecker {
                             Location::file(path)
                                 .with_play(play_idx, play_name.map(String::from))
                                 .with_task(task_idx, task_name.map(String::from)),
-                        ).with_suggestion("Specify 'version' to ensure reproducible builds"));
-                    }
+                        )
+                        .with_suggestion("Specify 'version' to ensure reproducible builds"),
+                    );
+                }
             }
         }
     }
@@ -460,11 +539,15 @@ impl BestPracticesChecker {
     ) {
         // Check for become_user without become
         let has_become = task.contains_key(serde_yaml::Value::String("become".to_string()));
-        let has_become_user = task.contains_key(serde_yaml::Value::String("become_user".to_string()));
+        let has_become_user =
+            task.contains_key(serde_yaml::Value::String("become_user".to_string()));
 
-        if has_become_user && !has_become
-            && config.should_run_rule("B012", RuleCategory::BestPractices, Severity::Warning) {
-                result.add_issue(LintIssue::new(
+        if has_become_user
+            && !has_become
+            && config.should_run_rule("B012", RuleCategory::BestPractices, Severity::Warning)
+        {
+            result.add_issue(
+                LintIssue::new(
                     "B012",
                     "become-user-without-become",
                     Severity::Warning,
@@ -473,8 +556,10 @@ impl BestPracticesChecker {
                     Location::file(path)
                         .with_play(play_idx, play_name.map(String::from))
                         .with_task(task_idx, task_name.map(String::from)),
-                ).with_suggestion("Add 'become: yes' or remove 'become_user'"));
-            }
+                )
+                .with_suggestion("Add 'become: yes' or remove 'become_user'"),
+            );
+        }
     }
 
     /// Check path usage in certain modules.
@@ -498,22 +583,39 @@ impl BestPracticesChecker {
                 if let Some(args_map) = args.as_mapping() {
                     // Check dest parameter
                     for dest_key in &["dest", "path"] {
-                        if let Some(dest) = args_map.get(serde_yaml::Value::String(dest_key.to_string())) {
+                        if let Some(dest) =
+                            args_map.get(serde_yaml::Value::String(dest_key.to_string()))
+                        {
                             if let Some(dest_str) = dest.as_str() {
                                 // Skip if it's a template variable
-                                if !self.jinja_pattern.is_match(dest_str) && !dest_str.starts_with('/') && !dest_str.starts_with('~')
-                                    && config.should_run_rule("B013", RuleCategory::BestPractices, Severity::Hint) {
-                                        result.add_issue(LintIssue::new(
+                                if !self.jinja_pattern.is_match(dest_str)
+                                    && !dest_str.starts_with('/')
+                                    && !dest_str.starts_with('~')
+                                    && config.should_run_rule(
+                                        "B013",
+                                        RuleCategory::BestPractices,
+                                        Severity::Hint,
+                                    )
+                                {
+                                    result.add_issue(
+                                        LintIssue::new(
                                             "B013",
                                             "relative-path",
                                             Severity::Hint,
                                             RuleCategory::BestPractices,
-                                            format!("Relative path '{}' used for '{}'", dest_str, dest_key),
+                                            format!(
+                                                "Relative path '{}' used for '{}'",
+                                                dest_str, dest_key
+                                            ),
                                             Location::file(path)
                                                 .with_play(play_idx, play_name.map(String::from))
                                                 .with_task(task_idx, task_name.map(String::from)),
-                                        ).with_suggestion("Consider using an absolute path for clarity"));
-                                    }
+                                        )
+                                        .with_suggestion(
+                                            "Consider using an absolute path for clarity",
+                                        ),
+                                    );
+                                }
                             }
                         }
                     }
@@ -538,27 +640,32 @@ impl BestPracticesChecker {
         if let Some(notify) = task.get(serde_yaml::Value::String("notify".to_string())) {
             let handlers: Vec<&str> = match notify {
                 serde_yaml::Value::String(s) => vec![s.as_str()],
-                serde_yaml::Value::Sequence(seq) => {
-                    seq.iter().filter_map(|v| v.as_str()).collect()
-                }
+                serde_yaml::Value::Sequence(seq) => seq.iter().filter_map(|v| v.as_str()).collect(),
                 _ => vec![],
             };
 
             for handler in handlers {
                 // Check for handler names with spaces in wrong format
                 if handler.contains("  ")
-                    && config.should_run_rule("B014", RuleCategory::BestPractices, Severity::Hint) {
-                        result.add_issue(LintIssue::new(
+                    && config.should_run_rule("B014", RuleCategory::BestPractices, Severity::Hint)
+                {
+                    result.add_issue(
+                        LintIssue::new(
                             "B014",
                             "handler-multiple-spaces",
                             Severity::Hint,
                             RuleCategory::BestPractices,
-                            format!("Handler name '{}' contains multiple consecutive spaces", handler),
+                            format!(
+                                "Handler name '{}' contains multiple consecutive spaces",
+                                handler
+                            ),
                             Location::file(path)
                                 .with_play(play_idx, play_name.map(String::from))
                                 .with_task(task_idx, task_name.map(String::from)),
-                        ).with_suggestion("Use single spaces in handler names"));
-                    }
+                        )
+                        .with_suggestion("Use single spaces in handler names"),
+                    );
+                }
             }
         }
     }
@@ -579,9 +686,12 @@ impl BestPracticesChecker {
         let has_retries = task.contains_key(serde_yaml::Value::String("retries".to_string()));
         let has_until = task.contains_key(serde_yaml::Value::String("until".to_string()));
 
-        if has_retries && !has_until
-            && config.should_run_rule("B015", RuleCategory::BestPractices, Severity::Warning) {
-                result.add_issue(LintIssue::new(
+        if has_retries
+            && !has_until
+            && config.should_run_rule("B015", RuleCategory::BestPractices, Severity::Warning)
+        {
+            result.add_issue(
+                LintIssue::new(
                     "B015",
                     "retries-without-until",
                     Severity::Warning,
@@ -590,8 +700,10 @@ impl BestPracticesChecker {
                     Location::file(path)
                         .with_play(play_idx, play_name.map(String::from))
                         .with_task(task_idx, task_name.map(String::from)),
-                ).with_suggestion("Add 'until' condition to define when retries should stop"));
-            }
+                )
+                .with_suggestion("Add 'until' condition to define when retries should stop"),
+            );
+        }
     }
 }
 

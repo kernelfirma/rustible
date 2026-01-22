@@ -36,7 +36,6 @@ mod yaml;
 pub use best_practices::BestPracticesChecker;
 pub use params::{ModuleDef, ParamDef, ParamType, ParamValidator};
 pub use types::{
-    LintConfig, LintError, LintIssue, LintOpResult, LintResult, Location,
-    RuleCategory, Severity,
+    LintConfig, LintError, LintIssue, LintOpResult, LintResult, Location, RuleCategory, Severity,
 };
 pub use yaml::YamlChecker;

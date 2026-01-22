@@ -682,12 +682,14 @@ impl RusshConnection {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
 
-            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
-                ConnectionError::InvalidConfig(format!(
-                    "Invalid escalation user '{}': {}",
-                    escalate_user, e
-                ))
-            })?;
+            BecomeValidator::new()
+                .validate_username(escalate_user)
+                .map_err(|e| {
+                    ConnectionError::InvalidConfig(format!(
+                        "Invalid escalation user '{}': {}",
+                        escalate_user, e
+                    ))
+                })?;
 
             match escalate_method {
                 "sudo" => {
@@ -871,7 +873,8 @@ impl RusshConnection {
         host_config: Option<HostConfig>,
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<Self> {
-        let resolved = ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
+        let resolved =
+            ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
         let host_config = resolved.host_config.clone();
         let retry_config = resolved.retry_config.clone();
         let actual_host = resolved.host.clone();
@@ -892,17 +895,18 @@ impl RusshConnection {
 
         let (handle, jump_handles) = if jump_chain.is_empty() {
             // Connect with retry logic
-            let handle = ssh_common::connect_with_retry_async(&retry_config, "SSH connection", || {
-                Self::do_connect(
-                    &actual_host,
-                    actual_port,
-                    &actual_user,
-                    &host_config,
-                    global_config,
-                    timeout,
-                )
-            })
-            .await?;
+            let handle =
+                ssh_common::connect_with_retry_async(&retry_config, "SSH connection", || {
+                    Self::do_connect(
+                        &actual_host,
+                        actual_port,
+                        &actual_user,
+                        &host_config,
+                        global_config,
+                        timeout,
+                    )
+                })
+                .await?;
             (handle, Vec::new())
         } else {
             debug!(
@@ -1190,11 +1194,10 @@ impl RusshConnection {
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<()> {
         // Try SSH agent first if enabled
-        if global_config.defaults.use_agent
-            && Self::try_agent_auth(session, user).await.is_ok() {
-                debug!("Authenticated using SSH agent");
-                return Ok(());
-            }
+        if global_config.defaults.use_agent && Self::try_agent_auth(session, user).await.is_ok() {
+            debug!("Authenticated using SSH agent");
+            return Ok(());
+        }
 
         // Try key-based authentication
         for key_path in ssh_common::identity_file_candidates(host_config, global_config) {
@@ -1595,13 +1598,16 @@ impl Connection for RusshConnection {
             attrs.permissions = Some(mode);
         }
 
-        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to create remote file {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        let mut remote_file = sftp
+            .open_with_flags_and_attributes(&remote_path_str, flags, attrs)
+            .await
+            .map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to create remote file {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
 
         // Write content to remote file
         remote_file.write_all(&content).await.map_err(|e| {
@@ -1682,13 +1688,16 @@ impl Connection for RusshConnection {
             attrs.permissions = Some(mode);
         }
 
-        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to create remote file {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        let mut remote_file = sftp
+            .open_with_flags_and_attributes(&remote_path_str, flags, attrs)
+            .await
+            .map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to create remote file {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
 
         // Write content to remote file
         remote_file.write_all(content).await.map_err(|e| {
@@ -2067,9 +2076,7 @@ impl RusshConnection {
         let prepared_commands: Vec<(usize, String)> = match commands
             .iter()
             .enumerate()
-            .map(|(idx, cmd)| {
-                Self::build_command_with_env(cmd, &options).map(|full| (idx, full))
-            })
+            .map(|(idx, cmd)| Self::build_command_with_env(cmd, &options).map(|full| (idx, full)))
             .collect::<ConnectionResult<Vec<_>>>()
         {
             Ok(prepared) => prepared,
@@ -2193,10 +2200,7 @@ impl RusshConnection {
                     let password_data = format!("{password}\n");
                     let mut cursor = tokio::io::BufReader::new(password_data.as_bytes());
                     channel.data(&mut cursor).await.map_err(|e| {
-                        ConnectionError::ExecutionFailed(format!(
-                            "Failed to write password: {}",
-                            e
-                        ))
+                        ConnectionError::ExecutionFailed(format!("Failed to write password: {}", e))
                     })?;
                 }
             }
@@ -2628,17 +2632,15 @@ impl<'a> PipelinedExecutor<'a> {
             }
 
             if let Some(Some(channel)) = channels.get_mut(idx) {
-                let full_command = match RusshConnection::build_command_with_env(
-                    &cmd.command,
-                    &cmd.options,
-                ) {
-                    Ok(full_command) => full_command,
-                    Err(e) => {
-                        channels[idx] = None;
-                        channel_errors[idx] = Some(e);
-                        continue;
-                    }
-                };
+                let full_command =
+                    match RusshConnection::build_command_with_env(&cmd.command, &cmd.options) {
+                        Ok(full_command) => full_command,
+                        Err(e) => {
+                            channels[idx] = None;
+                            channel_errors[idx] = Some(e);
+                            continue;
+                        }
+                    };
 
                 if let Err(e) = channel.exec(true, full_command).await {
                     // Mark this channel as failed
@@ -2819,9 +2821,9 @@ impl RusshConnection {
     /// ```rust,ignore,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-/// use rustible::prelude::*;
-/// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
-/// let mut pipeline = connection.pipeline();
+    /// use rustible::prelude::*;
+    /// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
+    /// let mut pipeline = connection.pipeline();
     /// pipeline.queue("ls -la", None);
     /// pipeline.queue("df -h", None);
     /// pipeline.queue("free -m", None);
@@ -3215,9 +3217,7 @@ impl RusshConnection {
         })?;
         let size = content.len() as u64;
         let guard = handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or(ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         if opts.create_dirs {
@@ -3362,9 +3362,7 @@ impl RusshConnection {
         local: &Path,
     ) -> ConnectionResult<u64> {
         let guard = handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or(ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         let path_str = remote.to_string_lossy().to_string();
@@ -3410,9 +3408,7 @@ impl RusshConnection {
             return Ok(());
         }
         let guard = self.handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or(ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         if opts.create_dirs {
@@ -3490,9 +3486,7 @@ impl RusshConnection {
         progress: ProgressCallback,
     ) -> ConnectionResult<()> {
         let guard = self.handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or(ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         let path_str = remote.to_string_lossy().to_string();
@@ -3961,8 +3955,7 @@ mod tests {
 
     #[test]
     fn test_build_command_rejects_invalid_user() {
-        let options =
-            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let options = ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
         let result = RusshConnection::build_command("echo hello", &options);
         assert!(result.is_err());
     }

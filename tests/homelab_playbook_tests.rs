@@ -72,9 +72,7 @@ async fn test_homelab_smoke_playbook() {
             .arg("dest", tmp_file.as_str())
             .arg("content", "rustible homelab smoke"),
     );
-    play.add_task(
-        Task::new("Read temp file", "command").arg("cmd", format!("cat {}", tmp_file)),
-    );
+    play.add_task(Task::new("Read temp file", "command").arg("cmd", format!("cat {}", tmp_file)));
     play.add_task(
         Task::new("Cleanup temp file", "file")
             .arg("path", tmp_file.as_str())
@@ -95,6 +93,10 @@ async fn test_homelab_smoke_playbook() {
     for (host, result) in results {
         assert!(!result.unreachable, "Host {} unreachable", host);
         assert!(!result.failed, "Host {} failed", host);
-        assert!(result.stats.ok + result.stats.changed > 0, "Host {} had no task results", host);
+        assert!(
+            result.stats.ok + result.stats.changed > 0,
+            "Host {} had no task results",
+            host
+        );
     }
 }

@@ -157,7 +157,9 @@ impl TemplateModule {
         // Upload rendered content to remote
         conn.upload_content(rendered.as_bytes(), &dest_path, Some(transfer_opts))
             .await
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload template: {}", e)))?;
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to upload template: {}", e))
+            })?;
 
         let mut output =
             ModuleOutput::changed(format!("Rendered template '{}' to '{}'", src_name, dest));
@@ -434,10 +436,7 @@ impl Module for TemplateModule {
                         .enable_all()
                         .build()
                         .map_err(|e| {
-                            ModuleError::ExecutionFailed(format!(
-                                "Failed to create runtime: {}",
-                                e
-                            ))
+                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
                         })?;
 
                     rt.block_on(Self::execute_remote(

@@ -369,9 +369,7 @@ impl SqlitePersistence {
         })
     }
 
-    fn load_from_file(
-        path: &PathBuf,
-    ) -> StateResult<PersistedState> {
+    fn load_from_file(path: &PathBuf) -> StateResult<PersistedState> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -400,7 +398,6 @@ impl SqlitePersistence {
 
         Ok((snapshots, tasks, db.metadata))
     }
-
 
     fn save_to_file(&self) -> StateResult<()> {
         #[derive(Serialize)]

@@ -213,10 +213,10 @@ impl<T> WorkItem<T> {
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::WorkItem;
-/// let item = WorkItem::new("task_data");
-/// assert_eq!(item.priority, 0);
-/// assert_eq!(item.weight, 1);
+    /// # use rustible::executor::work_stealing::WorkItem;
+    /// let item = WorkItem::new("task_data");
+    /// assert_eq!(item.priority, 0);
+    /// assert_eq!(item.weight, 1);
     /// # Ok(())
     /// # }
     /// ```
@@ -243,11 +243,11 @@ impl<T> WorkItem<T> {
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::WorkItem;
-/// # let task = "task_data";
-/// let urgent = WorkItem::new(task).with_priority(255);
-/// let normal = WorkItem::new(task).with_priority(128);
-/// let background = WorkItem::new(task).with_priority(0);
+    /// # use rustible::executor::work_stealing::WorkItem;
+    /// # let task = "task_data";
+    /// let urgent = WorkItem::new(task).with_priority(255);
+    /// let normal = WorkItem::new(task).with_priority(128);
+    /// let background = WorkItem::new(task).with_priority(0);
     /// # Ok(())
     /// # }
     /// ```
@@ -271,10 +271,10 @@ impl<T> WorkItem<T> {
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::WorkItem;
-/// # let host = "host1";
-/// // A simple ping operation (cheap)
-/// let ping = WorkItem::new(host).with_weight(1);
+    /// # use rustible::executor::work_stealing::WorkItem;
+    /// # let host = "host1";
+    /// // A simple ping operation (cheap)
+    /// let ping = WorkItem::new(host).with_weight(1);
     ///
     /// // A complex deployment (expensive)
     /// let deploy = WorkItem::new(host).with_weight(100);
@@ -437,11 +437,11 @@ impl WorkStealingConfig {
     /// ```rust,ignore,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-/// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
-/// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
-///     WorkStealingConfig::for_io_bound()
-/// );
+    /// use rustible::prelude::*;
+    /// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+    /// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
+    ///     WorkStealingConfig::for_io_bound()
+    /// );
     /// # Ok(())
     /// # }
     /// ```
@@ -472,11 +472,11 @@ impl WorkStealingConfig {
     /// ```rust,ignore,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-/// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
-/// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
-///     WorkStealingConfig::for_cpu_bound()
-/// );
+    /// use rustible::prelude::*;
+    /// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+    /// let scheduler: WorkStealingScheduler<String> = WorkStealingScheduler::new(
+    ///     WorkStealingConfig::for_cpu_bound()
+    /// );
     /// # Ok(())
     /// # }
     /// ```
@@ -809,9 +809,9 @@ impl WorkStealingStats {
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
-/// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
-/// let stats = scheduler.stats();
+    /// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+    /// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
+    /// let stats = scheduler.stats();
     /// match stats.load_imbalance() {
     ///     x if x < 0.1 => println!("Excellent balance"),
     ///     x if x < 0.3 => println!("Good balance"),
@@ -862,9 +862,9 @@ impl WorkStealingStats {
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
-/// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
-/// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
-/// let stats = scheduler.stats();
+    /// # use rustible::executor::work_stealing::{WorkStealingConfig, WorkStealingScheduler};
+    /// # let scheduler = WorkStealingScheduler::<u8>::new(WorkStealingConfig::default());
+    /// let stats = scheduler.stats();
     /// println!("Steal ratio: {:.1}%", stats.steal_ratio() * 100.0);
     /// # Ok(())
     /// # }

@@ -182,9 +182,11 @@ fn merge_values(base: Value, other: Value, list_merge: &str) -> Value {
                         let other_set: HashSet<String> =
                             other_seq.iter().map(|v| v.to_string()).collect();
                         let mut result = other_seq;
-                        result.extend(base_seq.into_iter().filter(|v| {
-                            !other_set.contains(&v.to_string())
-                        }));
+                        result.extend(
+                            base_seq
+                                .into_iter()
+                                .filter(|v| !other_set.contains(&v.to_string())),
+                        );
                         Value::from(result)
                     }
                     "keep" => base,
@@ -394,7 +396,12 @@ fn unique(list: Value, case_sensitive: Option<bool>) -> Vec<Value> {
 ///
 /// Compatible with Ansible's `flatten` filter.
 fn flatten(list: Value, levels: Option<i64>) -> Vec<Value> {
-    fn flatten_recursive(value: &Value, depth: i64, max_depth: Option<i64>, result: &mut Vec<Value>) {
+    fn flatten_recursive(
+        value: &Value,
+        depth: i64,
+        max_depth: Option<i64>,
+        result: &mut Vec<Value>,
+    ) {
         if let Some(max) = max_depth {
             if depth > max {
                 result.push(value.clone());
@@ -495,12 +502,7 @@ fn dict2items(dict: Value, key_name: Option<String>, value_name: Option<String>)
     if let Some(obj) = dict.as_object() {
         if let Some(iter) = obj.try_iter_pairs() {
             return iter
-                .map(|(k, v)| {
-                    Value::from_iter([
-                        (key_name.clone(), k),
-                        (value_name.clone(), v),
-                    ])
-                })
+                .map(|(k, v)| Value::from_iter([(key_name.clone(), k), (value_name.clone(), v)]))
                 .collect();
         }
     }
@@ -727,12 +729,12 @@ fn rejectattr(list: Value, attr: String, test: Option<String>, value: Option<Val
 
 fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool {
     match test {
-        Some("equalto" | "==" | "eq") => {
-            compare.map(|c| val.to_string() == c.to_string()).unwrap_or(false)
-        }
-        Some("ne" | "!=") => {
-            compare.map(|c| val.to_string() != c.to_string()).unwrap_or(true)
-        }
+        Some("equalto" | "==" | "eq") => compare
+            .map(|c| val.to_string() == c.to_string())
+            .unwrap_or(false),
+        Some("ne" | "!=") => compare
+            .map(|c| val.to_string() != c.to_string())
+            .unwrap_or(true),
         Some("defined") => !val.is_undefined(),
         Some("undefined") => val.is_undefined(),
         Some("none" | "null") => val.is_none(),
@@ -747,9 +749,14 @@ fn apply_test(val: &Value, test: Option<&str>, compare: Option<&Value>) -> bool 
         }
         Some("contains") => {
             if let Some(seq) = val.as_seq() {
-                compare.map(|c| seq.iter().any(|item| item.to_string() == c.to_string())).unwrap_or(false)
+                compare
+                    .map(|c| seq.iter().any(|item| item.to_string() == c.to_string()))
+                    .unwrap_or(false)
             } else if let Some(s) = val.as_str() {
-                compare.and_then(|c| c.as_str()).map(|substr| s.contains(substr)).unwrap_or(false)
+                compare
+                    .and_then(|c| c.as_str())
+                    .map(|substr| s.contains(substr))
+                    .unwrap_or(false)
             } else {
                 false
             }
@@ -833,7 +840,11 @@ fn slice_filter(list: Value, start: i64, end: Option<i64>, step: Option<i64>) ->
         let len = items.len() as i64;
 
         // Handle negative indices
-        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
+        let start = if start < 0 {
+            (len + start).max(0)
+        } else {
+            start.min(len)
+        } as usize;
         let end = end
             .map(|e| if e < 0 { (len + e).max(0) } else { e.min(len) } as usize)
             .unwrap_or(len as usize);
@@ -920,10 +931,7 @@ mod tests {
         let nested = Value::from(vec![
             Value::from(1),
             Value::from(vec![Value::from(2), Value::from(3)]),
-            Value::from(vec![
-                Value::from(4),
-                Value::from(vec![Value::from(5)]),
-            ]),
+            Value::from(vec![Value::from(4), Value::from(vec![Value::from(5)])]),
         ]);
 
         let result = flatten(nested, None);
