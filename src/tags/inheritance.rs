@@ -155,13 +155,17 @@ impl TagInheritanceBuilder {
 
     /// Add role tags
     pub fn role_tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.inner.role_tags.extend(tags.into_iter().map(Into::into));
+        self.inner
+            .role_tags
+            .extend(tags.into_iter().map(Into::into));
         self
     }
 
     /// Add block tags
     pub fn block_tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.inner.block_tags.extend(tags.into_iter().map(Into::into));
+        self.inner
+            .block_tags
+            .extend(tags.into_iter().map(Into::into));
         self
     }
 
@@ -192,8 +196,7 @@ mod tests {
 
     #[test]
     fn test_play_tag_inheritance() {
-        let inheritance = TagInheritance::new()
-            .with_play_tags(vec!["production".to_string()]);
+        let inheritance = TagInheritance::new().with_play_tags(vec!["production".to_string()]);
         let task_tags = vec!["deploy".to_string()];
 
         let resolved = inheritance.resolve_tags(&task_tags);
@@ -253,8 +256,7 @@ mod tests {
 
     #[test]
     fn test_full_inheritance_chain() {
-        let mut inheritance = TagInheritance::new()
-            .with_play_tags(vec!["play".to_string()]);
+        let mut inheritance = TagInheritance::new().with_play_tags(vec!["play".to_string()]);
         inheritance.push_role_tags(&["role".to_string()]);
         inheritance.push_block_tags(&["block".to_string()]);
         inheritance.set_include_tags(vec!["include".to_string()]);
@@ -271,8 +273,7 @@ mod tests {
 
     #[test]
     fn test_duplicate_tags_deduplicated() {
-        let inheritance = TagInheritance::new()
-            .with_play_tags(vec!["common".to_string()]);
+        let inheritance = TagInheritance::new().with_play_tags(vec!["common".to_string()]);
         let task_tags = vec!["common".to_string(), "unique".to_string()];
 
         let resolved = inheritance.resolve_tags(&task_tags);
@@ -302,8 +303,7 @@ mod tests {
 
     #[test]
     fn test_child_context() {
-        let mut parent = TagInheritance::new()
-            .with_play_tags(vec!["play".to_string()]);
+        let mut parent = TagInheritance::new().with_play_tags(vec!["play".to_string()]);
         parent.push_role_tags(&["role".to_string()]);
         parent.set_include_tags(vec!["include".to_string()]);
 
@@ -336,8 +336,7 @@ mod tests {
         let empty = TagInheritance::new();
         assert!(!empty.has_inherited_tags());
 
-        let with_play = TagInheritance::new()
-            .with_play_tags(vec!["tag".to_string()]);
+        let with_play = TagInheritance::new().with_play_tags(vec!["tag".to_string()]);
         assert!(with_play.has_inherited_tags());
     }
 }

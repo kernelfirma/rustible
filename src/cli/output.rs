@@ -34,12 +34,12 @@ impl TaskStatus {
     pub fn colored_string(&self) -> String {
         match self {
             TaskStatus::Ok => "✔ ok".green().to_string(),
-            TaskStatus::Changed => "~ changed".yellow().to_string(),
-            TaskStatus::Skipped => "- skipping".cyan().to_string(),
+            TaskStatus::Changed => "✎ changed".yellow().to_string(),
+            TaskStatus::Skipped => "↷ skipping".cyan().to_string(),
             TaskStatus::Failed => "✖ failed".red().bold().to_string(),
-            TaskStatus::Unreachable => "✖ unreachable".red().bold().to_string(),
+            TaskStatus::Unreachable => "✘ unreachable".red().bold().to_string(),
             TaskStatus::Rescued => "✚ rescued".magenta().to_string(),
-            TaskStatus::Ignored => "! ignored".blue().to_string(),
+            TaskStatus::Ignored => "⊘ ignored".blue().to_string(),
         }
     }
 
@@ -510,6 +510,20 @@ impl OutputFormatter {
         }
     }
 
+    /// Print a diagnostic message without extra prefixes
+    pub fn diagnostic(&self, message: &str) {
+        if self.json_mode {
+            let err = serde_json::json!({
+                "type": "diagnostic",
+                "message": message
+            });
+            eprintln!("{}", serde_json::to_string(&err).unwrap());
+            return;
+        }
+
+        eprintln!("{}", message);
+    }
+
     /// Print a warning message
     pub fn warning(&self, message: &str) {
         if self.json_mode {
@@ -900,6 +914,12 @@ mod tests {
         // It should contain the text
         assert!(TaskStatus::Ok.colored_string().contains("ok"));
         assert!(TaskStatus::Changed.colored_string().contains("changed"));
+
+        // Verify new icons
+        assert!(TaskStatus::Changed.colored_string().contains("✎"));
+        assert!(TaskStatus::Skipped.colored_string().contains("↷"));
+        assert!(TaskStatus::Unreachable.colored_string().contains("✘"));
+        assert!(TaskStatus::Ignored.colored_string().contains("⊘"));
     }
 
     #[test]

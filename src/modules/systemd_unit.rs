@@ -311,7 +311,9 @@ impl SystemdUnitConfig {
         let is_template = name.contains("@.");
 
         // Check for instance name
-        let instance = INSTANCE_NAME_REGEX.captures(&name).map(|caps| caps.get(2).map_or("", |m| m.as_str()).to_string());
+        let instance = INSTANCE_NAME_REGEX
+            .captures(&name)
+            .map(|caps| caps.get(2).map_or("", |m| m.as_str()).to_string());
 
         // Parse state
         let state_str = params

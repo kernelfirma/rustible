@@ -80,8 +80,7 @@ struct HostStats {
 }
 
 /// Information about a fork slot.
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ForkSlot {
     /// Host currently occupying this slot (if any)
     host: Option<String>,
@@ -90,7 +89,6 @@ struct ForkSlot {
     /// Whether the slot is active
     active: bool,
 }
-
 
 /// Configuration for the forked callback.
 #[derive(Debug, Clone)]

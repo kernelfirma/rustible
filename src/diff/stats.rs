@@ -55,9 +55,7 @@ impl DiffStats {
     pub fn short_summary(&self) -> String {
         format!(
             "{} file(s), +{} -{}",
-            self.files_changed,
-            self.insertions,
-            self.deletions
+            self.files_changed, self.insertions, self.deletions
         )
     }
 
@@ -146,7 +144,14 @@ impl DiffStats {
         let insert_bar = "+".repeat(insert_width);
         let delete_bar = "-".repeat(delete_width);
 
-        let change_str = format!("{:>4}", if total > 999 { "+999".to_string() } else { format!("{}", total) });
+        let change_str = format!(
+            "{:>4}",
+            if total > 999 {
+                "+999".to_string()
+            } else {
+                format!("{}", total)
+            }
+        );
 
         if use_color {
             format!(
@@ -157,7 +162,10 @@ impl DiffStats {
                 delete_bar.red()
             )
         } else {
-            format!(" {} | {} {}{}", filename, change_str, insert_bar, delete_bar)
+            format!(
+                " {} | {} {}{}",
+                filename, change_str, insert_bar, delete_bar
+            )
         }
     }
 }
@@ -219,7 +227,8 @@ impl DiffStatsAccumulator {
         }
 
         // Find the longest filename for alignment
-        let max_filename_len = self.file_stats
+        let max_filename_len = self
+            .file_stats
             .iter()
             .map(|(name, _)| name.len())
             .max()
@@ -333,19 +342,25 @@ mod tests {
     fn test_accumulator() {
         let mut acc = DiffStatsAccumulator::new();
 
-        acc.add("file1.txt".to_string(), DiffStats {
-            files_changed: 1,
-            insertions: 5,
-            deletions: 2,
-            ..Default::default()
-        });
+        acc.add(
+            "file1.txt".to_string(),
+            DiffStats {
+                files_changed: 1,
+                insertions: 5,
+                deletions: 2,
+                ..Default::default()
+            },
+        );
 
-        acc.add("file2.txt".to_string(), DiffStats {
-            files_changed: 1,
-            insertions: 3,
-            deletions: 1,
-            ..Default::default()
-        });
+        acc.add(
+            "file2.txt".to_string(),
+            DiffStats {
+                files_changed: 1,
+                insertions: 3,
+                deletions: 1,
+                ..Default::default()
+            },
+        );
 
         assert!(acc.has_changes());
         assert_eq!(acc.totals().files_changed, 2);

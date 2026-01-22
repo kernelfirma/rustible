@@ -1293,8 +1293,8 @@ impl InventoryCache {
         tokio::fs::create_dir_all(cache_dir).await?;
 
         let cache_file = cache_dir.join(format!("{}.json", key));
-        let json = inventory_to_json(inventory)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        let json =
+            inventory_to_json(inventory).map_err(|e| std::io::Error::other(e.to_string()))?;
 
         tokio::fs::write(cache_file, serde_json::to_string_pretty(&json)?).await
     }

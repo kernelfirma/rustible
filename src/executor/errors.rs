@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::diagnostics::RichDiagnostic;
+
 /// Errors that can occur during playbook and task execution.
 ///
 /// This enum covers all error conditions that may arise during the
@@ -38,6 +40,17 @@ pub enum ExecutorError {
     #[error("Playbook parse error: {0}")]
     ParseError(String),
 
+    /// Rich diagnostic error with source context.
+    #[error("{message}")]
+    Diagnostic {
+        /// Primary error message
+        message: String,
+        /// Rich diagnostic details
+        diagnostic: RichDiagnostic,
+        /// Source content for rendering (optional)
+        source_text: Option<String>,
+    },
+
     /// An I/O operation failed.
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
@@ -59,3 +72,27 @@ pub enum ExecutorError {
 ///
 /// A type alias for `Result<T, ExecutorError>` used throughout the executor module.
 pub type ExecutorResult<T> = Result<T, ExecutorError>;
+
+impl ExecutorError {
+    /// Create a diagnostic error from a RichDiagnostic.
+    pub fn diagnostic(diagnostic: RichDiagnostic, source: Option<String>) -> Self {
+        let message = diagnostic.message.clone();
+        Self::Diagnostic {
+            message,
+            diagnostic,
+            source_text: source,
+        }
+    }
+
+    /// Render the diagnostic if present.
+    pub fn render_diagnostic(&self) -> Option<String> {
+        match self {
+            ExecutorError::Diagnostic {
+                diagnostic,
+                source_text,
+                ..
+            } => Some(diagnostic.render_with_source(source_text.as_deref())),
+            _ => None,
+        }
+    }
+}

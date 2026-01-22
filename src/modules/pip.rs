@@ -105,7 +105,9 @@ impl PipConfig {
                         ModuleError::InvalidParameter(format!("Invalid umask: {}", s))
                     })?,
                 )
-            } else { umask_val.as_u64().map(|n| n as u32) }
+            } else {
+                umask_val.as_u64().map(|n| n as u32)
+            }
         } else {
             None
         };

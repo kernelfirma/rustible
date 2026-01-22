@@ -129,7 +129,8 @@ impl ModuleDef {
 
     /// Add a deprecated parameter.
     pub fn with_deprecated(mut self, param: &str, replacement: &str) -> Self {
-        self.deprecated_params.insert(param.to_string(), replacement.to_string());
+        self.deprecated_params
+            .insert(param.to_string(), replacement.to_string());
         self
     }
 }
@@ -167,10 +168,13 @@ impl ParamValidator {
         self.register(
             ModuleDef::new("apt")
                 .with_param(ParamDef::optional("name").with_aliases(vec!["pkg", "package"]))
-                .with_param(
-                    ParamDef::optional("state")
-                        .with_choices(vec!["present", "absent", "latest", "build-dep", "fixed"]),
-                )
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "present",
+                    "absent",
+                    "latest",
+                    "build-dep",
+                    "fixed",
+                ]))
                 .with_param(ParamDef::optional("update_cache").with_type(ParamType::Bool))
                 .with_param(ParamDef::optional("cache_valid_time").with_type(ParamType::Int))
                 .with_param(ParamDef::optional("purge").with_type(ParamType::Bool))
@@ -179,17 +183,23 @@ impl ParamValidator {
                 .with_param(ParamDef::optional("dpkg_options"))
                 .with_param(ParamDef::optional("force").with_type(ParamType::Bool))
                 .with_param(ParamDef::optional("install_recommends").with_type(ParamType::Bool))
-                .with_param(ParamDef::optional("upgrade").with_choices(vec!["no", "yes", "safe", "full", "dist"])),
+                .with_param(
+                    ParamDef::optional("upgrade")
+                        .with_choices(vec!["no", "yes", "safe", "full", "dist"]),
+                ),
         );
 
         // yum module
         self.register(
             ModuleDef::new("yum")
                 .with_param(ParamDef::optional("name").with_aliases(vec!["pkg"]))
-                .with_param(
-                    ParamDef::optional("state")
-                        .with_choices(vec!["present", "absent", "latest", "installed", "removed"]),
-                )
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "present",
+                    "absent",
+                    "latest",
+                    "installed",
+                    "removed",
+                ]))
                 .with_param(ParamDef::optional("enablerepo"))
                 .with_param(ParamDef::optional("disablerepo"))
                 .with_param(ParamDef::optional("update_cache").with_type(ParamType::Bool))
@@ -200,10 +210,13 @@ impl ParamValidator {
         self.register(
             ModuleDef::new("dnf")
                 .with_param(ParamDef::optional("name").with_aliases(vec!["pkg"]))
-                .with_param(
-                    ParamDef::optional("state")
-                        .with_choices(vec!["present", "absent", "latest", "installed", "removed"]),
-                )
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "present",
+                    "absent",
+                    "latest",
+                    "installed",
+                    "removed",
+                ]))
                 .with_param(ParamDef::optional("enablerepo"))
                 .with_param(ParamDef::optional("disablerepo"))
                 .with_param(ParamDef::optional("update_cache").with_type(ParamType::Bool)),
@@ -241,10 +254,14 @@ impl ParamValidator {
         self.register(
             ModuleDef::new("file")
                 .with_param(ParamDef::required("path").with_aliases(vec!["dest", "name"]))
-                .with_param(
-                    ParamDef::optional("state")
-                        .with_choices(vec!["file", "directory", "link", "hard", "touch", "absent"]),
-                )
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "file",
+                    "directory",
+                    "link",
+                    "hard",
+                    "touch",
+                    "absent",
+                ]))
                 .with_param(ParamDef::optional("owner"))
                 .with_param(ParamDef::optional("group"))
                 .with_param(ParamDef::optional("mode"))
@@ -257,10 +274,12 @@ impl ParamValidator {
         self.register(
             ModuleDef::new("service")
                 .with_param(ParamDef::required("name"))
-                .with_param(
-                    ParamDef::optional("state")
-                        .with_choices(vec!["started", "stopped", "restarted", "reloaded"]),
-                )
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "started",
+                    "stopped",
+                    "restarted",
+                    "reloaded",
+                ]))
                 .with_param(ParamDef::optional("enabled").with_type(ParamType::Bool))
                 .with_param(ParamDef::optional("pattern"))
                 .with_param(ParamDef::optional("sleep").with_type(ParamType::Int)),
@@ -358,7 +377,9 @@ impl ParamValidator {
         // lineinfile module
         self.register(
             ModuleDef::new("lineinfile")
-                .with_param(ParamDef::required("path").with_aliases(vec!["dest", "destfile", "name"]))
+                .with_param(
+                    ParamDef::required("path").with_aliases(vec!["dest", "destfile", "name"]),
+                )
                 .with_param(ParamDef::optional("line"))
                 .with_param(ParamDef::optional("regexp"))
                 .with_param(ParamDef::optional("state").with_choices(vec!["present", "absent"]))
@@ -376,7 +397,9 @@ impl ParamValidator {
         // blockinfile module
         self.register(
             ModuleDef::new("blockinfile")
-                .with_param(ParamDef::required("path").with_aliases(vec!["dest", "destfile", "name"]))
+                .with_param(
+                    ParamDef::required("path").with_aliases(vec!["dest", "destfile", "name"]),
+                )
                 .with_param(ParamDef::optional("block").with_aliases(vec!["content"]))
                 .with_param(ParamDef::optional("state").with_choices(vec!["present", "absent"]))
                 .with_param(ParamDef::optional("marker"))
@@ -397,7 +420,12 @@ impl ParamValidator {
                 .with_param(ParamDef::optional("name"))
                 .with_param(ParamDef::optional("requirements").with_type(ParamType::Path))
                 .with_param(ParamDef::optional("version"))
-                .with_param(ParamDef::optional("state").with_choices(vec!["present", "absent", "latest", "forcereinstall"]))
+                .with_param(ParamDef::optional("state").with_choices(vec![
+                    "present",
+                    "absent",
+                    "latest",
+                    "forcereinstall",
+                ]))
                 .with_param(ParamDef::optional("virtualenv").with_type(ParamType::Path))
                 .with_param(ParamDef::optional("virtualenv_command"))
                 .with_param(ParamDef::optional("virtualenv_python"))
@@ -413,7 +441,10 @@ impl ParamValidator {
                 .with_param(ParamDef::optional("get_checksum").with_type(ParamType::Bool))
                 .with_param(ParamDef::optional("get_mime").with_type(ParamType::Bool))
                 .with_param(ParamDef::optional("get_attributes").with_type(ParamType::Bool))
-                .with_param(ParamDef::optional("checksum_algorithm").with_choices(vec!["md5", "sha1", "sha224", "sha256", "sha384", "sha512"])),
+                .with_param(
+                    ParamDef::optional("checksum_algorithm")
+                        .with_choices(vec!["md5", "sha1", "sha224", "sha256", "sha384", "sha512"]),
+                ),
         );
     }
 
@@ -453,14 +484,7 @@ impl ParamValidator {
             // Check if we have a definition for this module
             if let Some(module_def) = self.modules.get(key_str) {
                 self.validate_module_params(
-                    module_def,
-                    value,
-                    task_idx,
-                    play_idx,
-                    play_name,
-                    task_name,
-                    path,
-                    config,
+                    module_def, value, task_idx, play_idx, play_name, task_name, path, config,
                     result,
                 );
             }
@@ -491,8 +515,10 @@ impl ParamValidator {
         // Handle string arguments (free-form)
         if args.is_string() {
             if !module.free_form
-                && config.should_run_rule("P001", RuleCategory::Parameters, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
+                && config.should_run_rule("P001", RuleCategory::Parameters, Severity::Warning)
+            {
+                result.add_issue(
+                    LintIssue::new(
                         "P001",
                         "unexpected-free-form",
                         Severity::Warning,
@@ -502,8 +528,10 @@ impl ParamValidator {
                             module.name
                         ),
                         location.clone(),
-                    ).with_suggestion("Use named parameters instead of a string"));
-                }
+                    )
+                    .with_suggestion("Use named parameters instead of a string"),
+                );
+            }
             return;
         }
 
@@ -525,8 +553,10 @@ impl ParamValidator {
                     || param.aliases.iter().any(|a| provided_params.contains(a));
 
                 if !has_param
-                    && config.should_run_rule("P002", RuleCategory::Parameters, Severity::Error) {
-                        result.add_issue(LintIssue::new(
+                    && config.should_run_rule("P002", RuleCategory::Parameters, Severity::Error)
+                {
+                    result.add_issue(
+                        LintIssue::new(
                             "P002",
                             "missing-required-param",
                             Severity::Error,
@@ -536,8 +566,10 @@ impl ParamValidator {
                                 module.name, param.name
                             ),
                             location.clone(),
-                        ).with_suggestion(format!("Add '{}' parameter", param.name)));
-                    }
+                        )
+                        .with_suggestion(format!("Add '{}' parameter", param.name)),
+                    );
+                }
             }
         }
 
@@ -549,24 +581,28 @@ impl ParamValidator {
             };
 
             // Find the parameter definition
-            let param_def = module.params.iter().find(|p| {
-                p.name == key_str || p.aliases.contains(&key_str.to_string())
-            });
+            let param_def = module
+                .params
+                .iter()
+                .find(|p| p.name == key_str || p.aliases.contains(&key_str.to_string()));
 
             // Check for deprecated parameters
             if let Some(replacement) = module.deprecated_params.get(key_str) {
                 if config.should_run_rule("P003", RuleCategory::Deprecation, Severity::Warning) {
-                    result.add_issue(LintIssue::new(
-                        "P003",
-                        "deprecated-param",
-                        Severity::Warning,
-                        RuleCategory::Deprecation,
-                        format!(
-                            "Parameter '{}' is deprecated for module '{}'",
-                            key_str, module.name
-                        ),
-                        location.clone(),
-                    ).with_suggestion(format!("Use '{}' instead", replacement)));
+                    result.add_issue(
+                        LintIssue::new(
+                            "P003",
+                            "deprecated-param",
+                            Severity::Warning,
+                            RuleCategory::Deprecation,
+                            format!(
+                                "Parameter '{}' is deprecated for module '{}'",
+                                key_str, module.name
+                            ),
+                            location.clone(),
+                        )
+                        .with_suggestion(format!("Use '{}' instead", replacement)),
+                    );
                 }
             }
 
@@ -575,8 +611,13 @@ impl ParamValidator {
                 if let Some(ref choices) = def.choices {
                     if let Some(value_str) = value.as_str() {
                         if !choices.contains(&value_str.to_string())
-                            && config.should_run_rule("P004", RuleCategory::Parameters, Severity::Error) {
-                                result.add_issue(LintIssue::new(
+                            && config.should_run_rule(
+                                "P004",
+                                RuleCategory::Parameters,
+                                Severity::Error,
+                            )
+                        {
+                            result.add_issue(LintIssue::new(
                                     "P004",
                                     "invalid-choice",
                                     Severity::Error,
@@ -587,25 +628,36 @@ impl ParamValidator {
                                     ),
                                     location.clone(),
                                 ));
-                            }
+                        }
                     }
                 }
 
                 // Check type
-                self.validate_param_type(def, value, key_str, &module.name, &location, config, result);
+                self.validate_param_type(
+                    def,
+                    value,
+                    key_str,
+                    &module.name,
+                    &location,
+                    config,
+                    result,
+                );
             } else if config.should_run_rule("P005", RuleCategory::Parameters, Severity::Warning) {
                 // Unknown parameter
-                result.add_issue(LintIssue::new(
-                    "P005",
-                    "unknown-param",
-                    Severity::Warning,
-                    RuleCategory::Parameters,
-                    format!(
-                        "Unknown parameter '{}' for module '{}'",
-                        key_str, module.name
-                    ),
-                    location.clone(),
-                ).with_suggestion("Check module documentation for valid parameters"));
+                result.add_issue(
+                    LintIssue::new(
+                        "P005",
+                        "unknown-param",
+                        Severity::Warning,
+                        RuleCategory::Parameters,
+                        format!(
+                            "Unknown parameter '{}' for module '{}'",
+                            key_str, module.name
+                        ),
+                        location.clone(),
+                    )
+                    .with_suggestion("Check module documentation for valid parameters"),
+                );
             }
         }
     }
@@ -627,16 +679,17 @@ impl ParamValidator {
             ParamType::Bool => {
                 value.is_bool()
                     || value.as_str().is_some_and(|s| {
-                        matches!(s.to_lowercase().as_str(), "yes" | "no" | "true" | "false" | "on" | "off")
+                        matches!(
+                            s.to_lowercase().as_str(),
+                            "yes" | "no" | "true" | "false" | "on" | "off"
+                        )
                     })
             }
             ParamType::Int => {
-                value.as_i64().is_some()
-                    || value.as_str().is_some_and(|s| s.parse::<i64>().is_ok())
+                value.as_i64().is_some() || value.as_str().is_some_and(|s| s.parse::<i64>().is_ok())
             }
             ParamType::Float => {
-                value.as_f64().is_some()
-                    || value.as_str().is_some_and(|s| s.parse::<f64>().is_ok())
+                value.as_f64().is_some() || value.as_str().is_some_and(|s| s.parse::<f64>().is_ok())
             }
             ParamType::List => value.is_sequence(),
             ParamType::Dict => value.is_mapping(),
@@ -645,37 +698,79 @@ impl ParamValidator {
         };
 
         if !type_match
-            && config.should_run_rule("P006", RuleCategory::Parameters, Severity::Warning) {
-                result.add_issue(LintIssue::new(
-                    "P006",
-                    "type-mismatch",
-                    Severity::Warning,
-                    RuleCategory::Parameters,
-                    format!(
-                        "Parameter '{}' in module '{}' expects type {:?}, got {:?}",
-                        param_name, module_name, def.param_type, value
-                    ),
-                    location.clone(),
-                ));
-            }
+            && config.should_run_rule("P006", RuleCategory::Parameters, Severity::Warning)
+        {
+            result.add_issue(LintIssue::new(
+                "P006",
+                "type-mismatch",
+                Severity::Warning,
+                RuleCategory::Parameters,
+                format!(
+                    "Parameter '{}' in module '{}' expects type {:?}, got {:?}",
+                    param_name, module_name, def.param_type, value
+                ),
+                location.clone(),
+            ));
+        }
     }
 }
 
 /// Check if a key is a task attribute (not a module name).
 fn is_task_attribute(key: &str) -> bool {
     const TASK_ATTRS: &[&str] = &[
-        "name", "action", "when", "loop", "with_items", "with_dict",
-        "with_file", "with_fileglob", "with_first_found", "with_together",
-        "with_nested", "with_random_choice", "with_sequence", "with_subelements",
-        "with_template", "with_inventory_hostnames", "with_indexed_items",
-        "loop_control", "register", "notify", "listen",
-        "ignore_errors", "ignore_unreachable", "changed_when", "failed_when",
-        "tags", "become", "become_method", "become_user",
-        "delegate_to", "delegate_facts", "local_action", "run_once",
-        "retries", "delay", "until", "async", "poll",
-        "environment", "vars", "args", "block", "rescue", "always",
-        "connection", "throttle", "timeout", "no_log", "diff", "check_mode",
-        "module_defaults", "any_errors_fatal", "debugger",
+        "name",
+        "action",
+        "when",
+        "loop",
+        "with_items",
+        "with_dict",
+        "with_file",
+        "with_fileglob",
+        "with_first_found",
+        "with_together",
+        "with_nested",
+        "with_random_choice",
+        "with_sequence",
+        "with_subelements",
+        "with_template",
+        "with_inventory_hostnames",
+        "with_indexed_items",
+        "loop_control",
+        "register",
+        "notify",
+        "listen",
+        "ignore_errors",
+        "ignore_unreachable",
+        "changed_when",
+        "failed_when",
+        "tags",
+        "become",
+        "become_method",
+        "become_user",
+        "delegate_to",
+        "delegate_facts",
+        "local_action",
+        "run_once",
+        "retries",
+        "delay",
+        "until",
+        "async",
+        "poll",
+        "environment",
+        "vars",
+        "args",
+        "block",
+        "rescue",
+        "always",
+        "connection",
+        "throttle",
+        "timeout",
+        "no_log",
+        "diff",
+        "check_mode",
+        "module_defaults",
+        "any_errors_fatal",
+        "debugger",
     ];
 
     TASK_ATTRS.contains(&key) || key.starts_with("with_")
@@ -700,7 +795,15 @@ apt:
         )
         .unwrap();
 
-        validator.validate_task(&task, 0, 0, None, Path::new("test.yml"), &config, &mut result);
+        validator.validate_task(
+            &task,
+            0,
+            0,
+            None,
+            Path::new("test.yml"),
+            &config,
+            &mut result,
+        );
 
         // apt with state but no name - should be fine as name is optional
         // but copy with no dest would fail
@@ -722,7 +825,15 @@ apt:
         )
         .unwrap();
 
-        validator.validate_task(&task, 0, 0, None, Path::new("test.yml"), &config, &mut result);
+        validator.validate_task(
+            &task,
+            0,
+            0,
+            None,
+            Path::new("test.yml"),
+            &config,
+            &mut result,
+        );
 
         assert!(result.issues.iter().any(|i| i.rule_id == "P004"));
     }

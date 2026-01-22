@@ -423,7 +423,10 @@ impl<C: VaultClient> VaultProvider<C> {
         if let Some(key) = key {
             // Return only the specified key
             let value = data.get(key).ok_or_else(|| {
-                SecretError::NotFound(format!("Key '{}' not found in secret '{}'", key, secret_path))
+                SecretError::NotFound(format!(
+                    "Key '{}' not found in secret '{}'",
+                    key, secret_path
+                ))
             })?;
             let mut filtered = HashMap::new();
             filtered.insert(key.to_string(), value.clone());

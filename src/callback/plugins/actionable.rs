@@ -624,7 +624,9 @@ impl ExecutionCallback for ActionableCallback {
                 };
                 println!(
                     "\n{} {} in {:.2}s",
-                    name, playbook_status, duration.as_secs_f64()
+                    name,
+                    playbook_status,
+                    duration.as_secs_f64()
                 );
             }
         }
