@@ -12,9 +12,21 @@ use super::{
 };
 use crate::connection::{Connection, ExecuteOptions};
 use crate::utils::{cmd_escape, powershell_escape, shell_escape};
+use once_cell::sync::Lazy;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
+
+/// Shared runtime for background tasks to avoid creating a new runtime per command
+/// execution and to prevent deadlocks when blocking on current_thread runtimes.
+static BACKGROUND_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("Failed to create background runtime for command module")
+});
 
 /// Module for executing commands directly
 pub struct CommandModule;
@@ -317,86 +329,80 @@ impl CommandModule {
         let options = self.build_execute_options(params, context)?;
         let warn_on_stderr = params.get_bool_or("warn", true);
 
-        // Use scoped thread with a NEW runtime to avoid blocking the parent tokio runtime
-        // This prevents deadlock when called from within an async context
-        std::thread::scope(|scope| {
-            scope
-                .spawn(|| {
-                    // Create a new runtime in this thread - this avoids nesting
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .map_err(|e| {
-                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
-                        })?;
+        // Run the async logic on the background runtime to avoid blocking the caller's runtime
+        // (which might be single-threaded) and to avoid creating a new runtime per call.
+        // This solves both the performance overhead and the deadlock risk.
+        let handle = BACKGROUND_RUNTIME.handle();
+        let (tx, rx) = std::sync::mpsc::channel();
 
-                    rt.block_on(async {
-                        // Check creates/removes conditions on remote
-                        if let Some(output) = self
-                            .check_creates_removes_remote(&params_clone, &connection)
-                            .await?
-                        {
-                            return Ok(output);
-                        }
+        handle.spawn(async move {
+            // Instantiate module here to avoid capturing &self which is not 'static
+            let module = CommandModule;
+            let result = async {
+                // Check creates/removes conditions on remote
+                if let Some(output) = module
+                    .check_creates_removes_remote(&params_clone, &connection)
+                    .await?
+                {
+                    return Ok(output);
+                }
 
-                        // In check mode, return what would happen
-                        if check_mode {
-                            return Ok(ModuleOutput::changed(format!(
-                                "Would execute: {}",
-                                cmd_display
-                            ))
-                            .with_command_output(
-                                Some(String::new()),
-                                Some(String::new()),
-                                Some(0),
-                            ));
-                        }
+                // In check mode, return what would happen
+                if check_mode {
+                    return Ok(
+                        ModuleOutput::changed(format!("Would execute: {}", cmd_display))
+                            .with_command_output(Some(String::new()), Some(String::new()), Some(0)),
+                    );
+                }
 
-                        // Execute via connection
-                        let result = connection
-                            .execute(&cmd_display, Some(options))
-                            .await
-                            .map_err(|e| {
-                                ModuleError::ExecutionFailed(format!(
-                                    "Failed to execute '{}': {}",
-                                    cmd_display, e
-                                ))
-                            })?;
+                // Execute via connection
+                let result = connection
+                    .execute(&cmd_display, Some(options))
+                    .await
+                    .map_err(|e| {
+                        ModuleError::ExecutionFailed(format!(
+                            "Failed to execute '{}': {}",
+                            cmd_display, e
+                        ))
+                    })?;
 
-                        if result.success {
-                            let mut output = ModuleOutput::changed(format!(
-                                "Command '{}' executed successfully",
-                                cmd_display
-                            ))
-                            .with_command_output(
-                                Some(result.stdout.clone()),
-                                Some(result.stderr.clone()),
-                                Some(result.exit_code),
-                            );
+                if result.success {
+                    let mut output = ModuleOutput::changed(format!(
+                        "Command '{}' executed successfully",
+                        cmd_display
+                    ))
+                    .with_command_output(
+                        Some(result.stdout.clone()),
+                        Some(result.stderr.clone()),
+                        Some(result.exit_code),
+                    );
 
-                            if warn_on_stderr && !result.stderr.is_empty() {
-                                output.data.insert(
-                                    "warnings".to_string(),
-                                    serde_json::json!([result.stderr]),
-                                );
-                            }
+                    if warn_on_stderr && !result.stderr.is_empty() {
+                        output
+                            .data
+                            .insert("warnings".to_string(), serde_json::json!([result.stderr]));
+                    }
 
-                            Ok(output)
+                    Ok(output)
+                } else {
+                    Err(ModuleError::CommandFailed {
+                        code: result.exit_code,
+                        message: if result.stderr.is_empty() {
+                            result.stdout
                         } else {
-                            Err(ModuleError::CommandFailed {
-                                code: result.exit_code,
-                                message: if result.stderr.is_empty() {
-                                    result.stdout
-                                } else {
-                                    result.stderr
-                                },
-                            })
-                        }
+                            result.stderr
+                        },
                     })
-                })
-                .join()
-                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".to_string()))?
-        })
+                }
+            }
+            .await;
+
+            let _ = tx.send(result);
+        });
+
+        rx.recv().map_err(|_| {
+            ModuleError::ExecutionFailed("Background task panicked or was cancelled".to_string())
+        })?
     }
 }
 
