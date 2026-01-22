@@ -511,6 +511,20 @@ impl OutputFormatter {
         }
     }
 
+    /// Print a diagnostic message without extra prefixes
+    pub fn diagnostic(&self, message: &str) {
+        if self.json_mode {
+            let err = serde_json::json!({
+                "type": "diagnostic",
+                "message": message
+            });
+            eprintln!("{}", serde_json::to_string(&err).unwrap());
+            return;
+        }
+
+        eprintln!("{}", message);
+    }
+
     /// Print a warning message
     pub fn warning(&self, message: &str) {
         if self.json_mode {
