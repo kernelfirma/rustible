@@ -34,12 +34,12 @@ impl TaskStatus {
     pub fn colored_string(&self) -> String {
         match self {
             TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
-            TaskStatus::Changed => format!("~ {}", "changed").yellow().to_string(),
-            TaskStatus::Skipped => format!("- {}", "skipping").cyan().to_string(),
+            TaskStatus::Changed => format!("✎ {}", "changed").yellow().to_string(),
+            TaskStatus::Skipped => format!("↷ {}", "skipping").cyan().to_string(),
             TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
-            TaskStatus::Unreachable => format!("✖ {}", "unreachable").red().bold().to_string(),
+            TaskStatus::Unreachable => format!("✘ {}", "unreachable").red().bold().to_string(),
             TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
-            TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
+            TaskStatus::Ignored => format!("⊘ {}", "ignored").blue().to_string(),
         }
     }
 
@@ -915,6 +915,12 @@ mod tests {
         // It should contain the text
         assert!(TaskStatus::Ok.colored_string().contains("ok"));
         assert!(TaskStatus::Changed.colored_string().contains("changed"));
+
+        // Verify new icons
+        assert!(TaskStatus::Changed.colored_string().contains("✎"));
+        assert!(TaskStatus::Skipped.colored_string().contains("↷"));
+        assert!(TaskStatus::Unreachable.colored_string().contains("✘"));
+        assert!(TaskStatus::Ignored.colored_string().contains("⊘"));
     }
 
     #[test]
