@@ -45,11 +45,27 @@ const ALLOWED_CREATE_PARAMS: &[&str] = &[
     "rootfs",
     "storage",
     // Networking
-    "net0", "net1", "net2", "net3", "net4",
-    "net5", "net6", "net7", "net8", "net9",
+    "net0",
+    "net1",
+    "net2",
+    "net3",
+    "net4",
+    "net5",
+    "net6",
+    "net7",
+    "net8",
+    "net9",
     // Mount points
-    "mp0", "mp1", "mp2", "mp3", "mp4",
-    "mp5", "mp6", "mp7", "mp8", "mp9",
+    "mp0",
+    "mp1",
+    "mp2",
+    "mp3",
+    "mp4",
+    "mp5",
+    "mp6",
+    "mp7",
+    "mp8",
+    "mp9",
     // Identity
     "password",
     "ssh-public-keys",
@@ -71,23 +87,23 @@ const ALLOWED_CREATE_PARAMS: &[&str] = &[
 
 /// Allowed parameters for LXC cloning (POST /nodes/{node}/lxc/{vmid}/clone)
 const ALLOWED_CLONE_PARAMS: &[&str] = &[
-    "newid",      // Required: target CTID
-    "hostname",   // Container hostname
+    "newid",    // Required: target CTID
+    "hostname", // Container hostname
     "description",
-    "pool",       // Resource pool
-    "target",     // Target node
-    "storage",    // Target storage
-    "full",       // Full clone (1) or linked clone (0)
-    "snapname",   // Source snapshot name
-    "bwlimit",    // I/O bandwidth limit
+    "pool",     // Resource pool
+    "target",   // Target node
+    "storage",  // Target storage
+    "full",     // Full clone (1) or linked clone (0)
+    "snapname", // Source snapshot name
+    "bwlimit",  // I/O bandwidth limit
 ];
 
 /// Allowed parameters for LXC deletion (DELETE /nodes/{node}/lxc/{vmid})
 const ALLOWED_DELETE_PARAMS: &[&str] = &[
-    "purge",           // Remove from backup jobs and HA
+    "purge",                      // Remove from backup jobs and HA
     "destroy-unreferenced-disks", // Remove unreferenced disks
-    "force",           // Force stop before delete
-    "skiplock",        // Ignore lock
+    "force",                      // Force stop before delete
+    "skiplock",                   // Ignore lock
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +203,8 @@ struct ProxmoxLxcConfig {
     wait: WaitConfig,
     /// Validate create/clone/delete params against allowlists
     strict_params: bool,
+    /// Explicit opt-in for disabling TLS verification
+    insecure_skip_tls_verify: bool,
     /// TLS configuration for custom CA and server name
     tls: TlsConfig,
 }
@@ -224,6 +242,7 @@ impl ProxmoxLxcConfig {
             .unwrap_or(DEFAULT_TIMEOUT_SECS);
 
         let validate_certs = params.get_bool_or("validate_certs", true);
+        let insecure_skip_tls_verify = params.get_bool_or("insecure_skip_tls_verify", false);
         let strict_params = params.get_bool_or("strict_params", true);
 
         // TLS configuration
@@ -241,6 +260,19 @@ impl ProxmoxLxcConfig {
             .unwrap_or(DEFAULT_WAIT_INTERVAL_SECS)
             .max(1); // Minimum 1 second interval
 
+        if !validate_certs && !insecure_skip_tls_verify {
+            return Err(ModuleError::InvalidParameter(
+                "validate_certs=false requires insecure_skip_tls_verify=true".to_string(),
+            ));
+        }
+
+        if !validate_certs {
+            tracing::warn!(
+                "TLS certificate validation disabled for Proxmox LXC API. \
+                 Set validate_certs=true for production use."
+            );
+        }
+
         Ok(Self {
             api_base: normalize_api_base(&api_url)?,
             token_id: token_id.trim().to_string(),
@@ -257,6 +289,7 @@ impl ProxmoxLxcConfig {
                 interval_secs: wait_interval,
             },
             strict_params,
+            insecure_skip_tls_verify,
             tls: TlsConfig {
                 server_name: tls_server_name,
                 ca_cert_path,
@@ -432,21 +465,23 @@ fn parse_vmid(params: &ModuleParams) -> ModuleResult<u64> {
 fn parse_vmid_from_param(params: &ModuleParams, key: &str) -> ModuleResult<u64> {
     if let Some(vmid) = params.get_i64(key)? {
         if vmid <= 0 {
-            return Err(ModuleError::InvalidParameter(
-                format!("{} must be a positive integer", key),
-            ));
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} must be a positive integer",
+                key
+            )));
         }
         return Ok(vmid as u64);
     }
 
     if let Some(vmid) = params.get_string(key)? {
-        let parsed: u64 = vmid.parse().map_err(|_| {
-            ModuleError::InvalidParameter(format!("Invalid {} '{}'", key, vmid))
-        })?;
+        let parsed: u64 = vmid
+            .parse()
+            .map_err(|_| ModuleError::InvalidParameter(format!("Invalid {} '{}'", key, vmid)))?;
         if parsed == 0 {
-            return Err(ModuleError::InvalidParameter(
-                format!("{} must be a positive integer", key),
-            ));
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} must be a positive integer",
+                key
+            )));
         }
         return Ok(parsed);
     }
@@ -484,11 +519,7 @@ fn load_ca_certificate(path: &str) -> ModuleResult<Certificate> {
         })
 }
 
-fn build_client(
-    timeout_secs: u64,
-    validate_certs: bool,
-    tls: &TlsConfig,
-) -> ModuleResult<Client> {
+fn build_client(timeout_secs: u64, validate_certs: bool, tls: &TlsConfig) -> ModuleResult<Client> {
     let mut builder = Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .danger_accept_invalid_certs(!validate_certs);
@@ -643,10 +674,7 @@ fn fetch_status_optional(
 ) -> ModuleResult<Option<LxcStatus>> {
     let url = api_url(
         config,
-        &format!(
-            "nodes/{}/lxc/{}/status/current",
-            config.node, config.vmid
-        ),
+        &format!("nodes/{}/lxc/{}/status/current", config.node, config.vmid),
     );
     let response = request_json_optional(
         client,
@@ -679,11 +707,7 @@ fn fetch_status_optional(
     }))
 }
 
-fn perform_action(
-    client: &Client,
-    config: &ProxmoxLxcConfig,
-    action: &str,
-) -> ModuleResult<Value> {
+fn perform_action(client: &Client, config: &ProxmoxLxcConfig, action: &str) -> ModuleResult<Value> {
     let url = api_url(
         config,
         &format!(
@@ -733,11 +757,7 @@ fn get_task_status(
 }
 
 /// Wait for a task to complete, polling until done or timeout
-fn wait_for_task(
-    client: &Client,
-    config: &ProxmoxLxcConfig,
-    upid: &str,
-) -> ModuleResult<TaskInfo> {
+fn wait_for_task(client: &Client, config: &ProxmoxLxcConfig, upid: &str) -> ModuleResult<TaskInfo> {
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(config.wait.timeout_secs);
     let interval = std::time::Duration::from_secs(config.wait.interval_secs);
@@ -760,9 +780,7 @@ fn wait_for_task(
         if start.elapsed() >= timeout {
             return Err(ModuleError::ExecutionFailed(format!(
                 "Timed out waiting for task {} after {} seconds (status: {})",
-                upid,
-                config.wait.timeout_secs,
-                task_info.status
+                upid, config.wait.timeout_secs, task_info.status
             )));
         }
 
@@ -782,7 +800,11 @@ fn value_to_param_string(key: &str, value: &Value) -> ModuleResult<String> {
     match value {
         Value::String(value) => Ok(value.clone()),
         Value::Number(value) => Ok(value.to_string()),
-        Value::Bool(value) => Ok(if *value { "1".to_string() } else { "0".to_string() }),
+        Value::Bool(value) => Ok(if *value {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        }),
         Value::Null => Err(ModuleError::InvalidParameter(format!(
             "Parameter '{}' cannot be null",
             key
@@ -795,9 +817,9 @@ fn value_to_param_string(key: &str, value: &Value) -> ModuleResult<String> {
 }
 
 fn parse_string_map(field: &str, value: &Value) -> ModuleResult<HashMap<String, String>> {
-    let object = value.as_object().ok_or_else(|| {
-        ModuleError::InvalidParameter(format!("'{}' must be an object", field))
-    })?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| ModuleError::InvalidParameter(format!("'{}' must be an object", field)))?;
 
     let mut map = HashMap::new();
     for (key, value) in object {
@@ -855,8 +877,7 @@ fn build_create_params(
         body.entry("hostname".to_string()).or_insert(hostname);
     }
     if let Some(description) = params.get_string("description")? {
-        body.entry("description".to_string())
-            .or_insert(description);
+        body.entry("description".to_string()).or_insert(description);
     }
     if let Some(tags) = params.get_string("tags")? {
         body.entry("tags".to_string()).or_insert(tags);
@@ -896,8 +917,11 @@ fn build_clone_params(
     body.insert("newid".to_string(), config.vmid.to_string());
 
     let full = params.get_bool_or("clone_full", true);
-    body.entry("full".to_string())
-        .or_insert(if full { "1".to_string() } else { "0".to_string() });
+    body.entry("full".to_string()).or_insert(if full {
+        "1".to_string()
+    } else {
+        "0".to_string()
+    });
 
     let hostname = params
         .get_string("hostname")?
@@ -906,8 +930,7 @@ fn build_clone_params(
         body.entry("hostname".to_string()).or_insert(hostname);
     }
     if let Some(description) = params.get_string("description")? {
-        body.entry("description".to_string())
-            .or_insert(description);
+        body.entry("description".to_string()).or_insert(description);
     }
     if let Some(tags) = params.get_string("tags")? {
         body.entry("tags".to_string()).or_insert(tags);
@@ -1001,7 +1024,10 @@ fn delete_lxc(
     config: &ProxmoxLxcConfig,
     params: &ModuleParams,
 ) -> ModuleResult<Value> {
-    let url = api_url(config, &format!("nodes/{}/lxc/{}", config.node, config.vmid));
+    let url = api_url(
+        config,
+        &format!("nodes/{}/lxc/{}", config.node, config.vmid),
+    );
     let body = build_delete_params(config, params)?;
     request_json(
         client,
@@ -1091,7 +1117,13 @@ impl Module for ProxmoxLxcModule {
     }
 
     fn required_params(&self) -> &[&'static str] {
-        &["api_url", "api_token_id", "api_token_secret", "node", "vmid"]
+        &[
+            "api_url",
+            "api_token_id",
+            "api_token_secret",
+            "node",
+            "vmid",
+        ]
     }
 
     fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
@@ -1113,6 +1145,7 @@ impl Module for ProxmoxLxcModule {
         params.insert("delete", json!({}));
         params.insert("timeout", json!(DEFAULT_TIMEOUT_SECS));
         params.insert("validate_certs", json!(true));
+        params.insert("insecure_skip_tls_verify", json!(false));
         params
     }
 
@@ -1332,21 +1365,42 @@ mod tests {
 
     #[test]
     fn test_desired_state_parse() {
-        assert_eq!(DesiredState::from_str("status").unwrap(), DesiredState::Status);
-        assert_eq!(DesiredState::from_str("running").unwrap(), DesiredState::Started);
-        assert_eq!(DesiredState::from_str("stopped").unwrap(), DesiredState::Stopped);
+        assert_eq!(
+            DesiredState::from_str("status").unwrap(),
+            DesiredState::Status
+        );
+        assert_eq!(
+            DesiredState::from_str("running").unwrap(),
+            DesiredState::Started
+        );
+        assert_eq!(
+            DesiredState::from_str("stopped").unwrap(),
+            DesiredState::Stopped
+        );
         assert_eq!(
             DesiredState::from_str("restarted").unwrap(),
             DesiredState::Restarted
         );
-        assert_eq!(DesiredState::from_str("present").unwrap(), DesiredState::Present);
-        assert_eq!(DesiredState::from_str("absent").unwrap(), DesiredState::Absent);
-        assert_eq!(DesiredState::from_str("cloned").unwrap(), DesiredState::Cloned);
+        assert_eq!(
+            DesiredState::from_str("present").unwrap(),
+            DesiredState::Present
+        );
+        assert_eq!(
+            DesiredState::from_str("absent").unwrap(),
+            DesiredState::Absent
+        );
+        assert_eq!(
+            DesiredState::from_str("cloned").unwrap(),
+            DesiredState::Cloned
+        );
     }
 
     #[test]
     fn test_stop_method_parse() {
-        assert_eq!(StopMethod::from_str("shutdown").unwrap(), StopMethod::Shutdown);
+        assert_eq!(
+            StopMethod::from_str("shutdown").unwrap(),
+            StopMethod::Shutdown
+        );
         assert_eq!(StopMethod::from_str("stop").unwrap(), StopMethod::Stop);
     }
 
@@ -1388,16 +1442,14 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable for this test
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
         let mut params: ModuleParams = HashMap::new();
         params.insert("auto_name".to_string(), json!(true));
         let body = build_create_params(&config, &params).unwrap();
-        assert_eq!(
-            body.get("hostname"),
-            Some(&"rustible-ct-123".to_string())
-        );
+        assert_eq!(body.get("hostname"), Some(&"rustible-ct-123".to_string()));
     }
 
     #[test]
@@ -1414,16 +1466,14 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable for this test
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
         let mut params: ModuleParams = HashMap::new();
         params.insert("auto_name".to_string(), json!(true));
         let body = build_clone_params(&config, &params).unwrap();
-        assert_eq!(
-            body.get("hostname"),
-            Some(&"rustible-ct-456".to_string())
-        );
+        assert_eq!(body.get("hostname"), Some(&"rustible-ct-456".to_string()));
     }
 
     #[test]
@@ -1469,6 +1519,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true, // Enable strict validation
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
@@ -1503,6 +1554,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: false, // Disable strict validation
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
@@ -1536,6 +1588,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true,
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
@@ -1569,6 +1622,7 @@ mod tests {
             validate_certs: true,
             wait: WaitConfig::default(),
             strict_params: true,
+            insecure_skip_tls_verify: false,
             tls: TlsConfig::default(),
         };
 
@@ -1606,10 +1660,44 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_certs_requires_insecure_opt_in() {
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("api_url".to_string(), json!("https://pve.example:8006"));
+        params.insert("api_token_id".to_string(), json!("root@pam!token"));
+        params.insert("api_token_secret".to_string(), json!("secret"));
+        params.insert("node".to_string(), json!("pve"));
+        params.insert("vmid".to_string(), json!(101));
+        params.insert("validate_certs".to_string(), json!(false));
+
+        let err = ProxmoxLxcConfig::from_params(&params).unwrap_err();
+        assert!(err.to_string().contains("insecure_skip_tls_verify"));
+    }
+
+    #[test]
+    fn test_validate_certs_false_with_opt_in() {
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("api_url".to_string(), json!("https://pve.example:8006"));
+        params.insert("api_token_id".to_string(), json!("root@pam!token"));
+        params.insert("api_token_secret".to_string(), json!("secret"));
+        params.insert("node".to_string(), json!("pve"));
+        params.insert("vmid".to_string(), json!(101));
+        params.insert("validate_certs".to_string(), json!(false));
+        params.insert("insecure_skip_tls_verify".to_string(), json!(true));
+
+        let config = ProxmoxLxcConfig::from_params(&params).unwrap();
+        assert!(!config.validate_certs);
+        assert!(config.insecure_skip_tls_verify);
+    }
+
+    #[test]
     fn test_load_ca_certificate_not_found() {
         let result = load_ca_certificate("/nonexistent/path/ca.pem");
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("No such file") || msg.contains("not found") || msg.contains("Failed to read"));
+        assert!(
+            msg.contains("No such file")
+                || msg.contains("not found")
+                || msg.contains("Failed to read")
+        );
     }
 }
