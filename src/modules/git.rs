@@ -742,13 +742,15 @@ impl Module for GitModule {
             )?;
 
             // Verify GPG signature if requested
-            if verify_commit && changed
-                && !Self::verify_commit(&dest, &new_version, &gpg_whitelist)? {
-                    return Err(ModuleError::ExecutionFailed(format!(
-                        "GPG signature verification failed for commit {}",
-                        new_version
-                    )));
-                }
+            if verify_commit
+                && changed
+                && !Self::verify_commit(&dest, &new_version, &gpg_whitelist)?
+            {
+                return Err(ModuleError::ExecutionFailed(format!(
+                    "GPG signature verification failed for commit {}",
+                    new_version
+                )));
+            }
 
             if changed {
                 // Build detailed diff output

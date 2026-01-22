@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tracing::warn;
 use std::time::{Duration, Instant};
+use tracing::warn;
 
 use super::{SecurityError, SecurityResult};
 

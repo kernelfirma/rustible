@@ -875,17 +875,19 @@ impl SchemaValidator {
         // Check for deprecated when syntax
         if let Some(when) = task_obj.get("when") {
             if let Some(when_str) = when.as_str() {
-                if when_str.contains("{{") && when_str.contains("}}")
-                    && self.config.check_deprecations {
-                        result.add_warning(ValidationError {
-                            path: format!("{}/when", path),
-                            message: "Jinja2 braces in 'when' are deprecated".to_string(),
-                            line: None,
-                            column: None,
-                            severity: ErrorSeverity::Warning,
-                            suggestion: Some("Remove {{ and }} from when conditions".to_string()),
-                        });
-                    }
+                if when_str.contains("{{")
+                    && when_str.contains("}}")
+                    && self.config.check_deprecations
+                {
+                    result.add_warning(ValidationError {
+                        path: format!("{}/when", path),
+                        message: "Jinja2 braces in 'when' are deprecated".to_string(),
+                        line: None,
+                        column: None,
+                        severity: ErrorSeverity::Warning,
+                        suggestion: Some("Remove {{ and }} from when conditions".to_string()),
+                    });
+                }
             }
         }
     }

@@ -354,7 +354,9 @@ pub fn is_sensitive_field_name(name: &str) -> bool {
     ];
 
     let lower = name.to_lowercase();
-    sensitive_patterns.iter().any(|pattern| lower.contains(pattern))
+    sensitive_patterns
+        .iter()
+        .any(|pattern| lower.contains(pattern))
 }
 
 /// Macro to ensure no_log is respected in logging statements.

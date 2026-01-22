@@ -164,7 +164,10 @@ impl NotificationConfigBuilder {
 
     /// Sets the webhook URL (convenience method).
     pub fn webhook_url(mut self, url: impl Into<String>) -> Self {
-        let webhook = self.config.webhook.get_or_insert_with(WebhookConfig::default);
+        let webhook = self
+            .config
+            .webhook
+            .get_or_insert_with(WebhookConfig::default);
         webhook.url = url.into();
         self
     }
@@ -266,7 +269,8 @@ impl SlackConfig {
         Some(Self {
             webhook_url,
             channel: env::var("RUSTIBLE_SLACK_CHANNEL").ok(),
-            username: env::var("RUSTIBLE_SLACK_USERNAME").unwrap_or_else(|_| "Rustible".to_string()),
+            username: env::var("RUSTIBLE_SLACK_USERNAME")
+                .unwrap_or_else(|_| "Rustible".to_string()),
             icon_emoji: env::var("RUSTIBLE_SLACK_ICON_EMOJI")
                 .unwrap_or_else(|_| ":gear:".to_string()),
             mention_on_failure: env::var("RUSTIBLE_SLACK_MENTION_ON_FAILURE").ok(),
@@ -395,7 +399,9 @@ impl EmailConfig {
             .unwrap_or(false);
 
         let use_starttls = env::var("RUSTIBLE_SMTP_TLS")
-            .map(|v| v.eq_ignore_ascii_case("starttls") || v.eq_ignore_ascii_case("true") || v == "1")
+            .map(|v| {
+                v.eq_ignore_ascii_case("starttls") || v.eq_ignore_ascii_case("true") || v == "1"
+            })
             .unwrap_or(!use_tls);
 
         let cc: Vec<String> = env::var("RUSTIBLE_SMTP_CC")
@@ -601,7 +607,11 @@ impl WebhookConfig {
     }
 
     /// Sets basic authentication.
-    pub fn with_basic_auth(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
+    pub fn with_basic_auth(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
         self.basic_auth = Some((username.into(), password.into()));
         self
     }

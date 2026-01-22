@@ -148,7 +148,11 @@ impl TagCollector {
             output.push_str(&format!("  {}", tag));
 
             if let Some(tasks) = self.tag_tasks.get(tag) {
-                output.push_str(&format!(" ({} task{})", tasks.len(), if tasks.len() == 1 { "" } else { "s" }));
+                output.push_str(&format!(
+                    " ({} task{})",
+                    tasks.len(),
+                    if tasks.len() == 1 { "" } else { "s" }
+                ));
             }
 
             output.push('\n');

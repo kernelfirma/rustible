@@ -96,10 +96,7 @@ fn main() {
         Span::from_line_col(source, 3, 11, 16),
         "also undefined here",
     )
-    .with_secondary_label(
-        Span::from_line_col(source, 9, 15, 19),
-        "and here",
-    )
+    .with_secondary_label(Span::from_line_col(source, 9, 15, 19), "and here")
     .with_note("Variables must be defined before use")
     .with_help("Define these variables in vars, group_vars, or host_vars");
 

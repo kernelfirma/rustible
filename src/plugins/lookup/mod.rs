@@ -179,7 +179,11 @@ impl LookupOptions {
     }
 
     /// Add an option
-    pub fn with_option(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_option(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.options.insert(key.into(), value.into());
         self
     }
@@ -465,11 +469,7 @@ pub struct LookupOptionInfo {
 
 impl LookupOptionInfo {
     /// Create a new option info
-    pub fn new(
-        name: &'static str,
-        description: &'static str,
-        option_type: &'static str,
-    ) -> Self {
+    pub fn new(name: &'static str, description: &'static str, option_type: &'static str) -> Self {
         Self {
             name,
             description,

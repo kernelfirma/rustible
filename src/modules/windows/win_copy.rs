@@ -91,7 +91,8 @@ if (Test-Path -LiteralPath $dest -PathType Leaf) {
     Copy-Item -LiteralPath $dest -Destination $backupPath -Force
     $result.backup_file = $backupPath
 }
-".to_string()
+"
+            .to_string()
         } else {
             String::new()
         };

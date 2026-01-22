@@ -746,9 +746,9 @@ impl AgentForwarder {
                 .allowed_hosts
                 .iter()
                 .any(|h| h == host || matches_host_pattern(h, host))
-            {
-                return false;
-            }
+        {
+            return false;
+        }
 
         true
     }

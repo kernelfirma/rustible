@@ -569,11 +569,9 @@ impl ResourceGraph {
         let mut desired_addresses = HashSet::new();
 
         for id in order {
-            let resource = self
-                .resources
-                .get(&id)
-                .cloned()
-                .ok_or_else(|| ResourceGraphError::PlanError(format!("Resource '{}' missing", id)))?;
+            let resource = self.resources.get(&id).cloned().ok_or_else(|| {
+                ResourceGraphError::PlanError(format!("Resource '{}' missing", id))
+            })?;
             let address = format!("{}.{}", resource.resource_type, resource.id);
             desired_addresses.insert(address);
 
@@ -1140,8 +1138,7 @@ fn yaml_to_json(value: &serde_yaml::Value) -> ResourceGraphResult<JsonValue> {
 
 #[cfg(feature = "provisioning")]
 fn json_to_yaml(value: &JsonValue) -> ResourceGraphResult<serde_yaml::Value> {
-    serde_yaml::to_value(value)
-        .map_err(|err| ResourceGraphError::PlanError(err.to_string()))
+    serde_yaml::to_value(value).map_err(|err| ResourceGraphError::PlanError(err.to_string()))
 }
 
 // ============================================================================
@@ -1222,9 +1219,7 @@ mod tests {
     #[test]
     fn test_duplicate_resource_error() {
         let mut graph = ResourceGraph::new();
-        graph
-            .add_resource(Resource::new("test", "type1"))
-            .unwrap();
+        graph.add_resource(Resource::new("test", "type1")).unwrap();
 
         let result = graph.add_resource(Resource::new("test", "type2"));
         assert!(matches!(
@@ -1407,8 +1402,10 @@ mod tests {
 
     #[test]
     fn test_resource_output() {
-        let output = ResourceOutput::new("web_server")
-            .with_value("public_ip", serde_yaml::Value::String("1.2.3.4".to_string()));
+        let output = ResourceOutput::new("web_server").with_value(
+            "public_ip",
+            serde_yaml::Value::String("1.2.3.4".to_string()),
+        );
 
         assert_eq!(output.resource_id, "web_server");
         assert!(output.values.contains_key("public_ip"));
@@ -1511,7 +1508,9 @@ mod tests {
     #[tokio::test]
     async fn test_compare_detects_creates() {
         let mut graph = ResourceGraph::new();
-        graph.add_resource(Resource::new("web", "aws_instance")).unwrap();
+        graph
+            .add_resource(Resource::new("web", "aws_instance"))
+            .unwrap();
         graph.add_resource(Resource::new("db", "aws_rds")).unwrap();
 
         let state = ProvisioningState::new();

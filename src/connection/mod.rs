@@ -131,7 +131,7 @@ pub use russh::{
 };
 #[cfg(feature = "russh")]
 pub use russh_auth::{
-    default_identity_files, connect_to_agent, is_key_encrypted, load_private_key,
+    connect_to_agent, default_identity_files, is_key_encrypted, load_private_key,
     load_private_key_from_string, standard_key_locations, AuthConfig, AuthMethod, AuthResult,
     KeyError, KeyInfo, KeyLoader, KeyType, RusshAuthenticator, RusshClientHandler,
 };

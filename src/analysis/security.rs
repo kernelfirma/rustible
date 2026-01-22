@@ -186,7 +186,13 @@ impl SecurityAnalyzer {
             // Check all tasks
             let all_tasks = helpers::get_all_tasks(play);
             for (task_idx, task) in all_tasks.iter().enumerate() {
-                findings.extend(self.check_task(task, task_idx, play_idx, &play.name, &source_file)?);
+                findings.extend(self.check_task(
+                    task,
+                    task_idx,
+                    play_idx,
+                    &play.name,
+                    &source_file,
+                )?);
             }
         }
 
@@ -258,11 +264,9 @@ impl SecurityAnalyzer {
                             format!("Potential secret detected in variable '{}'", var_name),
                         )
                         .with_location(location.clone())
-                        .with_description(
-                            "A pattern matching known secret formats was detected."
-                        )
+                        .with_description("A pattern matching known secret formats was detected.")
                         .with_suggestion(
-                            "Remove the secret and use ansible-vault or a secret management tool."
+                            "Remove the secret and use ansible-vault or a secret management tool.",
                         ),
                     );
                     break;
@@ -302,7 +306,10 @@ impl SecurityAnalyzer {
         let args_str = serde_json::to_string(&task.module.args).unwrap_or_default();
         for url_match in self.url_pattern.find_iter(&args_str) {
             let url = url_match.as_str();
-            if url.starts_with("http://") && !url.starts_with("http://localhost") && !url.starts_with("http://127.0.0.1") {
+            if url.starts_with("http://")
+                && !url.starts_with("http://localhost")
+                && !url.starts_with("http://127.0.0.1")
+            {
                 findings.push(
                     AnalysisFinding::new(
                         "SEC003",
@@ -318,9 +325,12 @@ impl SecurityAnalyzer {
         }
 
         // Check for insecure file permissions
-        if task.module.name == "file" || task.module.name == "ansible.builtin.file"
-            || task.module.name == "copy" || task.module.name == "ansible.builtin.copy"
-            || task.module.name == "template" || task.module.name == "ansible.builtin.template"
+        if task.module.name == "file"
+            || task.module.name == "ansible.builtin.file"
+            || task.module.name == "copy"
+            || task.module.name == "ansible.builtin.copy"
+            || task.module.name == "template"
+            || task.module.name == "ansible.builtin.template"
         {
             findings.extend(self.check_file_permissions(task, &location)?);
         }
@@ -336,7 +346,7 @@ impl SecurityAnalyzer {
                 )
                 .with_location(location.clone())
                 .with_description(
-                    "This task appears to handle sensitive data but no_log is not set."
+                    "This task appears to handle sensitive data but no_log is not set.",
                 )
                 .with_suggestion("Add 'no_log: true' to prevent sensitive data from being logged."),
             );
@@ -359,10 +369,10 @@ impl SecurityAnalyzer {
                             )
                             .with_location(location.clone())
                             .with_description(
-                                "Hardcoding secrets in task variables is a security risk."
+                                "Hardcoding secrets in task variables is a security risk.",
                             )
                             .with_suggestion(
-                                "Use ansible-vault or reference from a secure source."
+                                "Use ansible-vault or reference from a secure source.",
                             ),
                         );
                     }
@@ -383,9 +393,7 @@ impl SecurityAnalyzer {
 
         let cmd = match &task.module.args {
             serde_json::Value::String(s) => Some(s.as_str()),
-            serde_json::Value::Object(obj) => {
-                obj.get("cmd").and_then(|v| v.as_str())
-            }
+            serde_json::Value::Object(obj) => obj.get("cmd").and_then(|v| v.as_str()),
             _ => None,
         };
 
@@ -435,7 +443,8 @@ impl SecurityAnalyzer {
 
                 if let Some(mode_str) = mode_str {
                     // Check for world-writable permissions
-                    if mode_str.ends_with("7") || mode_str.ends_with("6") || mode_str.ends_with("2") {
+                    if mode_str.ends_with("7") || mode_str.ends_with("6") || mode_str.ends_with("2")
+                    {
                         let last_char = mode_str.chars().last().unwrap_or('0');
                         if last_char == '7' || last_char == '6' || last_char == '2' {
                             findings.push(
@@ -450,7 +459,9 @@ impl SecurityAnalyzer {
                                     "Mode '{}' allows world-write access, which may be insecure.",
                                     mode_str
                                 ))
-                                .with_suggestion("Use more restrictive permissions (e.g., 0644 or 0600)."),
+                                .with_suggestion(
+                                    "Use more restrictive permissions (e.g., 0644 or 0600).",
+                                ),
                             );
                         }
                     }
@@ -481,7 +492,14 @@ impl SecurityAnalyzer {
         }
 
         // Skip if it's a common placeholder
-        let placeholders = ["changeme", "CHANGEME", "TODO", "FIXME", "placeholder", "example"];
+        let placeholders = [
+            "changeme",
+            "CHANGEME",
+            "TODO",
+            "FIXME",
+            "placeholder",
+            "example",
+        ];
         for placeholder in &placeholders {
             if value.to_lowercase().contains(&placeholder.to_lowercase()) {
                 return false;
@@ -490,8 +508,8 @@ impl SecurityAnalyzer {
 
         // Check if it's a long random-looking string
         if value.len() >= 16 {
-            let has_mixed_case = value.chars().any(|c| c.is_lowercase())
-                && value.chars().any(|c| c.is_uppercase());
+            let has_mixed_case =
+                value.chars().any(|c| c.is_lowercase()) && value.chars().any(|c| c.is_uppercase());
             let has_numbers = value.chars().any(|c| c.is_numeric());
             let has_special = value.chars().any(|c| !c.is_alphanumeric());
 

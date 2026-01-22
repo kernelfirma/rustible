@@ -41,7 +41,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex as ParkingMutex;
 use tokio::runtime::{Builder, Handle, Runtime};
-use tokio::sync::{broadcast, mpsc, oneshot, Semaphore, Mutex as AsyncMutex};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex as AsyncMutex, Semaphore};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};

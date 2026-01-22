@@ -48,12 +48,14 @@ impl LocalConnection {
     fn build_command(&self, command: &str, options: &ExecuteOptions) -> ConnectionResult<Command> {
         if options.escalate {
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
-            BecomeValidator::new().validate_username(escalate_user).map_err(|e| {
-                ConnectionError::InvalidConfig(format!(
-                    "Invalid escalation user '{}': {}",
-                    escalate_user, e
-                ))
-            })?;
+            BecomeValidator::new()
+                .validate_username(escalate_user)
+                .map_err(|e| {
+                    ConnectionError::InvalidConfig(format!(
+                        "Invalid escalation user '{}': {}",
+                        escalate_user, e
+                    ))
+                })?;
         }
 
         let mut cmd = if options.escalate {
@@ -337,8 +339,8 @@ impl Connection for LocalConnection {
         // Use OpenOptions to set mode atomically at creation
         #[cfg(unix)]
         {
-            use std::os::unix::fs::OpenOptionsExt;
             use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
 
             let mut open_options = fs::OpenOptions::new();
             open_options.write(true).create(true).truncate(true);
@@ -496,12 +498,14 @@ impl LocalConnection {
         };
 
         let path_str = path.to_string_lossy();
-        BecomeValidator::new().validate_path(&path_str).map_err(|e| {
-            ConnectionError::InvalidConfig(format!(
-                "Invalid ownership path '{}': {}",
-                path_str, e
-            ))
-        })?;
+        BecomeValidator::new()
+            .validate_path(&path_str)
+            .map_err(|e| {
+                ConnectionError::InvalidConfig(format!(
+                    "Invalid ownership path '{}': {}",
+                    path_str, e
+                ))
+            })?;
 
         let command = format!(
             "chown {} {}",
@@ -548,8 +552,7 @@ mod tests {
     #[test]
     fn test_build_command_rejects_invalid_user() {
         let conn = LocalConnection::new();
-        let options =
-            ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let options = ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
         let result = conn.build_command("echo hello", &options);
         assert!(result.is_err());
     }
