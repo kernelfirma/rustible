@@ -115,7 +115,13 @@ impl Executor {
                     let host_blocks = block_states
                         .get_mut(&host)
                         .unwrap_or_else(|| panic!("Missing block state for host {}", host));
-                    update_host_result_for_task(host_result, task, &task_result, host_blocks, &block_meta);
+                    update_host_result_for_task(
+                        host_result,
+                        task,
+                        &task_result,
+                        host_blocks,
+                        &block_meta,
+                    );
                 }
             }
 
@@ -188,8 +194,12 @@ impl Executor {
                 if !host_result.failed && !host_result.unreachable {
                     ensure_block_states_for_task(task, &mut block_states);
                 }
-                let should_run =
-                    should_run_task_for_host(task, host_result.failed, host_result.unreachable, &block_states);
+                let should_run = should_run_task_for_host(
+                    task,
+                    host_result.failed,
+                    host_result.unreachable,
+                    &block_states,
+                );
 
                 if should_run {
                     // Apply become precedence: task > config (play-level handled separately)

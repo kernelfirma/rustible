@@ -617,7 +617,11 @@ impl ExecutionCallback for DefaultCallback {
 
             println!();
             if self.use_color() {
-                println!("Playbook {} in {}", playbook_status, duration_str.bright_white());
+                println!(
+                    "Playbook {} in {}",
+                    playbook_status,
+                    duration_str.bright_white()
+                );
             } else {
                 println!("Playbook {} in {}", playbook_status, duration_str);
             }

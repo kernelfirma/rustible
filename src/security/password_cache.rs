@@ -45,8 +45,8 @@ impl PasswordCacheConfig {
     /// Create a config for high-security environments
     pub fn high_security() -> Self {
         Self {
-            default_ttl: Duration::from_secs(60),  // 1 minute
-            max_ttl: Duration::from_secs(300),     // 5 minutes max
+            default_ttl: Duration::from_secs(60), // 1 minute
+            max_ttl: Duration::from_secs(300),    // 5 minutes max
             enabled: true,
             max_entries: 50,
             clear_on_retrieve: true,
@@ -120,7 +120,6 @@ impl CachedPassword {
     pub fn age(&self) -> Duration {
         Instant::now() - self.created_at
     }
-
 }
 
 // Debug implementation that redacts the password
@@ -130,7 +129,10 @@ impl std::fmt::Debug for CachedPassword {
             .field("host", &self.host)
             .field("user", &self.user)
             .field("password", &"[REDACTED]")
-            .field("expires_at", &format!("{:?} remaining", self.remaining_ttl()))
+            .field(
+                "expires_at",
+                &format!("{:?} remaining", self.remaining_ttl()),
+            )
             .field("use_count", &self.use_count)
             .finish()
     }
@@ -307,10 +309,7 @@ impl PasswordCache {
         let key = CacheKey::new(host, user);
         let entries = self.entries.read();
 
-        entries
-            .get(&key)
-            .map(|e| !e.is_expired())
-            .unwrap_or(false)
+        entries.get(&key).map(|e| !e.is_expired()).unwrap_or(false)
     }
 
     /// Remove a password from the cache
@@ -332,11 +331,7 @@ impl PasswordCache {
     pub fn clear_host(&self, host: &str) {
         let mut entries = self.entries.write();
 
-        let keys_to_remove: Vec<_> = entries
-            .keys()
-            .filter(|k| k.host == host)
-            .cloned()
-            .collect();
+        let keys_to_remove: Vec<_> = entries.keys().filter(|k| k.host == host).cloned().collect();
 
         for key in keys_to_remove {
             // Entries dropped, Zeroizing clears passwords automatically

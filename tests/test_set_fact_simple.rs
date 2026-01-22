@@ -13,7 +13,10 @@ mod tests {
     fn test_set_fact_basic() {
         let module = SetFactModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("test_var".to_string(), Value::String("test_value".to_string()));
+        params.insert(
+            "test_var".to_string(),
+            Value::String("test_value".to_string()),
+        );
         params.insert("test_num".to_string(), Value::Number(42.into()));
 
         let context = ModuleContext::default();
@@ -21,7 +24,10 @@ mod tests {
 
         assert!(!result.changed);
         assert!(result.msg.contains("Set 2 facts"));
-        assert_eq!(result.data.get("test_var"), Some(&Value::String("test_value".to_string())));
+        assert_eq!(
+            result.data.get("test_var"),
+            Some(&Value::String("test_value".to_string()))
+        );
         assert_eq!(result.data.get("test_num"), Some(&Value::Number(42.into())));
     }
 
@@ -31,11 +37,18 @@ mod tests {
         runtime.add_host("testhost".to_string(), None);
 
         // Simulate set_fact behavior
-        runtime.set_host_fact("testhost", "my_fact".to_string(), Value::String("my_value".to_string()));
+        runtime.set_host_fact(
+            "testhost",
+            "my_fact".to_string(),
+            Value::String("my_value".to_string()),
+        );
 
         // Verify the fact is set
         let merged = runtime.get_merged_vars("testhost");
-        assert_eq!(merged.get("my_fact"), Some(&Value::String("my_value".to_string())));
+        assert_eq!(
+            merged.get("my_fact"),
+            Some(&Value::String("my_value".to_string()))
+        );
     }
 
     #[test]
@@ -44,13 +57,20 @@ mod tests {
         runtime.add_host("testhost".to_string(), None);
 
         // Set multiple facts
-        runtime.set_host_fact("testhost", "fact1".to_string(), Value::String("value1".to_string()));
+        runtime.set_host_fact(
+            "testhost",
+            "fact1".to_string(),
+            Value::String("value1".to_string()),
+        );
         runtime.set_host_fact("testhost", "fact2".to_string(), Value::Number(100.into()));
         runtime.set_host_fact("testhost", "fact3".to_string(), Value::Bool(true));
 
         // Verify all facts persist
         let merged = runtime.get_merged_vars("testhost");
-        assert_eq!(merged.get("fact1"), Some(&Value::String("value1".to_string())));
+        assert_eq!(
+            merged.get("fact1"),
+            Some(&Value::String("value1".to_string()))
+        );
         assert_eq!(merged.get("fact2"), Some(&Value::Number(100.into())));
         assert_eq!(merged.get("fact3"), Some(&Value::Bool(true)));
     }
@@ -83,7 +103,10 @@ mod tests {
     fn test_set_fact_cacheable() {
         let module = SetFactModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("cached_var".to_string(), Value::String("cached".to_string()));
+        params.insert(
+            "cached_var".to_string(),
+            Value::String("cached".to_string()),
+        );
         params.insert("cacheable".to_string(), Value::Bool(true));
 
         let context = ModuleContext::default();

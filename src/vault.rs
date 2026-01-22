@@ -106,7 +106,11 @@ impl Vault {
         // Use Zeroizing for the key buffer to ensure it's cleared after use
         let mut key = Zeroizing::new([0u8; 32]);
         argon2
-            .hash_password_into(self.password.as_bytes(), salt.as_str().as_bytes(), &mut *key)
+            .hash_password_into(
+                self.password.as_bytes(),
+                salt.as_str().as_bytes(),
+                &mut *key,
+            )
             .map_err(|e| Error::Vault(format!("Key derivation failed: {}", e)))?;
         Ok(GenericArray::clone_from_slice(&*key))
     }

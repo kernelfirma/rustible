@@ -2,9 +2,7 @@
 //!
 //! This module provides reporting capabilities for static analysis results.
 
-use super::{
-    AnalysisCategory, AnalysisFinding, ComplexityMetrics, DependencyGraph, Severity,
-};
+use super::{AnalysisCategory, AnalysisFinding, ComplexityMetrics, DependencyGraph, Severity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -121,7 +119,10 @@ impl AnalysisReport {
         }
 
         output.push_str("\nSummary:\n");
-        output.push_str(&format!("  Total findings: {}\n", self.summary.total_findings));
+        output.push_str(&format!(
+            "  Total findings: {}\n",
+            self.summary.total_findings
+        ));
         output.push_str(&format!(
             "  Health score: {:.1}/100\n",
             self.summary.health_score
@@ -169,7 +170,10 @@ impl AnalysisReport {
             output.push_str(&format!("  Plays: {}\n", metrics.play_count));
             output.push_str(&format!("  Tasks: {}\n", metrics.task_count));
             output.push_str(&format!("  Handlers: {}\n", metrics.handler_count));
-            output.push_str(&format!("  Max Nesting Depth: {}\n", metrics.max_nesting_depth));
+            output.push_str(&format!(
+                "  Max Nesting Depth: {}\n",
+                metrics.max_nesting_depth
+            ));
             output.push_str(&format!(
                 "  Cyclomatic Complexity: {}\n",
                 metrics.cyclomatic_complexity
@@ -321,8 +325,8 @@ fn calculate_health_score(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::SourceLocation;
+    use super::*;
 
     #[test]
     fn test_report_builder() {

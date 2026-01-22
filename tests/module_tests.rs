@@ -2367,6 +2367,35 @@ fn test_command_idempotency_with_creates() {
     assert!(result.msg.contains("Skipped"));
 }
 
+#[tokio::test]
+async fn test_command_remote_execution() {
+    let module = CommandModule;
+    let mock = std::sync::Arc::new(MockConnection::new("test-host"));
+
+    // Mock the command
+    mock.set_command_result(
+        "echo hello",
+        CommandResult::success("hello".to_string(), "".to_string()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+
+    // Create context with connection
+    let context = ModuleContext::default().with_connection(mock.clone());
+
+    // Execute
+    // This calls execute_remote which uses Handle::current() (from #[tokio::test])
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+    assert_eq!(result.stdout, Some("hello".to_string()));
+
+    // Verify command count
+    assert_eq!(mock.command_count(), 1);
+}
+
 // ============================================================================
 // EXTENDED SHELL MODULE TESTS
 // ============================================================================

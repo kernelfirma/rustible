@@ -160,8 +160,7 @@ pub type SecurityResult<T> = Result<T, SecurityError>;
 // ============================================================================
 
 /// Policy for host key verification
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum HostKeyVerificationMode {
     /// Accept any host key (insecure, for testing only)
     AcceptAll,
@@ -175,7 +174,6 @@ pub enum HostKeyVerificationMode {
     /// Combination of known_hosts and pinned keys
     KnownHostsOrPinned,
 }
-
 
 /// A pinned host key entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -884,8 +882,7 @@ fn ip_in_cidr(ip: IpAddr, network: IpAddr, prefix_len: u8) -> bool {
 // ============================================================================
 
 /// Minimum TLS version
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TlsVersion {
     Tls10,
     Tls11,
@@ -893,7 +890,6 @@ pub enum TlsVersion {
     Tls12,
     Tls13,
 }
-
 
 /// TLS certificate validation configuration
 #[derive(Debug, Clone)]
@@ -1116,8 +1112,7 @@ impl TlsValidationConfig {
 // ============================================================================
 
 /// Level of detail for audit logging
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AuditLevel {
     /// Log only errors and security violations
     Minimal,
@@ -1127,7 +1122,6 @@ pub enum AuditLevel {
     /// Log all encryption-related events
     Verbose,
 }
-
 
 /// Type of audit event
 #[derive(Debug, Clone, Serialize, Deserialize)]

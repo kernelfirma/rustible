@@ -93,7 +93,7 @@ pub use path::{
 };
 pub use rate_limit::{RateLimiter, RateLimiterConfig};
 pub use secret::{SecretBytes, SecretString};
-pub use template::{TemplateSecurityPolicy, TemplateSanitizer};
+pub use template::{TemplateSanitizer, TemplateSecurityPolicy};
 pub use validation::{BecomeValidator, ValidationResult};
 
 /// Errors that can occur during security operations
@@ -360,12 +360,7 @@ impl LeastPrivilegePolicy {
     }
 
     /// Validate an escalation request against the policy
-    pub fn validate_request(
-        &self,
-        user: &str,
-        method: &str,
-        command: &str,
-    ) -> SecurityResult<()> {
+    pub fn validate_request(&self, user: &str, method: &str, command: &str) -> SecurityResult<()> {
         if !self.is_user_allowed(user) {
             return Err(SecurityError::PolicyDenied(format!(
                 "User '{}' is not allowed by policy",
@@ -424,7 +419,6 @@ pub struct SecureExecuteOptions {
     /// Whether this operation has been validated
     validated: bool,
 }
-
 
 impl SecureExecuteOptions {
     /// Create new secure execute options
@@ -512,7 +506,6 @@ impl std::fmt::Debug for SecureExecuteOptions {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,8 +549,7 @@ mod tests {
 
     #[test]
     fn test_secure_execute_options_password_redaction() {
-        let options = SecureExecuteOptions::new()
-            .with_password("secret_password".to_string());
+        let options = SecureExecuteOptions::new().with_password("secret_password".to_string());
 
         let debug_output = format!("{:?}", options);
         assert!(debug_output.contains("[REDACTED]"));

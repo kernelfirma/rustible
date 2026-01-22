@@ -611,19 +611,19 @@ impl PluginFactory {
 /// ```rust,ignore,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    /// use rustible::callback::prelude::*;
-    /// use rustible::callback::config::CallbackConfig;
-    /// use rustible::callback::factory::PluginRegistry;
-    /// use std::sync::Arc;
-    ///
-    /// let mut registry = PluginRegistry::new();
-    ///
-    /// registry.register("my_plugin", |config| {
-    ///     let _ = config;
-    ///     Ok(Arc::new(MinimalCallback::new()))
-    /// });
-    ///
-    /// let plugin = registry.create("my_plugin", &CallbackConfig::default())?;
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::config::CallbackConfig;
+/// use rustible::callback::factory::PluginRegistry;
+/// use std::sync::Arc;
+///
+/// let mut registry = PluginRegistry::new();
+///
+/// registry.register("my_plugin", |config| {
+///     let _ = config;
+///     Ok(Arc::new(MinimalCallback::new()))
+/// });
+///
+/// let plugin = registry.create("my_plugin", &CallbackConfig::default())?;
 /// # Ok(())
 /// # }
 /// ```

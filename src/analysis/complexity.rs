@@ -3,9 +3,7 @@
 //! This module provides analysis of playbook complexity including cyclomatic complexity,
 //! nesting depth, and maintainability metrics.
 
-use super::{
-    helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
-};
+use super::{helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation};
 use crate::playbook::{Play, Playbook, Task};
 use serde::{Deserialize, Serialize};
 
@@ -220,7 +218,9 @@ impl ComplexityAnalyzer {
                 )
                 .with_location(location)
                 .with_description("Deeply nested blocks make code harder to read and maintain.")
-                .with_suggestion("Consider flattening the structure or extracting blocks to separate tasks."),
+                .with_suggestion(
+                    "Consider flattening the structure or extracting blocks to separate tasks.",
+                ),
             );
         }
 
