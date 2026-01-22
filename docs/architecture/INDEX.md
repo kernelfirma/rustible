@@ -34,7 +34,7 @@ This index lists all architecture-related documents in this directory.
 
 | File | Status | Summary |
 |------|--------|---------|
-| [aws-resource-roadmap.md](./aws-resource-roadmap.md) | Complete | Next 5-10 AWS resources prioritized for Terraform replacement |
+| [aws-resource-roadmap.md](./aws-resource-roadmap.md) | Complete | Next 5-10 AWS resources prioritized for Terraform parity |
 | [IMPLEMENTATION_SPEC.md](./IMPLEMENTATION_SPEC.md) | Draft | Phase 1 specification for aws_iam_role, aws_ebs_volume, and related resources |
 
 ## P0 Features (M1 Milestone)

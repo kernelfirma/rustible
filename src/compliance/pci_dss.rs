@@ -5,8 +5,8 @@
 
 use super::checks::*;
 use super::{
-    CheckInfo, CheckStatus, ComplianceContext, ComplianceError, ComplianceFramework,
-    ComplianceResult, ComplianceScanner, Finding, Severity,
+    CheckInfo, ComplianceContext, ComplianceError, ComplianceFramework, ComplianceResult,
+    ComplianceScanner, Finding, Severity,
 };
 use async_trait::async_trait;
 
@@ -159,9 +159,7 @@ impl PciDssScanner {
                     "Verify root/admin account usage is limited",
                     "grep -E '^[^:]+:x:0:' /etc/passwd | wc -l",
                 )
-                .with_description(
-                    "Only necessary accounts should have UID 0 (root privileges).",
-                )
+                .with_description("Only necessary accounts should have UID 0 (root privileges).")
                 .with_severity(Severity::High)
                 .with_category(CheckCategory::AccessControl)
                 .with_expected_pattern(r"^1$")
@@ -179,9 +177,7 @@ impl PciDssScanner {
                     "Verify sudo is installed for privilege escalation",
                     "command -v sudo",
                 )
-                .with_description(
-                    "Sudo must be used for controlled privilege escalation.",
-                )
+                .with_description("Sudo must be used for controlled privilege escalation.")
                 .with_severity(Severity::High)
                 .with_category(CheckCategory::AccessControl)
                 .with_expected_exit_code(0)
@@ -335,20 +331,14 @@ impl PciDssScanner {
         vec![
             // PCI-DSS 10.2.1 - Audit logging
             Box::new(
-                ServiceCheck::new(
-                    "PCI-10.2.1",
-                    "Verify audit logging is enabled",
-                    "auditd",
-                )
-                .with_description(
-                    "All access to cardholder data must be logged.",
-                )
-                .with_severity(Severity::High)
-                .should_be_enabled(true)
-                .should_be_running(true)
-                .with_remediation("systemctl enable auditd && systemctl start auditd")
-                .with_tag("pci-req-10".to_string())
-                .with_tag("auditing".to_string()),
+                ServiceCheck::new("PCI-10.2.1", "Verify audit logging is enabled", "auditd")
+                    .with_description("All access to cardholder data must be logged.")
+                    .with_severity(Severity::High)
+                    .should_be_enabled(true)
+                    .should_be_running(true)
+                    .with_remediation("systemctl enable auditd && systemctl start auditd")
+                    .with_tag("pci-req-10".to_string())
+                    .with_tag("auditing".to_string()),
             ),
             // PCI-DSS 10.2.2 - Log all actions by root/admin
             Box::new(
@@ -357,9 +347,7 @@ impl PciDssScanner {
                     "Verify root actions are audited",
                     "auditctl -l 2>/dev/null | grep -E '(uid=0|euid=0)'",
                 )
-                .with_description(
-                    "All actions taken by administrators must be logged.",
-                )
+                .with_description("All actions taken by administrators must be logged.")
                 .with_severity(Severity::High)
                 .with_category(CheckCategory::Auditing)
                 .with_expected_exit_code(0)
@@ -377,9 +365,7 @@ impl PciDssScanner {
                     "Verify authentication events are logged",
                     "auditctl -l 2>/dev/null | grep -E '(faillog|lastlog|tallylog|pam)'",
                 )
-                .with_description(
-                    "All authentication events must be logged.",
-                )
+                .with_description("All authentication events must be logged.")
                 .with_severity(Severity::High)
                 .with_category(CheckCategory::Auditing)
                 .with_expected_exit_code(0)
@@ -418,9 +404,7 @@ impl PciDssScanner {
                     "Verify audit log permissions are restrictive",
                     "/var/log/audit",
                 )
-                .with_description(
-                    "Audit logs must be protected from unauthorized access.",
-                )
+                .with_description("Audit logs must be protected from unauthorized access.")
                 .with_severity(Severity::High)
                 .with_category(CheckCategory::Auditing)
                 .with_owner("root")
@@ -501,7 +485,9 @@ impl ComplianceScanner for PciDssScanner {
             .checks
             .iter()
             .find(|c| c.id() == check_id)
-            .ok_or_else(|| ComplianceError::InvalidConfig(format!("Check {} not found", check_id)))?;
+            .ok_or_else(|| {
+                ComplianceError::InvalidConfig(format!("Check {} not found", check_id))
+            })?;
 
         let result = check.execute(context).await?;
 

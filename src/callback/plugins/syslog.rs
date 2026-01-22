@@ -21,8 +21,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{SyslogCallback, SyslogConfig, SyslogFacility};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{SyslogCallback, SyslogConfig, SyslogFacility};
 //!
 //! let config = SyslogConfig::builder()
 //!     .facility(SyslogFacility::Local0)
@@ -31,7 +34,9 @@
 //!     .build();
 //!
 //! let callback = SyslogCallback::new(config)?;
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -57,6 +62,7 @@ use crate::traits::{ExecutionCallback, ExecutionResult};
 /// For application-specific logging, use `Local0` through `Local7`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum SyslogFacility {
     /// Kernel messages
     Kern = 0,
@@ -91,6 +97,7 @@ pub enum SyslogFacility {
     /// Clock daemon (note 2)
     Clock = 15,
     /// Local use 0 (recommended for applications)
+    #[default]
     Local0 = 16,
     /// Local use 1
     Local1 = 17,
@@ -106,12 +113,6 @@ pub enum SyslogFacility {
     Local6 = 22,
     /// Local use 7
     Local7 = 23,
-}
-
-impl Default for SyslogFacility {
-    fn default() -> Self {
-        SyslogFacility::Local0
-    }
 }
 
 impl std::fmt::Display for SyslogFacility {
@@ -184,6 +185,7 @@ impl std::str::FromStr for SyslogFacility {
 /// Lower numbers indicate higher severity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum SyslogSeverity {
     /// System is unusable
     Emergency = 0,
@@ -198,15 +200,10 @@ pub enum SyslogSeverity {
     /// Normal but significant condition
     Notice = 5,
     /// Informational messages
+    #[default]
     Info = 6,
     /// Debug-level messages
     Debug = 7,
-}
-
-impl Default for SyslogSeverity {
-    fn default() -> Self {
-        SyslogSeverity::Info
-    }
 }
 
 impl std::fmt::Display for SyslogSeverity {
@@ -556,11 +553,7 @@ impl SyslogWriter for UnixSyslogWriter {
             .map_err(|e| SyslogError::WriteFailed(io::Error::new(io::ErrorKind::InvalidData, e)))?;
 
         unsafe {
-            libc::syslog(
-                priority as libc::c_int,
-                b"%s\0".as_ptr() as *const libc::c_char,
-                c_message.as_ptr(),
-            );
+            libc::syslog(priority as libc::c_int, c"%s".as_ptr(), c_message.as_ptr());
         }
 
         Ok(())
@@ -649,11 +642,16 @@ impl SyslogWriter for StderrSyslogWriter {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::{SyslogCallback, SyslogConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{SyslogCallback, SyslogConfig};
 ///
 /// let callback = SyslogCallback::new(SyslogConfig::default())?;
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct SyslogCallback {

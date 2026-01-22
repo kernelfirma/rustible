@@ -1,6 +1,11 @@
 //! Vault for encrypted secrets management
+//!
+//! This module provides AES-256-GCM encryption with Argon2 key derivation
+//! for storing sensitive data. The vault password is stored securely
+//! using `SecretString` which zeroes memory on drop.
 
 use crate::error::{Error, Result};
+use crate::security::SecretString;
 use aes_gcm::aead::generic_array::typenum;
 use aes_gcm::{
     aead::{generic_array::GenericArray, Aead},
@@ -10,20 +15,24 @@ use argon2::password_hash::SaltString;
 use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rand::rngs::OsRng;
+use zeroize::Zeroizing;
 
 /// Vault header marker
 const VAULT_HEADER: &str = "$RUSTIBLE_VAULT;1.0;AES256";
 
 /// Vault for encrypting/decrypting secrets
+///
+/// The password is stored in a `SecretString` which is automatically
+/// zeroed from memory when dropped, preventing secret leakage.
 pub struct Vault {
-    password: String,
+    password: SecretString,
 }
 
 impl Vault {
     /// Create a new vault with password
     pub fn new(password: impl Into<String>) -> Self {
         Self {
-            password: password.into(),
+            password: SecretString::new(password),
         }
     }
 
@@ -94,11 +103,24 @@ impl Vault {
 
     fn derive_key(&self, salt: &SaltString) -> Result<GenericArray<u8, typenum::U32>> {
         let argon2 = Argon2::default();
-        let mut key = [0u8; 32];
+        // Use Zeroizing for the key buffer to ensure it's cleared after use
+        let mut key = Zeroizing::new([0u8; 32]);
         argon2
-            .hash_password_into(self.password.as_bytes(), salt.as_str().as_bytes(), &mut key)
+            .hash_password_into(
+                self.password.as_bytes(),
+                salt.as_str().as_bytes(),
+                &mut *key,
+            )
             .map_err(|e| Error::Vault(format!("Key derivation failed: {}", e)))?;
-        Ok(GenericArray::clone_from_slice(&key))
+        Ok(GenericArray::clone_from_slice(&*key))
+    }
+}
+
+impl std::fmt::Debug for Vault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Vault")
+            .field("password", &"[REDACTED]")
+            .finish()
     }
 }
 
@@ -129,5 +151,13 @@ mod tests {
         let result = vault2.decrypt(&encrypted);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_vault_debug_redacts_password() {
+        let vault = Vault::new("super_secret");
+        let debug_output = format!("{:?}", vault);
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("super_secret"));
     }
 }

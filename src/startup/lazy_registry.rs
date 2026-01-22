@@ -9,35 +9,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::modules::{
-    apt::AptModule,
-    assert::AssertModule,
-    blockinfile::BlockinfileModule,
-    command::CommandModule,
-    copy::CopyModule,
-    cron::CronModule,
-    debug::DebugModule,
-    dnf::DnfModule,
-    facts::FactsModule,
-    file::FileModule,
-    git::GitModule,
-    group::GroupModule,
-    hostname::HostnameModule,
-    include_vars::IncludeVarsModule,
-    lineinfile::LineinfileModule,
-    mount::MountModule,
-    package::PackageModule,
-    pip::PipModule,
-    service::ServiceModule,
-    set_fact::SetFactModule,
-    shell::ShellModule,
-    stat::StatModule,
-    sysctl::SysctlModule,
-    systemd_unit::SystemdUnitModule,
-    template::TemplateModule,
-    uri::UriModule,
-    user::UserModule,
-    yum::YumModule,
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    apt::AptModule, assert::AssertModule, blockinfile::BlockinfileModule, command::CommandModule,
+    copy::CopyModule, cron::CronModule, debug::DebugModule, dnf::DnfModule, facts::FactsModule,
+    file::FileModule, git::GitModule, group::GroupModule, hostname::HostnameModule,
+    include_vars::IncludeVarsModule, lineinfile::LineinfileModule, mount::MountModule,
+    package::PackageModule, pip::PipModule, proxmox_vm::ProxmoxVmModule, service::ServiceModule,
+    set_fact::SetFactModule, shell::ShellModule, stat::StatModule, sysctl::SysctlModule,
+    systemd_unit::SystemdUnitModule, template::TemplateModule, uri::UriModule, user::UserModule,
+    yum::YumModule, Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
 };
 
 /// Module factory function type for lazy instantiation.
@@ -57,7 +36,10 @@ type ModuleFactory = fn() -> Arc<dyn Module>;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
 /// use rustible::startup::LazyModuleRegistry;
 ///
 /// let registry = LazyModuleRegistry::new();
@@ -72,6 +54,8 @@ type ModuleFactory = fn() -> Arc<dyn Module>;
 /// // Second access returns cached instance
 /// let debug2 = registry.get("debug").unwrap();
 /// assert_eq!(registry.instantiated_count(), 1);
+/// # Ok(())
+/// # }
 /// ```
 pub struct LazyModuleRegistry {
     /// Factory functions for creating modules
@@ -83,9 +67,9 @@ pub struct LazyModuleRegistry {
 impl LazyModuleRegistry {
     /// Create a new lazy registry with all builtin module factories.
     pub fn new() -> Self {
-        let mut factories: HashMap<&'static str, ModuleFactory> = HashMap::with_capacity(28);
+        let mut factories: HashMap<&'static str, ModuleFactory> = HashMap::with_capacity(29);
         let mut cache: HashMap<&'static str, OnceCell<Arc<dyn Module>>> =
-            HashMap::with_capacity(28);
+            HashMap::with_capacity(29);
 
         // Register factory functions (not instances!)
         // Package management
@@ -100,10 +84,14 @@ impl LazyModuleRegistry {
         factories.insert("shell", || Arc::new(ShellModule) as Arc<dyn Module>);
 
         // File/transport modules
-        factories.insert("blockinfile", || Arc::new(BlockinfileModule) as Arc<dyn Module>);
+        factories.insert("blockinfile", || {
+            Arc::new(BlockinfileModule) as Arc<dyn Module>
+        });
         factories.insert("copy", || Arc::new(CopyModule) as Arc<dyn Module>);
         factories.insert("file", || Arc::new(FileModule) as Arc<dyn Module>);
-        factories.insert("lineinfile", || Arc::new(LineinfileModule) as Arc<dyn Module>);
+        factories.insert("lineinfile", || {
+            Arc::new(LineinfileModule) as Arc<dyn Module>
+        });
         factories.insert("template", || Arc::new(TemplateModule) as Arc<dyn Module>);
 
         // System management modules
@@ -113,7 +101,9 @@ impl LazyModuleRegistry {
         factories.insert("mount", || Arc::new(MountModule) as Arc<dyn Module>);
         factories.insert("service", || Arc::new(ServiceModule) as Arc<dyn Module>);
         factories.insert("sysctl", || Arc::new(SysctlModule) as Arc<dyn Module>);
-        factories.insert("systemd_unit", || Arc::new(SystemdUnitModule) as Arc<dyn Module>);
+        factories.insert("systemd_unit", || {
+            Arc::new(SystemdUnitModule) as Arc<dyn Module>
+        });
         factories.insert("user", || Arc::new(UserModule) as Arc<dyn Module>);
 
         // Source control modules
@@ -122,7 +112,9 @@ impl LazyModuleRegistry {
         // Logic/utility modules
         factories.insert("assert", || Arc::new(AssertModule) as Arc<dyn Module>);
         factories.insert("debug", || Arc::new(DebugModule) as Arc<dyn Module>);
-        factories.insert("include_vars", || Arc::new(IncludeVarsModule) as Arc<dyn Module>);
+        factories.insert("include_vars", || {
+            Arc::new(IncludeVarsModule) as Arc<dyn Module>
+        });
         factories.insert("set_fact", || Arc::new(SetFactModule) as Arc<dyn Module>);
         factories.insert("stat", || Arc::new(StatModule) as Arc<dyn Module>);
         factories.insert("gather_facts", || Arc::new(FactsModule) as Arc<dyn Module>);
@@ -130,6 +122,9 @@ impl LazyModuleRegistry {
 
         // Network/API modules
         factories.insert("uri", || Arc::new(UriModule) as Arc<dyn Module>);
+        factories.insert("proxmox_vm", || {
+            Arc::new(ProxmoxVmModule) as Arc<dyn Module>
+        });
 
         // Initialize cache cells for each module
         for name in factories.keys() {
@@ -231,7 +226,10 @@ impl Default for LazyModuleRegistry {
 impl std::fmt::Debug for LazyModuleRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LazyModuleRegistry")
-            .field("registered_modules", &self.factories.keys().collect::<Vec<_>>())
+            .field(
+                "registered_modules",
+                &self.factories.keys().collect::<Vec<_>>(),
+            )
             .field("instantiated_count", &self.instantiated_count())
             .finish()
     }

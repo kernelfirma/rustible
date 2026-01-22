@@ -16,7 +16,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::connection::winrm::{WinRmConnection, WinRmConnectionBuilder, WinRmAuth};
 //!
 //! let conn = WinRmConnectionBuilder::new("windows-host.example.com")
@@ -28,6 +31,8 @@
 //! // Execute PowerShell command
 //! let result = conn.execute("Get-Process | Select-Object -First 5", None).await?;
 //! println!("Output: {}", result.stdout);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Security Considerations

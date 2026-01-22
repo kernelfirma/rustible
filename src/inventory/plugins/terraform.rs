@@ -89,8 +89,10 @@ impl Default for StateBackend {
 /// Each variant corresponds to a different storage mechanism where Terraform state can be stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TerraformBackendType {
     /// Local filesystem state file
+    #[default]
     Local,
     /// AWS S3 remote state backend
     S3,
@@ -102,12 +104,6 @@ pub enum TerraformBackendType {
     Consul,
     /// HTTP/HTTPS remote state backend
     Http,
-}
-
-impl Default for TerraformBackendType {
-    fn default() -> Self {
-        Self::Local
-    }
 }
 
 impl std::fmt::Display for TerraformBackendType {
@@ -842,7 +838,7 @@ impl TerraformPlugin {
                 continue;
             };
 
-            if !filter_values.iter().any(|fv| *fv == value) {
+            if !filter_values.contains(&value) {
                 return false;
             }
         }
@@ -1183,9 +1179,7 @@ fn extract_provider(provider: &str) -> String {
         }
         // No closing quote, return everything after the last slash
         // stripping any trailing characters like ]
-        return remaining
-            .trim_end_matches(|c: char| c == '"' || c == ']')
-            .to_string();
+        return remaining.trim_end_matches(['"', ']']).to_string();
     }
 
     // Fallback: try to extract from provider["aws"]
@@ -1304,11 +1298,7 @@ fn json_to_yaml(value: &serde_json::Value) -> serde_yaml::Value {
             if let Some(i) = n.as_i64() {
                 serde_yaml::Value::Number(i.into())
             } else if let Some(f) = n.as_f64() {
-                if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-                    serde_yaml::Value::Number((f as i64).into())
-                } else {
-                    serde_yaml::Value::Number((f as i64).into())
-                }
+                serde_yaml::Value::Number((f as i64).into())
             } else {
                 serde_yaml::Value::Number(0.into())
             }
@@ -2315,10 +2305,7 @@ mod tests {
     fn test_terraform_plugin_config() {
         let config = TerraformPluginConfig::default();
         assert_eq!(config.backend, TerraformBackendType::Local);
-        assert_eq!(
-            config.state_path,
-            Some(PathBuf::from("terraform.tfstate"))
-        );
+        assert_eq!(config.state_path, Some(PathBuf::from("terraform.tfstate")));
         assert!(config.export_outputs);
         assert!(config.resource_mappings.is_empty());
 

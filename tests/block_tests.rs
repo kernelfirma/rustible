@@ -959,6 +959,76 @@ async fn test_execute_nested_blocks() {
     assert!(!host_result.failed);
 }
 
+#[tokio::test]
+async fn test_execute_nested_block_vars_with_rescue() {
+    let mut runtime = RuntimeContext::new();
+    runtime.add_host("localhost".to_string(), None);
+
+    let config = ExecutorConfig {
+        gather_facts: false,
+        ..Default::default()
+    };
+    let executor = Executor::with_runtime(config, runtime);
+
+    let yaml = r#"
+- name: Nested block vars rescue
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Outer block
+      vars:
+        outer_var: "outer"
+        shared: "outer"
+      block:
+        - name: Inner block
+          vars:
+            inner_var: "inner"
+            shared: "inner"
+          block:
+            - name: Fail inner
+              fail:
+                msg: "boom"
+          rescue:
+            - name: Assert inner rescue vars
+              assert:
+                that:
+                  - shared == "inner"
+                  - outer_var == "outer"
+                  - inner_var == "inner"
+          always:
+            - name: Assert inner always vars
+              assert:
+                that:
+                  - shared == "inner"
+                  - outer_var == "outer"
+                  - inner_var == "inner"
+        - name: Assert outer after inner
+          assert:
+            that:
+              - shared == "outer"
+              - outer_var == "outer"
+              - inner_var is not defined
+      rescue:
+        - name: Outer rescue should not run
+          fail:
+            msg: "outer rescue ran"
+      always:
+        - name: Assert outer always vars
+          assert:
+            that:
+              - shared == "outer"
+              - outer_var == "outer"
+              - inner_var is not defined
+"#;
+
+    let playbook = Playbook::parse(yaml, None).expect("parse playbook");
+    let results = executor.run_playbook(&playbook).await.unwrap();
+
+    assert!(results.contains_key("localhost"));
+    let host_result = results.get("localhost").unwrap();
+    assert!(!host_result.failed);
+}
+
 // ============================================================================
 // Edge Cases and Error Handling Tests
 // ============================================================================

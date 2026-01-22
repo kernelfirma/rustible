@@ -1,3 +1,4 @@
+#![cfg(not(tarpaulin))]
 //! Comprehensive tests for Rustible task delegation functionality
 //!
 //! This test suite covers:

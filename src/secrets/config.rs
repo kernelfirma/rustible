@@ -90,8 +90,7 @@ impl SecretConfig {
         if std::env::var("VAULT_ADDR").is_ok() {
             config.backend_type = SecretBackendType::Vault;
             config.vault = Some(VaultConfig::from_env());
-        } else if std::env::var("AWS_REGION").is_ok()
-            || std::env::var("AWS_DEFAULT_REGION").is_ok()
+        } else if std::env::var("AWS_REGION").is_ok() || std::env::var("AWS_DEFAULT_REGION").is_ok()
         {
             config.backend_type = SecretBackendType::AwsSecretsManager;
             config.aws = Some(AwsSecretsManagerConfig::from_env());
@@ -144,11 +143,7 @@ impl SecretConfigBuilder {
     }
 
     /// Set AppRole authentication.
-    pub fn approle(
-        mut self,
-        role_id: impl Into<String>,
-        secret_id: impl Into<String>,
-    ) -> Self {
+    pub fn approle(mut self, role_id: impl Into<String>, secret_id: impl Into<String>) -> Self {
         let vault = self.config.vault.get_or_insert_with(VaultConfig::default);
         vault.auth = VaultAuthMethod::AppRole {
             role_id: role_id.into(),
@@ -297,9 +292,10 @@ impl VaultConfig {
 
         if let Ok(token) = std::env::var("VAULT_TOKEN") {
             config.auth = VaultAuthMethod::Token { token };
-        } else if let (Ok(role_id), Ok(secret_id)) =
-            (std::env::var("VAULT_ROLE_ID"), std::env::var("VAULT_SECRET_ID"))
-        {
+        } else if let (Ok(role_id), Ok(secret_id)) = (
+            std::env::var("VAULT_ROLE_ID"),
+            std::env::var("VAULT_SECRET_ID"),
+        ) {
             config.auth = VaultAuthMethod::AppRole {
                 role_id,
                 secret_id,
@@ -424,6 +420,7 @@ impl Default for VaultAuthMethod {
 /// AWS Secrets Manager configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct AwsSecretsManagerConfig {
     /// AWS region
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -456,21 +453,6 @@ pub struct AwsSecretsManagerConfig {
     /// Use dual-stack endpoints
     #[serde(default)]
     pub use_dual_stack: bool,
-}
-
-impl Default for AwsSecretsManagerConfig {
-    fn default() -> Self {
-        Self {
-            region: None,
-            profile: None,
-            access_key_id: None,
-            secret_access_key: None,
-            session_token: None,
-            endpoint_url: None,
-            use_fips: false,
-            use_dual_stack: false,
-        }
-    }
 }
 
 impl AwsSecretsManagerConfig {

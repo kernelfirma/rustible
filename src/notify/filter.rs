@@ -216,17 +216,13 @@ impl NotificationRule {
 /// Action to take when a rule matches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum RuleAction {
     /// Allow the notification
+    #[default]
     Allow,
     /// Deny (block) the notification
     Deny,
-}
-
-impl Default for RuleAction {
-    fn default() -> Self {
-        Self::Allow
-    }
 }
 
 /// Simple glob pattern matching.

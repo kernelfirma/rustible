@@ -14,7 +14,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::connection::kubernetes::{KubernetesConnection, KubernetesConnectionBuilder};
 //!
 //! // Connect to a pod in the default namespace
@@ -28,6 +31,8 @@
 //! // Execute a command
 //! let result = conn.execute("ls -la /app", None).await?;
 //! println!("Output: {}", result.stdout);
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;

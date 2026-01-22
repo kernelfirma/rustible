@@ -36,20 +36,15 @@ pub enum AuditLogError {
 pub type AuditLogResult<T> = Result<T, AuditLogError>;
 
 /// Format for audit log output
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AuditFormat {
     /// Single-line text format
+    #[default]
     Text,
     /// JSON format (one event per line)
     Json,
     /// Common Event Format (CEF)
     Cef,
-}
-
-impl Default for AuditFormat {
-    fn default() -> Self {
-        AuditFormat::Text
-    }
 }
 
 /// Trait for audit log backends
@@ -105,10 +100,7 @@ impl FileLogger {
             }
         }
 
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let file = OpenOptions::new().create(true).append(true).open(&path)?;
 
         Ok(Self {
             path,
@@ -212,11 +204,12 @@ impl fmt::Debug for FileLogger {
 }
 
 /// Syslog facility for audit messages
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SyslogFacility {
     /// Security/authorization messages
     Auth,
     /// Security/authorization messages (private)
+    #[default]
     AuthPriv,
     /// System daemons
     Daemon,
@@ -246,12 +239,6 @@ impl SyslogFacility {
             SyslogFacility::Local6 => 22,
             SyslogFacility::Local7 => 23,
         }
-    }
-}
-
-impl Default for SyslogFacility {
-    fn default() -> Self {
-        SyslogFacility::AuthPriv
     }
 }
 
@@ -330,11 +317,18 @@ impl SyslogLogger {
     }
 
     /// Create a syslog logger for remote server
-    pub fn remote(ident: impl Into<String>, host: impl Into<String>, port: u16) -> AuditLogResult<Self> {
+    pub fn remote(
+        ident: impl Into<String>,
+        host: impl Into<String>,
+        port: u16,
+    ) -> AuditLogResult<Self> {
         Self::with_options(
             ident,
             SyslogFacility::AuthPriv,
-            SyslogTransport::Udp { host: host.into(), port },
+            SyslogTransport::Udp {
+                host: host.into(),
+                port,
+            },
             AuditFormat::Text,
         )
     }
@@ -354,7 +348,9 @@ impl SyslogLogger {
         let priority = (self.facility.to_code() << 3) | Self::severity_to_priority(event.severity);
         let content = match self.format {
             AuditFormat::Text => event.to_log_line(),
-            AuditFormat::Json => serde_json::to_string(event).unwrap_or_else(|_| event.to_log_line()),
+            AuditFormat::Json => {
+                serde_json::to_string(event).unwrap_or_else(|_| event.to_log_line())
+            }
             AuditFormat::Cef => format_cef(event),
         };
 
@@ -368,7 +364,9 @@ impl SyslogLogger {
             sock.send(message.as_bytes())?;
             Ok(())
         } else {
-            Err(AuditLogError::NotAvailable("Unix socket not connected".into()))
+            Err(AuditLogError::NotAvailable(
+                "Unix socket not connected".into(),
+            ))
         }
     }
 
@@ -390,9 +388,9 @@ impl AuditLogger for SyslogLogger {
         match &self.transport {
             SyslogTransport::Unix(_) => self.send_unix(&message),
             SyslogTransport::Udp { host, port } => self.send_udp(&message, host, *port),
-            SyslogTransport::Tcp { .. } => {
-                Err(AuditLogError::NotAvailable("TCP syslog not implemented".into()))
-            }
+            SyslogTransport::Tcp { .. } => Err(AuditLogError::NotAvailable(
+                "TCP syslog not implemented".into(),
+            )),
         }
     }
 
@@ -517,14 +515,18 @@ pub struct JournaldLogger {
 #[cfg(not(target_os = "linux"))]
 impl JournaldLogger {
     pub fn new(ident: impl Into<String>) -> Self {
-        Self { ident: ident.into() }
+        Self {
+            ident: ident.into(),
+        }
     }
 }
 
 #[cfg(not(target_os = "linux"))]
 impl AuditLogger for JournaldLogger {
     fn log(&self, _event: &AuditEvent) -> AuditLogResult<()> {
-        Err(AuditLogError::NotAvailable("journald only available on Linux".into()))
+        Err(AuditLogError::NotAvailable(
+            "journald only available on Linux".into(),
+        ))
     }
 
     fn flush(&self) -> AuditLogResult<()> {
@@ -662,6 +664,7 @@ fn cef_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]
@@ -690,8 +693,7 @@ mod tests {
 
         let logger = FileLogger::with_options(&log_path, AuditFormat::Json, None, 5).unwrap();
 
-        let event = AuditEvent::file_modification("/etc/passwd", "Modified")
-            .success();
+        let event = AuditEvent::file_modification("/etc/passwd", "Modified").success();
 
         logger.log(&event).unwrap();
         logger.flush().unwrap();
@@ -724,5 +726,22 @@ mod tests {
     #[test]
     fn test_cef_escape() {
         assert_eq!(cef_escape("a|b=c\\d"), "a\\|b\\=c\\\\d");
+    }
+
+    #[test]
+    fn test_file_logger_rotation() {
+        let temp = TempDir::new().unwrap();
+        let log_path = temp.path().join("audit.log");
+
+        std::fs::write(&log_path, "x".repeat(64)).unwrap();
+
+        let logger = FileLogger::with_options(&log_path, AuditFormat::Text, Some(10), 3).unwrap();
+        let event = AuditEvent::command_execution("echo test").success();
+        logger.log(&event).unwrap();
+        logger.flush().unwrap();
+
+        let rotated = PathBuf::from(format!("{}.1", log_path.display()));
+        assert!(rotated.exists());
+        assert!(log_path.exists());
     }
 }

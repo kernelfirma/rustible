@@ -158,7 +158,7 @@ impl FactCache {
     pub fn get_by_ip(&self, ip: &str) -> Option<CachedFacts> {
         self.ip_to_hostname
             .get(ip)
-            .and_then(|hostname| self.cache.get(&hostname.to_string()))
+            .and_then(|hostname| self.cache.get(&hostname))
     }
 
     /// Get facts for a host with specific subsets

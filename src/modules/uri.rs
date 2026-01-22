@@ -240,6 +240,7 @@ impl UriModule {
     }
 
     /// Execute HTTP request with retry logic
+    #[allow(clippy::too_many_arguments)]
     async fn execute_request(
         client: &Client,
         method: Method,
@@ -773,32 +774,50 @@ impl Module for UriModule {
             .unwrap_or(DEFAULT_RETRY_DELAY_SECS);
 
         // Execute the async request using tokio runtime
-        let result = tokio::runtime::Handle::try_current()
-            .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".to_string()))?
-            .block_on(Self::execute_async(
-                url,
-                method,
-                headers,
-                body,
-                body_format,
-                auth_type,
-                auth_user,
-                auth_password,
-                auth_token,
-                oauth2_token_url,
-                oauth2_client_id,
-                oauth2_client_secret,
-                oauth2_scope,
-                timeout_secs,
-                validate_certs,
-                follow_redirects,
-                max_redirects,
-                return_content,
-                status_code_list,
-                retries,
-                retry_delay_secs,
-                false, // check_mode already handled above
-            ));
+        let fut = Self::execute_async(
+            url,
+            method,
+            headers,
+            body,
+            body_format,
+            auth_type,
+            auth_user,
+            auth_password,
+            auth_token,
+            oauth2_token_url,
+            oauth2_client_id,
+            oauth2_client_secret,
+            oauth2_scope,
+            timeout_secs,
+            validate_certs,
+            follow_redirects,
+            max_redirects,
+            return_content,
+            status_code_list,
+            retries,
+            retry_delay_secs,
+            false, // check_mode already handled above
+        );
+
+        let result = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            std::thread::scope(|s| {
+                s.spawn(move || handle.block_on(fut))
+                    .join()
+                    .unwrap_or_else(|_| {
+                        Err(ModuleError::ExecutionFailed(
+                            "Tokio runtime thread panicked".to_string(),
+                        ))
+                    })
+            })
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
+                })?;
+            rt.block_on(fut)
+        };
 
         result
     }

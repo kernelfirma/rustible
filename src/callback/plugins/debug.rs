@@ -47,14 +47,19 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::DebugCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::DebugCallback;
 //!
 //! let callback = DebugCallback::new();
 //! // Or with custom verbosity
 //! let callback = DebugCallback::with_verbosity(3);
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -243,8 +248,13 @@ impl DebugCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = DebugCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -274,8 +284,13 @@ impl DebugCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = DebugCallback::with_verbosity(3);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_verbosity(verbosity: u8) -> Self {
@@ -535,7 +550,7 @@ impl ExecutionCallback for DebugCallback {
             // Print overall summary
             if let Some(start_time) = *start {
                 let duration = start_time.elapsed();
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully".green().bold()
                 } else {
                     "failed".red().bold()
@@ -546,7 +561,7 @@ impl ExecutionCallback for DebugCallback {
                 println!(
                     "{} {} in {}",
                     "Playbook".bright_white(),
-                    status,
+                    playbook_status,
                     Self::format_duration(duration).yellow()
                 );
 

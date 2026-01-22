@@ -32,11 +32,16 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::TreeCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::TreeCallback;
 //!
 //! let callback = TreeCallback::new("/var/log/rustible/runs/2024-01-15-deploy")?;
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -235,8 +240,11 @@ impl Default for TreeConfig {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::TreeCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::TreeCallback;
 ///
 /// // Create with auto-generated run directory
 /// let callback = TreeCallback::new_with_timestamp("/var/log/rustible/runs")?;
@@ -244,7 +252,9 @@ impl Default for TreeConfig {
 /// // Or specify exact path
 /// let callback = TreeCallback::new("/var/log/rustible/runs/my-deploy")?;
 ///
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct TreeCallback {
@@ -279,8 +289,13 @@ impl TreeCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = TreeCallback::new("/var/log/rustible/runs/2024-01-15")?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(tree_root: impl AsRef<Path>) -> Result<Self> {
         Self::with_config(tree_root, TreeConfig::default())
@@ -318,9 +333,14 @@ impl TreeCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// // Creates /var/log/rustible/runs/2024-01-15T10-30-00Z/
     /// let callback = TreeCallback::new_with_timestamp("/var/log/rustible/runs")?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new_with_timestamp(base_path: impl AsRef<Path>) -> Result<Self> {
         let timestamp = Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();

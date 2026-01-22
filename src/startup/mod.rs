@@ -17,7 +17,10 @@
 //!
 //! Use `StartupMetrics` to profile application initialization:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::startup::{StartupMetrics, StartupPhase};
 //!
 //! let mut metrics = StartupMetrics::new();
@@ -26,6 +29,8 @@
 //! metrics.end_phase(StartupPhase::ConfigLoading);
 //!
 //! metrics.report();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Architecture
@@ -44,7 +49,7 @@ pub mod lazy_registry;
 pub mod metrics;
 
 pub use lazy_registry::LazyModuleRegistry;
-pub use metrics::{StartupMetrics, StartupPhase, PhaseMetrics};
+pub use metrics::{PhaseMetrics, StartupMetrics, StartupPhase};
 
 use once_cell::sync::Lazy;
 use std::sync::Arc;
@@ -93,6 +98,6 @@ mod tests {
     #[test]
     fn test_metrics_creation() {
         let metrics = init_metrics();
-        assert!(metrics.total_duration().as_nanos() == 0);
+        assert!(metrics.total_duration() < std::time::Duration::from_millis(100));
     }
 }

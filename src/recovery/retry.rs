@@ -10,7 +10,10 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::recovery::retry::{RetryPolicy, BackoffStrategy};
 //! use std::time::Duration;
 //!
@@ -23,6 +26,8 @@
 //!     .backoff(BackoffStrategy::Exponential { base: Duration::from_secs(1), max: Duration::from_secs(30) })
 //!     .jitter(0.25)  // Add up to 25% random jitter
 //!     .build();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::time::{Duration, Instant};

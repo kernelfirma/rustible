@@ -211,11 +211,16 @@ impl Default for CounterConfig {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::CounterCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::CounterCallback;
 ///
 /// let callback = CounterCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct CounterCallback {
@@ -244,8 +249,13 @@ impl CounterCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = CounterCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -535,16 +545,16 @@ impl ExecutionCallback for CounterCallback {
         // Print recap header
         println!();
         let recap_header = "RECAP";
-        let stars = "*".repeat(80_usize.saturating_sub(recap_header.len() + 1));
+        let divider = "*".repeat(80_usize.saturating_sub(recap_header.len() + 1));
 
         if self.config.use_color {
             println!(
                 "{} {}",
                 recap_header.bright_white().bold(),
-                stars.bright_black()
+                divider.bright_black()
             );
         } else {
-            println!("{} {}", recap_header, stars);
+            println!("{} {}", recap_header, divider);
         }
 
         // Print recap for each host in sorted order
@@ -563,20 +573,20 @@ impl ExecutionCallback for CounterCallback {
             println!("{}", self.format_summary(&global, duration));
 
             if self.config.use_color {
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully".green().bold()
                 } else {
                     "failed".red().bold()
                 };
 
-                println!("\nPlaybook '{}' {}", name.bright_white(), status);
+                println!("\nPlaybook '{}' {}", name.bright_white(), playbook_status);
             } else {
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully"
                 } else {
                     "failed"
                 };
-                println!("\nPlaybook '{}' {}", name, status);
+                println!("\nPlaybook '{}' {}", name, playbook_status);
             }
         }
     }
@@ -648,7 +658,7 @@ impl ExecutionCallback for CounterCallback {
         let mut global = self.global_stats.write();
 
         // Determine status and update counts
-        let status = if result.result.skipped {
+        let result_status = if result.result.skipped {
             host_stats.skipped += 1;
             global.skipped += 1;
             "skipped"
@@ -699,13 +709,13 @@ impl ExecutionCallback for CounterCallback {
                     &result.host,
                     current_host,
                     total_hosts,
-                    status,
+                    result_status,
                     result.result.changed
                 )
             );
 
             // Print error message for failures
-            if status == "failed" && !result.result.message.is_empty() {
+            if result_status == "failed" && !result.result.message.is_empty() {
                 if self.config.use_color {
                     println!("  {} {}", "=>".red(), result.result.message.bright_red());
                 } else {

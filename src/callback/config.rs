@@ -69,14 +69,19 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::config::{CallbackConfig, CallbackConfigLoader};
 //!
 //! // Load from all sources with proper precedence
 //! let config = CallbackConfigLoader::new()
 //!     .with_file("/etc/rustible/callbacks.toml")
 //!     .with_env_prefix("RUSTIBLE_CALLBACK")
-//!     .with_cli_args(&cli_matches)
+//!     .with_plugin("timer")
+//!     .with_verbosity(2)
+//!     .with_show_diff(true)
 //!     .load()?;
 //!
 //! // Access configuration
@@ -87,6 +92,8 @@
 //! if let Some(timer_config) = config.get_plugin_config("timer") {
 //!     println!("Timer enabled: {}", timer_config.enabled);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -199,9 +206,7 @@ impl CallbackConfig {
 
     /// Get mutable plugin-specific configuration, creating if necessary.
     pub fn get_or_create_plugin_config(&mut self, plugin_name: &str) -> &mut PluginConfig {
-        self.plugins
-            .entry(plugin_name.to_string())
-            .or_insert_with(PluginConfig::default)
+        self.plugins.entry(plugin_name.to_string()).or_default()
     }
 
     /// Check if a specific plugin is enabled.

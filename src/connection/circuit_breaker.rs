@@ -13,8 +13,15 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::ConnectionResult;
 //! use rustible::connection::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
+//! # async fn connection_attempt() -> ConnectionResult<()> {
+//! #     Ok(())
+//! # }
 //!
 //! let config = CircuitBreakerConfig::default();
 //! let breaker = CircuitBreaker::new("host1", config);
@@ -26,6 +33,8 @@
 //!         Err(e) => breaker.record_failure(&e),
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

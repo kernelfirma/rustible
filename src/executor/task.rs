@@ -37,6 +37,8 @@ static TEMPLATE_VAR_REGEX: Lazy<regex::Regex> =
 static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"\{\{|\{%").expect("Invalid template check regex"));
 
+use crate::diagnostics::template_syntax_error;
+use crate::error::Error;
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
@@ -46,8 +48,10 @@ use crate::template::TEMPLATE_ENGINE;
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TaskStatus {
     /// Task completed successfully without changes
+    #[default]
     Ok,
     /// Task completed successfully with changes
     Changed,
@@ -57,12 +61,6 @@ pub enum TaskStatus {
     Skipped,
     /// Host was unreachable
     Unreachable,
-}
-
-impl Default for TaskStatus {
-    fn default() -> Self {
-        TaskStatus::Ok
-    }
 }
 
 /// Result of executing a task
@@ -335,6 +333,9 @@ pub struct Task {
     /// Tags for task filtering
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Task-level variables
+    #[serde(default)]
+    pub vars: IndexMap<String, JsonValue>,
     /// Whether to become another user
     #[serde(default)]
     pub r#become: bool,
@@ -347,6 +348,9 @@ pub struct Task {
     /// Task type within a block
     #[serde(default)]
     pub block_role: BlockRole,
+    /// Block context stack (outermost to innermost)
+    #[serde(default)]
+    pub block_stack: Vec<BlockContext>,
     /// Number of retries for until loop
     #[serde(default)]
     pub retries: Option<u32>,
@@ -369,6 +373,19 @@ pub enum BlockRole {
     Rescue,
     /// Task in the always section (runs regardless)
     Always,
+}
+
+/// Block context for a task (supports nested blocks)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockContext {
+    /// Block ID
+    pub id: String,
+    /// Task role within this block
+    #[serde(default)]
+    pub role: BlockRole,
+    /// Block-level variables
+    #[serde(default)]
+    pub vars: IndexMap<String, JsonValue>,
 }
 
 fn default_loop_var() -> String {
@@ -403,10 +420,12 @@ impl Default for Task {
             delegate_facts: None,
             run_once: false,
             tags: Vec::new(),
+            vars: IndexMap::new(),
             r#become: false,
             become_user: None,
             block_id: None,
             block_role: BlockRole::Normal,
+            block_stack: Vec::new(),
             retries: None,
             delay: None,
             until: None,
@@ -436,11 +455,8 @@ impl From<crate::playbook::Task> for Task {
             // Standard loop or with_items - can be array or template expression
             if let Some(arr) = v.as_array() {
                 Some(LoopSource::Items(arr.clone()))
-            } else if let Some(s) = v.as_str() {
-                // Template expression like "{{ result.results }}"
-                Some(LoopSource::Template(s.to_string()))
             } else {
-                None
+                v.as_str().map(|s| LoopSource::Template(s.to_string()))
             }
         } else if let Some(v) = pt.with_dict {
             // with_dict - convert dict to list of {key, value} objects
@@ -500,10 +516,12 @@ impl From<crate::playbook::Task> for Task {
             delegate_facts: pt.delegate_facts,
             run_once: pt.run_once,
             tags: pt.tags,
+            vars: pt.vars.as_map().clone(),
             r#become: pt.r#become.unwrap_or(false),
             become_user: pt.become_user,
             block_id: None,
             block_role: BlockRole::Normal,
+            block_stack: Vec::new(),
             retries: pt.retries,
             delay: pt.delay,
             until: pt.until,
@@ -567,6 +585,17 @@ impl Task {
     pub fn ignore_errors(mut self, ignore: bool) -> Self {
         self.ignore_errors = ignore;
         self
+    }
+
+    /// Merge block-level variables from all block contexts (outer to inner).
+    pub fn merged_block_vars(&self) -> IndexMap<String, JsonValue> {
+        let mut merged = IndexMap::new();
+        for ctx in &self.block_stack {
+            for (key, value) in &ctx.vars {
+                merged.insert(key.clone(), value.clone());
+            }
+        }
+        merged
     }
 
     /// Execute the task
@@ -804,6 +833,7 @@ impl Task {
     }
 
     /// Execute task in a loop
+    #[allow(clippy::too_many_arguments)]
     async fn execute_loop(
         &self,
         items: &[JsonValue],
@@ -846,11 +876,11 @@ impl Task {
             {
                 let mut rt = runtime.write().await;
                 // Clone loop_var only once per loop iteration (unavoidable for runtime storage)
-                rt.set_task_var(self.loop_var.clone(), item.clone());
+                rt.set_task_var(&ctx.host, self.loop_var.clone(), item.clone());
 
                 // Set index_var if specified - avoid clone when possible
                 if let Some(idx_var) = index_var {
-                    rt.set_task_var(idx_var.clone(), serde_json::json!(index));
+                    rt.set_task_var(&ctx.host, idx_var.clone(), serde_json::json!(index));
                 }
 
                 // Build ansible_loop object
@@ -888,7 +918,7 @@ impl Task {
                     );
                 }
 
-                rt.set_task_var(ANSIBLE_LOOP_KEY.to_string(), ansible_loop);
+                rt.set_task_var(&ctx.host, ANSIBLE_LOOP_KEY.to_string(), ansible_loop);
             }
 
             // Execute for this item with parallelization enforcement
@@ -947,10 +977,10 @@ impl Task {
         {
             let mut rt = runtime.write().await;
             let mut vars_to_clear = vec![self.loop_var.as_str(), "ansible_loop"];
-            if let Some(ref idx_var) = index_var {
+            if let Some(idx_var) = index_var {
                 vars_to_clear.push(idx_var.as_str());
             }
-            rt.remove_task_vars(&vars_to_clear);
+            rt.remove_task_vars(&ctx.host, &vars_to_clear);
         }
 
         // Create combined result
@@ -1002,7 +1032,9 @@ impl Task {
     ) -> ExecutorResult<TaskResult> {
         let max_retries = self.retries.unwrap_or(3);
         let delay_seconds = self.delay.unwrap_or(5);
-        let until_condition = self.until.as_ref().expect("until condition must be set");
+        let until_condition = self.until.as_ref().ok_or_else(|| {
+            ExecutorError::RuntimeError("Missing until condition for retry execution".to_string())
+        })?;
 
         debug!(
             "Executing with retry: max_retries={}, delay={}s, until='{}'",
@@ -1187,12 +1219,12 @@ impl Task {
                         )));
                     }
 
+                    // Convert args to ModuleParams-compatible format
+                    let module_params: std::collections::HashMap<String, serde_json::Value> =
+                        args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
                     // Execute via Python if connection is available
                     if let Some(ref connection) = ctx.connection {
-                        // Convert args to ModuleParams-compatible format
-                        let module_params: std::collections::HashMap<String, serde_json::Value> =
-                            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
                         match executor
                             .execute(
                                 connection.as_ref(),
@@ -1219,19 +1251,38 @@ impl Task {
                                 self.module, e
                             ))),
                         }
-                    } else {
-                        // No connection available - simulate for localhost or log warning
-                        if ctx.host == "localhost" || ctx.host == "127.0.0.1" {
-                            warn!(
-                                "Python module {} would need local execution (not implemented)",
-                                self.module
-                            );
-                        } else {
-                            warn!(
-                                "Python module {} requires connection to {} (not available)",
-                                self.module, ctx.host
-                            );
+                    } else if matches!(ctx.host.as_str(), "localhost" | "127.0.0.1" | "::1") {
+                        let local_conn = crate::connection::local::LocalConnection::new();
+                        match executor
+                            .execute(
+                                &local_conn,
+                                &self.module,
+                                &module_params,
+                                &ctx.python_interpreter,
+                            )
+                            .await
+                        {
+                            Ok(output) => {
+                                let msg = output.msg.clone();
+                                let mut result = if output.changed {
+                                    TaskResult::changed()
+                                } else {
+                                    TaskResult::ok()
+                                };
+                                result.msg = Some(msg);
+                                result.result = Some(output.to_result_json());
+                                Ok(result)
+                            }
+                            Err(e) => Err(ExecutorError::RuntimeError(format!(
+                                "Python module {} failed locally: {}",
+                                self.module, e
+                            ))),
                         }
+                    } else {
+                        warn!(
+                            "Python module {} requires connection to {} (not available)",
+                            self.module, ctx.host
+                        );
                         Ok(TaskResult::changed().with_msg(format!(
                             "Executed Python module: {} (simulated - no connection)",
                             self.module
@@ -1276,6 +1327,11 @@ impl Task {
             },
             become_user: if ctx.r#become {
                 Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
+            become_password: if ctx.r#become {
+                ctx.become_password.clone()
             } else {
                 None
             },
@@ -1604,6 +1660,11 @@ impl Task {
                     } else {
                         None
                     },
+                    become_password: if ctx.r#become {
+                        ctx.become_password.clone()
+                    } else {
+                        None
+                    },
                     connection: ctx.connection.clone(),
                 };
 
@@ -1647,6 +1708,11 @@ impl Task {
             },
             become_user: if ctx.r#become {
                 Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
+            become_password: if ctx.r#become {
+                ctx.become_password.clone()
             } else {
                 None
             },
@@ -1700,6 +1766,11 @@ impl Task {
             },
             become_user: if ctx.r#become {
                 Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
+            become_password: if ctx.r#become {
+                ctx.become_password.clone()
             } else {
                 None
             },
@@ -1760,6 +1831,11 @@ impl Task {
             },
             become_user: if ctx.r#become {
                 Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
+            become_password: if ctx.r#become {
+                ctx.become_password.clone()
             } else {
                 None
             },
@@ -2326,6 +2402,7 @@ impl Task {
         Ok(TaskResult::ok().with_msg(format!("Loaded {} variable(s) from {}", var_count, source)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn execute_include_tasks(
         &self,
         args: &IndexMap<String, JsonValue>,
@@ -2471,7 +2548,7 @@ fn template_value(
     // Use the unified template engine for all value rendering
     TEMPLATE_ENGINE
         .render_value(value, vars)
-        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
+        .map_err(|e| template_error_from_value(value, e))
 }
 
 /// Template a string using variables
@@ -2484,7 +2561,49 @@ fn template_string(template: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     // Use the unified template engine for all string rendering
     TEMPLATE_ENGINE
         .render_with_indexmap(template, vars)
-        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
+        .map_err(|e| template_error_to_executor(template, e))
+}
+
+fn template_error_from_value(value: &JsonValue, error: Error) -> ExecutorError {
+    let source = template_source_for_value(value);
+    template_error_to_executor(&source, error)
+}
+
+fn template_source_for_value(value: &JsonValue) -> String {
+    match value {
+        JsonValue::String(s) => s.clone(),
+        _ => serde_yaml::to_string(value).unwrap_or_else(|_| value.to_string()),
+    }
+}
+
+fn template_error_to_executor(template_source: &str, error: Error) -> ExecutorError {
+    match error {
+        Error::Template(mini_err) => {
+            let message = mini_err
+                .detail()
+                .map(str::to_string)
+                .unwrap_or_else(|| mini_err.to_string());
+            let line = mini_err.line().unwrap_or(1);
+            let col = 1;
+            let name = mini_err.name().unwrap_or("<template>");
+            let file = if name.starts_with("__rustible_template_") {
+                "<template>"
+            } else {
+                name
+            };
+            let diagnostic = template_syntax_error(file, template_source, line, col, &message);
+            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
+        }
+        Error::TemplateRender { message, .. } => {
+            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
+            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
+        }
+        Error::TemplateSyntax { message, .. } => {
+            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
+            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
+        }
+        other => ExecutorError::RuntimeError(format!("Template error: {}", other)),
+    }
 }
 
 /// Convert JSON value to string for templating
@@ -2545,10 +2664,11 @@ fn find_operator_outside_parens(expr: &str, op: &str) -> Option<usize> {
             b'(' => depth += 1,
             b')' => depth -= 1,
             _ => {
-                if depth == 0 && i + op_bytes.len() <= bytes.len() {
-                    if &bytes[i..i + op_bytes.len()] == op_bytes {
-                        last_match = Some(i);
-                    }
+                if depth == 0
+                    && i + op_bytes.len() <= bytes.len()
+                    && &bytes[i..i + op_bytes.len()] == op_bytes
+                {
+                    last_match = Some(i);
                 }
             }
         }
@@ -2815,7 +2935,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     // Use the unified template engine for all condition evaluation
     TEMPLATE_ENGINE
         .evaluate_condition(expr, vars)
-        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
+        .map_err(|e| template_error_to_executor(expr, e))
 }
 
 /// Check if a JSON value is "truthy"
@@ -2876,6 +2996,27 @@ pub trait Module: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+
+    fn setup_execution(
+        host: &str,
+    ) -> (
+        ExecutionContext,
+        Arc<RwLock<RuntimeContext>>,
+        Arc<RwLock<HashMap<String, Handler>>>,
+        Arc<Mutex<HashSet<String>>>,
+        Arc<ParallelizationManager>,
+        Arc<ModuleRegistry>,
+    ) {
+        (
+            ExecutionContext::new(host),
+            Arc::new(RwLock::new(RuntimeContext::new())),
+            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(Mutex::new(HashSet::new())),
+            Arc::new(ParallelizationManager::new()),
+            Arc::new(ModuleRegistry::new()),
+        )
+    }
 
     #[test]
     fn test_task_builder() {
@@ -2908,6 +3049,15 @@ mod tests {
 
         let result = template_string("Count: {{ count }}", &vars).unwrap();
         assert_eq!(result, "Count: 42");
+    }
+
+    #[test]
+    fn test_template_string_diagnostic() {
+        let vars = IndexMap::new();
+        let err = template_string("Hello {{", &vars).unwrap_err();
+        let rendered = err.render_diagnostic().expect("expected diagnostic");
+        assert!(rendered.contains("E0020"));
+        assert!(rendered.contains("template error"));
     }
 
     #[test]
@@ -3129,5 +3279,183 @@ mod tests {
 
         // Custom field should be in data
         assert!(registered.data.contains_key("custom_data"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_skips_when_condition_false() {
+        let task = Task::new("conditional", "debug").when("false");
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Skipped);
+        assert_eq!(
+            result.msg,
+            Some("Skipped: condition 'false' was false".to_string())
+        );
+        assert!(notified.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_ignore_errors_on_failure() {
+        let mut task = Task::new("fail", "fail").arg("msg", "boom");
+        task.ignore_errors = true;
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Ok);
+        assert_eq!(result.msg, Some("Ignored error: boom".to_string()));
+        assert!(!result.changed);
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_retry_exhausts_retries() {
+        let mut task = Task::new("retry", "debug").arg("msg", "retry");
+        task.until = Some("false".to_string());
+        task.retries = Some(1);
+        task.delay = Some(0);
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Failed);
+        assert_eq!(
+            result.msg,
+            Some("Retries exhausted (1). Until condition 'false' never met".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_loop_registers_results_and_clears_vars() {
+        let mut task = Task::new("loop debug", "debug")
+            .arg("msg", "hello")
+            .loop_over(vec![serde_json::json!(1), serde_json::json!(2)])
+            .register("loop_out");
+        task.loop_control = Some(LoopControl {
+            loop_var: "item".to_string(),
+            index_var: Some("idx".to_string()),
+            label: None,
+            pause: None,
+            extended: false,
+        });
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("host1");
+
+        let result = task
+            .execute(
+                &ctx,
+                &runtime,
+                &handlers,
+                &notified,
+                &parallelization_manager,
+                &module_registry,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.status, TaskStatus::Ok);
+        assert_eq!(result.msg, Some("Completed 2 loop iterations".to_string()));
+
+        let rt = runtime.read().await;
+        let registered = rt
+            .get_registered(&ctx.host, "loop_out")
+            .expect("registered result");
+        let results = registered.results.as_ref().expect("loop results");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].data.get("item"), Some(&serde_json::json!(1)));
+        assert_eq!(results[1].data.get("item"), Some(&serde_json::json!(2)));
+        assert!(rt.get_var("item", Some(&ctx.host)).is_none());
+        assert!(rt.get_var("ansible_loop", Some(&ctx.host)).is_none());
+        assert!(rt.get_var("idx", Some(&ctx.host)).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execute_set_fact_delegation_respects_delegate_facts() {
+        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(42));
+        task.delegate_to = Some("delegate".to_string());
+        task.delegate_facts = Some(true);
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("origin");
+
+        task.execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization_manager,
+            &module_registry,
+        )
+        .await
+        .unwrap();
+
+        let rt = runtime.read().await;
+        assert_eq!(
+            rt.get_host_fact("delegate", "answer"),
+            Some(serde_json::json!(42))
+        );
+        assert_eq!(rt.get_host_fact("origin", "answer"), None);
+    }
+
+    #[tokio::test]
+    async fn test_execute_set_fact_delegation_defaults_to_origin_host() {
+        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(7));
+        task.delegate_to = Some("delegate".to_string());
+
+        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
+            setup_execution("origin");
+
+        task.execute(
+            &ctx,
+            &runtime,
+            &handlers,
+            &notified,
+            &parallelization_manager,
+            &module_registry,
+        )
+        .await
+        .unwrap();
+
+        let rt = runtime.read().await;
+        assert_eq!(
+            rt.get_host_fact("origin", "answer"),
+            Some(serde_json::json!(7))
+        );
+        assert_eq!(rt.get_host_fact("delegate", "answer"), None);
     }
 }

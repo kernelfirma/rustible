@@ -20,9 +20,19 @@ use std::sync::Arc;
 pub struct CommandModule;
 
 impl CommandModule {
+    fn get_cmd_param(&self, params: &ModuleParams) -> ModuleResult<Option<String>> {
+        if let Some(cmd) = params.get_string("cmd")? {
+            return Ok(Some(cmd));
+        }
+        if let Some(cmd) = params.get_string("_raw_params")? {
+            return Ok(Some(cmd));
+        }
+        Ok(None)
+    }
+
     /// Build the command string from params (for display and remote execution)
     fn get_command_string(&self, params: &ModuleParams) -> ModuleResult<String> {
-        let cmd = params.get_string("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
         let argv = params.get_vec_string("argv")?;
         let shell_type = params
             .get_string("shell_type")?
@@ -39,10 +49,10 @@ impl CommandModule {
             let escaped_args: Vec<std::borrow::Cow<'_, str>> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
-                    "cmd" => cmd_escape(arg),
-                    "powershell" => powershell_escape(arg),
-                    "posix" | "sh" | "bash" => shell_escape(arg),
-                    _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility
+                    "cmd" => cmd_escape(arg).into_owned(),
+                    "powershell" => powershell_escape(arg).into_owned(),
+                    "posix" | "sh" | "bash" => shell_escape(arg).into_owned(),
+                    _ => shell_escape(arg).into_owned(), // Default to POSIX for safety/backward compatibility
                 })
                 .collect();
 
@@ -67,7 +77,7 @@ impl CommandModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<Command> {
-        let cmd = params.get_string("cmd")?;
+        let cmd = self.get_cmd_param(params)?;
         let argv = params.get_vec_string("argv")?;
 
         let mut command = if let Some(argv) = argv {
@@ -160,6 +170,9 @@ impl CommandModule {
             options.escalate = true;
             options.escalate_user = context.become_user.clone();
             options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
         }
 
         Ok(options)
@@ -252,7 +265,8 @@ impl CommandModule {
         // In check mode, return what would happen
         if context.check_mode {
             let cmd = self.get_command_string(params)?;
-            return Ok(ModuleOutput::changed(format!("Would execute: {}", cmd)));
+            return Ok(ModuleOutput::changed(format!("Would execute: {}", cmd))
+                .with_command_output(Some(String::new()), Some(String::new()), Some(0)));
         }
 
         let mut command = self.build_command(params, context)?;
@@ -330,7 +344,12 @@ impl CommandModule {
                             return Ok(ModuleOutput::changed(format!(
                                 "Would execute: {}",
                                 cmd_display
-                            )));
+                            ))
+                            .with_command_output(
+                                Some(String::new()),
+                                Some(String::new()),
+                                Some(0),
+                            ));
                         }
 
                         // Execute via connection
@@ -401,7 +420,10 @@ impl Module for CommandModule {
 
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Must have either cmd or argv
-        if params.get("cmd").is_none() && params.get("argv").is_none() {
+        if params.get("cmd").is_none()
+            && params.get("_raw_params").is_none()
+            && params.get("argv").is_none()
+        {
             return Err(ModuleError::MissingParameter(
                 "Either 'cmd' or 'argv' must be provided".to_string(),
             ));
@@ -456,6 +478,19 @@ mod tests {
 
         assert!(result.changed);
         assert!(result.stdout.as_ref().unwrap().contains("hello world"));
+    }
+
+    #[test]
+    fn test_command_with_raw_params() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("_raw_params".to_string(), serde_json::json!("echo hello"));
+
+        let context = ModuleContext::default();
+        let result = module.execute(&params, &context).unwrap();
+
+        assert!(result.changed);
+        assert!(result.stdout.as_ref().unwrap().contains("hello"));
     }
 
     #[test]

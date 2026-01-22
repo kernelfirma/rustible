@@ -16,7 +16,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::api::awx::{AwxCompatHandler, JobLaunchRequest};
 //!
 //! let handler = AwxCompatHandler::new(state);
@@ -29,6 +32,8 @@
 //! };
 //!
 //! let response = handler.launch_job_template(1, request).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -573,8 +578,14 @@ mod tests {
 
     #[test]
     fn test_awx_job_status_conversion() {
-        assert_eq!(AwxJobStatus::from(JobStatus::Pending), AwxJobStatus::Pending);
-        assert_eq!(AwxJobStatus::from(JobStatus::Running), AwxJobStatus::Running);
+        assert_eq!(
+            AwxJobStatus::from(JobStatus::Pending),
+            AwxJobStatus::Pending
+        );
+        assert_eq!(
+            AwxJobStatus::from(JobStatus::Running),
+            AwxJobStatus::Running
+        );
         assert_eq!(
             AwxJobStatus::from(JobStatus::Success),
             AwxJobStatus::Successful

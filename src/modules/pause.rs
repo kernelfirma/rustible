@@ -64,7 +64,7 @@ impl PauseModule {
         let fd = stdin.as_fd();
 
         // Get current terminal settings
-        let mut termios = match nix::sys::termios::tcgetattr(&fd) {
+        let mut termios = match nix::sys::termios::tcgetattr(fd) {
             Ok(t) => t,
             Err(_) => {
                 // Fall back to normal input if we can't get termios
@@ -80,8 +80,7 @@ impl PauseModule {
             .remove(nix::sys::termios::LocalFlags::ECHO);
 
         // Apply settings
-        if nix::sys::termios::tcsetattr(&fd, nix::sys::termios::SetArg::TCSANOW, &termios).is_err()
-        {
+        if nix::sys::termios::tcsetattr(fd, nix::sys::termios::SetArg::TCSANOW, &termios).is_err() {
             // Fall back to normal input
             let mut line = String::new();
             stdin.lock().read_line(&mut line)?;
@@ -93,12 +92,12 @@ impl PauseModule {
         let result = stdin.lock().read_line(&mut line);
 
         // Restore echo (get fresh termios to restore)
-        if let Ok(mut restore_termios) = nix::sys::termios::tcgetattr(&fd) {
+        if let Ok(mut restore_termios) = nix::sys::termios::tcgetattr(fd) {
             restore_termios
                 .local_flags
                 .insert(nix::sys::termios::LocalFlags::ECHO);
             let _ = nix::sys::termios::tcsetattr(
-                &fd,
+                fd,
                 nix::sys::termios::SetArg::TCSANOW,
                 &restore_termios,
             );
@@ -156,7 +155,7 @@ impl Module for PauseModule {
         if let Some(seconds) = params.get("seconds") {
             match seconds {
                 Value::Number(n) => {
-                    if n.as_f64().map_or(true, |v| v < 0.0) {
+                    if n.as_f64().is_none_or(|v| v < 0.0) {
                         return Err(ModuleError::InvalidParameter(
                             "seconds must be a non-negative number".to_string(),
                         ));
@@ -181,7 +180,7 @@ impl Module for PauseModule {
         if let Some(minutes) = params.get("minutes") {
             match minutes {
                 Value::Number(n) => {
-                    if n.as_f64().map_or(true, |v| v < 0.0) {
+                    if n.as_f64().is_none_or(|v| v < 0.0) {
                         return Err(ModuleError::InvalidParameter(
                             "minutes must be a non-negative number".to_string(),
                         ));

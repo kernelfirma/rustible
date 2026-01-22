@@ -10,16 +10,22 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::lint::{Linter, LintConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::lint::{LintConfig, YamlChecker};
+//! use std::path::Path;
 //!
 //! let config = LintConfig::default();
-//! let linter = Linter::new(config);
-//! let result = linter.check_file("playbook.yml")?;
+//! let checker = YamlChecker::new();
+//! let result = checker.check_file(Path::new("playbook.yml"), &config)?;
 //!
-//! for issue in result.issues() {
+//! for issue in &result.issues {
 //!     println!("{}: {}", issue.severity, issue.message);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 mod best_practices;
@@ -28,9 +34,8 @@ mod types;
 mod yaml;
 
 pub use best_practices::BestPracticesChecker;
-pub use params::{ModuleDef, ParamDef, ParamType, ParamChecker};
+pub use params::{ModuleDef, ParamDef, ParamType, ParamValidator};
 pub use types::{
-    LintConfig, LintError, LintIssue, LintOpResult, LintResult, Location,
-    RuleCategory, Severity,
+    LintConfig, LintError, LintIssue, LintOpResult, LintResult, Location, RuleCategory, Severity,
 };
 pub use yaml::YamlChecker;

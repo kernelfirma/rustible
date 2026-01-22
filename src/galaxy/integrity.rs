@@ -11,19 +11,15 @@ use super::error::GalaxyResult;
 /// Checksum algorithm
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ChecksumAlgorithm {
     /// SHA-256 (default)
+    #[default]
     Sha256,
     /// SHA-512
     Sha512,
     /// MD5 (legacy, not recommended)
     Md5,
-}
-
-impl Default for ChecksumAlgorithm {
-    fn default() -> Self {
-        Self::Sha256
-    }
 }
 
 /// File integrity information
@@ -209,5 +205,59 @@ mod tests {
             expected,
             ChecksumAlgorithm::Sha256
         ));
+    }
+
+    #[tokio::test]
+    async fn test_verify_file_checksum() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let file_path = temp_dir.path().join("file.txt");
+        std::fs::write(&file_path, b"hello file").expect("write file");
+
+        let expected =
+            IntegrityVerifier::compute_checksum(b"hello file", ChecksumAlgorithm::Sha256);
+        let ok = IntegrityVerifier::verify_file(&file_path, &expected, ChecksumAlgorithm::Sha256)
+            .await
+            .expect("verify file");
+        assert!(ok);
+    }
+
+    #[tokio::test]
+    async fn test_verify_collection_missing_manifest() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let report = IntegrityVerifier::verify_collection(temp_dir.path())
+            .await
+            .expect("verify collection");
+        assert!(report.passed);
+        assert!(report.error.is_some());
+        assert_eq!(report.files_checked, 0);
+        assert_eq!(report.files_failed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_verify_collection_with_manifest() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let file_path = temp_dir.path().join("README.md");
+        std::fs::write(&file_path, b"collection data").expect("write file");
+
+        let checksum =
+            IntegrityVerifier::compute_checksum(b"collection data", ChecksumAlgorithm::Sha256);
+        let manifest = format!(
+            r#"{{
+  "files": [
+    {{ "name": "README.md", "chksum_sha256": "{}" }},
+    {{ "name": "MISSING.txt", "chksum_sha256": "{}" }}
+  ]
+}}"#,
+            checksum, checksum
+        );
+        std::fs::write(temp_dir.path().join("FILES.json"), manifest).expect("write manifest");
+
+        let report = IntegrityVerifier::verify_collection(temp_dir.path())
+            .await
+            .expect("verify collection");
+        assert!(!report.passed);
+        assert_eq!(report.files_checked, 1);
+        assert_eq!(report.files_failed, 1);
+        assert!(report.error.is_some());
     }
 }

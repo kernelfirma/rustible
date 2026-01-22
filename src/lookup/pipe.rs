@@ -97,9 +97,9 @@ impl PipeLookup {
         }
 
         // Execute the command with timeout enforcement
-        let mut child = command.spawn().map_err(|e| {
-            LookupError::CommandFailed(format!("Failed to execute command: {}", e))
-        })?;
+        let mut child = command
+            .spawn()
+            .map_err(|e| LookupError::CommandFailed(format!("Failed to execute command: {}", e)))?;
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -226,9 +226,32 @@ impl Lookup for PipeLookup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::process::Command;
 
     fn unsafe_context() -> LookupContext {
         LookupContext::new().with_allow_unsafe(true)
+    }
+
+    #[cfg(unix)]
+    fn hostname_command() -> String {
+        let available = Command::new("sh")
+            .arg("-c")
+            .arg("command -v hostname")
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+
+        if available {
+            "hostname".to_string()
+        } else {
+            "uname -n".to_string()
+        }
+    }
+
+    #[cfg(windows)]
+    fn hostname_command() -> String {
+        "hostname".to_string()
     }
 
     #[test]
@@ -248,7 +271,8 @@ mod tests {
         let lookup = PipeLookup::new();
         let context = unsafe_context();
 
-        let result = lookup.lookup(&["hostname"], &context);
+        let cmd = hostname_command();
+        let result = lookup.lookup(&[cmd.as_str()], &context);
         assert!(result.is_ok());
         let values = result.unwrap();
         assert_eq!(values.len(), 1);
@@ -355,7 +379,9 @@ mod tests {
         // Valid commands
         assert!(lookup.validate_command("echo hello").is_ok());
         assert!(lookup.validate_command("ls -la").is_ok());
-        assert!(lookup.validate_command("cat /etc/passwd | grep root").is_ok());
+        assert!(lookup
+            .validate_command("cat /etc/passwd | grep root")
+            .is_ok());
 
         // Invalid commands
         assert!(lookup.validate_command("").is_err());

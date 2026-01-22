@@ -20,6 +20,7 @@ use super::ConnectionError;
 /// Strategy for calculating retry delays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BackoffStrategy {
     /// Fixed delay between retries.
     Fixed,
@@ -28,15 +29,10 @@ pub enum BackoffStrategy {
     /// Exponential increase: delay * 2^attempt.
     Exponential,
     /// Exponential with decorrelated jitter for better distribution.
+    #[default]
     ExponentialWithJitter,
     /// Fibonacci sequence for gradual increase.
     Fibonacci,
-}
-
-impl Default for BackoffStrategy {
-    fn default() -> Self {
-        Self::ExponentialWithJitter
-    }
 }
 
 /// Configuration for retry behavior.
@@ -247,9 +243,7 @@ impl RetryPolicy {
         let capped_delay = base_delay.min(self.max_delay);
 
         // Apply jitter
-        if self.jitter > 0.0
-            && (self.strategy == BackoffStrategy::ExponentialWithJitter || self.jitter > 0.0)
-        {
+        if self.jitter > 0.0 {
             let jitter_range = capped_delay.as_secs_f64() * self.jitter;
             let jitter_value = rand::thread_rng().gen_range(-jitter_range..=jitter_range);
             let jittered_secs = (capped_delay.as_secs_f64() + jitter_value).max(0.0);

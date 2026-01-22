@@ -713,3 +713,192 @@ fn build_galaxy_config(
 
     config
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::output::OutputFormatter;
+    use crate::config::{Config, GalaxyServer};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::RwLock;
+
+    fn test_context(config: Config) -> CommandContext {
+        CommandContext {
+            config,
+            output: OutputFormatter::new(false, false, 0),
+            inventory_path: None,
+            extra_vars: Vec::new(),
+            verbosity: 0,
+            check_mode: false,
+            diff_mode: false,
+            limit: None,
+            forks: 1,
+            timeout: 30,
+            connections: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    #[test]
+    fn test_build_galaxy_config_overrides() {
+        let temp = tempdir().unwrap();
+        let cache_dir = temp.path().join("cache");
+        let default_collections = temp.path().join("collections_default");
+        let default_roles = temp.path().join("roles_default");
+        let override_collections = temp.path().join("collections_override");
+        let override_roles = temp.path().join("roles_override");
+
+        let mut config = Config::default();
+        config.galaxy.server = "https://example.invalid".to_string();
+        config.galaxy.server_list = vec![GalaxyServer {
+            name: "primary".to_string(),
+            url: "https://alt.invalid".to_string(),
+            token: Some("token".to_string()),
+        }];
+        config.galaxy.cache_dir = Some(cache_dir.clone());
+        config.galaxy.collections_path = Some(default_collections);
+        config.galaxy.roles_path = Some(default_roles);
+        config.galaxy.ignore_certs = true;
+
+        let ctx = test_context(config);
+        let galaxy_config =
+            build_galaxy_config(&ctx, Some(&override_collections), Some(&override_roles));
+
+        assert_eq!(galaxy_config.server, "https://example.invalid");
+        assert_eq!(galaxy_config.cache_dir, Some(cache_dir));
+        assert_eq!(galaxy_config.collections_path, Some(override_collections));
+        assert_eq!(galaxy_config.roles_path, Some(override_roles));
+        assert!(galaxy_config.ignore_certs);
+        assert_eq!(galaxy_config.server_list.len(), 1);
+        assert_eq!(galaxy_config.server_list[0].name, "primary");
+        assert_eq!(galaxy_config.server_list[0].token.as_deref(), Some("token"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_collection_list_missing_path() {
+        let temp = tempdir().unwrap();
+        let missing = temp.path().join("missing_collections");
+        let args = CollectionListArgs {
+            collections_path: Some(missing),
+        };
+
+        let ctx = test_context(Config::default());
+        let exit = execute_collection_list(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_collection_list_with_versions() {
+        let temp = tempdir().unwrap();
+        let collections_path = temp.path().join("collections");
+        let ac_path = collections_path.join("ansible_collections");
+
+        let ns_one = ac_path.join("acme").join("demo");
+        std::fs::create_dir_all(&ns_one).unwrap();
+        std::fs::write(
+            ns_one.join("MANIFEST.json"),
+            r#"{"collection_info":{"version":"1.2.3"}}"#,
+        )
+        .unwrap();
+
+        let ns_two = ac_path.join("other").join("misc");
+        std::fs::create_dir_all(&ns_two).unwrap();
+
+        let args = CollectionListArgs {
+            collections_path: Some(collections_path),
+        };
+        let ctx = test_context(Config::default());
+        let exit = execute_collection_list(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_role_list_with_versions() {
+        let temp = tempdir().unwrap();
+        let roles_path = temp.path().join("roles");
+
+        let role_one = roles_path.join("role_one");
+        std::fs::create_dir_all(role_one.join("meta")).unwrap();
+        std::fs::write(
+            role_one.join("meta/main.yml"),
+            "galaxy_info:\n  version: \"2.0.0\"\n",
+        )
+        .unwrap();
+
+        let role_two = roles_path.join("role_two");
+        std::fs::create_dir_all(&role_two).unwrap();
+
+        let args = RoleListArgs {
+            roles_path: Some(roles_path),
+        };
+        let ctx = test_context(Config::default());
+        let exit = execute_role_list(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_role_remove_missing() {
+        let temp = tempdir().unwrap();
+        let roles_path = temp.path().join("roles");
+        std::fs::create_dir_all(&roles_path).unwrap();
+
+        let args = RoleRemoveArgs {
+            name: "missing_role".to_string(),
+            roles_path: Some(roles_path),
+        };
+        let ctx = test_context(Config::default());
+        let exit = execute_role_remove(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 1);
+    }
+
+    #[tokio::test]
+    async fn test_execute_role_remove_success() {
+        let temp = tempdir().unwrap();
+        let roles_path = temp.path().join("roles");
+        let role_path = roles_path.join("demo_role");
+        std::fs::create_dir_all(&role_path).unwrap();
+
+        let args = RoleRemoveArgs {
+            name: "demo_role".to_string(),
+            roles_path: Some(roles_path),
+        };
+        let ctx = test_context(Config::default());
+        let exit = execute_role_remove(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+        assert!(!role_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_execute_collection_verify_empty_cache() {
+        let temp = tempdir().unwrap();
+        let mut config = Config::default();
+        config.galaxy.cache_dir = Some(temp.path().join("cache"));
+
+        let ctx = test_context(config);
+        let args = CollectionVerifyArgs { name: None };
+        let exit = execute_collection_verify(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_install_missing_requirements() {
+        let temp = tempdir().unwrap();
+        let args = InstallArgs {
+            requirements: temp.path().join("requirements.yml"),
+            force: false,
+            offline: false,
+        };
+
+        let ctx = test_context(Config::default());
+        let exit = execute_install(&args, &ctx).await.unwrap();
+
+        assert_eq!(exit, 1);
+    }
+}

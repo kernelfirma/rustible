@@ -43,13 +43,13 @@
 
 use std::collections::HashMap;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use russh_keys::agent::client::AgentClient;
-use russh_keys::key::PublicKey;
+use russh::keys::agent::client::AgentClient;
+use russh::keys::{HashAlg, PublicKey};
 use thiserror::Error;
 use tokio::net::UnixStream;
 use tokio::sync::{Mutex, RwLock};
@@ -142,8 +142,8 @@ pub struct AgentKeyInfo {
 impl AgentKeyInfo {
     /// Create AgentKeyInfo from a PublicKey
     pub fn from_public_key(key: &PublicKey) -> Self {
-        let key_type = key.name().to_string();
-        let fingerprint = key.fingerprint();
+        let key_type = key.algorithm().as_str().to_string();
+        let fingerprint = key.fingerprint(HashAlg::Sha256).to_string();
         let supports_certificates = key_type.contains("cert");
 
         Self {
@@ -231,7 +231,7 @@ impl SshAgentClient {
     /// # Arguments
     ///
     /// * `socket_path` - Path to the SSH agent Unix socket
-    pub async fn connect_to(socket_path: &PathBuf) -> Result<Self, AgentError> {
+    pub async fn connect_to(socket_path: &Path) -> Result<Self, AgentError> {
         debug!(path = %socket_path.display(), "Connecting to SSH agent");
 
         let agent = AgentClient::connect_env()
@@ -245,7 +245,7 @@ impl SshAgentClient {
 
         Ok(Self {
             agent: Mutex::new(Some(agent)),
-            socket_path: socket_path.clone(),
+            socket_path: socket_path.to_path_buf(),
             request_count: AtomicU64::new(0),
             created_at: Instant::now(),
         })
@@ -288,11 +288,11 @@ impl SshAgentClient {
         let identities = agent
             .request_identities()
             .await
-            .map_err(|e: russh_keys::Error| AgentError::CommunicationError(e.to_string()))?;
+            .map_err(|e| AgentError::CommunicationError(e.to_string()))?;
 
         let keys: Vec<AgentKeyInfo> = identities
             .iter()
-            .map(|key| AgentKeyInfo::from_public_key(key))
+            .map(AgentKeyInfo::from_public_key)
             .collect();
 
         debug!(
@@ -320,7 +320,7 @@ impl SshAgentClient {
         let identities = agent
             .request_identities()
             .await
-            .map_err(|e: russh_keys::Error| AgentError::CommunicationError(e.to_string()))?;
+            .map_err(|e| AgentError::CommunicationError(e.to_string()))?;
 
         Ok(identities)
     }
@@ -368,13 +368,18 @@ impl SshAgentClient {
             }
         })?;
 
-        let agent: AgentClient<UnixStream> = AgentClient::connect(socket);
+        let mut agent: AgentClient<UnixStream> = AgentClient::connect(socket);
 
-        let (_, result) = agent.sign_request_signature(key, data).await;
-        let signature =
-            result.map_err(|e: russh_keys::Error| AgentError::SigningFailed(e.to_string()))?;
+        let signature = agent
+            .sign_request_signature(key, None, data)
+            .await
+            .map_err(|e| AgentError::SigningFailed(e.to_string()))?;
 
-        trace!(key = %key.name(), data_len = data.len(), "Signed data with agent key");
+        trace!(
+            key = %key.algorithm().as_str(),
+            data_len = data.len(),
+            "Signed data with agent key"
+        );
         // Convert signature to bytes
         let sig_bytes = signature.as_ref().to_vec();
         Ok(sig_bytes)
@@ -740,15 +745,14 @@ impl AgentForwarder {
         }
 
         // Check host allowlist
-        if !self.config.allowed_hosts.is_empty() {
-            if !self
+        if !self.config.allowed_hosts.is_empty()
+            && !self
                 .config
                 .allowed_hosts
                 .iter()
                 .any(|h| h == host || matches_host_pattern(h, host))
-            {
-                return false;
-            }
+        {
+            return false;
         }
 
         true
@@ -806,7 +810,7 @@ impl AgentForwarder {
         if self.config.log_requests {
             info!(
                 host = %host,
-                key_type = %key.name(),
+                key_type = %key.algorithm().as_str(),
                 data_len = data.len(),
                 "Forwarding signature request"
             );
@@ -972,16 +976,15 @@ mod tests {
         // We'll skip actual public key creation and just test the display_name logic
         // by creating a mock structure
         let mut info = AgentKeyInfo {
-            // Create a dummy key using from_bytes with a valid test key
+            // Create a deterministic Ed25519 public key for testing.
             public_key: {
-                // A valid ed25519 public key (just the base point for testing)
-                let bytes: [u8; 32] = [
-                    0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-                    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-                    0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-                ];
-                let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&bytes).unwrap();
-                russh_keys::key::PublicKey::Ed25519(verifying_key)
+                let secret = [1u8; 32];
+                let signing_key = ed25519_dalek::SigningKey::from_bytes(&secret);
+                let verifying_key = ed25519_dalek::VerifyingKey::from(&signing_key);
+                let key_data = russh::keys::ssh_key::public::KeyData::Ed25519(
+                    russh::keys::ssh_key::public::Ed25519PublicKey::from(&verifying_key),
+                );
+                russh::keys::PublicKey::new(key_data, "")
             },
             key_type: "ssh-ed25519".to_string(),
             comment: String::new(),

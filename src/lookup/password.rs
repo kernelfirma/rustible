@@ -30,7 +30,6 @@
 //! - `encrypt` (string): Encryption type for storing (not implemented yet)
 
 use super::{Lookup, LookupContext, LookupError, LookupResult};
-use rand::seq::SliceRandom;
 use rand::Rng;
 use std::fs;
 use std::path::PathBuf;
@@ -64,9 +63,7 @@ impl PasswordLookup {
             "digits" => Some(DIGITS.to_string()),
             "hexdigits" => Some(HEXDIGITS.to_string()),
             "punctuation" => Some(PUNCTUATION.to_string()),
-            "alphanumeric" => {
-                Some(format!("{}{}{}", ASCII_LOWERCASE, ASCII_UPPERCASE, DIGITS))
-            }
+            "alphanumeric" => Some(format!("{}{}{}", ASCII_LOWERCASE, ASCII_UPPERCASE, DIGITS)),
             _ => None,
         }
     }
@@ -75,10 +72,7 @@ impl PasswordLookup {
     fn build_charset(chars_spec: &str) -> LookupResult<String> {
         if chars_spec.is_empty() {
             // Default to alphanumeric
-            return Ok(format!(
-                "{}{}{}",
-                ASCII_LOWERCASE, ASCII_UPPERCASE, DIGITS
-            ));
+            return Ok(format!("{}{}{}", ASCII_LOWERCASE, ASCII_UPPERCASE, DIGITS));
         }
 
         let mut charset = String::new();
@@ -242,18 +236,15 @@ impl Lookup for PasswordLookup {
         let charset = Self::build_charset(chars_spec)?;
 
         // Check if a file path was provided (first non-option argument)
-        let file_path: Option<PathBuf> = args
-            .iter()
-            .find(|arg| !arg.contains('='))
-            .map(|path| {
-                if PathBuf::from(path).is_absolute() {
-                    PathBuf::from(path)
-                } else if let Some(ref base) = context.base_dir {
-                    base.join(path)
-                } else {
-                    PathBuf::from(path)
-                }
-            });
+        let file_path: Option<PathBuf> = args.iter().find(|arg| !arg.contains('=')).map(|path| {
+            if PathBuf::from(path).is_absolute() {
+                PathBuf::from(path)
+            } else if let Some(ref base) = context.base_dir {
+                base.join(path)
+            } else {
+                PathBuf::from(path)
+            }
+        });
 
         // If file exists and we're not regenerating, return existing password
         if let Some(ref path) = file_path {
@@ -323,9 +314,7 @@ mod tests {
         assert!(result.is_ok());
         let values = result.unwrap();
         assert_eq!(values[0].len(), 16);
-        assert!(values[0]
-            .chars()
-            .all(|c| HEXDIGITS.contains(c)));
+        assert!(values[0].chars().all(|c| HEXDIGITS.contains(c)));
     }
 
     #[test]
@@ -348,9 +337,7 @@ mod tests {
         assert!(result.is_ok());
         let values = result.unwrap();
         assert_eq!(values[0].len(), 50);
-        assert!(values[0]
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric()));
+        assert!(values[0].chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
     #[test]
@@ -382,10 +369,7 @@ mod tests {
         let lookup = PasswordLookup::new();
         let context = LookupContext::default();
 
-        let result = lookup.lookup(
-            &[password_file.to_str().unwrap(), "length=16"],
-            &context,
-        );
+        let result = lookup.lookup(&[password_file.to_str().unwrap(), "length=16"], &context);
         assert!(result.is_ok());
 
         // Verify file was created

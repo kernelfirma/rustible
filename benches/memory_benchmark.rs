@@ -210,9 +210,9 @@ fn bench_variables_scaling(c: &mut Criterion) {
                 b.iter(|| {
                     let mut vars = Variables::new();
                     for i in 0..num {
-                        vars.insert(
+                        vars.set(
                             format!("var_{}", i),
-                            serde_yaml::Value::String(format!("value_{}", i)),
+                            serde_json::Value::String(format!("value_{}", i)),
                         );
                     }
                     black_box(vars)
@@ -230,9 +230,9 @@ fn bench_variables_merging(c: &mut Criterion) {
     // Create base variables
     let mut base_vars = Variables::new();
     for i in 0..200 {
-        base_vars.insert(
+        base_vars.set(
             format!("base_var_{}", i),
-            serde_yaml::Value::String(format!("base_value_{}", i)),
+            serde_json::Value::String(format!("base_value_{}", i)),
         );
     }
 
@@ -240,17 +240,15 @@ fn bench_variables_merging(c: &mut Criterion) {
     group.bench_function("merge_200_vars", |b| {
         let mut override_vars = Variables::new();
         for i in 0..50 {
-            override_vars.insert(
+            override_vars.set(
                 format!("override_var_{}", i),
-                serde_yaml::Value::String(format!("override_value_{}", i)),
+                serde_json::Value::String(format!("override_value_{}", i)),
             );
         }
 
         b.iter(|| {
             let mut merged = base_vars.clone();
-            for (k, v) in override_vars.iter() {
-                merged.insert(k.clone(), v.clone());
-            }
+            merged.merge(&override_vars);
             black_box(merged)
         })
     });

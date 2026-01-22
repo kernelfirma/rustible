@@ -14,51 +14,80 @@
 //! Host key pinning provides defense against MITM attacks by requiring
 //! SSH servers to present a pre-approved public key fingerprint.
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let policy = HostKeyPolicy::new()
 //!     .with_pin("server.example.com", "SHA256:abc123...")
-//!     .with_strict_checking(true);
+//!     .with_mode(HostKeyVerificationMode::PinnedOnly);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Jump Hosts (Bastion Servers)
 //!
 //! Configure multi-hop SSH connections through bastion hosts:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let jump_config = JumpHostConfig::new("bastion.example.com")
-//!     .with_port(22)
-//!     .with_user("jump_user");
+//!     .port(22)
+//!     .user("jump_user");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Network Isolation
 //!
 //! Restrict module execution to specific networks and ports:
 //!
-//! ```rust,ignore
-//! let isolation = NetworkIsolation::new()
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
+//! let isolation = NetworkIsolation::restrictive()
 //!     .allow_host("192.168.1.0/24")
-//!     .allow_port(22)
-//!     .deny_all_outbound();
+//!     .allow_port(22);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## TLS Validation
 //!
 //! Configure TLS certificate validation for HTTPS connections:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let tls_config = TlsValidationConfig::new()
-//!     .require_valid_cert(true)
+//!     .with_require_valid_cert(true)
 //!     .with_ca_bundle("/etc/ssl/certs/ca-certificates.crt")
 //!     .with_min_tls_version(TlsVersion::Tls12);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Encryption Audit Logging
 //!
 //! Log all encryption-related events for security auditing:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! # use rustible::connection::security::*;
 //! let audit_log = EncryptionAuditLog::new("/var/log/rustible/encryption.log")
-//!     .with_log_level(AuditLevel::Verbose);
+//!     .with_level(AuditLevel::Verbose);
+//! # Ok(())
+//! # }
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -131,11 +160,12 @@ pub type SecurityResult<T> = Result<T, SecurityError>;
 // ============================================================================
 
 /// Policy for host key verification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum HostKeyVerificationMode {
     /// Accept any host key (insecure, for testing only)
     AcceptAll,
     /// Accept first seen and verify on subsequent connections (TOFU)
+    #[default]
     TrustOnFirstUse,
     /// Only accept keys from known_hosts file
     KnownHostsOnly,
@@ -143,12 +173,6 @@ pub enum HostKeyVerificationMode {
     PinnedOnly,
     /// Combination of known_hosts and pinned keys
     KnownHostsOrPinned,
-}
-
-impl Default for HostKeyVerificationMode {
-    fn default() -> Self {
-        Self::TrustOnFirstUse
-    }
 }
 
 /// A pinned host key entry
@@ -250,8 +274,10 @@ pub struct HostKeyPolicy {
     pub log_verification: bool,
     /// Callback for unknown hosts (return true to accept)
     #[serde(skip)]
-    unknown_host_callback: Option<Arc<dyn Fn(&str, &str) -> bool + Send + Sync>>,
+    unknown_host_callback: Option<UnknownHostCallback>,
 }
+
+type UnknownHostCallback = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
 
 impl std::fmt::Debug for HostKeyPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -856,18 +882,13 @@ fn ip_in_cidr(ip: IpAddr, network: IpAddr, prefix_len: u8) -> bool {
 // ============================================================================
 
 /// Minimum TLS version
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TlsVersion {
     Tls10,
     Tls11,
+    #[default]
     Tls12,
     Tls13,
-}
-
-impl Default for TlsVersion {
-    fn default() -> Self {
-        Self::Tls12
-    }
 }
 
 /// TLS certificate validation configuration
@@ -1091,20 +1112,15 @@ impl TlsValidationConfig {
 // ============================================================================
 
 /// Level of detail for audit logging
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AuditLevel {
     /// Log only errors and security violations
     Minimal,
     /// Log connections and key operations
+    #[default]
     Standard,
     /// Log all encryption-related events
     Verbose,
-}
-
-impl Default for AuditLevel {
-    fn default() -> Self {
-        Self::Standard
-    }
 }
 
 /// Type of audit event

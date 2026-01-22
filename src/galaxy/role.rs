@@ -77,11 +77,7 @@ impl RoleInfo {
     pub fn download_url(&self) -> Option<String> {
         let user = self.github_user.as_ref()?;
         let repo = self.github_repo.as_ref()?;
-        let branch = self
-            .github_branch
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("master");
+        let branch = self.github_branch.as_deref().unwrap_or("master");
 
         Some(format!(
             "https://github.com/{}/{}/archive/{}.tar.gz",
@@ -496,6 +492,7 @@ impl RoleInstaller {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::GalaxyConfig;
 
     #[test]
     fn test_role_info_full_name() {
@@ -556,5 +553,95 @@ mod tests {
         };
 
         assert_eq!(role.full_name(), "geerlingguy.nginx");
+    }
+
+    fn build_tar_gz(root_name: &str, files: &[(&str, &str)]) -> Vec<u8> {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let root_path = temp_dir.path().join(root_name);
+        std::fs::create_dir_all(&root_path).expect("create root");
+        for (rel, contents) in files {
+            let file_path = root_path.join(rel);
+            if let Some(parent) = file_path.parent() {
+                std::fs::create_dir_all(parent).expect("create parents");
+            }
+            std::fs::write(&file_path, contents).expect("write file");
+        }
+
+        let mut buffer = Vec::new();
+        let encoder = flate2::write::GzEncoder::new(&mut buffer, flate2::Compression::default());
+        let mut tar = tar::Builder::new(encoder);
+        tar.append_dir_all(root_name, &root_path)
+            .expect("append dir");
+        let encoder = tar.into_inner().expect("finish tar");
+        encoder.finish().expect("finish gzip");
+        buffer
+    }
+
+    #[tokio::test]
+    async fn test_galaxy_role_from_path_with_meta() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let role_dir = temp_dir.path().join("geerlingguy.nginx");
+        let meta_dir = role_dir.join("meta");
+        std::fs::create_dir_all(&meta_dir).expect("create meta");
+        std::fs::write(
+            meta_dir.join("main.yml"),
+            r#"galaxy_info:
+  role_name: nginx
+  author: "Test Author"
+  platforms:
+    - name: ubuntu
+      release: jammy
+  galaxy_tags:
+    - web
+"#,
+        )
+        .expect("write meta");
+
+        let role = GalaxyRole::from_path(&role_dir).await.expect("role");
+        assert_eq!(role.owner, "geerlingguy");
+        assert_eq!(role.name, "nginx");
+        assert!(role.galaxy_info.is_some());
+        assert_eq!(
+            role.galaxy_info
+                .as_ref()
+                .and_then(|info| info.role_name.clone()),
+            Some("nginx".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_role_install_from_cache() {
+        let cache_dir = tempfile::tempdir().expect("tempdir");
+        let cache_config = crate::galaxy::GalaxyCacheConfig {
+            cache_dir: cache_dir.path().to_path_buf(),
+            max_size: 0,
+            ttl_seconds: 0,
+        };
+        let cache = Arc::new(GalaxyCache::new(cache_config).expect("cache"));
+        let client = Arc::new(GalaxyClient::new(&GalaxyConfig::default()).expect("client"));
+        let installer = RoleInstaller::new(Arc::clone(&client), Arc::clone(&cache));
+
+        let tarball = build_tar_gz(
+            "geerlingguy-nginx-1.0.0",
+            &[("tasks/main.yml", "hello role")],
+        );
+        let cache_path = cache
+            .store_role("geerlingguy.nginx", "1.0.0", &tarball, None)
+            .await
+            .expect("store cache");
+        assert!(cache_path.exists());
+
+        let dest_dir = tempfile::tempdir().expect("tempdir");
+        let installed_path = installer
+            .install_from_cache(
+                "geerlingguy.nginx",
+                Some("1.0.0"),
+                Some(dest_dir.path().to_path_buf()),
+            )
+            .await
+            .expect("install from cache");
+
+        let task_file = installed_path.join("tasks/main.yml");
+        assert!(task_file.exists(), "expected extracted file");
     }
 }

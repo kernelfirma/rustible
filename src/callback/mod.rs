@@ -55,7 +55,10 @@
 //!
 //! Use the [`prelude`] module for convenient imports:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::prelude::*;
 //!
 //! // Default Ansible-like output
@@ -71,13 +74,18 @@
 //! let composite = CompositeCallback::new()
 //!     .with_callback(Box::new(ProgressCallback::new()))
 //!     .with_callback(Box::new(DiffCallback::new()));
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Creating Custom Callbacks
 //!
 //! Implement [`ExecutionCallback`] to create custom callbacks:
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
 //! use rustible::callback::prelude::*;
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
@@ -96,6 +104,8 @@
 //!             result.duration);
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! [`ExecutionCallback`]: crate::traits::ExecutionCallback
@@ -202,17 +212,22 @@ pub type SharedCallback = std::sync::Arc<dyn crate::traits::ExecutionCallback>;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
 /// use rustible::callback::prelude::*;
 ///
 /// // Create and configure callbacks
 /// let default = DefaultCallback::new();
-/// let timer = TimerCallback::builder().show_per_task(true).build();
+/// let timer = TimerCallback::summary_only();
 ///
 /// // Combine them
 /// let composite = CompositeCallback::new()
 ///     .with_callback(Box::new(default))
 ///     .with_callback(Box::new(timer));
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// [`ExecutionCallback`]: crate::traits::ExecutionCallback

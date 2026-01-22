@@ -1,14 +1,15 @@
-
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+    use regex::Regex;
+    use rustible::connection::{
+        CommandResult, Connection, ConnectionError, ExecuteOptions, FileStat, TransferOptions,
+    };
     use rustible::modules::cron::CronModule;
     use rustible::modules::{Module, ModuleContext, ModuleParams};
-    use rustible::connection::{Connection, CommandResult, ExecuteOptions, ConnectionError, TransferOptions, FileStat};
-    use std::sync::{Arc, Mutex};
     use std::collections::HashMap;
-    use async_trait::async_trait;
     use std::path::Path;
-    use regex::Regex;
+    use std::sync::{Arc, Mutex};
 
     struct MockConnection {
         executed_commands: Arc<Mutex<Vec<String>>>,
@@ -16,10 +17,18 @@ mod tests {
 
     #[async_trait]
     impl Connection for MockConnection {
-        fn identifier(&self) -> &str { "mock" }
-        async fn is_alive(&self) -> bool { true }
+        fn identifier(&self) -> &str {
+            "mock"
+        }
+        async fn is_alive(&self) -> bool {
+            true
+        }
 
-        async fn execute(&self, cmd: &str, _options: Option<ExecuteOptions>) -> Result<CommandResult, ConnectionError> {
+        async fn execute(
+            &self,
+            cmd: &str,
+            _options: Option<ExecuteOptions>,
+        ) -> Result<CommandResult, ConnectionError> {
             self.executed_commands.lock().unwrap().push(cmd.to_string());
             Ok(CommandResult {
                 success: true,
@@ -29,14 +38,40 @@ mod tests {
             })
         }
 
-        async fn upload(&self, _src: &Path, _dest: &Path, _options: Option<TransferOptions>) -> Result<(), ConnectionError> { Ok(()) }
-        async fn download(&self, _src: &Path, _dest: &Path) -> Result<(), ConnectionError> { Ok(()) }
-        async fn stat(&self, _path: &Path) -> Result<FileStat, ConnectionError> { unimplemented!() }
-        async fn path_exists(&self, _path: &Path) -> Result<bool, ConnectionError> { Ok(false) }
-        async fn close(&self) -> Result<(), ConnectionError> { Ok(()) }
-        async fn upload_content(&self, _content: &[u8], _dest: &Path, _options: Option<TransferOptions>) -> Result<(), ConnectionError> { Ok(()) }
-        async fn download_content(&self, _path: &Path) -> Result<Vec<u8>, ConnectionError> { Ok(Vec::new()) }
-        async fn is_directory(&self, _path: &Path) -> Result<bool, ConnectionError> { Ok(false) }
+        async fn upload(
+            &self,
+            _src: &Path,
+            _dest: &Path,
+            _options: Option<TransferOptions>,
+        ) -> Result<(), ConnectionError> {
+            Ok(())
+        }
+        async fn download(&self, _src: &Path, _dest: &Path) -> Result<(), ConnectionError> {
+            Ok(())
+        }
+        async fn stat(&self, _path: &Path) -> Result<FileStat, ConnectionError> {
+            unimplemented!()
+        }
+        async fn path_exists(&self, _path: &Path) -> Result<bool, ConnectionError> {
+            Ok(false)
+        }
+        async fn close(&self) -> Result<(), ConnectionError> {
+            Ok(())
+        }
+        async fn upload_content(
+            &self,
+            _content: &[u8],
+            _dest: &Path,
+            _options: Option<TransferOptions>,
+        ) -> Result<(), ConnectionError> {
+            Ok(())
+        }
+        async fn download_content(&self, _path: &Path) -> Result<Vec<u8>, ConnectionError> {
+            Ok(Vec::new())
+        }
+        async fn is_directory(&self, _path: &Path) -> Result<bool, ConnectionError> {
+            Ok(false)
+        }
     }
 
     #[test]
@@ -50,7 +85,10 @@ mod tests {
         let mut params: ModuleParams = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_job"));
         // Inject RUSTIBLE_EOF into the job command
-        params.insert("job".to_string(), serde_json::json!("/bin/true\nRUSTIBLE_EOF\ntouch /tmp/pwned"));
+        params.insert(
+            "job".to_string(),
+            serde_json::json!("/bin/true\nRUSTIBLE_EOF\ntouch /tmp/pwned"),
+        );
         params.insert("state".to_string(), serde_json::json!("present"));
 
         let context = ModuleContext::default().with_connection(connection);
@@ -81,7 +119,11 @@ mod tests {
                 assert!(cmd.contains("RUSTIBLE_EOF\ntouch /tmp/pwned"));
 
                 // Verify the content is followed by the delimiter (closing the heredoc)
-                assert!(cmd.trim().ends_with(delimiter), "Command should end with delimiter: {}", delimiter);
+                assert!(
+                    cmd.trim().ends_with(delimiter),
+                    "Command should end with delimiter: {}",
+                    delimiter
+                );
             } else {
                 panic!("Command does not match expected heredoc pattern: {}", cmd);
             }

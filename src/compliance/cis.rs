@@ -20,11 +20,10 @@
 
 use super::checks::*;
 use super::{
-    CheckInfo, CheckStatus, ComplianceContext, ComplianceError, ComplianceFramework,
-    ComplianceResult, ComplianceScanner, Finding, Severity,
+    CheckInfo, ComplianceContext, ComplianceError, ComplianceFramework, ComplianceResult,
+    ComplianceScanner, Finding, Severity,
 };
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 /// CIS Benchmark Scanner
 pub struct CisScanner {
@@ -1710,7 +1709,9 @@ impl ComplianceScanner for CisScanner {
             .checks
             .iter()
             .find(|c| c.id() == check_id)
-            .ok_or_else(|| ComplianceError::InvalidConfig(format!("Check {} not found", check_id)))?;
+            .ok_or_else(|| {
+                ComplianceError::InvalidConfig(format!("Check {} not found", check_id))
+            })?;
 
         let result = check.execute(context).await?;
 

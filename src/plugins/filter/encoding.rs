@@ -186,7 +186,9 @@ fn urlsplit(url_str: String, component: Option<String>) -> Value {
 /// Compatible with Ansible's `urlencode` filter.
 fn urlencode_filter(input: String) -> String {
     // URL encoding for query strings
-    form_urlencoded::byte_serialize(input.as_bytes()).collect()
+    form_urlencoded::byte_serialize(input.as_bytes())
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 /// URL-decode a string.
@@ -262,22 +264,35 @@ fn unquote_filter(input: String) -> String {
 
 // Re-export url-encoding utilities
 mod form_urlencoded {
-    pub fn byte_serialize(bytes: &[u8]) -> impl Iterator<Item = &str> + '_ {
-        bytes.iter().flat_map(|&b| {
-            if matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~') {
-                vec![std::str::from_utf8(&[b]).unwrap()]
+    pub fn byte_serialize(bytes: &[u8]) -> impl Iterator<Item = String> + '_ {
+        bytes.iter().map(|&b| {
+            if matches!(
+                b,
+                b'A'..=b'Z'
+                    | b'a'..=b'z'
+                    | b'0'..=b'9'
+                    | b'-'
+                    | b'_'
+                    | b'.'
+                    | b'~'
+            ) {
+                (b as char).to_string()
             } else {
-                let hex = format!("%{:02X}", b);
-                // Leak is fine here for test/filter usage; in production you might want a different approach
-                vec![Box::leak(hex.into_boxed_str()) as &str]
+                format!("%{:02X}", b)
             }
         })
     }
 
-    pub fn parse(bytes: &[u8]) -> impl Iterator<Item = (std::borrow::Cow<'_, str>, std::borrow::Cow<'_, str>)> {
+    pub fn parse(
+        bytes: &[u8],
+    ) -> impl Iterator<Item = (std::borrow::Cow<'_, str>, std::borrow::Cow<'_, str>)> {
         let s = String::from_utf8_lossy(bytes);
         let decoded = percent_decode(&s);
-        vec![(std::borrow::Cow::Owned(decoded), std::borrow::Cow::Borrowed(""))].into_iter()
+        vec![(
+            std::borrow::Cow::Owned(decoded),
+            std::borrow::Cow::Borrowed(""),
+        )]
+        .into_iter()
     }
 
     fn percent_decode(s: &str) -> String {
@@ -336,37 +351,55 @@ mod tests {
 
     #[test]
     fn test_urlsplit_all() {
-        let result = urlsplit("https://user:pass@example.com:8080/path?q=1#frag".to_string(), None);
+        let result = urlsplit(
+            "https://user:pass@example.com:8080/path?q=1#frag".to_string(),
+            None,
+        );
         assert!(!result.is_undefined());
     }
 
     #[test]
     fn test_urlsplit_scheme() {
-        let result = urlsplit("https://example.com/path".to_string(), Some("scheme".to_string()));
+        let result = urlsplit(
+            "https://example.com/path".to_string(),
+            Some("scheme".to_string()),
+        );
         assert_eq!(result.to_string(), "https");
     }
 
     #[test]
     fn test_urlsplit_hostname() {
-        let result = urlsplit("https://example.com:8080/path".to_string(), Some("hostname".to_string()));
+        let result = urlsplit(
+            "https://example.com:8080/path".to_string(),
+            Some("hostname".to_string()),
+        );
         assert_eq!(result.to_string(), "example.com");
     }
 
     #[test]
     fn test_urlsplit_port() {
-        let result = urlsplit("https://example.com:8080/path".to_string(), Some("port".to_string()));
+        let result = urlsplit(
+            "https://example.com:8080/path".to_string(),
+            Some("port".to_string()),
+        );
         assert_eq!(result.to_string(), "8080");
     }
 
     #[test]
     fn test_urlsplit_path() {
-        let result = urlsplit("https://example.com/some/path".to_string(), Some("path".to_string()));
+        let result = urlsplit(
+            "https://example.com/some/path".to_string(),
+            Some("path".to_string()),
+        );
         assert_eq!(result.to_string(), "/some/path");
     }
 
     #[test]
     fn test_urlsplit_query() {
-        let result = urlsplit("https://example.com/path?foo=bar&baz=qux".to_string(), Some("query".to_string()));
+        let result = urlsplit(
+            "https://example.com/path?foo=bar&baz=qux".to_string(),
+            Some("query".to_string()),
+        );
         assert_eq!(result.to_string(), "foo=bar&baz=qux");
     }
 

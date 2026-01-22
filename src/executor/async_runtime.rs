@@ -16,7 +16,9 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::executor::async_runtime::{RuntimeBuilder, RuntimeConfig};
 //!
 //! let config = RuntimeConfig::for_io_bound();
@@ -27,7 +29,9 @@
 //! });
 //!
 //! // Graceful shutdown with timeout
-//! runtime.shutdown_graceful(Duration::from_secs(30)).await;
+//! runtime.shutdown_timeout(std::time::Duration::from_secs(30));
+//! # Ok(())
+//! # }
 //! ```
 
 use std::future::Future;
@@ -35,9 +39,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use parking_lot::Mutex;
+use parking_lot::Mutex as ParkingMutex;
 use tokio::runtime::{Builder, Handle, Runtime};
-use tokio::sync::{broadcast, mpsc, oneshot, Semaphore};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex as AsyncMutex, Semaphore};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
@@ -658,7 +662,7 @@ pub struct TaskSpawner {
     metrics: Arc<MetricsCollector>,
 
     /// JoinSet for tracking spawned tasks.
-    join_set: Arc<Mutex<JoinSet<()>>>,
+    join_set: Arc<ParkingMutex<JoinSet<()>>>,
 }
 
 impl TaskSpawner {
@@ -675,7 +679,7 @@ impl TaskSpawner {
             backpressure,
             shutdown,
             metrics,
-            join_set: Arc::new(Mutex::new(JoinSet::new())),
+            join_set: Arc::new(ParkingMutex::new(JoinSet::new())),
         }
     }
 
@@ -925,7 +929,7 @@ impl RuntimeBuilder {
 /// when producers outpace consumers.
 pub struct BoundedWorkQueue<T> {
     sender: mpsc::Sender<T>,
-    receiver: Mutex<mpsc::Receiver<T>>,
+    receiver: AsyncMutex<mpsc::Receiver<T>>,
     capacity: usize,
 }
 
@@ -935,7 +939,7 @@ impl<T> BoundedWorkQueue<T> {
         let (sender, receiver) = mpsc::channel(capacity);
         Self {
             sender,
-            receiver: Mutex::new(receiver),
+            receiver: AsyncMutex::new(receiver),
             capacity,
         }
     }
@@ -952,7 +956,8 @@ impl<T> BoundedWorkQueue<T> {
 
     /// Receive an item from the queue.
     pub async fn recv(&self) -> Option<T> {
-        self.receiver.lock().recv().await
+        let mut receiver = self.receiver.lock().await;
+        receiver.recv().await
     }
 
     /// Get the queue capacity.

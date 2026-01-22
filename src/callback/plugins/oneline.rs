@@ -22,18 +22,23 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::OnelineCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::OnelineCallback;
 //!
 //! // Basic usage with defaults
 //! let callback = OnelineCallback::new();
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
 //!
 //! // With custom configuration
 //! let config = OnelineConfig::default()
 //!     .with_task_name()
 //!     .with_colors();
 //! let callback = OnelineCallback::with_config(config);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Grep-Friendly Output
@@ -385,7 +390,7 @@ impl ExecutionCallback for OnelineCallback {
             .map(|t| t.elapsed())
             .unwrap_or_default();
 
-        let status = if success { "SUCCESS" } else { "FAILED" };
+        let playbook_status = if success { "SUCCESS" } else { "FAILED" };
 
         // Print recap header
         self.output_line("");
@@ -393,7 +398,7 @@ impl ExecutionCallback for OnelineCallback {
             "PLAYBOOK RECAP: {}{}{}  ({:.2}s)",
             name,
             self.config.separator,
-            status,
+            playbook_status,
             duration.as_secs_f64()
         ));
 

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::{VarPrecedence, Variable, VarStore};
+use super::{VarPrecedence, VarStore, Variable};
 
 /// Counter for generating unique scope IDs
 static SCOPE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -249,7 +249,12 @@ impl LexicalScope {
     }
 
     /// Set a variable in this scope
-    pub fn set(&mut self, key: impl Into<String>, value: serde_yaml::Value, precedence: VarPrecedence) {
+    pub fn set(
+        &mut self,
+        key: impl Into<String>,
+        value: serde_yaml::Value,
+        precedence: VarPrecedence,
+    ) {
         let key = key.into();
         let variable = Variable::new(value, precedence);
         let scoped = ScopedVariable::new(variable).in_scope(self.id);
@@ -382,18 +387,22 @@ impl ScopedVarStore {
 
     /// Get the current scope
     pub fn current_scope(&self) -> &LexicalScope {
-        self.scopes.get(&self.current_scope_id).expect("Current scope must exist")
+        self.scopes
+            .get(&self.current_scope_id)
+            .expect("Current scope must exist")
     }
 
     /// Get mutable access to the current scope
     fn current_scope_mut(&mut self) -> &mut LexicalScope {
-        self.scopes.get_mut(&self.current_scope_id).expect("Current scope must exist")
+        self.scopes
+            .get_mut(&self.current_scope_id)
+            .expect("Current scope must exist")
     }
 
     /// Enter a new scope
     pub fn enter_scope(&mut self, config: ScopeConfig) -> u64 {
         let parent_id = self.current_scope_id;
-        let mut scope = LexicalScope::new(config.with_parent(parent_id));
+        let scope = LexicalScope::new(config.with_parent(parent_id));
         let scope_id = scope.id;
 
         // Update parent's children
@@ -431,7 +440,7 @@ impl ScopedVarStore {
         self.enter_scope(
             ScopeConfig::new(ScopeLevel::Role)
                 .with_name(name)
-                .isolated(true)
+                .isolated(true),
         )
     }
 
@@ -488,9 +497,12 @@ impl ScopedVarStore {
                     global.set_with_declaration(&key, value, precedence, declaration);
                 }
             }
-            ScopeDeclaration::TaskLocal | ScopeDeclaration::RoleLocal | ScopeDeclaration::PlayLocal => {
+            ScopeDeclaration::TaskLocal
+            | ScopeDeclaration::RoleLocal
+            | ScopeDeclaration::PlayLocal => {
                 // Only set in current scope, not in VarStore
-                self.current_scope_mut().set_with_declaration(&key, value, precedence, declaration);
+                self.current_scope_mut()
+                    .set_with_declaration(&key, value, precedence, declaration);
             }
             ScopeDeclaration::Implicit => {
                 // Default behavior
@@ -511,8 +523,7 @@ impl ScopedVarStore {
         let key = key.into();
 
         let variable = Variable::new(value, precedence);
-        let scoped = ScopedVariable::new(variable)
-            .in_role(&role_name);
+        let scoped = ScopedVariable::new(variable).in_role(&role_name);
 
         self.role_variables
             .entry(role_name)
@@ -526,7 +537,8 @@ impl ScopedVarStore {
             if let Some(var) = role_vars.get_mut(key) {
                 var.exported = true;
                 // Copy to VarStore for global access
-                self.var_store.set(key, var.variable.value.clone(), var.variable.precedence);
+                self.var_store
+                    .set(key, var.variable.value.clone(), var.variable.precedence);
                 return true;
             }
         }
@@ -595,10 +607,8 @@ impl ScopedVarStore {
 
     /// Get all variables visible from current scope
     pub fn all(&mut self) -> IndexMap<String, serde_yaml::Value> {
-        let mut result = IndexMap::new();
-
         // Start with VarStore's merged variables
-        result = self.var_store.all().clone();
+        let mut result = self.var_store.all().clone();
 
         // Walk up scope chain and overlay variables
         let mut scope_ids: Vec<u64> = Vec::new();
@@ -622,7 +632,9 @@ impl ScopedVarStore {
                     // Respect scope declarations
                     match var.scope_declaration {
                         ScopeDeclaration::TaskLocal if sid != self.current_scope_id => continue,
-                        ScopeDeclaration::RoleLocal if scope.config.level != ScopeLevel::Role => continue,
+                        ScopeDeclaration::RoleLocal if scope.config.level != ScopeLevel::Role => {
+                            continue
+                        }
                         _ => {}
                     }
                     result.insert(key.clone(), var.variable.value.clone());
@@ -669,8 +681,16 @@ impl ScopeVisualization {
         if let Some(scope) = store.scopes.get(&scope_id) {
             // Scope header
             let scope_name = scope.config.name.as_deref().unwrap_or("anonymous");
-            let marker = if scope_id == store.current_scope_id { ">>> " } else { "" };
-            let isolated = if scope.config.isolated { " [isolated]" } else { "" };
+            let marker = if scope_id == store.current_scope_id {
+                ">>> "
+            } else {
+                ""
+            };
+            let isolated = if scope.config.isolated {
+                " [isolated]"
+            } else {
+                ""
+            };
 
             lines.push(format!(
                 "{}{}{} scope '{}' (id={}){}",
@@ -712,7 +732,7 @@ impl ScopeVisualization {
             }
             serde_yaml::Value::Sequence(seq) => format!("[{} items]", seq.len()),
             serde_yaml::Value::Mapping(map) => format!("{{}} {} keys}}", map.len()),
-            serde_yaml::Value::Tagged(t) => format!("!{} ...", t.tag.to_string()),
+            serde_yaml::Value::Tagged(t) => format!("!{} ...", t.tag),
         }
     }
 }
@@ -755,11 +775,19 @@ mod tests {
         let mut store = ScopedVarStore::new();
 
         // Set global variable
-        store.set("global_var", serde_yaml::Value::String("global".into()), VarPrecedence::ExtraVars);
+        store.set(
+            "global_var",
+            serde_yaml::Value::String("global".into()),
+            VarPrecedence::ExtraVars,
+        );
 
         // Enter play scope
         store.enter_play("my_play");
-        store.set("play_var", serde_yaml::Value::String("play".into()), VarPrecedence::PlayVars);
+        store.set(
+            "play_var",
+            serde_yaml::Value::String("play".into()),
+            VarPrecedence::PlayVars,
+        );
 
         // Should see both
         assert_eq!(
@@ -784,11 +812,19 @@ mod tests {
 
         // Set a play variable
         store.enter_play("my_play");
-        store.set("outer_var", serde_yaml::Value::String("outer".into()), VarPrecedence::PlayVars);
+        store.set(
+            "outer_var",
+            serde_yaml::Value::String("outer".into()),
+            VarPrecedence::PlayVars,
+        );
 
         // Enter isolated role scope
         store.enter_role("my_role");
-        store.set("role_var", serde_yaml::Value::String("role".into()), VarPrecedence::RoleVars);
+        store.set(
+            "role_var",
+            serde_yaml::Value::String("role".into()),
+            VarPrecedence::RoleVars,
+        );
 
         // Role can see its own var
         assert!(store.contains("role_var"));
@@ -854,9 +890,17 @@ mod tests {
     fn test_scope_visualization() {
         let mut store = ScopedVarStore::new();
 
-        store.set("global_var", serde_yaml::Value::String("val".into()), VarPrecedence::ExtraVars);
+        store.set(
+            "global_var",
+            serde_yaml::Value::String("val".into()),
+            VarPrecedence::ExtraVars,
+        );
         store.enter_play("test_play");
-        store.set("play_var", serde_yaml::Value::Number(42.into()), VarPrecedence::PlayVars);
+        store.set(
+            "play_var",
+            serde_yaml::Value::Number(42.into()),
+            VarPrecedence::PlayVars,
+        );
         store.enter_task("task1");
 
         let viz = store.visualize();
@@ -900,11 +944,23 @@ mod tests {
     fn test_all_variables() {
         let mut store = ScopedVarStore::new();
 
-        store.set("a", serde_yaml::Value::Number(1.into()), VarPrecedence::ExtraVars);
+        store.set(
+            "a",
+            serde_yaml::Value::Number(1.into()),
+            VarPrecedence::ExtraVars,
+        );
         store.enter_play("play");
-        store.set("b", serde_yaml::Value::Number(2.into()), VarPrecedence::PlayVars);
+        store.set(
+            "b",
+            serde_yaml::Value::Number(2.into()),
+            VarPrecedence::PlayVars,
+        );
         store.enter_task("task");
-        store.set("c", serde_yaml::Value::Number(3.into()), VarPrecedence::TaskVars);
+        store.set(
+            "c",
+            serde_yaml::Value::Number(3.into()),
+            VarPrecedence::TaskVars,
+        );
 
         let all = store.all();
 

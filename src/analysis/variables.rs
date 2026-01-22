@@ -3,11 +3,8 @@
 //! This module provides analysis of variable definitions, usage, and detection of
 //! undefined or unused variables in playbooks.
 
-use super::{
-    helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation,
-};
-use crate::playbook::{Play, Playbook, Task, When};
-use crate::vars::Variables;
+use super::{helpers, AnalysisCategory, AnalysisFinding, AnalysisResult, Severity, SourceLocation};
+use crate::playbook::{Play, Playbook};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -238,22 +235,12 @@ impl VariableAnalyzer {
 
         // First pass: collect all variable definitions
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            self.collect_play_definitions(
-                play,
-                play_idx,
-                &source_file,
-                &mut all_definitions,
-            );
+            self.collect_play_definitions(play, play_idx, &source_file, &mut all_definitions);
         }
 
         // Second pass: collect all variable usages
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            self.collect_play_usages(
-                play,
-                play_idx,
-                &source_file,
-                &mut all_usages,
-            );
+            self.collect_play_usages(play, play_idx, &source_file, &mut all_usages);
         }
 
         // Analyze for issues
@@ -270,7 +257,7 @@ impl VariableAnalyzer {
                         )
                         .with_description(
                             "This variable is used but not defined in the playbook. \
-                             It might be defined in inventory, extra vars, or role defaults."
+                             It might be defined in inventory, extra vars, or role defaults.",
                         )
                         .with_location(location.clone())
                         .with_suggestion(format!(
@@ -326,8 +313,7 @@ impl VariableAnalyzer {
         source_file: &Option<String>,
         definitions: &mut HashMap<String, VariableUsage>,
     ) {
-        let play_location = SourceLocation::new()
-            .with_play(play_idx, &play.name);
+        let play_location = SourceLocation::new().with_play(play_idx, &play.name);
         let play_location = if let Some(f) = source_file {
             play_location.with_file(f.clone())
         } else {
@@ -335,7 +321,7 @@ impl VariableAnalyzer {
         };
 
         // Play-level variables
-        for var_name in play.vars.keys() {
+        for var_name in play.vars.as_map().keys() {
             definitions.insert(
                 var_name.clone(),
                 VariableUsage::new(var_name, VariableScope::Play)
@@ -356,7 +342,7 @@ impl VariableAnalyzer {
             };
 
             // Task-level vars
-            for var_name in task.vars.keys() {
+            for var_name in task.vars.as_map().keys() {
                 definitions.insert(
                     var_name.clone(),
                     VariableUsage::new(var_name, VariableScope::Task)
@@ -421,7 +407,7 @@ impl VariableAnalyzer {
         usages: &mut HashMap<String, Vec<SourceLocation>>,
     ) {
         // Collect from play vars (values might reference other variables)
-        for value in play.vars.values() {
+        for value in play.vars.as_map().values() {
             let vars = helpers::extract_value_variables(value);
             let location = SourceLocation::new().with_play(play_idx, &play.name);
             let location = if let Some(f) = source_file {
@@ -480,7 +466,7 @@ impl VariableAnalyzer {
             }
 
             // From task vars (values)
-            for value in task.vars.values() {
+            for value in task.vars.as_map().values() {
                 let vars = helpers::extract_value_variables(value);
                 for var in vars {
                     usages.entry(var).or_default().push(location.clone());
@@ -529,12 +515,12 @@ impl VariableAnalyzer {
         let mut findings = Vec::new();
 
         for (play_idx, play) in playbook.plays.iter().enumerate() {
-            let play_vars: HashSet<_> = play.vars.keys().cloned().collect();
+            let play_vars: HashSet<_> = play.vars.as_map().keys().cloned().collect();
 
             let all_tasks = helpers::get_all_tasks(play);
             for (task_idx, task) in all_tasks.iter().enumerate() {
                 // Check if task vars shadow play vars
-                for var_name in task.vars.keys() {
+                for var_name in task.vars.as_map().keys() {
                     if play_vars.contains(var_name) {
                         let location = SourceLocation::new()
                             .with_play(play_idx, &play.name)
@@ -554,12 +540,12 @@ impl VariableAnalyzer {
                             )
                             .with_description(
                                 "This variable is defined at both play and task level. \
-                                 The task-level definition will take precedence."
+                                 The task-level definition will take precedence.",
                             )
                             .with_location(location)
                             .with_suggestion(
                                 "Consider using a different name to avoid confusion, \
-                                 or remove the duplicate definition."
+                                 or remove the duplicate definition.",
                             ),
                         );
                     }
@@ -631,6 +617,7 @@ impl VariableAnalyzer {
     }
 
     /// Calculate Levenshtein distance between two strings
+    #[allow(clippy::needless_range_loop)]
     fn levenshtein_distance(a: &str, b: &str) -> usize {
         let a_chars: Vec<_> = a.chars().collect();
         let b_chars: Vec<_> = b.chars().collect();
@@ -656,7 +643,11 @@ impl VariableAnalyzer {
 
         for i in 1..=a_len {
             for j in 1..=b_len {
-                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
                 matrix[i][j] = (matrix[i - 1][j] + 1)
                     .min(matrix[i][j - 1] + 1)
                     .min(matrix[i - 1][j - 1] + cost);

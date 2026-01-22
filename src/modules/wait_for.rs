@@ -554,7 +554,7 @@ impl WaitForModule {
                 )
             }
             WaitState::Present => {
-                let path = config.path.as_ref().map(|s| s.as_str()).unwrap_or("");
+                let path = config.path.as_deref().unwrap_or("");
                 if let Some(ref pattern) = config.search_regex {
                     format!("pattern '{}' in file '{}'", pattern, path)
                 } else {
@@ -564,7 +564,7 @@ impl WaitForModule {
             WaitState::Absent => {
                 format!(
                     "path '{}' to be removed",
-                    config.path.as_ref().map(|s| s.as_str()).unwrap_or("")
+                    config.path.as_deref().unwrap_or("")
                 )
             }
             WaitState::Drained => {

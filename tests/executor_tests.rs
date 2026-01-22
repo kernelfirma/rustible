@@ -153,26 +153,43 @@ fn test_runtime_context_add_host() {
 #[test]
 fn test_runtime_context_variable_precedence() {
     let mut ctx = RuntimeContext::new();
+    let host = "server1";
+    ctx.add_host(host.to_string(), None);
 
     // Set variables at different levels
     ctx.set_global_var("var".to_string(), serde_json::json!("global"));
-    assert_eq!(ctx.get_var("var", None), Some(serde_json::json!("global")));
+    assert_eq!(
+        ctx.get_var("var", Some(host)),
+        Some(serde_json::json!("global"))
+    );
 
     // Play vars override global
     ctx.set_play_var("var".to_string(), serde_json::json!("play"));
-    assert_eq!(ctx.get_var("var", None), Some(serde_json::json!("play")));
+    assert_eq!(
+        ctx.get_var("var", Some(host)),
+        Some(serde_json::json!("play"))
+    );
 
     // Task vars override play
-    ctx.set_task_var("var".to_string(), serde_json::json!("task"));
-    assert_eq!(ctx.get_var("var", None), Some(serde_json::json!("task")));
+    ctx.set_task_var(host, "var".to_string(), serde_json::json!("task"));
+    assert_eq!(
+        ctx.get_var("var", Some(host)),
+        Some(serde_json::json!("task"))
+    );
 
     // Extra vars override all
     ctx.set_extra_var("var".to_string(), serde_json::json!("extra"));
-    assert_eq!(ctx.get_var("var", None), Some(serde_json::json!("extra")));
+    assert_eq!(
+        ctx.get_var("var", Some(host)),
+        Some(serde_json::json!("extra"))
+    );
 
     // Clear task vars, should fall back to extra (highest)
-    ctx.clear_task_vars();
-    assert_eq!(ctx.get_var("var", None), Some(serde_json::json!("extra")));
+    ctx.clear_task_vars(host);
+    assert_eq!(
+        ctx.get_var("var", Some(host)),
+        Some(serde_json::json!("extra"))
+    );
 }
 
 #[test]

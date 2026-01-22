@@ -36,8 +36,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::logfile::{LogFileCallback, LogFileConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{LogFileCallback, LogFileConfig};
 //! use std::path::PathBuf;
 //!
 //! // Create with default configuration (logs to ./logs)
@@ -51,7 +54,9 @@
 //!     .build();
 //! let callback = LogFileCallback::new(config)?;
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -606,8 +611,11 @@ impl LogFileState {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::logfile::{LogFileCallback, LogFileConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::{LogFileCallback, LogFileConfig};
 ///
 /// // Create with default config (logs to ./logs)
 /// let callback = LogFileCallback::new(LogFileConfig::default())?;
@@ -619,6 +627,8 @@ impl LogFileState {
 ///     .max_log_files(30)
 ///     .build();
 /// let callback = LogFileCallback::new(config)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct LogFileCallback {

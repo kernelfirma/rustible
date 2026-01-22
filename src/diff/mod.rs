@@ -9,12 +9,17 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::diff::{DiffFormatter, DiffFormat, DiffOptions};
 //!
 //! let formatter = DiffFormatter::new(DiffOptions::default());
 //! let diff = formatter.format("old content", "new content");
 //! println!("{}", diff);
+//! # Ok(())
+//! # }
 //! ```
 
 mod formatter;
@@ -25,7 +30,6 @@ pub use formatter::{DiffFormat, DiffFormatter, DiffOptions};
 pub use stats::{DiffStats, DiffStatsAccumulator};
 pub use word_diff::{format_inline_diff, lines_are_similar, pair_similar_lines, WordDiff};
 
-use colored::Colorize;
 use similar::{ChangeTag, TextDiff};
 
 /// Type of change in a diff line
@@ -106,11 +110,24 @@ pub fn generate_diff(
     stats.files_changed = 1;
 
     for hunk in unified.iter_hunks() {
+        let ops = hunk.ops();
+        let (old_start, old_end, new_start, new_end) =
+            if let (Some(first), Some(last)) = (ops.first(), ops.last()) {
+                (
+                    first.old_range().start,
+                    last.old_range().end,
+                    first.new_range().start,
+                    last.new_range().end,
+                )
+            } else {
+                (0, 0, 0, 0)
+            };
+
         let mut diff_hunk = DiffHunk {
-            old_start: hunk.old_range().start + 1,
-            old_count: hunk.old_range().len(),
-            new_start: hunk.new_range().start + 1,
-            new_count: hunk.new_range().len(),
+            old_start: old_start + 1,
+            old_count: old_end.saturating_sub(old_start),
+            new_start: new_start + 1,
+            new_count: new_end.saturating_sub(new_start),
             lines: Vec::new(),
         };
 

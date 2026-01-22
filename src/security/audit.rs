@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{EscalationMethod, SecurityResult};
+use super::SecurityResult;
 
 /// Severity level for audit entries
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -133,7 +133,7 @@ impl AuditEntry {
             event_type,
             severity,
             host: host.to_string(),
-            source_user: whoami::username(),
+            source_user: current_username(),
             target_user: None,
             method: None,
             command: None,
@@ -230,6 +230,12 @@ impl AuditEntry {
 
         parts.join(" ")
     }
+}
+
+fn current_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 /// Sanitize a command for logging (remove sensitive data)
@@ -414,13 +420,7 @@ impl AuditLogger {
     }
 
     /// Log an escalation start event
-    pub fn log_escalation_start(
-        &self,
-        host: &str,
-        target_user: &str,
-        method: &str,
-        command: &str,
-    ) {
+    pub fn log_escalation_start(&self, host: &str, target_user: &str, method: &str, command: &str) {
         let entry = AuditEntry::new(AuditEventType::EscalationStart, AuditSeverity::Info, host)
             .with_target_user(target_user)
             .with_method(method)
@@ -449,28 +449,21 @@ impl AuditLogger {
     }
 
     /// Log an escalation failure event
-    pub fn log_escalation_failure(
-        &self,
-        host: &str,
-        target_user: &str,
-        method: &str,
-        error: &str,
-    ) {
-        let entry = AuditEntry::new(AuditEventType::EscalationFailed, AuditSeverity::Warning, host)
-            .with_target_user(target_user)
-            .with_method(method)
-            .with_error(error);
+    pub fn log_escalation_failure(&self, host: &str, target_user: &str, method: &str, error: &str) {
+        let entry = AuditEntry::new(
+            AuditEventType::EscalationFailed,
+            AuditSeverity::Warning,
+            host,
+        )
+        .with_target_user(target_user)
+        .with_method(method)
+        .with_error(error);
 
         self.log(entry);
     }
 
     /// Log a policy violation
-    pub fn log_policy_violation(
-        &self,
-        host: &str,
-        target_user: &str,
-        reason: &str,
-    ) {
+    pub fn log_policy_violation(&self, host: &str, target_user: &str, reason: &str) {
         let entry = AuditEntry::new(AuditEventType::PolicyViolation, AuditSeverity::Alert, host)
             .with_target_user(target_user)
             .with_error(reason);
@@ -479,12 +472,7 @@ impl AuditLogger {
     }
 
     /// Log suspicious input detection
-    pub fn log_suspicious_input(
-        &self,
-        host: &str,
-        input_type: &str,
-        value: &str,
-    ) {
+    pub fn log_suspicious_input(&self, host: &str, input_type: &str, value: &str) {
         let entry = AuditEntry::new(AuditEventType::SuspiciousInput, AuditSeverity::Alert, host)
             .with_context("input_type", input_type)
             .with_context("value", sanitize_command(value));
@@ -573,10 +561,14 @@ mod tests {
 
     #[test]
     fn test_audit_entry_creation() {
-        let entry = AuditEntry::new(AuditEventType::EscalationStart, AuditSeverity::Info, "host1")
-            .with_target_user("root")
-            .with_method("sudo")
-            .with_command("apt install nginx");
+        let entry = AuditEntry::new(
+            AuditEventType::EscalationStart,
+            AuditSeverity::Info,
+            "host1",
+        )
+        .with_target_user("root")
+        .with_method("sudo")
+        .with_command("apt install nginx");
 
         assert_eq!(entry.host, "host1");
         assert_eq!(entry.target_user, Some("root".to_string()));
@@ -621,12 +613,19 @@ mod tests {
         let logger = AuditLogger::with_config(config);
 
         // Info should be filtered
-        let entry = AuditEntry::new(AuditEventType::EscalationStart, AuditSeverity::Info, "host1");
+        let entry = AuditEntry::new(
+            AuditEventType::EscalationStart,
+            AuditSeverity::Info,
+            "host1",
+        );
         logger.log(entry);
 
         // Warning should pass
-        let entry =
-            AuditEntry::new(AuditEventType::PolicyViolation, AuditSeverity::Warning, "host1");
+        let entry = AuditEntry::new(
+            AuditEventType::PolicyViolation,
+            AuditSeverity::Warning,
+            "host1",
+        );
         logger.log(entry);
 
         assert_eq!(logger.entry_count(), 1);
@@ -670,11 +669,15 @@ mod tests {
 
     #[test]
     fn test_audit_entry_format() {
-        let entry = AuditEntry::new(AuditEventType::EscalationSuccess, AuditSeverity::Info, "host1")
-            .with_target_user("root")
-            .with_method("sudo")
-            .with_command("apt update")
-            .with_duration_ms(1500);
+        let entry = AuditEntry::new(
+            AuditEventType::EscalationSuccess,
+            AuditSeverity::Info,
+            "host1",
+        )
+        .with_target_user("root")
+        .with_method("sudo")
+        .with_command("apt update")
+        .with_duration_ms(1500);
 
         let log_line = entry.format_log_line();
 

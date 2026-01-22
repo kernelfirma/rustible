@@ -288,33 +288,31 @@ impl Breakpoint {
 
         // Check type-specific matching
         let type_matches = match &self.breakpoint_type {
-            BreakpointType::Task => self.pattern.as_ref().map_or(false, |p| {
+            BreakpointType::Task => self.pattern.as_ref().is_some_and(|p| {
                 context
                     .task
                     .as_ref()
-                    .map_or(false, |t| Self::pattern_matches(p, t))
+                    .is_some_and(|t| Self::pattern_matches(p, t))
             }),
-            BreakpointType::Host => self.pattern.as_ref().map_or(false, |p| {
+            BreakpointType::Host => self.pattern.as_ref().is_some_and(|p| {
                 context
                     .host
                     .as_ref()
-                    .map_or(false, |h| Self::pattern_matches(p, h))
+                    .is_some_and(|h| Self::pattern_matches(p, h))
             }),
-            BreakpointType::Module => self.pattern.as_ref().map_or(false, |p| {
+            BreakpointType::Module => self.pattern.as_ref().is_some_and(|p| {
                 context
                     .module
                     .as_ref()
-                    .map_or(false, |m| Self::pattern_matches(p, m))
+                    .is_some_and(|m| Self::pattern_matches(p, m))
             }),
-            BreakpointType::Play => self.pattern.as_ref().map_or(false, |p| {
+            BreakpointType::Play => self.pattern.as_ref().is_some_and(|p| {
                 context
                     .play
                     .as_ref()
-                    .map_or(false, |pl| Self::pattern_matches(p, pl))
+                    .is_some_and(|pl| Self::pattern_matches(p, pl))
             }),
-            BreakpointType::TaskNumber => {
-                self.task_number.map_or(false, |n| context.task_number == n)
-            }
+            BreakpointType::TaskNumber => self.task_number == Some(context.task_number),
             BreakpointType::OnFailure => context.failed,
             BreakpointType::OnChange => context.changed,
             BreakpointType::OnUnreachable => false, // Would need additional context
@@ -327,9 +325,7 @@ impl Breakpoint {
         }
 
         // Check condition if present
-        self.condition
-            .as_ref()
-            .map_or(true, |c| c.evaluate(context))
+        self.condition.as_ref().is_none_or(|c| c.evaluate(context))
     }
 
     /// Check if a pattern matches a value (supports wildcards)

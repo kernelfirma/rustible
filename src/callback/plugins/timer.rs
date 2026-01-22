@@ -14,8 +14,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::timer::{TimerCallback, TimerConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{TimerCallback, TimerConfig};
 //!
 //! let timer = TimerCallback::new(TimerConfig {
 //!     show_per_task: true,
@@ -26,7 +29,9 @@
 //! });
 //!
 //! // Use with playbook executor
-//! executor.add_callback(Box::new(timer));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Output
@@ -568,12 +573,8 @@ impl ExecutionCallback for TimerCallback {
         let success = result.result.success;
         let changed = result.result.changed;
 
-        // Use the duration from ExecutionResult if available, otherwise calculate
-        let duration = if result.duration > Duration::ZERO {
-            Some(result.duration)
-        } else {
-            None
-        };
+        // Use the duration from ExecutionResult even if it is zero.
+        let duration = Some(result.duration);
 
         self.record_task_complete(&result.task_name, &result.host, success, changed, duration);
     }

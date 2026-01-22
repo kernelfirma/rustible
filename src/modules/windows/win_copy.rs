@@ -85,28 +85,27 @@ $result | ConvertTo-Json -Compress
         force: bool,
     ) -> String {
         let backup_section = if backup {
-            format!(
-                r#"
-if (Test-Path -LiteralPath $dest -PathType Leaf) {{
-    $backupPath = $dest + ".bak." + (Get-Date -Format "yyyyMMddHHmmss")
+            r"
+if (Test-Path -LiteralPath $dest -PathType Leaf) {
+    $backupPath = $dest + '.bak.' + (Get-Date -Format 'yyyyMMddHHmmss')
     Copy-Item -LiteralPath $dest -Destination $backupPath -Force
     $result.backup_file = $backupPath
-}}
-"#
-            )
+}
+"
+            .to_string()
         } else {
             String::new()
         };
 
         let force_section = if force {
-            r#"
+            r"
 if (Test-Path -LiteralPath $dest -PathType Leaf) {
     $file = Get-Item -LiteralPath $dest -Force
     if ($file.IsReadOnly) {
         $file.IsReadOnly = $false
     }
 }
-"#
+"
         } else {
             ""
         };
@@ -156,26 +155,26 @@ $result | ConvertTo-Json -Compress
         force: bool,
     ) -> String {
         let backup_section = if backup {
-            r#"
+            r"
 if (Test-Path -LiteralPath $dest -PathType Leaf) {
-    $backupPath = $dest + ".bak." + (Get-Date -Format "yyyyMMddHHmmss")
+    $backupPath = $dest + '.bak.' + (Get-Date -Format 'yyyyMMddHHmmss')
     Copy-Item -LiteralPath $dest -Destination $backupPath -Force
     $result.backup_file = $backupPath
 }
-"#
+"
         } else {
             ""
         };
 
         let force_section = if force {
-            r#"
+            r"
 if (Test-Path -LiteralPath $dest -PathType Leaf) {
     $file = Get-Item -LiteralPath $dest -Force
     if ($file.IsReadOnly) {
         $file.IsReadOnly = $false
     }
 }
-"#
+"
         } else {
             ""
         };
@@ -279,7 +278,7 @@ impl Module for WinCopyModule {
 
         let dest = params.get_string_required("dest")?;
         let src = params.get_string("src")?;
-        let content = params.get_string("content")?;
+        let inline_content = params.get_string("content")?;
         let backup = params.get_bool_or("backup", false);
         let force = params.get_bool_or("force", true);
         let checksum_algo = params
@@ -308,7 +307,7 @@ impl Module for WinCopyModule {
             .to_lowercase();
 
         // Calculate checksum of source content
-        let (source_content, source_checksum) = if let Some(ref content_str) = content {
+        let (source_content, source_checksum) = if let Some(ref content_str) = inline_content {
             let hash = Self::compute_checksum(content_str.as_bytes(), &checksum_algo);
             (content_str.clone(), hash)
         } else if let Some(ref src_path) = src {
@@ -365,7 +364,7 @@ impl Module for WinCopyModule {
         }
 
         // Perform the copy
-        let copy_script = if content.is_some() {
+        let copy_script = if inline_content.is_some() {
             Self::generate_write_content_script(&dest, &source_content, backup, force)
         } else {
             Self::generate_copy_from_base64_script(&dest, &source_content, backup, force)

@@ -2189,6 +2189,7 @@ fn test_module_with_all_context_options() {
         r#become: true,
         become_method: Some("sudo".to_string()),
         become_user: Some("root".to_string()),
+        become_password: None,
         connection: None,
     };
 

@@ -22,8 +22,11 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::actionable::{ActionableCallback, ActionableConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::{ActionableCallback, ActionableConfig};
 //!
 //! // Basic usage with defaults
 //! let callback = ActionableCallback::new();
@@ -35,7 +38,9 @@
 //!     ..Default::default()
 //! });
 //!
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Example Output
@@ -205,11 +210,16 @@ impl HostStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::actionable::ActionableCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::ActionableCallback;
 ///
 /// let callback = ActionableCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ActionableCallback {
@@ -234,8 +244,13 @@ impl ActionableCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = ActionableCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -246,12 +261,17 @@ impl ActionableCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let config = ActionableConfig {
     ///     show_duration: true,
     ///     ..Default::default()
     /// };
     /// let callback = ActionableCallback::with_config(config);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn with_config(config: ActionableConfig) -> Self {
@@ -569,15 +589,13 @@ impl ExecutionCallback for ActionableCallback {
                 } else {
                     format!("SUMMARY: {} host(s) changed, all successful", total_changed)
                 }
+            } else if self.config.use_colors {
+                format!(
+                    "{}: No changes made (all tasks ok or skipped)",
+                    "SUMMARY".bright_white().bold()
+                )
             } else {
-                if self.config.use_colors {
-                    format!(
-                        "{}: No changes made (all tasks ok or skipped)",
-                        "SUMMARY".bright_white().bold()
-                    )
-                } else {
-                    "SUMMARY: No changes made (all tasks ok or skipped)".to_string()
-                }
+                "SUMMARY: No changes made (all tasks ok or skipped)".to_string()
             };
 
             println!("{}", summary);
@@ -587,7 +605,7 @@ impl ExecutionCallback for ActionableCallback {
         if let Some(start) = start_time {
             let duration = start.elapsed();
             if self.config.use_colors {
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully".green()
                 } else {
                     "failed".red().bold()
@@ -595,16 +613,21 @@ impl ExecutionCallback for ActionableCallback {
                 println!(
                     "\n{} {} in {:.2}s",
                     name.bright_white().bold(),
-                    status,
+                    playbook_status,
                     duration.as_secs_f64()
                 );
             } else {
-                let status = if success {
+                let playbook_status = if success {
                     "completed successfully"
                 } else {
                     "failed"
                 };
-                println!("\n{} {} in {:.2}s", name, status, duration.as_secs_f64());
+                println!(
+                    "\n{} {} in {:.2}s",
+                    name,
+                    playbook_status,
+                    duration.as_secs_f64()
+                );
             }
         }
     }

@@ -26,7 +26,9 @@ impl WebhookNotifier {
             .timeout(timeout)
             .danger_accept_invalid_certs(!config.verify_ssl)
             .build()
-            .map_err(|e| NotificationError::internal(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                NotificationError::internal(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self { config, client })
     }
@@ -150,7 +152,6 @@ fn truncate(s: &str, max_len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
     fn test_parse_method() {
@@ -235,20 +236,25 @@ mod tests {
             .with_header("X-API-Key", "secret");
 
         assert_eq!(config.headers.len(), 2);
-        assert_eq!(config.headers.get("X-Custom-Header"), Some(&"custom-value".to_string()));
+        assert_eq!(
+            config.headers.get("X-Custom-Header"),
+            Some(&"custom-value".to_string())
+        );
     }
 
     #[test]
     fn test_webhook_with_auth() {
-        let config = WebhookConfig::new("https://example.com/hook")
-            .with_auth_token("my-bearer-token");
+        let config =
+            WebhookConfig::new("https://example.com/hook").with_auth_token("my-bearer-token");
 
         assert_eq!(config.auth_token, Some("my-bearer-token".to_string()));
 
-        let config = WebhookConfig::new("https://example.com/hook")
-            .with_basic_auth("user", "pass");
+        let config = WebhookConfig::new("https://example.com/hook").with_basic_auth("user", "pass");
 
-        assert_eq!(config.basic_auth, Some(("user".to_string(), "pass".to_string())));
+        assert_eq!(
+            config.basic_auth,
+            Some(("user".to_string(), "pass".to_string()))
+        );
     }
 
     #[test]

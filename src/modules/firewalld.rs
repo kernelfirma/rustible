@@ -84,6 +84,14 @@ impl FirewalldState {
     }
 }
 
+impl std::str::FromStr for FirewalldState {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        FirewalldState::from_str(s)
+    }
+}
+
 /// Zone target options
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZoneTarget {
@@ -114,6 +122,14 @@ impl ZoneTarget {
             ZoneTarget::Drop => "DROP",
             ZoneTarget::Reject => "REJECT",
         }
+    }
+}
+
+impl std::str::FromStr for ZoneTarget {
+    type Err = ModuleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ZoneTarget::from_str(s)
     }
 }
 
@@ -219,6 +235,9 @@ impl FirewalldModule {
             options = options.with_escalation(context.become_user.clone());
             if let Some(ref method) = context.become_method {
                 options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
             }
         }
         options

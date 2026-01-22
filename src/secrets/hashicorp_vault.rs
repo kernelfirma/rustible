@@ -26,15 +26,23 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust,ignore
-//! use rustible::secrets::{VaultBackend, VaultConfig, VaultAuthMethod};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
+//! use rustible::secrets::{SecretBackend, VaultAuthMethod, VaultBackend, VaultConfig};
 //!
 //! // Token authentication
-//! let config = VaultConfig::new("https://vault.example.com:8200")
-//!     .with_token("hvs.example_token")
-//!     .with_namespace("my-namespace");
+//! let config = VaultConfig {
+//!     address: "https://vault.example.com:8200".to_string(),
+//!     auth: VaultAuthMethod::Token {
+//!         token: "hvs.example_token".to_string(),
+//!     },
+//!     namespace: Some("my-namespace".to_string()),
+//!     ..VaultConfig::default()
+//! };
 //!
-//! let vault = VaultBackend::new(config).await?;
+//! let vault = VaultBackend::new(config.into()).await?;
 //!
 //! // KV v2 secret access
 //! let secret = vault.get_secret("secret/data/myapp/database").await?;
@@ -45,17 +53,19 @@
 //!
 //! // Dynamic database credentials
 //! let creds = vault.generate_database_credentials("my-role").await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use reqwest::{header, Client, StatusCode};
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::backend::{BackendCapabilities, BackendCapability, SecretBackend, SecretBackendType};
 use super::error::{SecretError, SecretResult};
@@ -193,6 +203,57 @@ impl Default for VaultAuthMethod {
     }
 }
 
+impl From<super::config::VaultAuthMethod> for VaultAuthMethod {
+    fn from(auth: super::config::VaultAuthMethod) -> Self {
+        match auth {
+            super::config::VaultAuthMethod::Token { token } => VaultAuthMethod::Token { token },
+            super::config::VaultAuthMethod::AppRole {
+                role_id,
+                secret_id,
+                mount_path,
+            } => VaultAuthMethod::AppRole {
+                role_id,
+                secret_id,
+                mount_path,
+            },
+            super::config::VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path,
+                mount_path,
+            } => VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path: jwt_path.to_string_lossy().to_string(),
+                mount_path,
+            },
+            super::config::VaultAuthMethod::AwsIam { role, mount_path } => {
+                VaultAuthMethod::AwsIam {
+                    role,
+                    region: None,
+                    mount_path,
+                }
+            }
+            super::config::VaultAuthMethod::Ldap {
+                username,
+                password,
+                mount_path,
+            } => VaultAuthMethod::Ldap {
+                username,
+                password,
+                mount_path,
+            },
+            super::config::VaultAuthMethod::Userpass {
+                username,
+                password,
+                mount_path,
+            } => VaultAuthMethod::Userpass {
+                username,
+                password,
+                mount_path,
+            },
+        }
+    }
+}
+
 /// Configuration for the HashiCorp Vault backend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
@@ -240,6 +301,26 @@ pub struct VaultConfig {
     pub default_kv_version: u8,
 }
 
+impl From<super::config::VaultConfig> for VaultConfig {
+    fn from(config: super::config::VaultConfig) -> Self {
+        Self {
+            address: config.address,
+            auth: config.auth.into(),
+            namespace: config.namespace,
+            timeout_secs: DEFAULT_TIMEOUT_SECS,
+            tls_verify: !config.skip_verify,
+            ca_cert_path: config
+                .ca_cert
+                .map(|path| path.to_string_lossy().to_string()),
+            client_cert_path: None,
+            client_key_path: None,
+            max_retries: default_max_retries(),
+            retry_delay_ms: default_retry_delay_ms(),
+            default_kv_version: config.kv_version,
+        }
+    }
+}
+
 fn default_vault_addr() -> String {
     std::env::var("VAULT_ADDR").unwrap_or_else(|_| DEFAULT_VAULT_ADDR.to_string())
 }
@@ -284,15 +365,17 @@ impl VaultConfig {
 
     /// Create configuration from environment variables.
     pub fn from_env() -> SecretResult<Self> {
-        let address = std::env::var("VAULT_ADDR").unwrap_or_else(|_| DEFAULT_VAULT_ADDR.to_string());
+        let address =
+            std::env::var("VAULT_ADDR").unwrap_or_else(|_| DEFAULT_VAULT_ADDR.to_string());
         let namespace = std::env::var("VAULT_NAMESPACE").ok();
 
         // Determine auth method from environment
         let auth = if let Ok(token) = std::env::var("VAULT_TOKEN") {
             VaultAuthMethod::Token { token }
-        } else if let (Ok(role_id), Ok(secret_id)) =
-            (std::env::var("VAULT_ROLE_ID"), std::env::var("VAULT_SECRET_ID"))
-        {
+        } else if let (Ok(role_id), Ok(secret_id)) = (
+            std::env::var("VAULT_ROLE_ID"),
+            std::env::var("VAULT_SECRET_ID"),
+        ) {
             VaultAuthMethod::AppRole {
                 role_id,
                 secret_id,
@@ -402,7 +485,12 @@ impl VaultToken {
         }
     }
 
-    fn with_metadata(mut self, ttl_secs: Option<u64>, renewable: bool, policies: Vec<String>) -> Self {
+    fn with_metadata(
+        mut self,
+        ttl_secs: Option<u64>,
+        renewable: bool,
+        policies: Vec<String>,
+    ) -> Self {
         self.ttl_secs = ttl_secs;
         self.renewable = renewable;
         self.policies = policies;
@@ -603,9 +691,8 @@ impl VaultBackend {
             let ca_cert = std::fs::read(ca_path).map_err(|e| {
                 SecretError::Configuration(format!("Failed to read CA cert: {}", e))
             })?;
-            let cert = reqwest::Certificate::from_pem(&ca_cert).map_err(|e| {
-                SecretError::Configuration(format!("Invalid CA cert: {}", e))
-            })?;
+            let cert = reqwest::Certificate::from_pem(&ca_cert)
+                .map_err(|e| SecretError::Configuration(format!("Invalid CA cert: {}", e)))?;
             builder = builder.add_root_certificate(cert);
         }
 
@@ -661,7 +748,10 @@ impl VaultBackend {
                 role,
                 region,
                 mount_path,
-            } => self.auth_aws_iam(role, region.as_deref(), mount_path).await?,
+            } => {
+                self.auth_aws_iam(role, region.as_deref(), mount_path)
+                    .await?
+            }
             VaultAuthMethod::Userpass {
                 username,
                 password,
@@ -701,7 +791,10 @@ impl VaultBackend {
 
         if let Some(data) = vault_resp.data {
             let ttl = data.get("ttl").and_then(|v| v.as_u64());
-            let renewable = data.get("renewable").and_then(|v| v.as_bool()).unwrap_or(false);
+            let renewable = data
+                .get("renewable")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let policies = data
                 .get("policies")
                 .and_then(|v| v.as_array())
@@ -743,9 +836,8 @@ impl VaultBackend {
         jwt_path: &str,
         mount_path: &str,
     ) -> SecretResult<VaultToken> {
-        let jwt = std::fs::read_to_string(jwt_path).map_err(|e| {
-            SecretError::Configuration(format!("Failed to read K8s JWT: {}", e))
-        })?;
+        let jwt = std::fs::read_to_string(jwt_path)
+            .map_err(|e| SecretError::Configuration(format!("Failed to read K8s JWT: {}", e)))?;
 
         let url = format!("{}/v1/auth/{}/login", self.config.address, mount_path);
 
@@ -798,9 +890,7 @@ impl VaultBackend {
             "iam_request_headers": {} // Would need proper AWS Signature V4 headers
         });
 
-        warn!(
-            "AWS IAM auth requires proper STS signing. This is a placeholder implementation."
-        );
+        warn!("AWS IAM auth requires proper STS signing. This is a placeholder implementation.");
 
         let response = self.post_auth(&url, &body).await?;
         self.parse_auth_response(response).await
@@ -847,9 +937,10 @@ impl VaultBackend {
             request = request.header("X-Vault-Namespace", ns);
         }
 
-        request.send().await.map_err(|e| {
-            SecretError::Connection(format!("Authentication request failed: {}", e))
-        })
+        request
+            .send()
+            .await
+            .map_err(|e| SecretError::Connection(format!("Authentication request failed: {}", e)))
     }
 
     /// Parse an authentication response.
@@ -939,9 +1030,16 @@ impl VaultBackend {
         path: &str,
     ) -> SecretResult<reqwest::RequestBuilder> {
         let token = self.get_token().await?;
-        let url = format!("{}/v1/{}", self.config.address, path.trim_start_matches('/'));
+        let url = format!(
+            "{}/v1/{}",
+            self.config.address,
+            path.trim_start_matches('/')
+        );
 
-        let mut request = self.client.request(method, &url).header("X-Vault-Token", token);
+        let mut request = self
+            .client
+            .request(method, &url)
+            .header("X-Vault-Token", token);
 
         if let Some(ns) = &self.config.namespace {
             request = request.header("X-Vault-Namespace", ns);
@@ -999,23 +1097,29 @@ impl VaultBackend {
         let request = self.request(reqwest::Method::GET, &api_path).await?;
         let response = self.execute_with_retry(request).await?;
 
-        self.handle_response::<KvV2Data>(response, &api_path).await.map(|data| {
-            let mut secret_data = HashMap::new();
-            for (k, v) in data.data {
-                secret_data.insert(k, json_to_secret_value(v));
-            }
+        self.handle_response::<KvV2Data>(response, &api_path)
+            .await
+            .map(|data| {
+                let mut secret_data = HashMap::new();
+                for (k, v) in data.data {
+                    secret_data.insert(k, json_to_secret_value(v));
+                }
 
-            let metadata = SecretMetadata {
-                version: Some(SecretVersion::Numeric(data.metadata.version)),
-                created_time: parse_rfc3339_timestamp(&data.metadata.created_time),
-                updated_time: None,
-                custom: data.metadata.custom_metadata.unwrap_or_default(),
-                deletion_time: data.metadata.deletion_time.as_ref().and_then(|t| parse_rfc3339_timestamp(t)),
-                destroyed: data.metadata.destroyed,
-            };
+                let metadata = SecretMetadata {
+                    version: Some(SecretVersion::Numeric(data.metadata.version)),
+                    created_time: parse_rfc3339_timestamp(&data.metadata.created_time),
+                    updated_time: None,
+                    custom: data.metadata.custom_metadata.unwrap_or_default(),
+                    deletion_time: data
+                        .metadata
+                        .deletion_time
+                        .as_ref()
+                        .and_then(|t| parse_rfc3339_timestamp(t)),
+                    destroyed: data.metadata.destroyed,
+                };
 
-            Secret::with_metadata(path, secret_data, metadata)
-        })
+                Secret::with_metadata(path, secret_data, metadata)
+            })
     }
 
     /// Read a specific version of a secret from KV v2.
@@ -1034,23 +1138,25 @@ impl VaultBackend {
         let request = self.request(reqwest::Method::GET, &api_path).await?;
         let response = self.execute_with_retry(request).await?;
 
-        self.handle_response::<KvV2Data>(response, &api_path).await.map(|data| {
-            let mut secret_data = HashMap::new();
-            for (k, v) in data.data {
-                secret_data.insert(k, json_to_secret_value(v));
-            }
+        self.handle_response::<KvV2Data>(response, &api_path)
+            .await
+            .map(|data| {
+                let mut secret_data = HashMap::new();
+                for (k, v) in data.data {
+                    secret_data.insert(k, json_to_secret_value(v));
+                }
 
-            let metadata = SecretMetadata {
-                version: Some(SecretVersion::Numeric(data.metadata.version)),
-                created_time: parse_rfc3339_timestamp(&data.metadata.created_time),
-                updated_time: None,
-                custom: data.metadata.custom_metadata.unwrap_or_default(),
-                deletion_time: None,
-                destroyed: data.metadata.destroyed,
-            };
+                let metadata = SecretMetadata {
+                    version: Some(SecretVersion::Numeric(data.metadata.version)),
+                    created_time: parse_rfc3339_timestamp(&data.metadata.created_time),
+                    updated_time: None,
+                    custom: data.metadata.custom_metadata.unwrap_or_default(),
+                    deletion_time: None,
+                    destroyed: data.metadata.destroyed,
+                };
 
-            Secret::with_metadata(path, secret_data, metadata)
-        })
+                Secret::with_metadata(path, secret_data, metadata)
+            })
     }
 
     /// Write a secret to KV v2 engine.
@@ -1108,7 +1214,12 @@ impl VaultBackend {
     }
 
     /// Destroy specific versions of a secret (permanent deletion).
-    pub async fn kv_v2_destroy(&self, mount: &str, path: &str, versions: &[u64]) -> SecretResult<()> {
+    pub async fn kv_v2_destroy(
+        &self,
+        mount: &str,
+        path: &str,
+        versions: &[u64],
+    ) -> SecretResult<()> {
         let api_path = format!("{}/destroy/{}", mount, path.trim_start_matches('/'));
 
         let body = serde_json::json!({
@@ -1134,7 +1245,12 @@ impl VaultBackend {
     }
 
     /// Undelete (recover) specific versions of a secret.
-    pub async fn kv_v2_undelete(&self, mount: &str, path: &str, versions: &[u64]) -> SecretResult<()> {
+    pub async fn kv_v2_undelete(
+        &self,
+        mount: &str,
+        path: &str,
+        versions: &[u64],
+    ) -> SecretResult<()> {
         let api_path = format!("{}/undelete/{}", mount, path.trim_start_matches('/'));
 
         let body = serde_json::json!({
@@ -1162,7 +1278,9 @@ impl VaultBackend {
     /// List secrets at a path in KV v2.
     pub async fn kv_v2_list(&self, mount: &str, path: &str) -> SecretResult<Vec<String>> {
         let api_path = format!("{}/metadata/{}", mount, path.trim_start_matches('/'));
-        let request = self.request(reqwest::Method::from_bytes(b"LIST").unwrap(), &api_path).await?;
+        let request = self
+            .request(reqwest::Method::from_bytes(b"LIST").unwrap(), &api_path)
+            .await?;
         let response = self.execute_with_retry(request).await?;
 
         if response.status() == StatusCode::NOT_FOUND {
@@ -1238,7 +1356,8 @@ impl VaultBackend {
     ///
     /// Returns the ciphertext in Vault's format: `vault:v1:...`
     pub async fn transit_encrypt(&self, key_name: &str, plaintext: &str) -> SecretResult<String> {
-        self.transit_encrypt_with_mount("transit", key_name, plaintext).await
+        self.transit_encrypt_with_mount("transit", key_name, plaintext)
+            .await
     }
 
     /// Encrypt data using a specific Transit mount.
@@ -1276,7 +1395,8 @@ impl VaultBackend {
     ///
     /// Returns the decrypted plaintext.
     pub async fn transit_decrypt(&self, key_name: &str, ciphertext: &str) -> SecretResult<String> {
-        self.transit_decrypt_with_mount("transit", key_name, ciphertext).await
+        self.transit_decrypt_with_mount("transit", key_name, ciphertext)
+            .await
     }
 
     /// Decrypt data using a specific Transit mount.
@@ -1346,7 +1466,12 @@ impl VaultBackend {
 
         self.handle_response::<BatchData>(response, &api_path)
             .await
-            .map(|data| data.batch_results.into_iter().map(|r| r.ciphertext).collect())
+            .map(|data| {
+                data.batch_results
+                    .into_iter()
+                    .map(|r| r.ciphertext)
+                    .collect()
+            })
     }
 
     /// Decrypt multiple items in a batch using Transit.
@@ -1382,7 +1507,9 @@ impl VaultBackend {
             batch_results: Vec<BatchResult>,
         }
 
-        let data = self.handle_response::<BatchData>(response, &api_path).await?;
+        let data = self
+            .handle_response::<BatchData>(response, &api_path)
+            .await?;
 
         data.batch_results
             .into_iter()
@@ -1390,9 +1517,8 @@ impl VaultBackend {
                 let bytes = BASE64.decode(&r.plaintext).map_err(|e| {
                     SecretError::InvalidFormat(format!("Failed to decode base64: {}", e))
                 })?;
-                String::from_utf8(bytes).map_err(|e| {
-                    SecretError::InvalidFormat(format!("Invalid UTF-8: {}", e))
-                })
+                String::from_utf8(bytes)
+                    .map_err(|e| SecretError::InvalidFormat(format!("Invalid UTF-8: {}", e)))
             })
             .collect()
     }
@@ -1572,8 +1698,12 @@ impl VaultBackend {
     /// # Returns
     ///
     /// Returns dynamic credentials with lease information.
-    pub async fn generate_database_credentials(&self, role: &str) -> SecretResult<DynamicCredentials> {
-        self.generate_database_credentials_with_mount("database", role).await
+    pub async fn generate_database_credentials(
+        &self,
+        role: &str,
+    ) -> SecretResult<DynamicCredentials> {
+        self.generate_database_credentials_with_mount("database", role)
+            .await
     }
 
     /// Generate database credentials from a specific mount.
@@ -1748,7 +1878,9 @@ impl VaultBackend {
         }
 
         if status == StatusCode::UNAUTHORIZED {
-            return Err(SecretError::Authentication("Token expired or invalid".into()));
+            return Err(SecretError::Authentication(
+                "Token expired or invalid".into(),
+            ));
         }
 
         if status == StatusCode::SERVICE_UNAVAILABLE || status == StatusCode::BAD_GATEWAY {
@@ -1826,7 +1958,8 @@ impl SecretBackend for VaultBackend {
         // Extract mount from path
         let parts: Vec<&str> = path.splitn(3, "/data/").collect();
         if parts.len() == 2 {
-            self.kv_v2_read_version(parts[0], parts[1], version_num).await
+            self.kv_v2_read_version(parts[0], parts[1], version_num)
+                .await
         } else {
             self.kv_v2_read_version("secret", path, version_num).await
         }
@@ -1851,12 +1984,15 @@ impl SecretBackend for VaultBackend {
         if path.contains("/data/") || self.config.default_kv_version == 2 {
             let parts: Vec<&str> = path.splitn(3, "/data/").collect();
             if parts.len() == 2 {
-                self.kv_v2_write(parts[0], parts[1], secret.data().clone()).await
+                self.kv_v2_write(parts[0], parts[1], secret.data().clone())
+                    .await
             } else {
-                self.kv_v2_write("secret", path, secret.data().clone()).await
+                self.kv_v2_write("secret", path, secret.data().clone())
+                    .await
             }
         } else {
-            self.kv_v1_write("secret", path, secret.data().clone()).await
+            self.kv_v1_write("secret", path, secret.data().clone())
+                .await
         }
     }
 
@@ -2013,7 +2149,10 @@ mod tests {
             json_to_secret_value(serde_json::json!(true)),
             SecretValue::Boolean(true)
         );
-        assert_eq!(json_to_secret_value(serde_json::json!(null)), SecretValue::Null);
+        assert_eq!(
+            json_to_secret_value(serde_json::json!(null)),
+            SecretValue::Null
+        );
     }
 
     #[test]

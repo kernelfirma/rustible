@@ -640,10 +640,12 @@ impl HealthChecker {
 /// Strategy for graceful degradation when connections fail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DegradationStrategy {
     /// Fail fast without retrying.
     FailFast,
     /// Retry with backoff.
+    #[default]
     RetryWithBackoff,
     /// Use a fallback connection if available.
     UseFallback,
@@ -651,12 +653,6 @@ pub enum DegradationStrategy {
     QueueForLater,
     /// Return cached result if available.
     ReturnCached,
-}
-
-impl Default for DegradationStrategy {
-    fn default() -> Self {
-        Self::RetryWithBackoff
-    }
 }
 
 /// Configuration for graceful degradation.

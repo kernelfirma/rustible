@@ -14,7 +14,10 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::prelude::*;
 //! use rustible::lookup::{LookupRegistry, LookupContext};
 //!
 //! let registry = LookupRegistry::with_builtins();
@@ -28,6 +31,8 @@
 //!
 //! // Generate a password
 //! let password = registry.lookup("password", &["length=16"], &context)?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod env;
@@ -103,7 +108,7 @@ pub enum LookupError {
 pub type LookupResult<T> = Result<T, LookupError>;
 
 /// Context for lookup plugin execution
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct LookupContext {
     /// Base directory for relative file paths
     pub base_dir: Option<PathBuf>,
@@ -171,6 +176,12 @@ impl LookupContext {
     pub fn with_default(mut self, default: impl Into<String>) -> Self {
         self.default_value = Some(default.into());
         self
+    }
+}
+
+impl Default for LookupContext {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -279,10 +290,7 @@ impl LookupRegistry {
             Ok(result) => Ok(result),
             Err(e) if !context.fail_on_error => {
                 // Return default value if fail_on_error is false
-                Ok(vec![context
-                    .default_value
-                    .clone()
-                    .unwrap_or_default()])
+                Ok(vec![context.default_value.clone().unwrap_or_default()])
             }
             Err(e) => Err(e),
         }
@@ -379,7 +387,11 @@ mod tests {
             fn description(&self) -> &'static str {
                 "Test lookup"
             }
-            fn lookup(&self, _args: &[&str], _context: &LookupContext) -> LookupResult<Vec<String>> {
+            fn lookup(
+                &self,
+                _args: &[&str],
+                _context: &LookupContext,
+            ) -> LookupResult<Vec<String>> {
                 Ok(vec![])
             }
         }

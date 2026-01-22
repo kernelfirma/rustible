@@ -5,7 +5,7 @@
 //! performance and integration with Tokio compared to ssh2.
 
 use async_trait::async_trait;
-use russh::client::{AuthResult, Handle, Handler};
+use russh::client::{AuthResult, Handle, Handler, KeyboardInteractiveAuthResponse};
 use russh::keys::agent::client::AgentClient;
 use russh::keys::load_secret_key;
 use russh::keys::PrivateKeyWithHashAlg;
@@ -17,9 +17,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::RwLock;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, trace, warn};
+
+use crate::security::BecomeValidator;
 
 /// Threshold for using streaming uploads (1MB)
 const STREAM_THRESHOLD: u64 = 1024 * 1024;
@@ -43,12 +45,14 @@ const WARMUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Minimum time between keepalive pings
 const MIN_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+const JUMP_ORIGINATOR_ADDRESS: &str = "127.0.0.1";
+const JUMP_ORIGINATOR_PORT: u32 = 0;
 
 use super::config::{ConnectionConfig, HostConfig};
 use super::ssh_common;
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
-    RusshError, TransferOptions,
+    JumpHostChain, JumpHostConfig, JumpHostResolver, RusshError, TransferOptions,
 };
 
 // ============================================================================
@@ -646,6 +650,8 @@ pub struct RusshConnection {
     commands_executed: AtomicU64,
     /// Keepalive interval (0 = disabled)
     keepalive_interval: Duration,
+    /// Jump host handles kept alive for ProxyJump connections
+    jump_handles: Arc<Mutex<Vec<Handle<ClientHandler>>>>,
 }
 
 /// Connection performance metrics
@@ -663,7 +669,7 @@ pub struct ConnectionMetrics {
 
 impl RusshConnection {
     /// Build command string with options (no environment variables)
-    fn build_command(command: &str, options: &ExecuteOptions) -> String {
+    fn build_command(command: &str, options: &ExecuteOptions) -> ConnectionResult<String> {
         let mut parts = Vec::new();
 
         // Add working directory
@@ -675,6 +681,15 @@ impl RusshConnection {
         if options.escalate {
             let escalate_method = options.escalate_method.as_deref().unwrap_or("sudo");
             let escalate_user = options.escalate_user.as_deref().unwrap_or("root");
+
+            BecomeValidator::new()
+                .validate_username(escalate_user)
+                .map_err(|e| {
+                    ConnectionError::InvalidConfig(format!(
+                        "Invalid escalation user '{}': {}",
+                        escalate_user, e
+                    ))
+                })?;
 
             match escalate_method {
                 "sudo" => {
@@ -697,14 +712,14 @@ impl RusshConnection {
         }
 
         parts.push(command.to_string());
-        parts.concat()
+        Ok(parts.concat())
     }
 
     /// Build command string with options, including environment variables
     ///
     /// Since russh doesn't support the SSH request_env protocol, we prepend
     /// environment variable exports to the command.
-    fn build_command_with_env(command: &str, options: &ExecuteOptions) -> String {
+    fn build_command_with_env(command: &str, options: &ExecuteOptions) -> ConnectionResult<String> {
         let mut parts = Vec::new();
 
         // Prepend environment variables as exports
@@ -718,8 +733,8 @@ impl RusshConnection {
         }
 
         // Add the rest of the command using the base build_command
-        parts.push(Self::build_command(command, options));
-        parts.concat()
+        parts.push(Self::build_command(command, options)?);
+        Ok(parts.concat())
     }
 
     /// Open an SFTP session
@@ -831,7 +846,7 @@ impl RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         let channel = handle.channel_open_session().await.map_err(|e| {
             ConnectionError::ConnectionFailed(format!("Failed to open warmup channel: {}", e))
@@ -858,15 +873,15 @@ impl RusshConnection {
         host_config: Option<HostConfig>,
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<Self> {
-        let ssh_common::ResolvedConnectionParams {
-            host_config,
-            retry_config,
-            host: actual_host,
-            port: actual_port,
-            user: actual_user,
-            timeout,
-            identifier,
-        } = ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
+        let resolved =
+            ssh_common::resolve_connection_params(host, port, user, host_config, global_config);
+        let host_config = resolved.host_config.clone();
+        let retry_config = resolved.retry_config.clone();
+        let actual_host = resolved.host.clone();
+        let actual_port = resolved.port;
+        let actual_user = resolved.user.clone();
+        let timeout = resolved.timeout;
+        let identifier = resolved.identifier.clone();
 
         debug!(
             host = %actual_host,
@@ -875,18 +890,32 @@ impl RusshConnection {
             "Connecting via SSH (russh)"
         );
 
-        // Connect with retry logic
-        let handle = ssh_common::connect_with_retry_async(&retry_config, "SSH connection", || {
-            Self::do_connect(
-                &actual_host,
-                actual_port,
-                &actual_user,
-                &host_config,
-                global_config,
-                timeout,
-            )
-        })
-        .await?;
+        let mut jump_resolver = JumpHostResolver::new(global_config);
+        let jump_chain = jump_resolver.resolve_from_config(&host_config)?;
+
+        let (handle, jump_handles) = if jump_chain.is_empty() {
+            // Connect with retry logic
+            let handle =
+                ssh_common::connect_with_retry_async(&retry_config, "SSH connection", || {
+                    Self::do_connect(
+                        &actual_host,
+                        actual_port,
+                        &actual_user,
+                        &host_config,
+                        global_config,
+                        timeout,
+                    )
+                })
+                .await?;
+            (handle, Vec::new())
+        } else {
+            debug!(
+                identifier = %identifier,
+                jump_chain = %jump_chain,
+                "Connecting via jump host chain"
+            );
+            Self::connect_via_jump_chain(&jump_chain, &resolved, global_config).await?
+        };
 
         // Determine keepalive interval from host config or use default
         let keepalive_interval = host_config
@@ -903,6 +932,7 @@ impl RusshConnection {
             created_at: Instant::now(),
             commands_executed: AtomicU64::new(0),
             keepalive_interval,
+            jump_handles: Arc::new(Mutex::new(jump_handles)),
         };
 
         debug!(
@@ -914,6 +944,60 @@ impl RusshConnection {
         Ok(conn)
     }
 
+    fn build_client_config(timeout: Duration) -> Arc<russh::client::Config> {
+        // Create optimized russh client configuration.
+        // Modern servers typically support these fast algorithms.
+        let config = russh::client::Config {
+            inactivity_timeout: Some(timeout),
+            // Optimize preferred algorithms for faster negotiation
+            // Prefer fast key exchange algorithms
+            preferred: russh::Preferred {
+                kex: std::borrow::Cow::Borrowed(&[
+                    russh::kex::CURVE25519,
+                    russh::kex::CURVE25519_PRE_RFC_8731,
+                ]),
+                // Prefer fast ciphers (only use AES-256-GCM as AES-128-GCM isn't available)
+                cipher: std::borrow::Cow::Borrowed(&[
+                    russh::cipher::CHACHA20_POLY1305,
+                    russh::cipher::AES_256_GCM,
+                ]),
+                // Prefer fast key types
+                key: std::borrow::Cow::Borrowed(&[
+                    Algorithm::Ed25519,
+                    Algorithm::Rsa {
+                        hash: Some(HashAlg::Sha256),
+                    },
+                    Algorithm::Rsa {
+                        hash: Some(HashAlg::Sha512),
+                    },
+                ]),
+                // Prefer fast MACs (not used with AEAD ciphers but needed for fallback)
+                mac: std::borrow::Cow::Borrowed(&[
+                    russh::mac::HMAC_SHA256,
+                    russh::mac::HMAC_SHA512,
+                ]),
+                // No compression for speed
+                compression: std::borrow::Cow::Borrowed(&[russh::compression::NONE]),
+            },
+            ..Default::default()
+        };
+        Arc::new(config)
+    }
+
+    fn build_client_handler(host: &str, port: u16, host_config: &HostConfig) -> ClientHandler {
+        // Determine strict host key checking setting
+        // If strict_host_key_checking is:
+        // - Some(true): reject unknown hosts (accept_unknown = false)
+        // - Some(false): accept unknown hosts (accept_unknown = true)
+        // - None: default to accepting unknown hosts (accept_unknown = true)
+        let accept_unknown = !host_config.strict_host_key_checking.unwrap_or(false);
+
+        // Use configured known_hosts file if provided
+        let known_hosts_path = ssh_common::user_known_hosts_path(host_config);
+
+        ClientHandler::new(host, port, accept_unknown, known_hosts_path)
+    }
+
     /// Perform the actual connection
     async fn do_connect(
         host: &str,
@@ -923,38 +1007,7 @@ impl RusshConnection {
         global_config: &ConnectionConfig,
         timeout: Duration,
     ) -> ConnectionResult<Handle<ClientHandler>> {
-        // Create optimized russh client configuration
-        let mut config = russh::client::Config::default();
-        config.inactivity_timeout = Some(timeout);
-        // Optimize preferred algorithms for faster negotiation
-        // Modern servers typically support these fast algorithms
-        config.preferred = russh::Preferred {
-            // Prefer fast key exchange algorithms
-            kex: std::borrow::Cow::Borrowed(&[
-                russh::kex::CURVE25519,
-                russh::kex::CURVE25519_PRE_RFC_8731,
-            ]),
-            // Prefer fast ciphers (only use AES-256-GCM as AES-128-GCM isn't available)
-            cipher: std::borrow::Cow::Borrowed(&[
-                russh::cipher::CHACHA20_POLY1305,
-                russh::cipher::AES_256_GCM,
-            ]),
-            // Prefer fast key types
-            key: std::borrow::Cow::Borrowed(&[
-                Algorithm::Ed25519,
-                Algorithm::Rsa {
-                    hash: Some(HashAlg::Sha256),
-                },
-                Algorithm::Rsa {
-                    hash: Some(HashAlg::Sha512),
-                },
-            ]),
-            // Prefer fast MACs (not used with AEAD ciphers but needed for fallback)
-            mac: std::borrow::Cow::Borrowed(&[russh::mac::HMAC_SHA256, russh::mac::HMAC_SHA512]),
-            // No compression for speed
-            compression: std::borrow::Cow::Borrowed(&[russh::compression::NONE]),
-        };
-        let config = Arc::new(config);
+        let config = Self::build_client_config(timeout);
 
         // Connect to the SSH server
         let addr = format!("{}:{}", host, port);
@@ -970,18 +1023,7 @@ impl RusshConnection {
             ConnectionError::ConnectionFailed(format!("Failed to set TCP_NODELAY: {}", e))
         })?;
 
-        // Create client handler with host key verification
-        // Determine strict host key checking setting
-        // If strict_host_key_checking is:
-        // - Some(true): reject unknown hosts (accept_unknown = false)
-        // - Some(false): accept unknown hosts (accept_unknown = true)
-        // - None: default to accepting unknown hosts (accept_unknown = true)
-        let accept_unknown = !host_config.strict_host_key_checking.unwrap_or(false);
-
-        // Use configured known_hosts file if provided
-        let known_hosts_path = ssh_common::user_known_hosts_path(host_config);
-
-        let handler = ClientHandler::new(host, port, accept_unknown, known_hosts_path);
+        let handler = Self::build_client_handler(host, port, host_config);
 
         let mut session = russh::client::connect_stream(config, socket, handler)
             .await
@@ -996,6 +1038,154 @@ impl RusshConnection {
         Ok(session)
     }
 
+    async fn do_connect_stream<S>(
+        stream: S,
+        host: &str,
+        port: u16,
+        user: &str,
+        host_config: &HostConfig,
+        global_config: &ConnectionConfig,
+        timeout: Duration,
+    ) -> ConnectionResult<Handle<ClientHandler>>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let config = Self::build_client_config(timeout);
+        let handler = Self::build_client_handler(host, port, host_config);
+
+        let mut session = russh::client::connect_stream(config, stream, handler)
+            .await
+            .map_err(|e| {
+                ConnectionError::ConnectionFailed(format!("SSH handshake failed: {}", e))
+            })?;
+
+        // Authenticate
+        Self::authenticate(&mut session, user, host_config, global_config).await?;
+
+        debug!(
+            host = %host,
+            port = %port,
+            user = %user,
+            "SSH connection established successfully (stream)"
+        );
+        Ok(session)
+    }
+
+    fn resolve_jump_params(
+        jump: &JumpHostConfig,
+        default_user: &str,
+        global_config: &ConnectionConfig,
+    ) -> ssh_common::ResolvedConnectionParams {
+        let mut host_config = global_config.get_host_merged(&jump.host);
+
+        if let Some(user) = &jump.user {
+            host_config.user = Some(user.clone());
+        }
+        if jump.port != 22 {
+            host_config.port = Some(jump.port);
+        }
+        if let Some(identity_file) = &jump.identity_file {
+            host_config.identity_file = Some(identity_file.clone());
+        }
+
+        ssh_common::resolve_connection_params(
+            &jump.host,
+            jump.port,
+            default_user,
+            Some(host_config),
+            global_config,
+        )
+    }
+
+    async fn connect_via_jump_channel(
+        handle: &Handle<ClientHandler>,
+        params: &ssh_common::ResolvedConnectionParams,
+        global_config: &ConnectionConfig,
+    ) -> ConnectionResult<Handle<ClientHandler>> {
+        let channel = handle
+            .channel_open_direct_tcpip(
+                params.host.as_str(),
+                params.port as u32,
+                JUMP_ORIGINATOR_ADDRESS,
+                JUMP_ORIGINATOR_PORT,
+            )
+            .await
+            .map_err(|e| {
+                ConnectionError::ConnectionFailed(format!(
+                    "Failed to open jump channel to {}:{}: {}",
+                    params.host, params.port, e
+                ))
+            })?;
+
+        let stream = channel.into_stream();
+
+        Self::do_connect_stream(
+            stream,
+            &params.host,
+            params.port,
+            &params.user,
+            &params.host_config,
+            global_config,
+            params.timeout,
+        )
+        .await
+    }
+
+    async fn connect_via_jump_chain(
+        jump_chain: &JumpHostChain,
+        target: &ssh_common::ResolvedConnectionParams,
+        global_config: &ConnectionConfig,
+    ) -> ConnectionResult<(Handle<ClientHandler>, Vec<Handle<ClientHandler>>)> {
+        let mut jump_handles = Vec::new();
+        let jump_params: Vec<_> = jump_chain
+            .iter()
+            .map(|jump| Self::resolve_jump_params(jump, &target.user, global_config))
+            .collect();
+
+        let first = jump_params.first().ok_or_else(|| {
+            ConnectionError::InvalidConfig("ProxyJump chain resolved to empty".to_string())
+        })?;
+
+        let mut current_handle = ssh_common::connect_with_retry_async(
+            &first.retry_config,
+            "SSH jump host connection",
+            || {
+                Self::do_connect(
+                    &first.host,
+                    first.port,
+                    &first.user,
+                    &first.host_config,
+                    global_config,
+                    first.timeout,
+                )
+            },
+        )
+        .await?;
+
+        for params in jump_params.iter().skip(1) {
+            let next_handle = ssh_common::connect_with_retry_async(
+                &params.retry_config,
+                "SSH jump host hop",
+                || Self::connect_via_jump_channel(&current_handle, params, global_config),
+            )
+            .await?;
+
+            jump_handles.push(current_handle);
+            current_handle = next_handle;
+        }
+
+        let target_handle = ssh_common::connect_with_retry_async(
+            &target.retry_config,
+            "SSH jump host target connection",
+            || Self::connect_via_jump_channel(&current_handle, target, global_config),
+        )
+        .await?;
+
+        jump_handles.push(current_handle);
+
+        Ok((target_handle, jump_handles))
+    }
+
     /// Perform SSH authentication
     async fn authenticate(
         session: &mut Handle<ClientHandler>,
@@ -1004,11 +1194,9 @@ impl RusshConnection {
         global_config: &ConnectionConfig,
     ) -> ConnectionResult<()> {
         // Try SSH agent first if enabled
-        if global_config.defaults.use_agent {
-            if Self::try_agent_auth(session, user).await.is_ok() {
-                debug!("Authenticated using SSH agent");
-                return Ok(());
-            }
+        if global_config.defaults.use_agent && Self::try_agent_auth(session, user).await.is_ok() {
+            debug!("Authenticated using SSH agent");
+            return Ok(());
         }
 
         // Try key-based authentication
@@ -1036,6 +1224,17 @@ impl RusshConnection {
 
             if matches!(result, AuthResult::Success) {
                 debug!("Authenticated using password");
+                return Ok(());
+            }
+        }
+
+        // Try keyboard-interactive authentication
+        if let Some(password) = &host_config.password {
+            if Self::try_keyboard_interactive_auth(session, user, password)
+                .await
+                .is_ok()
+            {
+                debug!("Authenticated using keyboard-interactive");
                 return Ok(());
             }
         }
@@ -1165,6 +1364,46 @@ impl RusshConnection {
             ))
         }
     }
+
+    /// Try keyboard-interactive authentication
+    async fn try_keyboard_interactive_auth(
+        session: &mut Handle<ClientHandler>,
+        user: &str,
+        password: &str,
+    ) -> ConnectionResult<()> {
+        let mut response = session
+            .authenticate_keyboard_interactive_start(user, None::<String>)
+            .await
+            .map_err(|e| {
+                ConnectionError::AuthenticationFailed(format!(
+                    "Keyboard-interactive authentication start failed: {}",
+                    e
+                ))
+            })?;
+
+        loop {
+            match response {
+                KeyboardInteractiveAuthResponse::Success => return Ok(()),
+                KeyboardInteractiveAuthResponse::Failure { .. } => {
+                    return Err(ConnectionError::AuthenticationFailed(
+                        "Keyboard-interactive authentication failed".to_string(),
+                    ))
+                }
+                KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                    let responses = prompts.iter().map(|_| password.to_string()).collect();
+                    response = session
+                        .authenticate_keyboard_interactive_respond(responses)
+                        .await
+                        .map_err(|e| {
+                            ConnectionError::AuthenticationFailed(format!(
+                                "Keyboard-interactive authentication failed: {}",
+                                e
+                            ))
+                        })?;
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -1200,7 +1439,7 @@ impl Connection for RusshConnection {
 
         // Build the full command with options
         // Prepend environment variables to the command since russh doesn't have request_env
-        let full_command = Self::build_command_with_env(command, &options);
+        let full_command = Self::build_command_with_env(command, &options)?;
 
         trace!(command = %full_command, "Executing remote command");
 
@@ -1214,7 +1453,7 @@ impl Connection for RusshConnection {
             let handle_guard = self.handle.read().await;
             let handle: &Handle<ClientHandler> = handle_guard
                 .as_ref()
-                .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+                .ok_or(ConnectionError::ConnectionClosed)?;
 
             // 1. Open a channel (while holding read lock)
             let mut channel = handle.channel_open_session().await.map_err(|e| {
@@ -1322,7 +1561,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1350,20 +1589,25 @@ impl Connection for RusshConnection {
         // Use open() with explicit flags and attributes to set mode atomically if provided
         let remote_path_str = remote_path.to_string_lossy().to_string();
 
-        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let flags = russh_sftp::protocol::OpenFlags::WRITE
+            | russh_sftp::protocol::OpenFlags::CREATE
+            | russh_sftp::protocol::OpenFlags::TRUNCATE;
         let mut attrs = russh_sftp::protocol::FileAttributes::default();
 
         if let Some(mode) = options.mode {
             attrs.permissions = Some(mode);
         }
 
-        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to create remote file {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        let mut remote_file = sftp
+            .open_with_flags_and_attributes(&remote_path_str, flags, attrs)
+            .await
+            .map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to create remote file {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
 
         // Write content to remote file
         remote_file.write_all(&content).await.map_err(|e| {
@@ -1417,7 +1661,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1435,20 +1679,25 @@ impl Connection for RusshConnection {
         // Create/open remote file for writing
         let remote_path_str = remote_path.to_string_lossy().to_string();
 
-        let mut flags = russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE;
+        let flags = russh_sftp::protocol::OpenFlags::WRITE
+            | russh_sftp::protocol::OpenFlags::CREATE
+            | russh_sftp::protocol::OpenFlags::TRUNCATE;
         let mut attrs = russh_sftp::protocol::FileAttributes::default();
 
         if let Some(mode) = options.mode {
             attrs.permissions = Some(mode);
         }
 
-        let mut remote_file = sftp.open_with_flags_and_attributes(&remote_path_str, flags, attrs).await.map_err(|e| {
-            ConnectionError::TransferFailed(format!(
-                "Failed to create remote file {}: {}",
-                remote_path.display(),
-                e
-            ))
-        })?;
+        let mut remote_file = sftp
+            .open_with_flags_and_attributes(&remote_path_str, flags, attrs)
+            .await
+            .map_err(|e| {
+                ConnectionError::TransferFailed(format!(
+                    "Failed to create remote file {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
 
         // Write content to remote file
         remote_file.write_all(content).await.map_err(|e| {
@@ -1495,7 +1744,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1550,7 +1799,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1585,7 +1834,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1612,7 +1861,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1635,7 +1884,7 @@ impl Connection for RusshConnection {
         let handle_guard = self.handle.read().await;
         let handle = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
 
         // Open SFTP session (while holding read lock)
         let sftp = Self::open_sftp(handle).await?;
@@ -1715,6 +1964,17 @@ impl Connection for RusshConnection {
                 .await;
         }
 
+        let mut jump_handles = self.jump_handles.lock().await;
+        for handle in jump_handles.drain(..).rev() {
+            let _ = handle
+                .disconnect(
+                    russh::Disconnect::ByApplication,
+                    "Connection closed by client",
+                    "en",
+                )
+                .await;
+        }
+
         Ok(())
     }
 
@@ -1767,19 +2027,22 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let commands = vec![
-    ///     "hostname".to_string(),
-    ///     "uptime".to_string(),
-    ///     "date".to_string(),
-    /// ];
-    /// let results = conn.execute_batch_internal(&commands, None).await;
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # use rustible::connection::Connection;
+    /// # let conn = rustible::connection::RusshConnectionBuilder::new("localhost").connect().await?;
+    /// let commands = vec!["hostname", "uptime", "date"];
+    /// let results = conn.execute_batch(&commands, None).await;
     /// for (cmd, result) in commands.iter().zip(results.iter()) {
     ///     match result {
     ///         Ok(r) => println!("{}: {}", cmd, r.stdout),
     ///         Err(e) => eprintln!("{}: error: {}", cmd, e),
     ///     }
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     async fn execute_batch_internal(
         &self,
@@ -1810,11 +2073,21 @@ impl RusshConnection {
         let handle_arc = self.handle.clone();
 
         // Prepare all command strings upfront
-        let prepared_commands: Vec<(usize, String)> = commands
+        let prepared_commands: Vec<(usize, String)> = match commands
             .iter()
             .enumerate()
-            .map(|(idx, cmd)| (idx, Self::build_command_with_env(cmd, &options)))
-            .collect();
+            .map(|(idx, cmd)| Self::build_command_with_env(cmd, &options).map(|full| (idx, full)))
+            .collect::<ConnectionResult<Vec<_>>>()
+        {
+            Ok(prepared) => prepared,
+            Err(e) => {
+                let err_msg = e.to_string();
+                return commands
+                    .iter()
+                    .map(|_| Err(ConnectionError::InvalidConfig(err_msg.clone())))
+                    .collect();
+            }
+        };
 
         // Use semaphore to limit concurrent channels
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CHANNELS));
@@ -1906,7 +2179,7 @@ impl RusshConnection {
             let handle_guard = handle_arc.read().await;
             let handle = handle_guard
                 .as_ref()
-                .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+                .ok_or(ConnectionError::ConnectionClosed)?;
 
             // Open a new channel
             let mut channel = handle.channel_open_session().await.map_err(|e| {
@@ -1922,13 +2195,14 @@ impl RusshConnection {
             })?;
 
             // Handle escalation password if needed
-            if escalate && escalate_password.is_some() {
-                let password = escalate_password.as_ref().unwrap();
-                let password_data = format!("{}\n", password);
-                let mut cursor = tokio::io::BufReader::new(password_data.as_bytes());
-                channel.data(&mut cursor).await.map_err(|e| {
-                    ConnectionError::ExecutionFailed(format!("Failed to write password: {}", e))
-                })?;
+            if escalate {
+                if let Some(password) = escalate_password.as_ref() {
+                    let password_data = format!("{password}\n");
+                    let mut cursor = tokio::io::BufReader::new(password_data.as_bytes());
+                    channel.data(&mut cursor).await.map_err(|e| {
+                        ConnectionError::ExecutionFailed(format!("Failed to write password: {}", e))
+                    })?;
+                }
             }
 
             // Collect stdout, stderr, and exit code
@@ -2151,10 +2425,13 @@ impl PendingCommand {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use rustible::connection::russh::{RusshConnection, PipelinedExecutor};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::connection::{PipelinedExecutor, RusshConnectionBuilder};
 ///
-/// let conn = RusshConnection::connect(...).await?;
+/// # let conn = RusshConnectionBuilder::new("localhost").connect().await?;
 /// let mut pipeline = conn.pipeline();
 ///
 /// // Queue commands - these don't execute yet
@@ -2167,6 +2444,8 @@ impl PendingCommand {
 /// for result in results {
 ///     println!("{:?}", result);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Memory Usage
@@ -2354,7 +2633,14 @@ impl<'a> PipelinedExecutor<'a> {
 
             if let Some(Some(channel)) = channels.get_mut(idx) {
                 let full_command =
-                    RusshConnection::build_command_with_env(&cmd.command, &cmd.options);
+                    match RusshConnection::build_command_with_env(&cmd.command, &cmd.options) {
+                        Ok(full_command) => full_command,
+                        Err(e) => {
+                            channels[idx] = None;
+                            channel_errors[idx] = Some(e);
+                            continue;
+                        }
+                    };
 
                 if let Err(e) = channel.exec(true, full_command).await {
                     // Mark this channel as failed
@@ -2532,12 +2818,18 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
     /// let mut pipeline = connection.pipeline();
     /// pipeline.queue("ls -la", None);
     /// pipeline.queue("df -h", None);
     /// pipeline.queue("free -m", None);
     /// let results = pipeline.flush().await;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn pipeline(&self) -> PipelinedExecutor<'_> {
         PipelinedExecutor::new(self)
@@ -2564,12 +2856,18 @@ impl RusshConnection {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let results = connection.execute_pipelined(&[
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # let connection = RusshConnectionBuilder::new("localhost").connect().await?;
+    /// let results = connection.execute_pipelined([
     ///     "echo hello",
     ///     "echo world",
     ///     "date",
     /// ]).await;
+    /// # Ok(())
+    /// # }
     /// ```
     pub async fn execute_pipelined<I, S>(&self, commands: I) -> Vec<ConnectionResult<CommandResult>>
     where
@@ -2628,7 +2926,7 @@ impl RusshConnection {
         let handle_guard = self.handle.read().await;
         let h = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         Self::create_remote_dirs_sftp(&sftp, remote_dir).await?;
         drop(handle_guard);
@@ -2643,7 +2941,7 @@ impl RusshConnection {
         options: &DirectoryTransferOptions,
         depth: usize,
     ) -> ConnectionResult<Vec<(PathBuf, PathBuf)>> {
-        if options.max_depth.map_or(false, |max| depth > max) {
+        if options.max_depth.is_some_and(|max| depth > max) {
             return Ok(Vec::new());
         }
         let mut files = Vec::new();
@@ -2667,7 +2965,7 @@ impl RusshConnection {
             if options
                 .exclude_patterns
                 .iter()
-                .any(|p| glob::Pattern::new(p).map_or(false, |pat| pat.matches(&name)))
+                .any(|p| glob::Pattern::new(p).is_ok_and(|pat| pat.matches(&name)))
             {
                 continue;
             }
@@ -2675,7 +2973,7 @@ impl RusshConnection {
                 && !options
                     .include_patterns
                     .iter()
-                    .any(|p| glob::Pattern::new(p).map_or(false, |pat| pat.matches(&name)))
+                    .any(|p| glob::Pattern::new(p).is_ok_and(|pat| pat.matches(&name)))
             {
                 continue;
             }
@@ -2729,13 +3027,13 @@ impl RusshConnection {
         options: &DirectoryTransferOptions,
         depth: usize,
     ) -> ConnectionResult<Vec<(PathBuf, PathBuf)>> {
-        if options.max_depth.map_or(false, |max| depth > max) {
+        if options.max_depth.is_some_and(|max| depth > max) {
             return Ok(Vec::new());
         }
         let handle_guard = self.handle.read().await;
         let h = handle_guard
             .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+            .ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(handle_guard);
         let read_dir = sftp
@@ -2753,7 +3051,7 @@ impl RusshConnection {
             if options
                 .exclude_patterns
                 .iter()
-                .any(|p| glob::Pattern::new(p).map_or(false, |pat| pat.matches(&name)))
+                .any(|p| glob::Pattern::new(p).is_ok_and(|pat| pat.matches(&name)))
             {
                 continue;
             }
@@ -2761,7 +3059,7 @@ impl RusshConnection {
                 && !options
                     .include_patterns
                     .iter()
-                    .any(|p| glob::Pattern::new(p).map_or(false, |pat| pat.matches(&name)))
+                    .any(|p| glob::Pattern::new(p).is_ok_and(|pat| pat.matches(&name)))
             {
                 continue;
             }
@@ -2919,9 +3217,7 @@ impl RusshConnection {
         })?;
         let size = content.len() as u64;
         let guard = handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         if opts.create_dirs {
@@ -2937,8 +3233,10 @@ impl RusshConnection {
             .await
             .map_err(|e| ConnectionError::TransferFailed(format!("Failed to write: {}", e)))?;
         if let Some(mode) = opts.mode {
-            let mut attrs = russh_sftp::protocol::FileAttributes::default();
-            attrs.permissions = Some(mode);
+            let attrs = russh_sftp::protocol::FileAttributes {
+                permissions: Some(mode),
+                ..Default::default()
+            };
             let _ = sftp.set_metadata(&path_str, attrs).await;
         }
         Ok(size)
@@ -3064,9 +3362,7 @@ impl RusshConnection {
         local: &Path,
     ) -> ConnectionResult<u64> {
         let guard = handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         let path_str = remote.to_string_lossy().to_string();
@@ -3112,9 +3408,7 @@ impl RusshConnection {
             return Ok(());
         }
         let guard = self.handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         if opts.create_dirs {
@@ -3153,8 +3447,10 @@ impl RusshConnection {
         prog.phase = TransferPhase::Finalizing;
         progress(&prog);
         if let Some(mode) = opts.mode {
-            let mut attrs = russh_sftp::protocol::FileAttributes::default();
-            attrs.permissions = Some(mode);
+            let attrs = russh_sftp::protocol::FileAttributes {
+                permissions: Some(mode),
+                ..Default::default()
+            };
             let _ = sftp.set_metadata(&path_str, attrs).await;
         }
         if opts.owner.is_some() || opts.group.is_some() {
@@ -3190,9 +3486,7 @@ impl RusshConnection {
         progress: ProgressCallback,
     ) -> ConnectionResult<()> {
         let guard = self.handle.read().await;
-        let h = guard
-            .as_ref()
-            .ok_or_else(|| ConnectionError::ConnectionClosed)?;
+        let h = guard.as_ref().ok_or(ConnectionError::ConnectionClosed)?;
         let sftp = Self::open_sftp(h).await?;
         drop(guard);
         let path_str = remote.to_string_lossy().to_string();
@@ -3253,8 +3547,11 @@ impl RusshConnection {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use rustible::connection::russh::HighPerformanceConnectionFactory;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::connection::{ConnectionConfig, HighPerformanceConnectionFactory};
 ///
 /// let factory = HighPerformanceConnectionFactory::new();
 ///
@@ -3265,7 +3562,10 @@ impl RusshConnection {
 ///     ("host3.example.com", 22, "user"),
 /// ];
 ///
+/// let config = ConnectionConfig::default();
 /// let connections = factory.connect_parallel(&hosts, &config).await;
+/// # Ok(())
+/// # }
 /// ```
 pub struct HighPerformanceConnectionFactory {
     /// Maximum concurrent connection attempts
@@ -3626,21 +3926,21 @@ mod tests {
     #[test]
     fn test_build_command_basic() {
         let options = ExecuteOptions::default();
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "echo hello");
     }
 
     #[test]
     fn test_build_command_with_cwd() {
         let options = ExecuteOptions::new().with_cwd("/tmp");
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "cd /tmp && echo hello");
     }
 
     #[test]
     fn test_build_command_with_escalation() {
         let options = ExecuteOptions::new().with_escalation(Some("admin".to_string()));
-        let cmd = RusshConnection::build_command("echo hello", &options);
+        let cmd = RusshConnection::build_command("echo hello", &options).unwrap();
         assert_eq!(cmd, "sudo -u admin -- echo hello");
     }
 
@@ -3649,8 +3949,15 @@ mod tests {
         let options = ExecuteOptions::new()
             .with_cwd("/var/log")
             .with_escalation(None);
-        let cmd = RusshConnection::build_command("cat syslog", &options);
+        let cmd = RusshConnection::build_command("cat syslog", &options).unwrap();
         assert_eq!(cmd, "cd /var/log && sudo -u root -- cat syslog");
+    }
+
+    #[test]
+    fn test_build_command_rejects_invalid_user() {
+        let options = ExecuteOptions::new().with_escalation(Some("root; rm -rf /".to_string()));
+        let result = RusshConnection::build_command("echo hello", &options);
+        assert!(result.is_err());
     }
 
     #[test]

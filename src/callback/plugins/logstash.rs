@@ -55,8 +55,11 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::{LogstashCallback, LogstashConfig};
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::plugins::{LogstashCallback, LogstashConfig, LogstashProtocol};
 //!
 //! // From environment variables
 //! let callback = LogstashCallback::from_env()?;
@@ -68,6 +71,8 @@
 //!     .protocol(LogstashProtocol::Tcp)
 //!     .build();
 //! let callback = LogstashCallback::new(config)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -578,7 +583,7 @@ impl LogstashCallback {
             }
             LogstashProtocol::Udp => {
                 let socket = UdpSocket::bind("0.0.0.0:0")?;
-                socket.connect(&self.config.address())?;
+                socket.connect(self.config.address())?;
                 state.connection = ConnectionState::UdpConnected(socket);
                 info!("Connected to Logstash via UDP at {}", self.config.address());
             }
@@ -629,7 +634,7 @@ impl LogstashCallback {
 
                 // Check if we should flush
                 let should_flush = state.buffer.len() >= self.config.batch_size
-                    || state.last_flush.map_or(true, |t| {
+                    || state.last_flush.is_none_or(|t| {
                         t.elapsed().as_millis() as u64 >= self.config.flush_interval_ms
                     });
 

@@ -40,13 +40,18 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::callback::plugins::JUnitCallback;
+//! ```rust,ignore,no_run
+//! # #[tokio::main]
+//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use rustible::callback::prelude::*;
+//! use rustible::callback::JUnitCallback;
 //!
 //! let callback = JUnitCallback::new("test-results.xml");
-//! executor.with_callback(Box::new(callback));
+//! # let _ = ();
 //!
 //! // After playbook execution, the XML file is written automatically
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;
@@ -111,8 +116,10 @@ impl TestSuite {
 
     /// Calculates summary statistics for this test suite.
     fn stats(&self) -> SuiteStats {
-        let mut stats = SuiteStats::default();
-        stats.tests = self.test_cases.len();
+        let mut stats = SuiteStats {
+            tests: self.test_cases.len(),
+            ..Default::default()
+        };
 
         for tc in &self.test_cases {
             match &tc.outcome {
@@ -159,11 +166,16 @@ struct SuiteStats {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::JUnitCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::JUnitCallback;
 ///
 /// let callback = JUnitCallback::new("test-results/playbook.xml");
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct JUnitCallback {
@@ -192,8 +204,13 @@ impl JUnitCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = JUnitCallback::new("test-results/playbook.xml");
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new(output_path: impl AsRef<Path>) -> Self {

@@ -2,8 +2,8 @@
 //!
 //! Handles resolving collection dependencies with version constraints.
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 /// Error during dependency resolution
@@ -67,9 +67,10 @@ impl CollectionDependency {
 }
 
 /// Version constraint for dependencies
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum VersionConstraint {
     /// Any version
+    #[default]
     Any,
     /// Exact version
     Exact(String),
@@ -87,12 +88,6 @@ pub enum VersionConstraint {
     And(Vec<VersionConstraint>),
 }
 
-impl Default for VersionConstraint {
-    fn default() -> Self {
-        Self::Any
-    }
-}
-
 impl VersionConstraint {
     /// Parse a version constraint string
     pub fn parse(s: &str) -> Result<Self, DependencyResolutionError> {
@@ -104,10 +99,8 @@ impl VersionConstraint {
 
         // Handle compound constraints (e.g., ">=1.0.0,<2.0.0")
         if s.contains(',') {
-            let constraints: Result<Vec<_>, _> = s
-                .split(',')
-                .map(|part| Self::parse(part.trim()))
-                .collect();
+            let constraints: Result<Vec<_>, _> =
+                s.split(',').map(|part| Self::parse(part.trim())).collect();
             return Ok(Self::And(constraints?));
         }
 
@@ -135,18 +128,18 @@ impl VersionConstraint {
         match self {
             Self::Any => true,
             Self::Exact(v) => version == v,
-            Self::Gte(v) => {
-                compare_versions(version, v).map(|c| c >= std::cmp::Ordering::Equal).unwrap_or(false)
-            }
-            Self::Gt(v) => {
-                compare_versions(version, v).map(|c| c == std::cmp::Ordering::Greater).unwrap_or(false)
-            }
-            Self::Lte(v) => {
-                compare_versions(version, v).map(|c| c <= std::cmp::Ordering::Equal).unwrap_or(false)
-            }
-            Self::Lt(v) => {
-                compare_versions(version, v).map(|c| c == std::cmp::Ordering::Less).unwrap_or(false)
-            }
+            Self::Gte(v) => compare_versions(version, v)
+                .map(|c| c >= std::cmp::Ordering::Equal)
+                .unwrap_or(false),
+            Self::Gt(v) => compare_versions(version, v)
+                .map(|c| c == std::cmp::Ordering::Greater)
+                .unwrap_or(false),
+            Self::Lte(v) => compare_versions(version, v)
+                .map(|c| c <= std::cmp::Ordering::Equal)
+                .unwrap_or(false),
+            Self::Lt(v) => compare_versions(version, v)
+                .map(|c| c == std::cmp::Ordering::Less)
+                .unwrap_or(false),
             Self::Range(min, max) => {
                 let gte_min = compare_versions(version, min)
                     .map(|c| c >= std::cmp::Ordering::Equal)
@@ -163,9 +156,7 @@ impl VersionConstraint {
 
 /// Compare two version strings
 fn compare_versions(a: &str, b: &str) -> Option<std::cmp::Ordering> {
-    let parse_version = |v: &str| -> Option<semver::Version> {
-        semver::Version::parse(v).ok()
-    };
+    let parse_version = |v: &str| -> Option<semver::Version> { semver::Version::parse(v).ok() };
 
     match (parse_version(a), parse_version(b)) {
         (Some(va), Some(vb)) => Some(va.cmp(&vb)),
@@ -283,7 +274,9 @@ impl DependencyResolver {
             return Err(DependencyResolutionError::CircularDependency(cycle));
         }
 
-        let mut result: Vec<(String, String)> = self.graph.resolved
+        let mut result: Vec<(String, String)> = self
+            .graph
+            .resolved
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();

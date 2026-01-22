@@ -61,11 +61,16 @@ struct HostStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use rustible::callback::plugins::MinimalCallback;
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::callback::prelude::*;
+/// use rustible::callback::MinimalCallback;
 ///
 /// let callback = MinimalCallback::new();
-/// executor.with_callback(Box::new(callback));
+/// # let _ = ();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct MinimalCallback {
@@ -84,8 +89,13 @@ impl MinimalCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::callback::prelude::*;
     /// let callback = MinimalCallback::new();
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn new() -> Self {
@@ -207,7 +217,7 @@ impl ExecutionCallback for MinimalCallback {
         // Print duration if we have start time
         if let Some(start) = *start_time {
             let duration = start.elapsed();
-            let status = if success {
+            let playbook_status = if success {
                 "completed".green()
             } else {
                 "failed".red().bold()
@@ -216,7 +226,7 @@ impl ExecutionCallback for MinimalCallback {
             println!(
                 "\n{} {} in {:.2}s",
                 name.bright_white().bold(),
-                status,
+                playbook_status,
                 duration.as_secs_f64()
             );
         }

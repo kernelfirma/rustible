@@ -388,8 +388,11 @@ impl TemplateCacheMetrics {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::cache::template::{TemplateCache, TemplateCacheConfig};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// # use rustible::cache::template::{TemplateCache, TemplateCacheConfig};
 ///
 /// let cache = TemplateCache::new(TemplateCacheConfig::default());
 ///
@@ -401,6 +404,8 @@ impl TemplateCacheMetrics {
 /// // Subsequent renders use the cached compiled template
 /// let result2 = cache.render("Hello {{ name }}!", &serde_json::json!({"name": "Rust"}))?;
 /// assert_eq!(result2, "Hello Rust!");
+/// # Ok(())
+/// # }
 /// ```
 pub struct TemplateCache {
     /// Cached compiled templates
@@ -525,10 +530,16 @@ impl TemplateCache {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust,ignore,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    /// use rustible::prelude::*;
+    /// # use rustible::cache::template::{TemplateCache, TemplateCacheConfig};
     /// let cache = TemplateCache::new(TemplateCacheConfig::default());
     /// let vars = serde_json::json!({"name": "World", "count": 42});
     /// let result = cache.render("Hello {{ name }}, count: {{ count }}", &vars)?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn render<S: serde::Serialize>(
         &self,

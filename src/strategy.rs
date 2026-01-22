@@ -64,12 +64,14 @@ use std::time::{Duration, Instant};
 /// | Debug | Step-by-step with logging | Troubleshooting |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum Strategy {
     /// Linear - run each task on all hosts before next task.
     ///
     /// This is the default strategy and provides predictable execution order.
     /// Task N completes on all hosts before task N+1 begins on any host.
     /// Useful when task ordering across hosts matters.
+    #[default]
     Linear,
 
     /// Free - each host runs independently as fast as possible.
@@ -92,12 +94,6 @@ pub enum Strategy {
     /// Supports optional breakpoints and state inspection.
     /// Best for troubleshooting failing playbooks.
     Debug,
-}
-
-impl Default for Strategy {
-    fn default() -> Self {
-        Self::Linear
-    }
 }
 
 impl fmt::Display for Strategy {
@@ -258,7 +254,7 @@ impl Strategy {
 // ============================================================================
 
 /// Configuration options for strategy execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StrategyConfig {
     /// The execution strategy to use.
     pub strategy: Strategy,
@@ -294,22 +290,6 @@ pub struct StrategyConfig {
     /// Custom parameters for plugin strategies.
     #[serde(default)]
     pub custom_params: HashMap<String, serde_json::Value>,
-}
-
-impl Default for StrategyConfig {
-    fn default() -> Self {
-        Self {
-            strategy: Strategy::default(),
-            batch_size: None,
-            fail_fast: false,
-            max_concurrent: None,
-            task_timeout: None,
-            batch_delay_ms: None,
-            verbose: false,
-            breakpoints: Vec::new(),
-            custom_params: HashMap::new(),
-        }
-    }
 }
 
 impl StrategyConfig {
@@ -593,8 +573,14 @@ impl StrategyContext {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use rustible::strategy::{StrategyPlugin, StrategyContext, StrategyResult};
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// use rustible::prelude::*;
+/// use rustible::strategy::{
+///     StrategyContext, StrategyOutput, StrategyPlugin, StrategyResult, TaskRunner,
+/// };
+/// use std::sync::Arc;
 /// use async_trait::async_trait;
 ///
 /// struct RollingUpdateStrategy {
@@ -616,11 +602,14 @@ impl StrategyContext {
 ///         &self,
 ///         ctx: &StrategyContext,
 ///         hosts: &[String],
-///         task_runner: Box<dyn TaskRunner>,
+///         task_runner: Arc<dyn TaskRunner>,
 ///     ) -> StrategyResult<StrategyOutput> {
 ///         // Custom execution logic
+///         Ok(StrategyOutput::default())
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[async_trait]
 pub trait StrategyPlugin: Send + Sync {

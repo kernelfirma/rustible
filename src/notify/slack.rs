@@ -23,10 +23,9 @@ impl SlackNotifier {
     pub fn new(config: SlackConfig, timeout: Duration) -> NotificationResult<Self> {
         config.validate()?;
 
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()
-            .map_err(|e| NotificationError::internal(format!("Failed to create HTTP client: {}", e)))?;
+        let client = Client::builder().timeout(timeout).build().map_err(|e| {
+            NotificationError::internal(format!("Failed to create HTTP client: {}", e))
+        })?;
 
         Ok(Self { config, client })
     }
@@ -50,7 +49,13 @@ impl SlackNotifier {
                 host_stats,
                 failures,
                 ..
-            } => self.format_playbook_complete(playbook, *success, *duration_secs, host_stats, failures.as_deref()),
+            } => self.format_playbook_complete(
+                playbook,
+                *success,
+                *duration_secs,
+                host_stats,
+                failures.as_deref(),
+            ),
             NotificationEvent::TaskFailed {
                 playbook,
                 task,
@@ -197,7 +202,13 @@ impl SlackNotifier {
         }
     }
 
-    fn format_task_failed(&self, playbook: &str, task: &str, host: &str, error: &str) -> SlackMessage {
+    fn format_task_failed(
+        &self,
+        playbook: &str,
+        task: &str,
+        host: &str,
+        error: &str,
+    ) -> SlackMessage {
         SlackMessage {
             channel: self.config.channel.clone(),
             username: self.config.username.clone(),
@@ -247,8 +258,7 @@ impl SlackNotifier {
     }
 
     fn format_custom(&self, name: &str, data: &serde_json::Value) -> SlackMessage {
-        let text = serde_json::to_string_pretty(data)
-            .unwrap_or_else(|_| data.to_string());
+        let text = serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string());
 
         SlackMessage {
             channel: self.config.channel.clone(),
@@ -284,7 +294,10 @@ impl Notifier for SlackNotifier {
 
         let message = self.format_message(event);
 
-        debug!("Sending Slack notification for event: {}", event.event_type());
+        debug!(
+            "Sending Slack notification for event: {}",
+            event.event_type()
+        );
 
         let response = self
             .client
@@ -303,7 +316,10 @@ impl Notifier for SlackNotifier {
             ));
         }
 
-        info!("Slack notification sent successfully for event: {}", event.event_type());
+        info!(
+            "Slack notification sent successfully for event: {}",
+            event.event_type()
+        );
         Ok(())
     }
 }
@@ -427,8 +443,7 @@ mod tests {
 
     #[test]
     fn test_format_playbook_complete_failure() {
-        let config = SlackConfig::new("https://hooks.slack.com/test")
-            .with_channel("#alerts");
+        let config = SlackConfig::new("https://hooks.slack.com/test").with_channel("#alerts");
         let notifier = SlackNotifier {
             config,
             client: Client::new(),
