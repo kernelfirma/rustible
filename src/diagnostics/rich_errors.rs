@@ -380,13 +380,9 @@ pub fn undefined_variable_error(
 ) -> RichDiagnostic {
     let span = Span::from_line_col(source, line, col, var_name.len());
 
-    let mut diag = RichDiagnostic::error(
-        format!("undefined variable '{}'", var_name),
-        file,
-        span,
-    )
-    .with_code("E0001")
-    .with_label("not defined in this scope");
+    let mut diag = RichDiagnostic::error(format!("undefined variable '{}'", var_name), file, span)
+        .with_code("E0001")
+        .with_label("not defined in this scope");
 
     // Find similar variable names for "did you mean?" suggestions
     if let Some(suggestion) = find_similar(var_name, available_vars) {
@@ -413,13 +409,9 @@ pub fn module_not_found_error(
 ) -> RichDiagnostic {
     let span = Span::from_line_col(source, line, col, module_name.len());
 
-    let mut diag = RichDiagnostic::error(
-        format!("module '{}' not found", module_name),
-        file,
-        span,
-    )
-    .with_code("E0002")
-    .with_label("unknown module");
+    let mut diag = RichDiagnostic::error(format!("module '{}' not found", module_name), file, span)
+        .with_code("E0002")
+        .with_label("unknown module");
 
     // Find similar module names
     if let Some(suggestion) = find_similar(module_name, available_modules) {
@@ -501,15 +493,11 @@ pub fn connection_error(
     // Find where the host is defined in the source
     let span = find_host_span(source, host, line);
 
-    RichDiagnostic::error(
-        format!("failed to connect to '{}'", host),
-        file,
-        span,
-    )
-    .with_code("E0030")
-    .with_label(format!("connection failed: {}", message))
-    .with_help("verify the host is reachable and SSH credentials are correct")
-    .with_note("use `rustible ping` to test connectivity")
+    RichDiagnostic::error(format!("failed to connect to '{}'", host), file, span)
+        .with_code("E0030")
+        .with_label(format!("connection failed: {}", message))
+        .with_help("verify the host is reachable and SSH credentials are correct")
+        .with_note("use `rustible ping` to test connectivity")
 }
 
 /// Builder for missing required argument errors

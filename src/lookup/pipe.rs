@@ -97,9 +97,9 @@ impl PipeLookup {
         }
 
         // Execute the command with timeout enforcement
-        let mut child = command.spawn().map_err(|e| {
-            LookupError::CommandFailed(format!("Failed to execute command: {}", e))
-        })?;
+        let mut child = command
+            .spawn()
+            .map_err(|e| LookupError::CommandFailed(format!("Failed to execute command: {}", e)))?;
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -379,7 +379,9 @@ mod tests {
         // Valid commands
         assert!(lookup.validate_command("echo hello").is_ok());
         assert!(lookup.validate_command("ls -la").is_ok());
-        assert!(lookup.validate_command("cat /etc/passwd | grep root").is_ok());
+        assert!(lookup
+            .validate_command("cat /etc/passwd | grep root")
+            .is_ok());
 
         // Invalid commands
         assert!(lookup.validate_command("").is_err());

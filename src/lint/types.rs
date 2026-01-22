@@ -34,7 +34,6 @@ impl std::fmt::Display for Severity {
     }
 }
 
-
 /// Category of lint rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -263,12 +262,18 @@ impl LintResult {
 
     /// Get issues filtered by severity.
     pub fn issues_by_severity(&self, severity: Severity) -> Vec<&LintIssue> {
-        self.issues.iter().filter(|i| i.severity == severity).collect()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == severity)
+            .collect()
     }
 
     /// Get issues filtered by category.
     pub fn issues_by_category(&self, category: RuleCategory) -> Vec<&LintIssue> {
-        self.issues.iter().filter(|i| i.category == category).collect()
+        self.issues
+            .iter()
+            .filter(|i| i.category == category)
+            .collect()
     }
 
     /// Check if there are any errors or critical issues.
@@ -288,11 +293,23 @@ impl LintResult {
     /// Get the exit code based on issues found.
     /// Returns 0 if no errors, 1 if there are warnings, 2 if there are errors.
     pub fn exit_code(&self) -> i32 {
-        if self.issues.iter().any(|i| matches!(i.severity, Severity::Critical)) {
+        if self
+            .issues
+            .iter()
+            .any(|i| matches!(i.severity, Severity::Critical))
+        {
             3
-        } else if self.issues.iter().any(|i| matches!(i.severity, Severity::Error)) {
+        } else if self
+            .issues
+            .iter()
+            .any(|i| matches!(i.severity, Severity::Error))
+        {
             2
-        } else if self.issues.iter().any(|i| matches!(i.severity, Severity::Warning)) {
+        } else if self
+            .issues
+            .iter()
+            .any(|i| matches!(i.severity, Severity::Warning))
+        {
             1
         } else {
             0
@@ -325,10 +342,7 @@ impl LintResult {
 pub enum LintError {
     /// Error reading a file.
     #[error("Failed to read file '{path}': {message}")]
-    FileRead {
-        path: PathBuf,
-        message: String,
-    },
+    FileRead { path: PathBuf, message: String },
 
     /// YAML parsing error.
     #[error("YAML parsing error in '{path}': {message}")]
@@ -413,7 +427,12 @@ impl LintConfig {
     }
 
     /// Check if a rule should be run.
-    pub fn should_run_rule(&self, rule_id: &str, category: RuleCategory, severity: Severity) -> bool {
+    pub fn should_run_rule(
+        &self,
+        rule_id: &str,
+        category: RuleCategory,
+        severity: Severity,
+    ) -> bool {
         // Check skip rules
         if self.skip_rules.contains(&rule_id.to_string()) {
             return false;

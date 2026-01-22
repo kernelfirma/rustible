@@ -625,11 +625,13 @@ impl Module for LineinfileModule {
                 ));
             }
         } else if state == "absent"
-            && params.get("line").is_none() && params.get("regexp").is_none() {
-                return Err(ModuleError::MissingParameter(
-                    "Either 'line' or 'regexp' is required for state=absent".to_string(),
-                ));
-            }
+            && params.get("line").is_none()
+            && params.get("regexp").is_none()
+        {
+            return Err(ModuleError::MissingParameter(
+                "Either 'line' or 'regexp' is required for state=absent".to_string(),
+            ));
+        }
 
         Ok(())
     }

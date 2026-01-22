@@ -324,8 +324,8 @@ mod humantime_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::secrets::types::SecretValue;
+    use std::collections::HashMap;
 
     fn create_test_secret(path: &str) -> Secret {
         let mut data = HashMap::new();
@@ -357,8 +357,14 @@ mod tests {
     fn test_cache_invalidation() {
         let mut cache = SecretCache::default();
 
-        cache.insert("test/secret1".to_string(), create_test_secret("test/secret1"));
-        cache.insert("test/secret2".to_string(), create_test_secret("test/secret2"));
+        cache.insert(
+            "test/secret1".to_string(),
+            create_test_secret("test/secret1"),
+        );
+        cache.insert(
+            "test/secret2".to_string(),
+            create_test_secret("test/secret2"),
+        );
 
         assert_eq!(cache.len(), 2);
 
@@ -372,9 +378,18 @@ mod tests {
     fn test_cache_invalidate_prefix() {
         let mut cache = SecretCache::default();
 
-        cache.insert("prod/db/password".to_string(), create_test_secret("prod/db/password"));
-        cache.insert("prod/api/key".to_string(), create_test_secret("prod/api/key"));
-        cache.insert("dev/db/password".to_string(), create_test_secret("dev/db/password"));
+        cache.insert(
+            "prod/db/password".to_string(),
+            create_test_secret("prod/db/password"),
+        );
+        cache.insert(
+            "prod/api/key".to_string(),
+            create_test_secret("prod/api/key"),
+        );
+        cache.insert(
+            "dev/db/password".to_string(),
+            create_test_secret("dev/db/password"),
+        );
 
         assert_eq!(cache.len(), 3);
 

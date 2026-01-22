@@ -586,9 +586,8 @@ collections:
         let path = temp_dir.path().join("requirements.yml");
 
         let mut requirements = RequirementsFile::new();
-        requirements.add_collection(
-            Requirement::collection("community.general").with_version("5.0.0"),
-        );
+        requirements
+            .add_collection(Requirement::collection("community.general").with_version("5.0.0"));
         requirements
             .write_to_file(&path)
             .await

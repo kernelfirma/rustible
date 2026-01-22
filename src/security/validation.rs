@@ -175,13 +175,7 @@ impl BecomeValidator {
         // Additional strict checks
         if self.strict_mode {
             // Reject usernames that look like command injection attempts
-            let suspicious_patterns = [
-                "root;",
-                "root&&",
-                "root||",
-                "root|",
-                "$(", "`", "${",
-            ];
+            let suspicious_patterns = ["root;", "root&&", "root||", "root|", "$(", "`", "${"];
             for pattern in suspicious_patterns {
                 if username.contains(pattern) {
                     return Err(SecurityError::CommandInjection(format!(
@@ -340,10 +334,10 @@ impl BecomeValidator {
     pub fn validate_flags(&self, flags: &str) -> SecurityResult<()> {
         // Check for dangerous patterns in flags
         let dangerous_patterns = [
-            "$(", "`", "${",    // Command substitution
-            ";", "&&", "||",    // Command chaining
-            "|", ">", "<",      // Pipes and redirects
-            "\n", "\r", "\0",   // Control characters
+            "$(", "`", "${", // Command substitution
+            ";", "&&", "||", // Command chaining
+            "|", ">", "<", // Pipes and redirects
+            "\n", "\r", "\0", // Control characters
         ];
 
         for pattern in dangerous_patterns {
@@ -368,8 +362,17 @@ mod tests {
         let validator = BecomeValidator::new();
 
         let valid_names = vec![
-            "root", "admin", "www-data", "nginx", "postgres", "mysql",
-            "nobody", "user123", "test_user", "test-user", "_apt",
+            "root",
+            "admin",
+            "www-data",
+            "nginx",
+            "postgres",
+            "mysql",
+            "nobody",
+            "user123",
+            "test_user",
+            "test-user",
+            "_apt",
             "systemd-network",
         ];
 

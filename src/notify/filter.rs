@@ -225,7 +225,6 @@ pub enum RuleAction {
     Deny,
 }
 
-
 /// Simple glob pattern matching.
 fn matches_glob(pattern: &str, text: &str) -> bool {
     // Simple implementation: * matches any sequence

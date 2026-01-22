@@ -106,7 +106,6 @@ pub enum TerraformBackendType {
     Http,
 }
 
-
 impl std::fmt::Display for TerraformBackendType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1180,9 +1179,7 @@ fn extract_provider(provider: &str) -> String {
         }
         // No closing quote, return everything after the last slash
         // stripping any trailing characters like ]
-        return remaining
-            .trim_end_matches(['"', ']'])
-            .to_string();
+        return remaining.trim_end_matches(['"', ']']).to_string();
     }
 
     // Fallback: try to extract from provider["aws"]
@@ -2308,10 +2305,7 @@ mod tests {
     fn test_terraform_plugin_config() {
         let config = TerraformPluginConfig::default();
         assert_eq!(config.backend, TerraformBackendType::Local);
-        assert_eq!(
-            config.state_path,
-            Some(PathBuf::from("terraform.tfstate"))
-        );
+        assert_eq!(config.state_path, Some(PathBuf::from("terraform.tfstate")));
         assert!(config.export_outputs);
         assert!(config.resource_mappings.is_empty());
 

@@ -69,7 +69,9 @@ impl TemplateContext {
 
         // Extract additional fields based on event type
         match event {
-            NotificationEvent::PlaybookStart { hosts, timestamp, .. } => {
+            NotificationEvent::PlaybookStart {
+                hosts, timestamp, ..
+            } => {
                 ctx.host_count = Some(hosts.len());
                 ctx.timestamp = timestamp.clone();
             }
@@ -143,28 +145,26 @@ impl NotificationTemplate {
         // Load Slack template
         let slack_path = path.join("slack.j2");
         if slack_path.exists() {
-            template.slack_template = Some(
-                std::fs::read_to_string(&slack_path)
-                    .map_err(|e| NotificationError::template(format!("Failed to read slack.j2: {}", e)))?,
-            );
+            template.slack_template = Some(std::fs::read_to_string(&slack_path).map_err(|e| {
+                NotificationError::template(format!("Failed to read slack.j2: {}", e))
+            })?);
         }
 
         // Load email template
         let email_path = path.join("email.j2");
         if email_path.exists() {
-            template.email_template = Some(
-                std::fs::read_to_string(&email_path)
-                    .map_err(|e| NotificationError::template(format!("Failed to read email.j2: {}", e)))?,
-            );
+            template.email_template = Some(std::fs::read_to_string(&email_path).map_err(|e| {
+                NotificationError::template(format!("Failed to read email.j2: {}", e))
+            })?);
         }
 
         // Load webhook template
         let webhook_path = path.join("webhook.j2");
         if webhook_path.exists() {
-            template.webhook_template = Some(
-                std::fs::read_to_string(&webhook_path)
-                    .map_err(|e| NotificationError::template(format!("Failed to read webhook.j2: {}", e)))?,
-            );
+            template.webhook_template =
+                Some(std::fs::read_to_string(&webhook_path).map_err(|e| {
+                    NotificationError::template(format!("Failed to read webhook.j2: {}", e))
+                })?);
         }
 
         Ok(template)
@@ -190,19 +190,28 @@ impl NotificationTemplate {
 
     /// Renders the Slack template.
     pub fn render_slack(&self, ctx: &TemplateContext) -> NotificationResult<String> {
-        let template = self.slack_template.as_deref().unwrap_or(DEFAULT_SLACK_TEMPLATE);
+        let template = self
+            .slack_template
+            .as_deref()
+            .unwrap_or(DEFAULT_SLACK_TEMPLATE);
         self.render(template, ctx)
     }
 
     /// Renders the email template.
     pub fn render_email(&self, ctx: &TemplateContext) -> NotificationResult<String> {
-        let template = self.email_template.as_deref().unwrap_or(DEFAULT_EMAIL_TEMPLATE);
+        let template = self
+            .email_template
+            .as_deref()
+            .unwrap_or(DEFAULT_EMAIL_TEMPLATE);
         self.render(template, ctx)
     }
 
     /// Renders the webhook template.
     pub fn render_webhook(&self, ctx: &TemplateContext) -> NotificationResult<String> {
-        let template = self.webhook_template.as_deref().unwrap_or(DEFAULT_WEBHOOK_TEMPLATE);
+        let template = self
+            .webhook_template
+            .as_deref()
+            .unwrap_or(DEFAULT_WEBHOOK_TEMPLATE);
         self.render(template, ctx)
     }
 
@@ -386,8 +395,7 @@ mod tests {
     #[test]
     fn test_template_context_with_var() {
         let event = NotificationEvent::playbook_start("test.yml", vec![]);
-        let ctx = TemplateContext::from_event(&event)
-            .with_var("custom_field", "custom_value");
+        let ctx = TemplateContext::from_event(&event).with_var("custom_field", "custom_value");
 
         assert!(ctx.data.is_object());
     }
@@ -455,8 +463,7 @@ mod tests {
 
     #[test]
     fn test_custom_template() {
-        let template = NotificationTemplate::new()
-            .with_slack_template("Custom: {{ playbook }}");
+        let template = NotificationTemplate::new().with_slack_template("Custom: {{ playbook }}");
 
         let event = NotificationEvent::playbook_start("custom.yml", vec![]);
         let ctx = TemplateContext::from_event(&event);
