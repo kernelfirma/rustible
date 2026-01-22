@@ -79,10 +79,7 @@ impl ProxmoxResource {
     }
 
     fn tags_list(&self) -> Vec<String> {
-        self.tags
-            .as_deref()
-            .map(parse_tags)
-            .unwrap_or_default()
+        self.tags.as_deref().map(parse_tags).unwrap_or_default()
     }
 
     fn hostname(&self, prefs: &[String]) -> Option<String> {
@@ -160,15 +157,15 @@ impl ProxmoxResource {
         }
 
         if let Some(ref status) = self.status {
-            vars.insert(
-                "proxmox_status".to_string(),
-                Value::String(status.clone()),
-            );
+            vars.insert("proxmox_status".to_string(), Value::String(status.clone()));
             vars.insert("status".to_string(), Value::String(status.clone()));
         }
 
         if let Some(vmid) = self.resolved_vmid() {
-            vars.insert("proxmox_vmid".to_string(), Value::Number(Number::from(vmid)));
+            vars.insert(
+                "proxmox_vmid".to_string(),
+                Value::Number(Number::from(vmid)),
+            );
             vars.insert("vmid".to_string(), Value::Number(Number::from(vmid)));
         }
 
@@ -178,15 +175,15 @@ impl ProxmoxResource {
 
         let tags = self.tags_list();
         if !tags.is_empty() {
-            let values = tags
-                .iter()
-                .map(|tag| Value::String(tag.clone()))
-                .collect();
+            let values = tags.iter().map(|tag| Value::String(tag.clone())).collect();
             vars.insert("proxmox_tags".to_string(), Value::Sequence(values));
         }
 
         if let Some(maxcpu) = self.maxcpu {
-            vars.insert("proxmox_maxcpu".to_string(), Value::String(maxcpu.to_string()));
+            vars.insert(
+                "proxmox_maxcpu".to_string(),
+                Value::String(maxcpu.to_string()),
+            );
         }
         if let Some(maxmem) = self.maxmem {
             vars.insert(
@@ -263,6 +260,7 @@ impl ProxmoxPlugin {
         let api_base = normalize_api_base(&api_url)?;
 
         let validate_certs = config.get_bool("validate_certs").unwrap_or(true);
+        let insecure_skip_tls_verify = config.get_bool("insecure_skip_tls_verify").unwrap_or(false);
         let timeout_secs = config
             .get_i64("timeout")
             .unwrap_or(DEFAULT_TIMEOUT_SECS as i64);
@@ -281,6 +279,19 @@ impl ProxmoxPlugin {
         }
 
         let ca_cert_path = config.get_string("ca_cert_path");
+        if !validate_certs && !insecure_skip_tls_verify {
+            return Err(PluginConfigError::Invalid(
+                "validate_certs=false requires insecure_skip_tls_verify=true".to_string(),
+            ));
+        }
+
+        if !validate_certs {
+            tracing::warn!(
+                "TLS certificate validation disabled for Proxmox inventory. \
+                 Set validate_certs=true for production use."
+            );
+        }
+
         let client = build_http_client(
             validate_certs,
             Duration::from_secs(timeout_secs as u64),
@@ -596,15 +607,12 @@ impl ProxmoxPlugin {
         Ok(resources)
     }
 
-    fn resources_to_inventory(&self, resources: Vec<ProxmoxResource>) -> InventoryResult<Inventory> {
+    fn resources_to_inventory(
+        &self,
+        resources: Vec<ProxmoxResource>,
+    ) -> InventoryResult<Inventory> {
         let mut inventory = Inventory::new();
         let hostname_prefs = self.get_hostname_preferences();
-
-        let mut proxmox_group = Group::new("proxmox");
-        proxmox_group.set_var(
-            "plugin".to_string(),
-            Value::String("proxmox".to_string()),
-        );
 
         for resource in &resources {
             if !self.resource_passes_filters(resource) {
@@ -643,7 +651,13 @@ impl ProxmoxPlugin {
             inventory.add_host(host)?;
         }
 
-        inventory.add_group(proxmox_group)?;
+        if let Some(group) = inventory.get_group_mut("proxmox") {
+            group.set_var("plugin".to_string(), Value::String("proxmox".to_string()));
+        } else {
+            let mut proxmox_group = Group::new("proxmox");
+            proxmox_group.set_var("plugin".to_string(), Value::String("proxmox".to_string()));
+            inventory.add_group(proxmox_group)?;
+        }
 
         Ok(inventory)
     }
@@ -705,6 +719,11 @@ impl DynamicInventoryPlugin for ProxmoxPlugin {
                 "Validate TLS certificates for the API",
                 true,
             ),
+            PluginOption::optional_bool(
+                "insecure_skip_tls_verify",
+                "Allow disabling TLS certificate validation (unsafe)",
+                false,
+            ),
             PluginOption::optional_string(
                 "ca_cert_path",
                 "Path to custom CA certificate (PEM)",
@@ -720,10 +739,7 @@ impl DynamicInventoryPlugin for ProxmoxPlugin {
             },
             PluginOption::optional_bool("include_qemu", "Include QEMU VMs", true),
             PluginOption::optional_bool("include_lxc", "Include LXC containers", true),
-            PluginOption::optional_list(
-                "hostnames",
-                "Hostname preferences (name, vmid, id, node)",
-            ),
+            PluginOption::optional_list("hostnames", "Hostname preferences (name, vmid, id, node)"),
             PluginOption {
                 name: "filters".to_string(),
                 description: "Filters by node, status, tags, or type".to_string(),
@@ -815,9 +831,8 @@ fn value_matches_operator(operator: FilterOperator, value: &str, filter_value: &
 }
 
 fn normalize_api_base(api_url: &str) -> Result<String, PluginConfigError> {
-    let mut url = Url::parse(api_url).map_err(|e| {
-        PluginConfigError::Invalid(format!("Invalid api_url '{}': {}", api_url, e))
-    })?;
+    let mut url = Url::parse(api_url)
+        .map_err(|e| PluginConfigError::Invalid(format!("Invalid api_url '{}': {}", api_url, e)))?;
 
     let mut path = url.path().trim_end_matches('/').to_string();
     if path.is_empty() || path == "/" {
@@ -927,18 +942,16 @@ mod tests {
     #[test]
     fn test_resource_passes_filters() {
         let mut config = base_config();
-        config.filters.insert(
-            "node".to_string(),
-            FilterConfig::Single("pve1".to_string()),
-        );
+        config
+            .filters
+            .insert("node".to_string(), FilterConfig::Single("pve1".to_string()));
         config.filters.insert(
             "status".to_string(),
             FilterConfig::Single("running".to_string()),
         );
-        config.filters.insert(
-            "tags".to_string(),
-            FilterConfig::Single("prod".to_string()),
-        );
+        config
+            .filters
+            .insert("tags".to_string(), FilterConfig::Single("prod".to_string()));
 
         let plugin = ProxmoxPlugin::new(config).unwrap();
         let resource = sample_resource();
