@@ -33,13 +33,13 @@ impl TaskStatus {
     /// Get the colored string representation
     pub fn colored_string(&self) -> String {
         match self {
-            TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
-            TaskStatus::Changed => format!("✎ {}", "changed").yellow().to_string(),
-            TaskStatus::Skipped => format!("↷ {}", "skipping").cyan().to_string(),
-            TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
-            TaskStatus::Unreachable => format!("✘ {}", "unreachable").red().bold().to_string(),
-            TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
-            TaskStatus::Ignored => format!("⊘ {}", "ignored").blue().to_string(),
+            TaskStatus::Ok => "✔ ok".green().to_string(),
+            TaskStatus::Changed => "✎ changed".yellow().to_string(),
+            TaskStatus::Skipped => "↷ skipping".cyan().to_string(),
+            TaskStatus::Failed => "✖ failed".red().bold().to_string(),
+            TaskStatus::Unreachable => "✘ unreachable".red().bold().to_string(),
+            TaskStatus::Rescued => "✚ rescued".magenta().to_string(),
+            TaskStatus::Ignored => "⊘ ignored".blue().to_string(),
         }
     }
 
@@ -207,7 +207,6 @@ impl OutputFormatter {
 
         // Calculate padding for alignment (longest status is "unreachable" = 11 chars)
         let padding_len = 11usize.saturating_sub(status.as_str().len());
-        let padding = " ".repeat(padding_len);
 
         let host_str = if self.use_color {
             host.bright_white().bold().to_string()
@@ -221,10 +220,10 @@ impl OutputFormatter {
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!("{}{}: [{}]", status_str, padding, host_str);
+                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!("{}{}: [{}]", status_str, padding, host_str);
+                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
             }
         }
 
@@ -318,18 +317,6 @@ impl OutputFormatter {
 
         for host in sorted_hosts {
             let host_stats = &stats.hosts[host];
-            let line = format!(
-                "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
-                host,
-                host_stats.ok,
-                host_stats.changed,
-                host_stats.unreachable,
-                host_stats.failed,
-                host_stats.skipped,
-                host_stats.rescued,
-                host_stats.ignored,
-                width = max_host_len
-            );
 
             if self.use_color {
                 let host_colored = if host_stats.failed > 0 || host_stats.unreachable > 0 {
@@ -350,8 +337,8 @@ impl OutputFormatter {
                 };
 
                 // Manual padding to ensure proper visual alignment with ANSI codes
-                let padding = " ".repeat(max_host_len.saturating_sub(host.len()));
-                print!("{}{}: ", host_colored, padding);
+                let padding_len = max_host_len.saturating_sub(host.len());
+                print!("{}{:width$}: ", host_colored, "", width = padding_len);
                 print!("{} ", fmt_stat("ok", host_stats.ok, colored::Color::Green));
                 print!(
                     "{} ",
@@ -379,6 +366,18 @@ impl OutputFormatter {
                 );
                 println!();
             } else {
+                let line = format!(
+                    "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
+                    host,
+                    host_stats.ok,
+                    host_stats.changed,
+                    host_stats.unreachable,
+                    host_stats.failed,
+                    host_stats.skipped,
+                    host_stats.rescued,
+                    host_stats.ignored,
+                    width = max_host_len
+                );
                 println!("{}", line);
             }
         }
