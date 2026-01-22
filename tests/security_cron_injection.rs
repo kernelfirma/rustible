@@ -81,7 +81,11 @@ mod tests {
                 assert!(cmd.contains("RUSTIBLE_EOF\ntouch /tmp/pwned"));
 
                 // Verify the content is followed by the delimiter (closing the heredoc)
-                assert!(cmd.trim().ends_with(delimiter), "Command should end with delimiter: {}", delimiter);
+                assert!(
+                    cmd.trim().ends_with(delimiter),
+                    "Command should end with delimiter: {}",
+                    delimiter
+                );
             } else {
                 panic!("Command does not match expected heredoc pattern: {}", cmd);
             }
