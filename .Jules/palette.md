@@ -22,6 +22,10 @@
 **Learning:** Adding consistent semantic emojis (e.g., 📖, 📄, 🏷️) to interactive list items significantly improves scannability and visual consistency with the main menu.
 **Action:** Always verify that interactive selection lists (Select, MultiSelect) use consistent icon prefixes for items, especially if the parent menu uses them.
 
+## 2024-05-27 - [Semantic Status Icons]
+**Learning:** Using distinct semantic icons (like ✎ for changed, ↷ for skipped) instead of generic ASCII characters (like ~, -) communicates intent more clearly and aligns with modern CLI aesthetics, reducing ambiguity.
+**Action:** Use specific Unicode symbols that represent the action (edit, jump, check) rather than abstract punctuation when displaying status.
+
 ## 2024-05-28 - [Unicode vs Emoji Usage]
 **Learning:** The codebase avoids emojis in banners (e.g., `[==== SUCCESS ====]`) but uses them in interactive menus. For CLI output like task status, text-like Unicode symbols (e.g. `✎` instead of `📝`) are preferred to maintain alignment and professional appearance.
 **Action:** Use Unicode symbols that are 1-cell wide for tabular output; reserve colorful emojis for interactive prompts.
