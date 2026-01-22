@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::Parser;
 use indexmap::IndexMap;
 use regex::Regex;
+use rustible::diagnostics::yaml_syntax_error;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -122,8 +123,12 @@ impl RunArgs {
                 if let Some(sp) = spinner {
                     sp.finish_and_clear();
                 }
-                ctx.output
-                    .error(&format!("Failed to parse playbook: {}", e));
+                if let Some(rendered) = e.render_diagnostic() {
+                    ctx.output.diagnostic(&rendered);
+                } else {
+                    ctx.output
+                        .error(&format!("Failed to parse playbook: {}", e));
+                }
                 return Ok(1);
             }
         };
@@ -226,7 +231,23 @@ impl RunArgs {
             ctx.output
                 .plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
-            let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
+            let playbook_yaml: serde_yaml::Value = match serde_yaml::from_str(&playbook_content) {
+                Ok(value) => value,
+                Err(e) => {
+                    let (line, col) =
+                        e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
+                    let diagnostic = yaml_syntax_error(
+                        &self.playbook,
+                        &playbook_content,
+                        line,
+                        col,
+                        &e.to_string(),
+                    );
+                    ctx.output
+                        .diagnostic(&diagnostic.render_with_source(Some(&playbook_content)));
+                    return Ok(1);
+                }
+            };
             if let Some(plays) = playbook_yaml.as_sequence() {
                 let extra_vars_for_plan: std::collections::HashMap<String, serde_yaml::Value> =
                     ctx.parse_extra_vars()?;
@@ -299,8 +320,12 @@ impl RunArgs {
         let results = match executor.run_playbook(&playbook).await {
             Ok(results) => results,
             Err(e) => {
-                ctx.output
-                    .error(&format!("Playbook execution failed: {}", e));
+                if let Some(rendered) = e.render_diagnostic() {
+                    ctx.output.diagnostic(&rendered);
+                } else {
+                    ctx.output
+                        .error(&format!("Playbook execution failed: {}", e));
+                }
                 return Ok(2);
             }
         };
