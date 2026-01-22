@@ -289,8 +289,7 @@ fn html_escape(input: &str) -> String {
 /// Check if a string could be a template injection attempt
 pub fn is_potential_injection(input: &str) -> bool {
     // Check for Jinja2-style template syntax
-    let has_template_syntax =
-        input.contains("{{") || input.contains("{%") || input.contains("{#");
+    let has_template_syntax = input.contains("{{") || input.contains("{%") || input.contains("{#");
 
     // Check for nested template attempts
     let has_nested = input.contains("{{{{") || input.contains("}}}}");
@@ -363,7 +362,9 @@ mod tests {
         );
 
         // Blocked variables fail
-        assert!(sanitizer.sanitize_variable("db_password", "secret123").is_err());
+        assert!(sanitizer
+            .sanitize_variable("db_password", "secret123")
+            .is_err());
         assert!(sanitizer.sanitize_variable("api_token", "abc").is_err());
     }
 
@@ -373,7 +374,9 @@ mod tests {
 
         // Normal templates pass
         assert!(sanitizer.check_template("Hello {{ name }}!").is_ok());
-        assert!(sanitizer.check_template("{% for item in items %}{{ item }}{% endfor %}").is_ok());
+        assert!(sanitizer
+            .check_template("{% for item in items %}{{ item }}{% endfor %}")
+            .is_ok());
 
         // Dangerous templates fail
         assert!(sanitizer.check_template("{{ config.items() }}").is_err());

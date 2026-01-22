@@ -125,19 +125,15 @@ impl MountModule {
         let fut = async move { connection.execute(&command, Some(options)).await };
 
         let result = if let Ok(handle) = Handle::try_current() {
-            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join())
-                .map_err(|_| {
-                    ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
-                })?
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join()).map_err(|_| {
+                ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+            })?
         } else {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!(
-                        "Failed to create tokio runtime: {}",
-                        e
-                    ))
+                    ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
                 })?;
             rt.block_on(fut)
         }

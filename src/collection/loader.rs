@@ -2,12 +2,12 @@
 //!
 //! Handles discovering and loading collections from search paths.
 
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
-use super::{Collection, CollectionError, CollectionResult, CollectionMetadata, PluginType};
 use super::metadata::GalaxyMetadata;
 use super::runtime::RuntimeConfig;
+use super::{Collection, CollectionError, CollectionMetadata, CollectionResult, PluginType};
 
 /// Search path for collections
 #[derive(Debug, Clone)]
@@ -77,15 +77,14 @@ impl CollectionLoader {
         // User collections
         if let Some(home) = dirs::home_dir() {
             self.add_search_path(
-                CollectionSearchPath::new(home.join(".ansible/collections"))
-                    .with_priority(50)
+                CollectionSearchPath::new(home.join(".ansible/collections")).with_priority(50),
             );
         }
 
         // System collections
-        self.add_search_path(
-            CollectionSearchPath::system("/usr/share/ansible/collections")
-        );
+        self.add_search_path(CollectionSearchPath::system(
+            "/usr/share/ansible/collections",
+        ));
 
         self
     }
@@ -93,7 +92,8 @@ impl CollectionLoader {
     /// Find a collection by name
     pub fn find(&self, namespace: &str, name: &str) -> Option<PathBuf> {
         for search_path in &self.search_paths {
-            let collection_path = search_path.path
+            let collection_path = search_path
+                .path
                 .join("ansible_collections")
                 .join(namespace)
                 .join(name);
@@ -115,12 +115,12 @@ impl CollectionLoader {
         }
 
         // Find collection path
-        let path = self.find(namespace, name).ok_or_else(|| {
-            CollectionError::NotFound {
+        let path = self
+            .find(namespace, name)
+            .ok_or_else(|| CollectionError::NotFound {
                 namespace: namespace.to_string(),
                 name: name.to_string(),
-            }
-        })?;
+            })?;
 
         // Load collection
         let collection = Self::load_from_path(&path).await?;
@@ -188,7 +188,9 @@ impl CollectionLoader {
         plugin_type: PluginType,
     ) -> CollectionResult<HashMap<String, PathBuf>> {
         let mut plugins = HashMap::new();
-        let plugins_dir = collection_path.join("plugins").join(plugin_type.directory_name());
+        let plugins_dir = collection_path
+            .join("plugins")
+            .join(plugin_type.directory_name());
 
         if !plugins_dir.exists() {
             return Ok(plugins);

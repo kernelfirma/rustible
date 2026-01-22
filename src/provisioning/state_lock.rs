@@ -503,10 +503,7 @@ impl LockBackend for DynamoDbLock {
             .send()
             .await
             .map_err(|e| {
-                ProvisioningError::CloudApiError(format!(
-                    "Failed to get DynamoDB lock: {}",
-                    e
-                ))
+                ProvisioningError::CloudApiError(format!("Failed to get DynamoDB lock: {}", e))
             })?;
 
         let Some(item) = result.item else {

@@ -423,10 +423,7 @@ impl CopyModule {
                         .enable_all()
                         .build()
                         .map_err(|e| {
-                            ModuleError::ExecutionFailed(format!(
-                                "Failed to create runtime: {}",
-                                e
-                            ))
+                            ModuleError::ExecutionFailed(format!("Failed to create runtime: {}", e))
                         })?;
 
                     rt.block_on(Self::execute_remote_async(

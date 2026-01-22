@@ -454,18 +454,9 @@ mod tests {
 
     #[test]
     fn test_plugin_type_from_str() {
-        assert_eq!(
-            "module".parse::<PluginType>().unwrap(),
-            PluginType::Module
-        );
-        assert_eq!(
-            "modules".parse::<PluginType>().unwrap(),
-            PluginType::Module
-        );
-        assert_eq!(
-            "filter".parse::<PluginType>().unwrap(),
-            PluginType::Filter
-        );
+        assert_eq!("module".parse::<PluginType>().unwrap(), PluginType::Module);
+        assert_eq!("modules".parse::<PluginType>().unwrap(), PluginType::Module);
+        assert_eq!("filter".parse::<PluginType>().unwrap(), PluginType::Filter);
     }
 
     #[test]

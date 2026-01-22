@@ -176,9 +176,7 @@ impl StigScanner {
                     "ASLR makes exploitation of memory corruption vulnerabilities more difficult.",
                 )
                 .with_severity(Severity::Medium)
-                .with_remediation(
-                    "Set 'kernel.randomize_va_space = 2' in /etc/sysctl.conf",
-                )
+                .with_remediation("Set 'kernel.randomize_va_space = 2' in /etc/sysctl.conf")
                 .with_tag("kernel".to_string())
                 .with_tag("memory".to_string()),
             ),
@@ -245,9 +243,7 @@ impl StigScanner {
                     "The system must have correct permissions on /etc/gshadow",
                     "/etc/gshadow",
                 )
-                .with_description(
-                    "The /etc/gshadow file contains group password information.",
-                )
+                .with_description("The /etc/gshadow file contains group password information.")
                 .with_severity(Severity::Medium)
                 .with_category(CheckCategory::AccessControl)
                 .with_owner("root")
@@ -268,9 +264,7 @@ impl StigScanner {
                     "The audit system must be installed",
                     "rpm -q audit 2>/dev/null || dpkg -l auditd 2>/dev/null | grep -q '^ii'",
                 )
-                .with_description(
-                    "The audit package is required for security event auditing.",
-                )
+                .with_description("The audit package is required for security event auditing.")
                 .with_severity(Severity::Medium)
                 .with_category(CheckCategory::Auditing)
                 .with_expected_exit_code(0)
@@ -300,9 +294,7 @@ impl StigScanner {
                     "The audit log directory must have mode 0750 or less",
                     "/var/log/audit",
                 )
-                .with_description(
-                    "Audit logs contain sensitive security information.",
-                )
+                .with_description("Audit logs contain sensitive security information.")
                 .with_severity(Severity::Medium)
                 .with_category(CheckCategory::Auditing)
                 .with_owner("root")
@@ -383,7 +375,9 @@ impl ComplianceScanner for StigScanner {
             .checks
             .iter()
             .find(|c| c.id() == check_id)
-            .ok_or_else(|| ComplianceError::InvalidConfig(format!("Check {} not found", check_id)))?;
+            .ok_or_else(|| {
+                ComplianceError::InvalidConfig(format!("Check {} not found", check_id))
+            })?;
 
         let result = check.execute(context).await?;
 

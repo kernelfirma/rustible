@@ -462,42 +462,34 @@ impl SysctlCheck {
         match self.comparison {
             Comparison::Equal => actual.trim() == self.expected.trim(),
             Comparison::NotEqual => actual.trim() != self.expected.trim(),
-            Comparison::GreaterThan => {
-                actual
-                    .trim()
-                    .parse::<i64>()
-                    .ok()
-                    .zip(self.expected.trim().parse::<i64>().ok())
-                    .map(|(a, e)| a > e)
-                    .unwrap_or(false)
-            }
-            Comparison::GreaterOrEqual => {
-                actual
-                    .trim()
-                    .parse::<i64>()
-                    .ok()
-                    .zip(self.expected.trim().parse::<i64>().ok())
-                    .map(|(a, e)| a >= e)
-                    .unwrap_or(false)
-            }
-            Comparison::LessThan => {
-                actual
-                    .trim()
-                    .parse::<i64>()
-                    .ok()
-                    .zip(self.expected.trim().parse::<i64>().ok())
-                    .map(|(a, e)| a < e)
-                    .unwrap_or(false)
-            }
-            Comparison::LessOrEqual => {
-                actual
-                    .trim()
-                    .parse::<i64>()
-                    .ok()
-                    .zip(self.expected.trim().parse::<i64>().ok())
-                    .map(|(a, e)| a <= e)
-                    .unwrap_or(false)
-            }
+            Comparison::GreaterThan => actual
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .zip(self.expected.trim().parse::<i64>().ok())
+                .map(|(a, e)| a > e)
+                .unwrap_or(false),
+            Comparison::GreaterOrEqual => actual
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .zip(self.expected.trim().parse::<i64>().ok())
+                .map(|(a, e)| a >= e)
+                .unwrap_or(false),
+            Comparison::LessThan => actual
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .zip(self.expected.trim().parse::<i64>().ok())
+                .map(|(a, e)| a < e)
+                .unwrap_or(false),
+            Comparison::LessOrEqual => actual
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .zip(self.expected.trim().parse::<i64>().ok())
+                .map(|(a, e)| a <= e)
+                .unwrap_or(false),
         }
     }
 }
@@ -573,7 +565,11 @@ pub struct ServiceCheck {
 }
 
 impl ServiceCheck {
-    pub fn new(id: impl Into<String>, title: impl Into<String>, service: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        service: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -698,10 +694,7 @@ impl ComplianceCheck for ServiceCheck {
                 .map_err(|e| ComplianceError::CheckFailed(e.to_string()))?;
 
             let is_enabled = enabled_result.stdout.trim() == "enabled";
-            observations.push(format!(
-                "enabled={}",
-                if is_enabled { "yes" } else { "no" }
-            ));
+            observations.push(format!("enabled={}", if is_enabled { "yes" } else { "no" }));
 
             if should_be_enabled && !is_enabled {
                 issues.push("should be enabled but is not");
@@ -720,10 +713,7 @@ impl ComplianceCheck for ServiceCheck {
                 .map_err(|e| ComplianceError::CheckFailed(e.to_string()))?;
 
             let is_running = running_result.stdout.trim() == "active";
-            observations.push(format!(
-                "running={}",
-                if is_running { "yes" } else { "no" }
-            ));
+            observations.push(format!("running={}", if is_running { "yes" } else { "no" }));
 
             if should_be_running && !is_running {
                 issues.push("should be running but is not");
@@ -760,7 +750,11 @@ pub struct CommandCheck {
 }
 
 impl CommandCheck {
-    pub fn new(id: impl Into<String>, title: impl Into<String>, command: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        command: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -869,9 +863,8 @@ impl ComplianceCheck for CommandCheck {
 
         // Check expected pattern
         if let Some(ref pattern) = self.expected_pattern {
-            let re = Regex::new(pattern).map_err(|e| {
-                ComplianceError::InvalidConfig(format!("Invalid regex: {}", e))
-            })?;
+            let re = Regex::new(pattern)
+                .map_err(|e| ComplianceError::InvalidConfig(format!("Invalid regex: {}", e)))?;
             if !re.is_match(&output) {
                 issues.push(format!("output does not match pattern: {}", pattern));
             }
@@ -879,9 +872,8 @@ impl ComplianceCheck for CommandCheck {
 
         // Check not-expected pattern
         if let Some(ref pattern) = self.not_expected_pattern {
-            let re = Regex::new(pattern).map_err(|e| {
-                ComplianceError::InvalidConfig(format!("Invalid regex: {}", e))
-            })?;
+            let re = Regex::new(pattern)
+                .map_err(|e| ComplianceError::InvalidConfig(format!("Invalid regex: {}", e)))?;
             if re.is_match(&output) {
                 issues.push(format!("output matches forbidden pattern: {}", pattern));
             }
@@ -904,10 +896,7 @@ impl ComplianceCheck for CommandCheck {
 }
 
 /// Helper function to execute a command and return the output
-pub async fn exec_command(
-    context: &ComplianceContext,
-    command: &str,
-) -> ComplianceResult<String> {
+pub async fn exec_command(context: &ComplianceContext, command: &str) -> ComplianceResult<String> {
     let result = context
         .connection
         .execute(command, None)
@@ -958,7 +947,9 @@ pub async fn file_contains(
 /// Helper function to get sysctl value
 pub async fn get_sysctl(context: &ComplianceContext, parameter: &str) -> ComplianceResult<String> {
     let cmd = format!("sysctl -n {}", parameter);
-    exec_command(context, &cmd).await.map(|s| s.trim().to_string())
+    exec_command(context, &cmd)
+        .await
+        .map(|s| s.trim().to_string())
 }
 
 /// Helper function to check if a package is installed
@@ -988,10 +979,7 @@ pub async fn package_installed(
 }
 
 /// Helper to check if a service is enabled
-pub async fn service_enabled(
-    context: &ComplianceContext,
-    service: &str,
-) -> ComplianceResult<bool> {
+pub async fn service_enabled(context: &ComplianceContext, service: &str) -> ComplianceResult<bool> {
     let cmd = format!("systemctl is-enabled {} 2>/dev/null", service);
     let result = context
         .connection
@@ -1003,10 +991,7 @@ pub async fn service_enabled(
 }
 
 /// Helper to check if a service is running
-pub async fn service_running(
-    context: &ComplianceContext,
-    service: &str,
-) -> ComplianceResult<bool> {
+pub async fn service_running(context: &ComplianceContext, service: &str) -> ComplianceResult<bool> {
     let cmd = format!("systemctl is-active {} 2>/dev/null", service);
     let result = context
         .connection
@@ -1069,10 +1054,9 @@ mod tests {
             command: &str,
             _options: Option<ExecuteOptions>,
         ) -> ConnectionResult<CommandResult> {
-            self.commands
-                .get(command)
-                .cloned()
-                .ok_or_else(|| ConnectionError::ExecutionFailed(format!("unexpected command: {}", command)))
+            self.commands.get(command).cloned().ok_or_else(|| {
+                ConnectionError::ExecutionFailed(format!("unexpected command: {}", command))
+            })
         }
 
         async fn upload(
@@ -1102,7 +1086,10 @@ mod tests {
         }
 
         async fn path_exists(&self, path: &Path) -> ConnectionResult<bool> {
-            Ok(*self.paths.get(&path.display().to_string()).unwrap_or(&false))
+            Ok(*self
+                .paths
+                .get(&path.display().to_string())
+                .unwrap_or(&false))
         }
 
         async fn is_directory(&self, _path: &Path) -> ConnectionResult<bool> {
@@ -1184,10 +1171,7 @@ mod tests {
 
         let result = check.execute(&context).await.unwrap();
         assert!(matches!(result.status, CheckStatus::Pass));
-        assert!(result
-            .observed
-            .unwrap_or_default()
-            .contains("owner=root"));
+        assert!(result.observed.unwrap_or_default().contains("owner=root"));
     }
 
     #[tokio::test]
@@ -1224,12 +1208,7 @@ mod tests {
             CommandResult::success("0\n".to_string(), String::new()),
         );
         let context = ComplianceContext::new(Arc::new(conn));
-        let check = SysctlCheck::new(
-            "sysctl.check",
-            "IP forward",
-            "net.ipv4.ip_forward",
-            "1",
-        );
+        let check = SysctlCheck::new("sysctl.check", "IP forward", "net.ipv4.ip_forward", "1");
 
         let result = check.execute(&context).await.unwrap();
         assert!(matches!(result.status, CheckStatus::Fail));
@@ -1321,9 +1300,7 @@ mod tests {
             .await
             .unwrap());
         assert_eq!(
-            get_sysctl(&context, "net.ipv4.ip_forward")
-                .await
-                .unwrap(),
+            get_sysctl(&context, "net.ipv4.ip_forward").await.unwrap(),
             "1"
         );
         assert!(package_installed(&context, "openssl").await.unwrap());

@@ -1173,9 +1173,7 @@ fn test_contains(haystack: &MiniJinjaValue, needle: &MiniJinjaValue) -> bool {
 
 fn test_match(value: &MiniJinjaValue, pattern: &str) -> bool {
     if let Some(s) = value.as_str() {
-        get_regex(pattern)
-            .map(|re| re.is_match(s))
-            .unwrap_or(false)
+        get_regex(pattern).map(|re| re.is_match(s)).unwrap_or(false)
     } else {
         false
     }

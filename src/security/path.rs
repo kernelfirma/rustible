@@ -270,13 +270,7 @@ pub fn validate_path_strict(path: &str, param_name: &str, max_length: usize) -> 
 pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
-        .filter(|c| {
-            c.is_ascii_alphanumeric()
-                || *c == '_'
-                || *c == '-'
-                || *c == '.'
-                || *c == ' '
-        })
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == '.' || *c == ' ')
         .collect::<String>()
         .trim()
         .to_string()

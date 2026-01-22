@@ -80,8 +80,7 @@ impl PauseModule {
             .remove(nix::sys::termios::LocalFlags::ECHO);
 
         // Apply settings
-        if nix::sys::termios::tcsetattr(fd, nix::sys::termios::SetArg::TCSANOW, &termios).is_err()
-        {
+        if nix::sys::termios::tcsetattr(fd, nix::sys::termios::SetArg::TCSANOW, &termios).is_err() {
             // Fall back to normal input
             let mut line = String::new();
             stdin.lock().read_line(&mut line)?;

@@ -312,9 +312,7 @@ impl Breakpoint {
                     .as_ref()
                     .is_some_and(|pl| Self::pattern_matches(p, pl))
             }),
-            BreakpointType::TaskNumber => {
-                self.task_number == Some(context.task_number)
-            }
+            BreakpointType::TaskNumber => self.task_number == Some(context.task_number),
             BreakpointType::OnFailure => context.failed,
             BreakpointType::OnChange => context.changed,
             BreakpointType::OnUnreachable => false, // Would need additional context
@@ -327,9 +325,7 @@ impl Breakpoint {
         }
 
         // Check condition if present
-        self.condition
-            .as_ref()
-            .is_none_or(|c| c.evaluate(context))
+        self.condition.as_ref().is_none_or(|c| c.evaluate(context))
     }
 
     /// Check if a pattern matches a value (supports wildcards)

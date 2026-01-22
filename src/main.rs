@@ -63,9 +63,7 @@ async fn main() -> Result<()> {
             args.execute().await?;
             0
         }
-        Commands::Explain(args) => {
-            cli::commands::explain::run(args.code.as_deref(), args.list)?
-        }
+        Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
     };
 
     std::process::exit(exit_code);

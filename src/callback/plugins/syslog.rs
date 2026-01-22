@@ -115,7 +115,6 @@ pub enum SyslogFacility {
     Local7 = 23,
 }
 
-
 impl std::fmt::Display for SyslogFacility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -206,7 +205,6 @@ pub enum SyslogSeverity {
     /// Debug-level messages
     Debug = 7,
 }
-
 
 impl std::fmt::Display for SyslogSeverity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -555,11 +553,7 @@ impl SyslogWriter for UnixSyslogWriter {
             .map_err(|e| SyslogError::WriteFailed(io::Error::new(io::ErrorKind::InvalidData, e)))?;
 
         unsafe {
-            libc::syslog(
-                priority as libc::c_int,
-                c"%s".as_ptr(),
-                c_message.as_ptr(),
-            );
+            libc::syslog(priority as libc::c_int, c"%s".as_ptr(), c_message.as_ptr());
         }
 
         Ok(())

@@ -775,29 +775,29 @@ impl Module for UriModule {
 
         // Execute the async request using tokio runtime
         let fut = Self::execute_async(
-                url,
-                method,
-                headers,
-                body,
-                body_format,
-                auth_type,
-                auth_user,
-                auth_password,
-                auth_token,
-                oauth2_token_url,
-                oauth2_client_id,
-                oauth2_client_secret,
-                oauth2_scope,
-                timeout_secs,
-                validate_certs,
-                follow_redirects,
-                max_redirects,
-                return_content,
-                status_code_list,
-                retries,
-                retry_delay_secs,
-                false, // check_mode already handled above
-            );
+            url,
+            method,
+            headers,
+            body,
+            body_format,
+            auth_type,
+            auth_user,
+            auth_password,
+            auth_token,
+            oauth2_token_url,
+            oauth2_client_id,
+            oauth2_client_secret,
+            oauth2_scope,
+            timeout_secs,
+            validate_certs,
+            follow_redirects,
+            max_redirects,
+            return_content,
+            status_code_list,
+            retries,
+            retry_delay_secs,
+            false, // check_mode already handled above
+        );
 
         let result = if let Ok(handle) = tokio::runtime::Handle::try_current() {
             std::thread::scope(|s| {
@@ -814,10 +814,7 @@ impl Module for UriModule {
                 .enable_all()
                 .build()
                 .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!(
-                        "Failed to create tokio runtime: {}",
-                        e
-                    ))
+                    ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
                 })?;
             rt.block_on(fut)
         };
