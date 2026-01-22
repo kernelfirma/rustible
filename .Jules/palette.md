@@ -21,3 +21,7 @@
 ## 2024-05-22 - Consistent List Item Icons
 **Learning:** Adding consistent semantic emojis (e.g., 📖, 📄, 🏷️) to interactive list items significantly improves scannability and visual consistency with the main menu.
 **Action:** Always verify that interactive selection lists (Select, MultiSelect) use consistent icon prefixes for items, especially if the parent menu uses them.
+
+## 2024-05-27 - [Semantic Status Icons]
+**Learning:** Using distinct semantic icons (like ✎ for changed, ↷ for skipped) instead of generic ASCII characters (like ~, -) communicates intent more clearly and aligns with modern CLI aesthetics, reducing ambiguity.
+**Action:** Use specific Unicode symbols that represent the action (edit, jump, check) rather than abstract punctuation when displaying status.

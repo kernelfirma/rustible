@@ -34,10 +34,10 @@ impl TaskStatus {
     pub fn colored_string(&self) -> String {
         match self {
             TaskStatus::Ok => format!("✔ {}", "ok").green().to_string(),
-            TaskStatus::Changed => format!("~ {}", "changed").yellow().to_string(),
-            TaskStatus::Skipped => format!("- {}", "skipping").cyan().to_string(),
+            TaskStatus::Changed => format!("✎ {}", "changed").yellow().to_string(),
+            TaskStatus::Skipped => format!("↷ {}", "skipping").cyan().to_string(),
             TaskStatus::Failed => format!("✖ {}", "failed").red().bold().to_string(),
-            TaskStatus::Unreachable => format!("✖ {}", "unreachable").red().bold().to_string(),
+            TaskStatus::Unreachable => format!("✘ {}", "unreachable").red().bold().to_string(),
             TaskStatus::Rescued => format!("✚ {}", "rescued").magenta().to_string(),
             TaskStatus::Ignored => format!("! {}", "ignored").blue().to_string(),
         }
@@ -876,20 +876,30 @@ impl RecapStats {
 
 /// Format a duration as a human-readable string
 fn format_duration(duration: Duration) -> String {
-    let secs = duration.as_secs();
+    let total_secs = duration.as_secs();
     let millis = duration.subsec_millis();
 
-    if secs >= 3600 {
-        let hours = secs / 3600;
-        let mins = (secs % 3600) / 60;
-        let secs = secs % 60;
-        format!("{}h {}m {}s", hours, mins, secs)
-    } else if secs >= 60 {
-        let mins = secs / 60;
-        let secs = secs % 60;
-        format!("{}m {}s", mins, secs)
-    } else if secs > 0 {
-        format!("{}.{:03}s", secs, millis)
+    if total_secs >= 3600 {
+        let hours = total_secs / 3600;
+        let mins = (total_secs % 3600) / 60;
+        let secs = total_secs % 60;
+        if mins == 0 && secs == 0 {
+            format!("{}h", hours)
+        } else if secs == 0 {
+            format!("{}h {}m", hours, mins)
+        } else {
+            format!("{}h {}m {}s", hours, mins, secs)
+        }
+    } else if total_secs >= 60 {
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        if secs == 0 {
+            format!("{}m", mins)
+        } else {
+            format!("{}m {}s", mins, secs)
+        }
+    } else if total_secs > 0 {
+        format!("{}.{:03}s", total_secs, millis)
     } else {
         format!("{}ms", millis)
     }
@@ -945,7 +955,10 @@ mod tests {
     fn test_format_duration() {
         assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
         assert_eq!(format_duration(Duration::from_secs(5)), "5.000s");
+        assert_eq!(format_duration(Duration::from_secs(60)), "1m");
         assert_eq!(format_duration(Duration::from_secs(65)), "1m 5s");
+        assert_eq!(format_duration(Duration::from_secs(3600)), "1h");
+        assert_eq!(format_duration(Duration::from_secs(3660)), "1h 1m");
         assert_eq!(format_duration(Duration::from_secs(3665)), "1h 1m 5s");
     }
 }
