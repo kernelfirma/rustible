@@ -7,6 +7,12 @@
 //!   export RUSTIBLE_PVE_TOKEN_SECRET='secret'
 //!   export RUSTIBLE_PVE_NODE=svr-host
 //!   export RUSTIBLE_PVE_VMID=100
+//!   export RUSTIBLE_PVE_TARGET_VMID=101
+//!   export RUSTIBLE_PVE_CLONE_FROM=9000
+//!   export RUSTIBLE_PVE_CREATE_PARAMS='{"memory":1024,"cores":1,"net0":"virtio,bridge=vmbr0"}'
+//!   export RUSTIBLE_PVE_ALLOW_MUTATION=1
+//!   export RUSTIBLE_PVE_CLEANUP=1
+//!   export RUSTIBLE_PVE_CHECK_MODE=1
 //!   cargo test --test proxmox_vm_tests -- --ignored
 
 use std::collections::HashMap;
@@ -129,7 +135,28 @@ fn optional_bool_env(name: &str) -> Option<bool> {
     }
 }
 
-fn build_params(config: &ProxmoxTestConfig, state: Option<&str>) -> ModuleParams {
+fn optional_json_env(name: &str) -> Option<serde_json::Value> {
+    match env::var(name) {
+        Ok(value) if !value.trim().is_empty() => match serde_json::from_str::<serde_json::Value>(&value) {
+            Ok(json) if json.is_object() => Some(json),
+            Ok(_) => {
+                eprintln!("{} must be a JSON object", name);
+                None
+            }
+            Err(err) => {
+                eprintln!("Invalid JSON for {}: {}", name, err);
+                None
+            }
+        },
+        _ => None,
+    }
+}
+
+fn build_params_with_vmid(
+    config: &ProxmoxTestConfig,
+    vmid: u64,
+    state: Option<&str>,
+) -> ModuleParams {
     let mut params: ModuleParams = HashMap::new();
     params.insert("api_url".to_string(), serde_json::json!(config.api_url));
     params.insert(
@@ -141,7 +168,7 @@ fn build_params(config: &ProxmoxTestConfig, state: Option<&str>) -> ModuleParams
         serde_json::json!(config.token_secret),
     );
     params.insert("node".to_string(), serde_json::json!(config.node));
-    params.insert("vmid".to_string(), serde_json::json!(config.vmid));
+    params.insert("vmid".to_string(), serde_json::json!(vmid));
 
     if let Some(state) = state {
         params.insert("state".to_string(), serde_json::json!(state));
@@ -204,6 +231,10 @@ fn build_params(config: &ProxmoxTestConfig, state: Option<&str>) -> ModuleParams
     params
 }
 
+fn build_params(config: &ProxmoxTestConfig, state: Option<&str>) -> ModuleParams {
+    build_params_with_vmid(config, config.vmid, state)
+}
+
 #[test]
 #[ignore = "Requires Proxmox API access; set RUSTIBLE_PVE_* env vars"]
 fn test_proxmox_vm_status_and_optional_lifecycle() {
@@ -261,4 +292,72 @@ fn test_proxmox_vm_status_and_optional_lifecycle() {
         output.status,
         ModuleStatus::Ok | ModuleStatus::Changed
     ));
+}
+
+#[test]
+#[ignore = "Requires Proxmox API access; set RUSTIBLE_PVE_* env vars"]
+fn test_proxmox_vm_present_clone_absent_safe() {
+    let config = match ProxmoxTestConfig::from_env() {
+        Some(config) => config,
+        None => return,
+    };
+
+    let module = ProxmoxVmModule;
+    let allow_mutation = env_flag("RUSTIBLE_PVE_ALLOW_MUTATION");
+    let cleanup = env_flag("RUSTIBLE_PVE_CLEANUP");
+    let check_mode = env_flag("RUSTIBLE_PVE_CHECK_MODE") || !allow_mutation;
+    let context = ModuleContext::default().with_check_mode(check_mode);
+
+    let target_vmid = optional_u64_env("RUSTIBLE_PVE_TARGET_VMID").unwrap_or(config.vmid);
+    let create_params = optional_json_env("RUSTIBLE_PVE_CREATE_PARAMS");
+
+    let mut params = build_params_with_vmid(&config, target_vmid, Some("present"));
+    if config.name.is_none() {
+        params.insert("auto_name".to_string(), serde_json::json!(true));
+    }
+    if let Some(create_params) = create_params.clone() {
+        params.insert("create".to_string(), create_params);
+    }
+
+    if allow_mutation && !check_mode && create_params.is_none() {
+        eprintln!("Skipping create (RUSTIBLE_PVE_CREATE_PARAMS not set)");
+    } else {
+        let output = module
+            .execute(&params, &context)
+            .expect("Proxmox create failed");
+        assert!(matches!(
+            output.status,
+            ModuleStatus::Ok | ModuleStatus::Changed
+        ));
+    }
+
+    if let Some(clone_from) = config.clone_from {
+        let mut params = build_params_with_vmid(&config, target_vmid, Some("cloned"));
+        params.insert("clone_from".to_string(), serde_json::json!(clone_from));
+        if config.name.is_none() {
+            params.insert("auto_name".to_string(), serde_json::json!(true));
+        }
+        let output = module
+            .execute(&params, &context)
+            .expect("Proxmox clone failed");
+        assert!(matches!(
+            output.status,
+            ModuleStatus::Ok | ModuleStatus::Changed
+        ));
+    } else {
+        eprintln!("Skipping clone (RUSTIBLE_PVE_CLONE_FROM not set)");
+    }
+
+    if check_mode || cleanup {
+        let params = build_params_with_vmid(&config, target_vmid, Some("absent"));
+        let output = module
+            .execute(&params, &context)
+            .expect("Proxmox delete failed");
+        assert!(matches!(
+            output.status,
+            ModuleStatus::Ok | ModuleStatus::Changed
+        ));
+    } else {
+        eprintln!("Skipping delete (RUSTIBLE_PVE_CLEANUP not set)");
+    }
 }
