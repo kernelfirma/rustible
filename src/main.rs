@@ -103,6 +103,9 @@ async fn init_project(
     // Ensure the base path exists
     if !path.exists() {
         fs::create_dir_all(path)?;
+        ctx.output.created(&format!("{}/", path.display()));
+    } else {
+        ctx.output.skipped(&format!("{}/", path.display()));
     }
 
     // Create directory structure
@@ -120,7 +123,9 @@ async fn init_project(
         let dir_path = path.join(dir);
         if !dir_path.exists() {
             fs::create_dir_all(&dir_path)?;
-            ctx.output.info(&format!("Created: {}/", dir));
+            ctx.output.created(&format!("{}/", dir));
+        } else {
+            ctx.output.skipped(&format!("{}/", dir));
         }
     }
 
@@ -142,7 +147,9 @@ all:
     let inventory_path = path.join("inventory/hosts.yml");
     if !inventory_path.exists() {
         fs::write(&inventory_path, inventory_content)?;
-        ctx.output.info("Created: inventory/hosts.yml");
+        ctx.output.created("inventory/hosts.yml");
+    } else {
+        ctx.output.skipped("inventory/hosts.yml");
     }
 
     // Create sample playbook based on template
@@ -253,7 +260,9 @@ all:
     let playbook_path = path.join("playbooks/site.yml");
     if !playbook_path.exists() {
         fs::write(&playbook_path, playbook_content)?;
-        ctx.output.info("Created: playbooks/site.yml");
+        ctx.output.created("playbooks/site.yml");
+    } else {
+        ctx.output.skipped("playbooks/site.yml");
     }
 
     // Create config file
@@ -291,7 +300,9 @@ log_timestamp = true
     let config_path = path.join("rustible.cfg");
     if !config_path.exists() {
         fs::write(&config_path, config_content)?;
-        ctx.output.info("Created: rustible.cfg");
+        ctx.output.created("rustible.cfg");
+    } else {
+        ctx.output.skipped("rustible.cfg");
     }
 
     // Create .gitignore
@@ -315,7 +326,9 @@ Thumbs.db
     let gitignore_path = path.join(".gitignore");
     if !gitignore_path.exists() {
         fs::write(&gitignore_path, gitignore_content)?;
-        ctx.output.info("Created: .gitignore");
+        ctx.output.created(".gitignore");
+    } else {
+        ctx.output.skipped(".gitignore");
     }
 
     ctx.output.section("Project initialized successfully!");
