@@ -42,3 +42,8 @@
 **Vulnerability:** The `unarchive` module was loading the entire content of downloaded files into memory using `response.bytes()` before writing to disk. This created a Denial of Service (DoS) vulnerability where downloading a large file could exhaust system memory and crash the application.
 **Learning:** Functions that handle external content (like downloads) must never assume the content fits in memory. Always assume inputs can be arbitrarily large.
 **Prevention:** Use streaming I/O (`std::io::copy` with `response` as a reader) to stream data directly to disk. Always configure timeouts for network operations to prevent indefinite hanging.
+
+## 2024-05-30 - Command Injection in Script Module
+**Vulnerability:** The `script` module allowed command injection via the `executable` parameter. This parameter was injected directly into the shell command string without validation or escaping, allowing an attacker to execute arbitrary commands if they could control the `executable` input.
+**Learning:** Even parameters that seem like they should be simple commands (like an interpreter path) can be vectors for injection if not validated. Relying on "it should just be a path" is not enough.
+**Prevention:** Validate all inputs that go into shell commands. Use strict validation (allowlists) where possible. For command arguments, ensure dangerous shell characters (`;`, `|`, `&`, etc.) are rejected unless strictly necessary and safe.

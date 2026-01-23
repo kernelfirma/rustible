@@ -36,8 +36,8 @@
 //! - `decrypt` - Decrypt ansible-vault encrypted script (default: true)
 
 use super::{
-    validate_path_param, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput,
-    ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
+    validate_command_args, validate_path_param, Module, ModuleClassification, ModuleContext,
+    ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::utils::shell_escape;
 use std::path::PathBuf;
@@ -182,6 +182,11 @@ impl Module for ScriptModule {
 
         if let Some(removes) = params.get_string("removes")? {
             validate_path_param(&removes, "removes")?;
+        }
+
+        // Validate executable to prevent command injection
+        if let Some(executable) = params.get_string("executable")? {
+            validate_command_args(&executable)?;
         }
 
         Ok(())
@@ -523,5 +528,41 @@ mod tests {
             exec_cmd,
             "cd '/tmp/dir with space' && /bin/bash /tmp/.ansible_script_123.tmp arg1 'arg with space'"
         );
+    }
+
+    #[test]
+    fn test_script_validate_params_executable_injection() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        params.insert(
+            "executable".to_string(),
+            Value::String("/bin/bash; rm -rf /".to_string()),
+        );
+
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Command arguments contain potentially dangerous pattern"));
+    }
+
+    #[test]
+    fn test_script_validate_params_executable_valid() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        params.insert(
+            "executable".to_string(),
+            Value::String("/usr/bin/python3 -u".to_string()),
+        );
+
+        // Should allow spaces (flags)
+        assert!(module.validate_params(&params).is_ok());
     }
 }
