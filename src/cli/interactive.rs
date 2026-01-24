@@ -100,45 +100,51 @@ impl InteractiveSession {
 
     /// Prompt for playbook selection
     pub fn select_playbook(&self, playbooks: &[PathBuf]) -> Result<Option<PathBuf>> {
-        if playbooks.is_empty() {
-            println!("{}", "No playbooks found in current directory.".yellow());
-            return Ok(None);
-        }
-
-        let items: Vec<String> = playbooks
+        let mut items: Vec<String> = playbooks
             .iter()
             .map(|p| format!("📖 {}", p.display()))
             .collect();
 
+        items.push("📝 Enter path manually...".to_string());
+        items.push("❌ Cancel".to_string());
+
+        let prompt_msg = if playbooks.is_empty() {
+            "No playbooks found. Select action:"
+        } else {
+            "Select a playbook"
+        };
+
         let selection = Select::with_theme(&self.theme)
-            .with_prompt("Select a playbook")
+            .with_prompt(prompt_msg)
             .items(&items)
             .default(0)
             .interact_on(&self.term)?;
+
+        // Check if "Cancel" was selected (last item)
+        if selection == items.len() - 1 {
+            return Ok(None);
+        }
+
+        // Check if "Enter path manually" was selected (second to last)
+        if selection == items.len() - 2 {
+            let path: String = Input::with_theme(&self.theme)
+                .with_prompt("Enter playbook path")
+                .interact_on(&self.term)?;
+            return Ok(Some(PathBuf::from(path)));
+        }
 
         Ok(Some(playbooks[selection].clone()))
     }
 
     /// Prompt for inventory selection
     pub fn select_inventory(&self, inventories: &[PathBuf]) -> Result<Option<PathBuf>> {
-        if inventories.is_empty() {
-            let custom: String = Input::with_theme(&self.theme)
-                .with_prompt("Enter inventory path (or 'localhost' for local)")
-                .default("localhost".to_string())
-                .interact_on(&self.term)?;
-
-            if custom == "localhost" {
-                return Ok(None);
-            }
-            return Ok(Some(PathBuf::from(custom)));
-        }
-
         let mut items: Vec<String> = inventories
             .iter()
             .map(|p| format!("📄 {}", p.display()))
             .collect();
-        items.push("📝 Enter custom path...".to_string());
+        // Add default options (always available)
         items.push("💻 Use localhost (no inventory)".to_string());
+        items.push("📝 Enter custom path...".to_string());
 
         let selection = Select::with_theme(&self.theme)
             .with_prompt("Select inventory")
@@ -146,14 +152,20 @@ impl InteractiveSession {
             .default(0)
             .interact_on(&self.term)?;
 
-        if selection == items.len() - 1 {
-            return Ok(None); // localhost
+        // Check if "Localhost" was selected (always second to last)
+        if selection == items.len() - 2 {
+            return Ok(None);
         }
 
-        if selection == items.len() - 2 {
+        // Check if "Custom path" was selected (always last)
+        if selection == items.len() - 1 {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("Enter inventory path")
                 .interact_on(&self.term)?;
+
+            if custom == "localhost" {
+                return Ok(None);
+            }
             return Ok(Some(PathBuf::from(custom)));
         }
 

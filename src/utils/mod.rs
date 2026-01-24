@@ -230,13 +230,13 @@ mod tests {
     fn test_shell_escape_cow() {
         // Verify we are actually avoiding allocation
         match shell_escape("simple") {
-            Cow::Borrowed(_) => {},
+            Cow::Borrowed(_) => {}
             Cow::Owned(_) => panic!("Should be borrowed"),
         }
 
         match shell_escape("with space") {
             Cow::Borrowed(_) => panic!("Should be owned"),
-            Cow::Owned(_) => {},
+            Cow::Owned(_) => {}
         }
     }
 
