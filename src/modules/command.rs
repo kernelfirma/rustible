@@ -58,7 +58,7 @@ impl CommandModule {
             }
 
             // Join argv with proper escaping for shell
-            let escaped_args: Vec<std::borrow::Cow<'_, str>> = argv
+            let escaped_args: Vec<String> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
                     "cmd" => cmd_escape(arg).into_owned(),
