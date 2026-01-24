@@ -162,9 +162,9 @@ impl LineinfileModule {
     ) -> ModuleResult<bool> {
         // Check if the exact line already exists
         if lines.iter().any(|l| l == line) {
-            // If using regexp, check if it matches the same line
+            // If using regexp, check if the line matches the regexp
             if let Some(re) = regexp {
-                if lines.iter().any(|l| l == line && re.is_match(l)) {
+                if re.is_match(line) {
                     return Ok(false);
                 }
             } else {
@@ -174,24 +174,24 @@ impl LineinfileModule {
 
         // If we have a regexp, find and replace matching lines
         if let Some(re) = regexp {
-            let matching_indices: Vec<usize> = lines
-                .iter()
-                .enumerate()
-                .filter(|(_, l)| re.is_match(l))
-                .map(|(i, _)| i)
-                .collect();
-
-            if !matching_indices.is_empty() {
-                if firstmatch {
-                    // Replace only the first match
-                    lines[matching_indices[0]] = line.to_string();
-                } else {
-                    // Replace all matches
-                    for &idx in &matching_indices {
-                        lines[idx] = line.to_string();
+            if firstmatch {
+                // Optimized: find first match only and replace
+                if let Some(idx) = lines.iter().position(|l| re.is_match(l)) {
+                    lines[idx] = line.to_string();
+                    return Ok(true);
+                }
+            } else {
+                // Optimized: replace in-place without allocating vector of indices
+                let mut changed = false;
+                for l in lines.iter_mut() {
+                    if re.is_match(l) {
+                        *l = line.to_string();
+                        changed = true;
                     }
                 }
-                return Ok(true);
+                if changed {
+                    return Ok(true);
+                }
             }
         }
 
@@ -340,7 +340,11 @@ impl LineinfileModule {
                         let content_str = String::from_utf8_lossy(&file_bytes);
                         let mut lines: Vec<String> =
                             content_str.lines().map(|s| s.to_string()).collect();
-                        let original_lines = lines.clone();
+                        let original_lines = if diff_mode {
+                            Some(lines.clone())
+                        } else {
+                            None
+                        };
 
                         // Apply changes based on state
                         let changed = match state {
@@ -398,7 +402,10 @@ impl LineinfileModule {
                         // In check mode, don't actually write
                         if check_mode {
                             let diff = if diff_mode {
-                                Some(Diff::new(original_lines.join("\n"), lines.join("\n")))
+                                Some(Diff::new(
+                                    original_lines.as_ref().unwrap().join("\n"),
+                                    lines.join("\n"),
+                                ))
                             } else {
                                 None
                             };
@@ -456,8 +463,10 @@ impl LineinfileModule {
                         let mut output = ModuleOutput::changed(format!("Modified '{}'", path));
 
                         if diff_mode {
-                            output = output
-                                .with_diff(Diff::new(original_lines.join("\n"), lines.join("\n")));
+                            output = output.with_diff(Diff::new(
+                                original_lines.as_ref().unwrap().join("\n"),
+                                lines.join("\n"),
+                            ));
                         }
 
                         if backup && file_exists {
@@ -504,7 +513,11 @@ impl LineinfileModule {
 
         // Read current content
         let mut lines = Self::read_file(path)?;
-        let original_lines = lines.clone();
+        let original_lines = if context.diff_mode {
+            Some(lines.clone())
+        } else {
+            None
+        };
 
         // Apply changes based on state
         let changed = match state {
@@ -558,7 +571,10 @@ impl LineinfileModule {
         // In check mode, don't actually write
         if context.check_mode {
             let diff = if context.diff_mode {
-                Some(Diff::new(original_lines.join("\n"), lines.join("\n")))
+                Some(Diff::new(
+                    original_lines.as_ref().unwrap().join("\n"),
+                    lines.join("\n"),
+                ))
             } else {
                 None
             };
@@ -589,7 +605,10 @@ impl LineinfileModule {
         }
 
         if context.diff_mode {
-            output = output.with_diff(Diff::new(original_lines.join("\n"), lines.join("\n")));
+            output = output.with_diff(Diff::new(
+                original_lines.as_ref().unwrap().join("\n"),
+                lines.join("\n"),
+            ));
         }
 
         Ok(output)
@@ -949,5 +968,32 @@ mod tests {
         let result = LineinfileModule::apply_backrefs(line, &re, original);
         // Correct behavior should be 'j' (group 10), not 'a0' (group 1 + '0')
         assert_eq!(result, "j");
+    }
+
+    #[test]
+    fn test_lineinfile_firstmatch() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("test.txt");
+        fs::write(&path, "match1\nmatch2\n").unwrap();
+
+        let module = LineinfileModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "path".to_string(),
+            serde_json::json!(path.to_str().unwrap()),
+        );
+        params.insert("regexp".to_string(), serde_json::json!("^match"));
+        params.insert("line".to_string(), serde_json::json!("replaced"));
+        params.insert("firstmatch".to_string(), serde_json::json!(true));
+
+        let context = ModuleContext::default();
+        let result = module.execute(&params, &context).unwrap();
+
+        assert!(result.changed);
+        let content = fs::read_to_string(&path).unwrap();
+        // Should only replace first match
+        assert!(content.contains("replaced"));
+        assert!(!content.contains("match1"));
+        assert!(content.contains("match2"));
     }
 }
