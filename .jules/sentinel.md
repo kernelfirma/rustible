@@ -42,3 +42,8 @@
 **Vulnerability:** The `unarchive` module was loading the entire content of downloaded files into memory using `response.bytes()` before writing to disk. This created a Denial of Service (DoS) vulnerability where downloading a large file could exhaust system memory and crash the application.
 **Learning:** Functions that handle external content (like downloads) must never assume the content fits in memory. Always assume inputs can be arbitrarily large.
 **Prevention:** Use streaming I/O (`std::io::copy` with `response` as a reader) to stream data directly to disk. Always configure timeouts for network operations to prevent indefinite hanging.
+
+## 2024-05-30 - Insecure Temporary File Location
+**Vulnerability:** The `user` and `script` modules were using hardcoded `/tmp` paths for temporary files. This ignores system configuration (`TMPDIR`) and can cause failures on systems where `/tmp` is mounted with `noexec` or is otherwise restricted.
+**Learning:** Hardcoding `/tmp` is brittle and potentially insecure in multi-tenant environments. Applications should respect environment variables or configuration for temporary directories.
+**Prevention:** Use a helper function to resolve the temporary directory from configuration (e.g., `ansible_remote_tmp`) or environment variables, falling back to `/tmp` only if necessary.

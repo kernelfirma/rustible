@@ -415,6 +415,33 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     Ok(())
 }
 
+/// Get the remote temporary directory from the context variables.
+///
+/// Checks `ansible_remote_tmp` and `remote_tmp` variables.
+/// Defaults to `/tmp` if not set.
+///
+/// # Arguments
+///
+/// * `context` - The module context containing variables
+///
+/// # Returns
+///
+/// * `String` - The remote temporary directory path
+pub fn get_remote_tmp(context: &ModuleContext) -> String {
+    // Check for ansible_remote_tmp variable
+    if let Some(serde_json::Value::String(path)) = context.vars.get("ansible_remote_tmp") {
+        return path.clone();
+    }
+
+    // Check for remote_tmp variable (legacy/alternative)
+    if let Some(serde_json::Value::String(path)) = context.vars.get("remote_tmp") {
+        return path.clone();
+    }
+
+    // Default to /tmp
+    "/tmp".to_string()
+}
+
 /// Normalizes a path and optionally validates it against a base directory.
 ///
 /// This function resolves the path and checks if it stays within the specified
@@ -1871,6 +1898,35 @@ mod tests {
         assert!(validate_command_args("nginx; reboot").is_err());
         assert!(validate_command_args("pkg && reboot").is_err());
         assert!(validate_command_args("cmd || curl evil.com").is_err());
+    }
+
+    #[test]
+    fn test_get_remote_tmp() {
+        // Test default
+        let ctx = ModuleContext::default();
+        assert_eq!(get_remote_tmp(&ctx), "/tmp");
+
+        // Test ansible_remote_tmp
+        let ctx = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/var/tmp");
+
+        // Test remote_tmp
+        let ctx = ModuleContextBuilder::new()
+            .var("remote_tmp", serde_json::json!("/opt/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/opt/tmp");
+
+        // Test precedence (ansible_remote_tmp wins)
+        let ctx = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .var("remote_tmp", serde_json::json!("/opt/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/var/tmp");
     }
 
     #[test]

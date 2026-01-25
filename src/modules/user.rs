@@ -3,8 +3,8 @@
 //! This module manages user accounts on the system.
 
 use super::{
-    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt,
+    get_remote_tmp, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput,
+    ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions, TransferOptions};
 use crate::utils::shell_escape;
@@ -391,7 +391,9 @@ impl UserModule {
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Use a temporary file to avoid exposing password in process list via echo
-        let temp_path = format!("/tmp/.ansible_passwd_{}", Uuid::new_v4());
+        // Respects ansible_remote_tmp if set
+        let remote_tmp = get_remote_tmp(context);
+        let temp_path = format!("{}/.ansible_passwd_{}", remote_tmp, Uuid::new_v4());
         let passwd_entry = format!("{}:{}", name, password);
 
         // Upload content to temp file with 600 permissions
