@@ -20,6 +20,7 @@ aws = [
     "dep:aws-sdk-s3",
     "dep:aws-sdk-iam",
     "dep:aws-sdk-dynamodb",
+    "dep:aws-sdk-rds",
 ]
 # Azure cloud modules (VMs, Resource Groups, Networking) - stub implementation
 azure = []
@@ -199,6 +200,7 @@ aws-sdk-ec2 = { version = "1.15", optional = true }
 aws-sdk-s3 = { version = "1.15", optional = true }
 aws-sdk-iam = { version = "1.15", optional = true }
 aws-sdk-dynamodb = { version = "1.15", optional = true }
+aws-sdk-rds = { version = "1.15", optional = true }
 
 # Hostname resolution
 hostname = "0.4"
