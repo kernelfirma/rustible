@@ -47,3 +47,8 @@
 **Vulnerability:** The `user` and `script` modules were using hardcoded `/tmp` paths for temporary files. This ignores system configuration (`TMPDIR`) and can cause failures on systems where `/tmp` is mounted with `noexec` or is otherwise restricted.
 **Learning:** Hardcoding `/tmp` is brittle and potentially insecure in multi-tenant environments. Applications should respect environment variables or configuration for temporary directories.
 **Prevention:** Use a helper function to resolve the temporary directory from configuration (e.g., `ansible_remote_tmp`) or environment variables, falling back to `/tmp` only if necessary.
+
+## 2026-01-26 - Unauthenticated WebSocket Access
+**Vulnerability:** The `job_ws_handler` allowed unauthenticated connections to stream job output, relying only on knowledge of the Job UUID.
+**Learning:** WebSocket handlers often bypass standard HTTP middleware stacks used for REST endpoints. Authentication must be explicitly implemented in the upgrade handler. Since browsers cannot easily set custom headers for WebSocket handshakes, tokens are often passed via query parameters.
+**Prevention:** Enforce authentication in WebSocket handlers before upgrading the connection. Use a strictly typed query parameter struct (e.g., `WsParams { token: String }`) to extract and validate credentials.

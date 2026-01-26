@@ -3,9 +3,10 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -14,12 +15,29 @@ use super::error::ApiError;
 use super::state::AppState;
 use super::types::WsMessage;
 
+/// Query parameters for WebSocket connection
+#[derive(Deserialize)]
+pub struct WsParams {
+    token: String,
+}
+
 /// WebSocket handler for job output streaming.
 pub async fn job_ws_handler(
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<Uuid>,
+    Query(params): Query<WsParams>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Validate token
+    let claims = state
+        .jwt_auth
+        .validate_token(&params.token)
+        .map_err(|e| ApiError::Unauthorized(format!("Invalid token: {}", e)))?;
+
+    if claims.is_expired() {
+        return Err(ApiError::Unauthorized("Token has expired".to_string()));
+    }
+
     // Verify job exists
     let _job = state
         .get_job(job_id)
@@ -30,7 +48,10 @@ pub async fn job_ws_handler(
         .subscribe_to_job(job_id)
         .ok_or_else(|| ApiError::Internal("Failed to subscribe to job".to_string()))?;
 
-    info!("WebSocket connection for job {}", job_id);
+    info!(
+        "WebSocket connection for job {} from user {}",
+        job_id, claims.sub
+    );
 
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, job_id, rx, state)))
 }
