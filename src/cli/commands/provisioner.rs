@@ -83,12 +83,12 @@ pub struct ProvisionerArgs {
     pub retry_delay: u64,
 
     /// Run in check mode (dry-run, no changes made)
-    #[arg(long)]
-    pub check: bool,
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
 
     /// Show differences when making changes
-    #[arg(long)]
-    pub diff: bool,
+    #[arg(long = "show-diff")]
+    pub show_diff: bool,
 
     /// Verbosity level
     #[arg(short = 'v', long, action = clap::ArgAction::Count)]
@@ -406,8 +406,8 @@ impl ProvisionerArgs {
 
         // Build executor config
         let config = ExecutorConfig {
-            check_mode: self.check,
-            diff_mode: self.diff,
+            check_mode: self.dry_run,
+            diff_mode: self.show_diff,
             gather_facts: true,
             forks: 1, // Single host
             strategy: ExecutionStrategy::Linear,
@@ -641,7 +641,7 @@ mod tests {
         assert_eq!(args.timeout, 30);
         assert_eq!(args.retries, 3);
         assert_eq!(args.retry_delay, 10);
-        assert!(!args.check);
+        assert!(!args.dry_run);
         assert!(!args.r#become);
     }
 
@@ -658,7 +658,7 @@ mod tests {
             "--timeout", "60",
             "--retries", "5",
             "--retry-delay", "15",
-            "--check",
+            "--dry-run",
             "--become",
             "--become-user", "admin",
         ]).unwrap();
@@ -668,7 +668,7 @@ mod tests {
         assert_eq!(args.timeout, 60);
         assert_eq!(args.retries, 5);
         assert_eq!(args.retry_delay, 15);
-        assert!(args.check);
+        assert!(args.dry_run);
         assert!(args.r#become);
         assert_eq!(args.become_user.as_deref(), Some("admin"));
     }

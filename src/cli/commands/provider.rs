@@ -62,8 +62,8 @@ pub struct InstallArgs {
     pub skip_verify: bool,
 
     /// Specific version to install (for registry sources)
-    #[arg(long)]
-    pub version: Option<String>,
+    #[arg(long = "ver")]
+    pub target_version: Option<String>,
 }
 
 /// Arguments for provider update
@@ -74,8 +74,8 @@ pub struct UpdateArgs {
     pub name: String,
 
     /// Update to specific version
-    #[arg(long)]
-    pub version: Option<String>,
+    #[arg(long = "ver")]
+    pub target_version: Option<String>,
 
     /// Skip signature verification (use with caution)
     #[arg(long)]
@@ -264,7 +264,7 @@ async fn install_from_registry(
     ctx: &CommandContext,
 ) -> Result<i32> {
     // Parse registry source: name, name@version, or registry::name@version
-    let (registry, provider_name, version) = parse_registry_source(name, args.version.as_deref());
+    let (registry, provider_name, version) = parse_registry_source(name, args.target_version.as_deref());
 
     ctx.output.info(&format!(
         "Looking up provider '{}' in registry '{}'{}",
@@ -496,7 +496,7 @@ async fn execute_update(args: &UpdateArgs, ctx: &CommandContext) -> Result<i32> 
         }
 
         // In full implementation, query registry for newer version and install
-        if let Some(version) = &args.version {
+        if let Some(version) = &args.target_version {
             ctx.output.info(&format!("Would update to version: {}", version));
         } else {
             ctx.output.info("Would update to latest version");

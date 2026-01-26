@@ -63,8 +63,8 @@ pub struct CollectionInstallArgs {
     pub name: String,
 
     /// Version constraint (e.g., ">=1.0.0,<2.0.0")
-    #[arg(id = "version_constraint", long = "ver")]
-    pub version: Option<String>,
+    #[arg(long = "ver")]
+    pub version_constraint: Option<String>,
 
     /// Path to install collections to
     #[arg(short = 'p', long)]
@@ -131,8 +131,8 @@ pub struct RoleInstallArgs {
     pub name: String,
 
     /// Version constraint
-    #[arg(id = "version_constraint", long = "ver")]
-    pub version: Option<String>,
+    #[arg(long = "ver")]
+    pub version_constraint: Option<String>,
 
     /// Path to install roles to
     #[arg(short = 'p', long)]
@@ -265,7 +265,7 @@ async fn execute_collection_install(
     match galaxy
         .install_collection(
             &args.name,
-            args.version.as_deref(),
+            args.version_constraint.as_deref(),
             args.collections_path.as_ref(),
         )
         .await
@@ -438,7 +438,7 @@ async fn execute_role_install(args: &RoleInstallArgs, ctx: &CommandContext) -> R
     match galaxy
         .install_role(
             &args.name,
-            args.version.as_deref(),
+            args.version_constraint.as_deref(),
             args.roles_path.as_ref(),
         )
         .await
