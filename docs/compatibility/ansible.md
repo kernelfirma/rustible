@@ -309,13 +309,64 @@ Rustible includes 30+ callback plugins matching Ansible functionality:
 
 ---
 
+## Edge-Case Conformance
+
+Rustible includes a conformance test suite (`tests/conformance_tests.rs`) verifying Ansible edge-case behaviors:
+
+### Boolean Coercion
+
+Rustible accepts Ansible's truthy/falsey string values:
+
+| Value | Boolean |
+|-------|---------|
+| `yes`, `Yes`, `YES` | `true` |
+| `no`, `No`, `NO` | `false` |
+| `true`, `True`, `TRUE` | `true` |
+| `false`, `False`, `FALSE` | `false` |
+| `on`, `On`, `ON` | `true` |
+| `off`, `Off`, `OFF` | `false` |
+| `1` | `true` |
+| `0` | `false` |
+| `""` (empty) | `false` |
+| `[]` (empty list) | `false` |
+
+### Block/Rescue/Always
+
+- Sections execute in order: `block` -> `rescue` (on error) -> `always`
+- Null sections treated as empty lists
+- Nested blocks supported
+
+### FQCN Normalization
+
+Both short names and FQCN work identically:
+
+```yaml
+# These are equivalent:
+- debug: msg="Hello"
+- ansible.builtin.debug: msg="Hello"
+- ansible.legacy.debug: msg="Hello"
+```
+
+### CLI Defaults
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--check` | `false` | Dry-run mode |
+| `--diff` | `false` | Show diffs |
+| `--tags` | All | Run all tags |
+| `--skip-tags` | None | Skip nothing |
+| `--forks` / `-f` | 5 | Parallel hosts |
+| `--become` / `-b` | `false` | Privilege escalation |
+
+---
+
 ## Known Incompatibilities
 
 1. **Vault Format**: Rustible uses AES-256-GCM with Argon2id (vs Ansible's AES-256-CTR with PBKDF2). Re-encryption required when migrating.
 
 2. **Python Module Fallback**: The `python` module provides FQCN support for running Ansible Python modules, but requires Python on the target.
 
-3. **Some Jinja2 Filters**: A few Ansible-specific filters not yet implemented.
+3. **Some Jinja2 Filters**: A few Ansible-specific filters not yet implemented. See [jinja2-filters.md](jinja2-filters.md).
 
 4. **WinRM**: Experimental support, not production-ready.
 
