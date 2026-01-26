@@ -47,6 +47,7 @@
 pub mod cluster;
 pub mod controller;
 pub mod distribution;
+pub mod observability;
 pub mod raft;
 pub mod recovery;
 pub mod state;
@@ -63,6 +64,11 @@ pub use raft::{RaftError, RaftEvent, RaftNode, RaftState};
 pub use recovery::{
     CachedTaskResult, CheckpointManager, ExecutionState, ExecutionTracker, IdempotencyKey,
     IdempotencyTracker, LeaderRecovery, PartitionDetector, PartitionState, RecoveryAction,
+};
+pub use observability::{
+    ClusterStatusResponse, ComponentHealth, ControllerStatusInfo, HealthResponse, HealthStatus,
+    LiveResponse, LoadMetrics, MetricValue, MetricsResponse, ObservabilityCollector,
+    PrometheusMetric, ReadyResponse, WorkUnitInfo, WorkUnitStats, WorkUnitStatusResponse,
 };
 pub use state::{
     ConsistencyLevel, DistributedStateStore, FactsStore, HLC, LWWEntry, LWWMap, SyncRequest,
