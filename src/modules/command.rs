@@ -61,10 +61,10 @@ impl CommandModule {
             let escaped_args: Vec<String> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
-                    "cmd" => cmd_escape(arg),
-                    "powershell" => powershell_escape(arg),
-                    "posix" | "sh" | "bash" => shell_escape(arg),
-                    _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility
+                    "cmd" => cmd_escape(arg).into_owned(),
+                    "powershell" => powershell_escape(arg).into_owned(),
+                    "posix" | "sh" | "bash" => shell_escape(arg).into_owned(),
+                    _ => shell_escape(arg).into_owned(), // Default to POSIX for safety/backward compatibility
                 })
                 .collect();
 

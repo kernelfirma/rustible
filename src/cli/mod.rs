@@ -9,6 +9,7 @@ pub mod diff;
 pub mod interactive;
 pub mod json_output;
 pub mod output;
+pub mod plan;
 pub mod progress;
 
 use clap::{Parser, Subcommand, ValueEnum};
