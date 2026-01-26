@@ -594,6 +594,42 @@ impl OutputFormatter {
         }
     }
 
+    /// Print a created status
+    pub fn created(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "created",
+                "message": message
+            });
+            println!("{}", serde_json::to_string(&success).unwrap());
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "✔ Created".green().bold(), message);
+        } else {
+            println!("Created {}", message);
+        }
+    }
+
+    /// Print a skipped status
+    pub fn skipped(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "skipped",
+                "message": message
+            });
+            println!("{}", serde_json::to_string(&success).unwrap());
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "↷ Skipped".cyan(), message);
+        } else {
+            println!("Skipped {}", message);
+        }
+    }
+
     /// Print plan output (always shows, bypasses verbosity)
     pub fn plan(&self, message: &str) {
         if self.json_mode {
