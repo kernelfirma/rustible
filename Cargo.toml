@@ -40,6 +40,8 @@ startup-warmup = []
 api = ["dep:axum", "dep:tower-http", "dep:jsonwebtoken", "dep:futures-util"]
 # Infrastructure provisioning (Terraform-like) - requires AWS SDK
 provisioning = ["aws"]
+# Distributed execution with leader election and work distribution
+distributed = []
 # Full feature set with ssh2 backend
 full = ["russh", "local", "ssh2-backend", "docker", "kubernetes"]
 # Full feature set with all cloud providers (includes experimental flags)

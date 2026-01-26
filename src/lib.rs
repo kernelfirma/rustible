@@ -608,6 +608,48 @@ pub mod state;
 pub mod recovery;
 
 // ============================================================================
+// Distributed Execution
+// ============================================================================
+
+/// Distributed execution support for scaling across multiple controllers.
+///
+/// This module provides distributed execution capabilities, allowing Rustible
+/// to scale across multiple controller nodes for improved performance and
+/// fault tolerance.
+///
+/// # Architecture
+///
+/// The distributed execution system uses a leader-follower architecture:
+/// - **Leader**: Coordinates work distribution and maintains cluster state
+/// - **Followers**: Execute assigned work units and report results
+/// - **Candidates**: Nodes participating in leader election
+///
+/// Leader election is handled via the Raft consensus protocol.
+///
+/// # Example
+///
+/// ```rust,ignore,no_run
+/// use rustible::distributed::{Controller, ClusterConfig, ControllerId};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = ClusterConfig {
+///         cluster_id: "my-cluster".to_string(),
+///         controller_id: ControllerId::new("ctrl-1"),
+///         bind_address: "127.0.0.1:9000".parse()?,
+///         peers: vec!["127.0.0.1:9001".parse()?],
+///         ..Default::default()
+///     };
+///
+///     let controller = Controller::new(config).await?;
+///     controller.start().await?;
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "distributed")]
+pub mod distributed;
+
+// ============================================================================
 // Infrastructure Provisioning (Terraform-like)
 // ============================================================================
 
