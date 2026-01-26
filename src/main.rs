@@ -63,6 +63,21 @@ async fn main() -> Result<()> {
             args.execute().await?;
             0
         }
+        Commands::Provisioner(args) => {
+            match args.execute().await {
+                Ok(result) => {
+                    if result.success {
+                        0
+                    } else {
+                        1
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Provisioner error: {}", e);
+                    1
+                }
+            }
+        }
         Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
     };
 

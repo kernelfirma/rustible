@@ -130,6 +130,10 @@ pub enum Commands {
     #[command(name = "lock")]
     Lock(commands::lock::LockArgs),
 
+    /// Terraform provisioner mode for local-exec integration
+    #[command(name = "provisioner")]
+    Provisioner(commands::provisioner::ProvisionerArgs),
+
     /// Explain an error code (like `rustc --explain`)
     #[command(name = "explain")]
     Explain(ExplainArgs),
