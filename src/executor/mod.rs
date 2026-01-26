@@ -125,7 +125,10 @@ pub use condition::{Condition, ConditionContext, ConditionEvaluator};
 pub use dependency::{
     DependencyError, DependencyGraph as AdvancedDependencyGraph, DependencyKind, DependencyNode,
 };
-pub use fact_pipeline::{FactPipeline, FactPipelineConfig, FactResult};
+pub use fact_pipeline::{
+    AsyncFactGatherer, AsyncFactGathererFactory, ConnectionFactGatherer,
+    ConnectionFactGathererFactory, FactPipeline, FactPipelineConfig, FactResult,
+};
 pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
 pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
 pub use playbook::{Play, Playbook};

@@ -10,13 +10,20 @@
 
 mod common;
 
+use indexmap::IndexMap;
 use rustible::executor::playbook::Playbook;
-use rustible::executor::runtime::RuntimeContext;
-use rustible::executor::task::{Task, TaskStatus};
-use rustible::executor::{Executor, ExecutorConfig};
+use rustible::executor::ExecutorConfig;
 use rustible::template::TemplateEngine;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
+
+/// Helper to convert JSON object to IndexMap for evaluate_condition
+fn vars_from_json(v: JsonValue) -> IndexMap<String, JsonValue> {
+    match v {
+        JsonValue::Object(map) => map.into_iter().collect(),
+        _ => IndexMap::new(),
+    }
+}
 
 // ============================================================================
 // Boolean Coercion Tests
@@ -29,13 +36,13 @@ fn test_boolean_coercion_yes_no() {
 
     // 'yes' should be truthy
     let result = engine
-        .evaluate_condition("{{ 'yes' | bool }}", &json!({}))
+        .evaluate_condition("{{ 'yes' | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "'yes' should be truthy");
 
     // 'no' should be falsy
     let result = engine
-        .evaluate_condition("{{ 'no' | bool }}", &json!({}))
+        .evaluate_condition("{{ 'no' | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "'no' should be falsy");
 }
@@ -47,14 +54,14 @@ fn test_boolean_coercion_true_false_strings() {
     // Case-insensitive true
     for val in ["true", "True", "TRUE"] {
         let template = format!("{{{{ '{}' | bool }}}}", val);
-        let result = engine.evaluate_condition(&template, &json!({})).unwrap();
+        let result = engine.evaluate_condition(&template, &vars_from_json(json!({}))).unwrap();
         assert!(result, "'{}' should be truthy", val);
     }
 
     // Case-insensitive false
     for val in ["false", "False", "FALSE"] {
         let template = format!("{{{{ '{}' | bool }}}}", val);
-        let result = engine.evaluate_condition(&template, &json!({})).unwrap();
+        let result = engine.evaluate_condition(&template, &vars_from_json(json!({}))).unwrap();
         assert!(!result, "'{}' should be falsy", val);
     }
 }
@@ -65,13 +72,13 @@ fn test_boolean_coercion_on_off() {
 
     // 'on' should be truthy
     let result = engine
-        .evaluate_condition("{{ 'on' | bool }}", &json!({}))
+        .evaluate_condition("{{ 'on' | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "'on' should be truthy");
 
     // 'off' should be falsy
     let result = engine
-        .evaluate_condition("{{ 'off' | bool }}", &json!({}))
+        .evaluate_condition("{{ 'off' | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "'off' should be falsy");
 }
@@ -82,13 +89,13 @@ fn test_boolean_coercion_numeric() {
 
     // 1 should be truthy
     let result = engine
-        .evaluate_condition("{{ 1 | bool }}", &json!({}))
+        .evaluate_condition("{{ 1 | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "1 should be truthy");
 
     // 0 should be falsy
     let result = engine
-        .evaluate_condition("{{ 0 | bool }}", &json!({}))
+        .evaluate_condition("{{ 0 | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "0 should be falsy");
 }
@@ -99,13 +106,13 @@ fn test_boolean_coercion_empty_values() {
 
     // Empty string should be falsy
     let result = engine
-        .evaluate_condition("{{ '' | bool }}", &json!({}))
+        .evaluate_condition("{{ '' | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "empty string should be falsy");
 
     // Empty list should be falsy
     let result = engine
-        .evaluate_condition("{{ [] | bool }}", &json!({}))
+        .evaluate_condition("{{ [] | bool }}", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "empty list should be falsy");
 }
@@ -133,7 +140,7 @@ fn test_boolean_in_when_condition() {
       when: disabled | bool
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert!(!playbook.plays.is_empty());
     assert_eq!(playbook.plays[0].tasks.len(), 2);
 }
@@ -294,7 +301,7 @@ fn test_fqcn_ansible_builtin() {
         msg: "Hello"
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 2);
 }
 
@@ -312,7 +319,7 @@ fn test_fqcn_ansible_legacy() {
         cmd: echo hello
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 1);
 }
 
@@ -395,7 +402,7 @@ fn test_extra_vars_override_all() {
         var: my_var
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert!(!playbook.plays.is_empty());
 
     // The play-level var should be set
@@ -409,7 +416,7 @@ fn test_undefined_variable_default() {
     let engine = TemplateEngine::new();
 
     let result = engine
-        .render_string(
+        .render_with_json(
             "{{ undefined_var | default('fallback') }}",
             &json!({}),
         )
@@ -439,7 +446,7 @@ fn test_loop_with_index() {
         - c
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 1);
 }
 
@@ -462,7 +469,7 @@ fn test_loop_with_dict() {
       loop: "{{ my_dict | dict2items }}"
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 1);
 }
 
@@ -488,7 +495,7 @@ fn test_when_with_registered_variable() {
       when: result is success
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 2);
 }
 
@@ -514,7 +521,7 @@ fn test_when_with_and_or() {
       when: a or b
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].tasks.len(), 2);
 }
 
@@ -548,6 +555,6 @@ fn test_handler_listen() {
       listen: restart services
 "#;
 
-    let playbook: Playbook = serde_yaml::from_str(yaml).unwrap();
+    let playbook = Playbook::parse(yaml, None).unwrap();
     assert_eq!(playbook.plays[0].handlers.len(), 2);
 }

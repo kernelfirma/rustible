@@ -11,6 +11,16 @@
 //! [Host 3] ─┤   (parallel)       │   (deduplicated)
 //! [Host N] ─┘                    ┴
 //! ```
+//!
+//! ## Connection-Based Fact Gathering
+//!
+//! For remote hosts, use `ConnectionFactGatherer` which wraps an SSH/remote
+//! connection and gathers facts via remote command execution:
+//!
+//! ```ignore
+//! let gatherer = ConnectionFactGatherer::new(connection);
+//! let result = pipeline.gather_facts("remote-host", gatherer).await;
+//! ```
 
 use indexmap::IndexMap;
 use parking_lot::RwLock;
@@ -20,6 +30,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Semaphore};
 use tracing::{debug, trace, warn};
+
+use crate::connection::Connection;
 
 /// Configuration for the fact gathering pipeline
 #[derive(Debug, Clone)]
@@ -436,6 +448,113 @@ impl AsyncFactGathererFactory for SimpleFactGathererFactory {
     }
 }
 
+/// Connection-based fact gatherer for remote hosts
+///
+/// This gatherer uses an SSH or remote connection to gather facts from
+/// remote hosts by executing commands and parsing their output.
+///
+/// # Example
+///
+/// ```ignore
+/// use rustible::connection::SshConnection;
+/// use rustible::executor::fact_pipeline::{ConnectionFactGatherer, FactPipeline};
+///
+/// let connection: Arc<dyn Connection + Send + Sync> = Arc::new(SshConnection::new("remote-host", 22));
+/// let gatherer = ConnectionFactGatherer::new(connection);
+/// let pipeline = FactPipeline::new(Default::default());
+/// let result = pipeline.gather_facts("remote-host", gatherer).await;
+/// ```
+pub struct ConnectionFactGatherer {
+    /// The connection to use for remote fact gathering
+    connection: Arc<dyn Connection + Send + Sync>,
+    /// Optional subset filter
+    gather_subset: Option<Vec<String>>,
+}
+
+impl ConnectionFactGatherer {
+    /// Create a new connection-based fact gatherer
+    pub fn new(connection: Arc<dyn Connection + Send + Sync>) -> Self {
+        Self {
+            connection,
+            gather_subset: None,
+        }
+    }
+
+    /// Create with a specific gather subset
+    pub fn with_subset(connection: Arc<dyn Connection + Send + Sync>, subset: Vec<String>) -> Self {
+        Self {
+            connection,
+            gather_subset: Some(subset),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncFactGatherer for ConnectionFactGatherer {
+    async fn gather_facts(
+        self,
+        _host: &str,
+        subset: &[String],
+    ) -> Result<IndexMap<String, JsonValue>, String> {
+        // Use provided subset or fall back to configured subset
+        let effective_subset: Option<&[String]> = if !subset.is_empty() {
+            Some(subset)
+        } else {
+            self.gather_subset.as_deref()
+        };
+
+        // Delegate to the facts module's connection-based gathering
+        let facts_map = crate::modules::facts::gather_facts_via_connection(
+            &self.connection,
+            effective_subset,
+        )
+        .await;
+
+        // Convert HashMap to IndexMap
+        let facts: IndexMap<String, JsonValue> = facts_map.into_iter().collect();
+        Ok(facts)
+    }
+}
+
+/// Factory for connection-based fact gatherers
+pub struct ConnectionFactGathererFactory {
+    /// The connection to use
+    connection: Arc<dyn Connection + Send + Sync>,
+    /// Optional gather subset
+    gather_subset: Option<Vec<String>>,
+}
+
+impl ConnectionFactGathererFactory {
+    /// Create a new factory with a connection
+    pub fn new(connection: Arc<dyn Connection + Send + Sync>) -> Self {
+        Self {
+            connection,
+            gather_subset: None,
+        }
+    }
+
+    /// Create with a specific gather subset
+    pub fn with_subset(connection: Arc<dyn Connection + Send + Sync>, subset: Vec<String>) -> Self {
+        Self {
+            connection,
+            gather_subset: Some(subset),
+        }
+    }
+}
+
+impl AsyncFactGathererFactory for ConnectionFactGathererFactory {
+    type Gatherer = ConnectionFactGatherer;
+
+    fn create(&self) -> Self::Gatherer {
+        match &self.gather_subset {
+            Some(subset) => {
+                ConnectionFactGatherer::with_subset(self.connection.clone(), subset.clone())
+            }
+            None => ConnectionFactGatherer::new(self.connection.clone()),
+        }
+    }
+}
+
 /// Streaming fact results for processing as they arrive
 pub struct FactStream {
     rx: mpsc::Receiver<FactResult>,
@@ -559,5 +678,118 @@ mod tests {
         };
 
         assert!((stats.cache_hit_ratio() - 0.75).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_connection_fact_gatherer() {
+        use crate::connection::local::LocalConnection;
+
+        // Create a local connection for testing
+        let connection: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::default());
+
+        // Create the gatherer
+        let gatherer = ConnectionFactGatherer::new(connection);
+
+        // Create pipeline with cache disabled
+        let config = FactPipelineConfig {
+            enable_cache: false,
+            ..Default::default()
+        };
+        let pipeline = FactPipeline::new(config);
+
+        // Gather facts via connection
+        let result = pipeline.gather_facts("localhost", gatherer).await;
+
+        // Verify we got facts
+        assert!(!result.from_cache);
+        assert!(result.error.is_none());
+
+        // Check for expected fact keys (gathered via local connection)
+        // The remote fact gathering doesn't add ansible_ prefix
+        assert!(
+            result.facts.contains_key("os_family") || result.facts.contains_key("system"),
+            "Expected OS facts, got: {:?}",
+            result.facts.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_connection_fact_gatherer_with_subset() {
+        use crate::connection::local::LocalConnection;
+
+        // Create a local connection for testing
+        let connection: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::default());
+
+        // Create the gatherer with specific subset
+        let gatherer =
+            ConnectionFactGatherer::with_subset(connection, vec!["network".to_string()]);
+
+        // Create pipeline
+        let config = FactPipelineConfig {
+            enable_cache: false,
+            ..Default::default()
+        };
+        let pipeline = FactPipeline::new(config);
+
+        // Gather facts via connection
+        let result = pipeline.gather_facts("localhost", gatherer).await;
+
+        // Verify we got facts
+        assert!(!result.from_cache);
+        assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_connection_fact_gatherer_factory() {
+        use crate::connection::local::LocalConnection;
+
+        // Create a local connection for testing
+        let connection: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::default());
+
+        // Create factory
+        let factory = ConnectionFactGathererFactory::new(connection);
+
+        // Create a gatherer via factory
+        let gatherer = factory.create();
+
+        // Verify gatherer works
+        let result = gatherer
+            .gather_facts("localhost", &[])
+            .await
+            .expect("Should gather facts");
+
+        // Should have some facts
+        assert!(!result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_connection_fact_gatherer_caching() {
+        use crate::connection::local::LocalConnection;
+
+        // Create a local connection for testing
+        let connection: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::default());
+
+        // Create pipeline with caching enabled
+        let config = FactPipelineConfig {
+            enable_cache: true,
+            cache_ttl: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let pipeline = FactPipeline::new(config);
+
+        // First gather - should hit the connection
+        let gatherer1 = ConnectionFactGatherer::new(connection.clone());
+        let result1 = pipeline.gather_facts("localhost", gatherer1).await;
+        assert!(!result1.from_cache);
+
+        // Second gather - should come from cache
+        let gatherer2 = ConnectionFactGatherer::new(connection);
+        let result2 = pipeline.gather_facts("localhost", gatherer2).await;
+        assert!(result2.from_cache);
+
+        // Verify stats
+        let stats = pipeline.stats();
+        assert_eq!(stats.cache_hits, 1);
+        assert_eq!(stats.cache_misses, 1);
     }
 }
