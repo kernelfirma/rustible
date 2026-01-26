@@ -1,0 +1,41 @@
+# Service Operations Compatibility Test
+# Tests: service, systemd modules
+---
+- name: Service Operations Compatibility
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  tasks:
+    - name: Check service status (generic)
+      service:
+        name: cron
+        state: started
+      check_mode: true
+      ignore_errors: true
+
+    - name: Check systemd service status
+      when: ansible_service_mgr == "systemd"
+      systemd:
+        name: cron
+        state: started
+        enabled: true
+      check_mode: true
+      ignore_errors: true
+
+    - name: Test service with daemon_reload
+      when: ansible_service_mgr == "systemd"
+      systemd:
+        name: cron
+        daemon_reload: true
+      check_mode: true
+      ignore_errors: true
+
+    - name: Test service facts
+      service_facts:
+      register: services
+      ignore_errors: true
+
+    - name: Debug service info
+      debug:
+        msg: "Service manager: {{ ansible_service_mgr | default('unknown') }}"

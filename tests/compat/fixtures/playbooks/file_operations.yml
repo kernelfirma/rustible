@@ -1,0 +1,46 @@
+# File Operations Compatibility Test
+# Tests: file, copy, stat modules
+---
+- name: File Operations Compatibility
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_dir: /tmp/rustible_compat_test
+    test_file: "{{ test_dir }}/test.txt"
+
+  tasks:
+    - name: Create test directory
+      file:
+        path: "{{ test_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create a file with content
+      copy:
+        dest: "{{ test_file }}"
+        content: "Hello from Rustible compatibility test"
+        mode: '0644'
+
+    - name: Get file stats
+      stat:
+        path: "{{ test_file }}"
+      register: file_stat
+
+    - name: Verify file exists
+      assert:
+        that:
+          - file_stat.stat.exists
+          - file_stat.stat.isreg
+          - file_stat.stat.mode == '0644'
+
+    - name: Create a symlink
+      file:
+        src: "{{ test_file }}"
+        dest: "{{ test_dir }}/test_link.txt"
+        state: link
+
+    - name: Remove test directory
+      file:
+        path: "{{ test_dir }}"
+        state: absent
