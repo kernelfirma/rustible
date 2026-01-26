@@ -5,6 +5,7 @@
 //!
 //! # Available Resources
 //!
+//! - `aws_ebs_volume` - EBS Volumes
 //! - `aws_eip` - Elastic IPs
 //! - `aws_iam_policy` - IAM Policies
 //! - `aws_iam_role` - IAM Roles
@@ -17,6 +18,7 @@
 //! - `aws_subnet` - VPC Subnets
 //! - `aws_vpc` - Virtual Private Clouds
 
+pub mod ebs_volume;
 pub mod elastic_ip;
 pub mod iam_policy;
 pub mod iam_role;
@@ -29,6 +31,7 @@ pub mod security_group_rule;
 pub mod subnet;
 pub mod vpc;
 
+pub use ebs_volume::{AwsEbsVolumeResource, EbsVolumeConfig, EbsVolumeState};
 pub use elastic_ip::{AwsElasticIpResource, ElasticIpAttributes, ElasticIpConfig};
 pub use iam_policy::{AwsIamPolicyResource, IamPolicyAttributes, IamPolicyConfig};
 pub use iam_role::{AwsIamRoleResource, IamRoleAttributes, IamRoleConfig};
