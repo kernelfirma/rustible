@@ -13,6 +13,7 @@
 //! ## MySQL Modules (requires `database` feature)
 //! - `mysql_db`: MySQL database management (create, drop, modify encoding/collation)
 //! - `mysql_user`: MySQL user/role management with privilege grants
+//! - `mysql_privs`: MySQL privilege management (grant, revoke with granular control)
 //! - `mysql_query`: Execute MySQL queries and scripts
 //!
 //! MySQL modules require the `sqlx` crate and are only available when the
@@ -61,6 +62,8 @@ pub use postgresql_user::PostgresqlUserModule;
 #[cfg(feature = "database")]
 pub mod mysql_db;
 #[cfg(feature = "database")]
+pub mod mysql_privs;
+#[cfg(feature = "database")]
 pub mod mysql_query;
 #[cfg(feature = "database")]
 pub mod mysql_user;
@@ -70,6 +73,8 @@ pub mod pool;
 // Re-export MySQL modules when available
 #[cfg(feature = "database")]
 pub use mysql_db::MysqlDbModule;
+#[cfg(feature = "database")]
+pub use mysql_privs::MysqlPrivsModule;
 #[cfg(feature = "database")]
 pub use mysql_query::MysqlQueryModule;
 #[cfg(feature = "database")]
