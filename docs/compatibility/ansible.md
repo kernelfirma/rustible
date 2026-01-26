@@ -236,37 +236,36 @@ cargo build --release --features full-cloud
 
 ## Jinja2 Filter Compatibility
 
-### Fully Supported Filters
-- `default` / `d`
-- `bool`
-- `int` / `float` / `string`
-- `length` / `count`
-- `lower` / `upper` / `title` / `capitalize`
-- `trim` / `strip`
-- `join`
-- `split`
-- `replace`
-- `regex_replace` / `regex_search` / `regex_findall`
-- `first` / `last`
-- `min` / `max` / `sum`
-- `sort` / `reverse`
-- `unique`
-- `flatten`
-- `map` / `select` / `reject` / `selectattr` / `rejectattr`
-- `to_json` / `to_yaml` / `to_nice_json` / `to_nice_yaml`
-- `from_json` / `from_yaml`
-- `b64encode` / `b64decode`
-- `hash` / `checksum`
-- `basename` / `dirname` / `expanduser`
+See [jinja2-filters.md](jinja2-filters.md) for the comprehensive filter gap list.
 
-### Partially Supported Filters
-- `ipaddr` - Basic support
-- `combine` - Basic support
+### Fully Supported Filters (40+)
 
-### Not Yet Supported Filters
+**String:** `default`/`d`, `lower`, `upper`, `capitalize`, `title`, `trim`, `replace`, `regex_replace`, `regex_search`, `split`, `join`, `quote`
+
+**List:** `first`, `last`, `length`/`count`, `unique`, `sort`, `reverse`, `flatten`, `list`, `selectattr`, `rejectattr`, `map`
+
+**Dict:** `combine`, `dict2items`, `items2dict`
+
+**Type:** `int`, `float`, `string`, `bool`, `list`
+
+**Path:** `basename`, `dirname`, `expanduser`, `realpath`
+
+**Encoding:** `b64encode`, `b64decode`, `to_json`, `to_nice_json`, `from_json`, `to_yaml`, `to_nice_yaml`, `from_yaml`, `from_yaml_all`
+
+**Ansible-Specific:** `mandatory`, `ternary`
+
+### Planned Filters (High Priority)
+
+- `min` / `max` / `sum` - Expose MiniJinja builtins
+- `regex_findall` - Find all regex matches
+- `password_hash` - Password hashing
+- `ipaddr` - IP address manipulation
+
+### Not Yet Supported
+
 - `ansible_vault` - Different vault format
-- `inventory_hostnames` - Planned
-- `subelements` - Planned
+- `json_query` - JMESPath queries
+- `subelements` - Nested loop helper
 
 ---
 
