@@ -26,6 +26,7 @@ pub mod iam_policy;
 pub mod iam_role;
 pub mod instance;
 pub mod internet_gateway;
+pub mod launch_template;
 pub mod load_balancer;
 pub mod nat_gateway;
 pub mod rds_instance;
@@ -45,6 +46,7 @@ pub use instance::{AwsInstanceResource, InstanceAttributes, InstanceConfig, Root
 pub use internet_gateway::{
     AwsInternetGatewayResource, InternetGatewayAttributes, InternetGatewayConfig,
 };
+pub use launch_template::{AwsLaunchTemplateResource, LaunchTemplateConfig, LaunchTemplateState};
 pub use load_balancer::{AwsLoadBalancerResource, LoadBalancerConfig, LoadBalancerState};
 pub use nat_gateway::{AwsNatGatewayResource, NatGatewayAttributes, NatGatewayConfig};
 pub use route_table::{
