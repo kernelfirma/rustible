@@ -83,6 +83,7 @@
 pub mod dependencies;
 pub mod diff;
 pub mod hashing;
+pub mod manifest;
 pub mod persistence;
 pub mod rollback;
 
@@ -101,6 +102,7 @@ use uuid::Uuid;
 
 pub use dependencies::{DependencyGraph, DependencyNode, TaskDependency};
 pub use diff::{DiffEngine, DiffReport, StateChange, StateDiff};
+pub use manifest::{DriftDetails, DriftState, DriftSummary, FieldDiff, HostManifest, ManifestStore, ResourceState};
 pub use hashing::{
     CachedTaskResult, HashCacheStats, HashingConfig, StateHashCache, TaskHashBuilder, TaskStateHash,
 };
