@@ -29,6 +29,7 @@ pub mod internet_gateway;
 pub mod nat_gateway;
 pub mod rds_instance;
 pub mod route_table;
+pub mod s3_bucket;
 pub mod security_group;
 pub mod security_group_rule;
 pub mod subnet;
@@ -49,6 +50,7 @@ pub use route_table::{
     RouteTableConfig,
 };
 pub use rds_instance::{AwsRdsInstanceResource, RdsInstanceConfig, RdsInstanceState};
+pub use s3_bucket::{AwsS3BucketResource, S3BucketConfig, S3BucketState};
 pub use security_group::AwsSecurityGroupResource;
 pub use security_group_rule::{
     AwsSecurityGroupRuleResource, RuleType, SecurityGroupRuleConfig, SecurityGroupRuleState,
