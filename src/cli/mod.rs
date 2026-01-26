@@ -134,6 +134,10 @@ pub enum Commands {
     #[command(name = "provisioner")]
     Provisioner(commands::provisioner::ProvisionerArgs),
 
+    /// Manage providers (install, update, verify)
+    #[command(name = "provider")]
+    Provider(commands::provider::ProviderArgs),
+
     /// Explain an error code (like `rustc --explain`)
     #[command(name = "explain")]
     Explain(ExplainArgs),

@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
         Commands::ListTasks(args) => args.execute(&mut ctx).await?,
         Commands::Vault(args) => args.execute(&mut ctx).await?,
         Commands::Galaxy(args) => cli::commands::galaxy::execute(args, &ctx).await?,
+        Commands::Provider(args) => cli::commands::provider::execute(args, &ctx).await?,
         Commands::Init(args) => init_project(&args.path, &args.template, &mut ctx).await?,
         Commands::Validate(args) => validate_playbook(&args.playbook, &mut ctx).await?,
         Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
