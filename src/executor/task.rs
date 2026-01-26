@@ -8,7 +8,7 @@
 //! # Performance Optimizations
 //!
 //! This module includes several hot path optimizations:
-//! - Cached regex patterns using `once_cell::sync::Lazy`
+//! - Template rendering uses the unified TEMPLATE_ENGINE with LRU caching
 //! - Inline hints for frequently called functions
 //! - Reduced allocations in template processing
 
@@ -17,25 +17,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, instrument, warn};
-
-// ============================================================================
-// PERFORMANCE: Cached regex patterns for hot path template processing
-// ============================================================================
-
-/// Cached regex for template variable extraction: {{ variable }}
-/// This regex is compiled once and reused across all template operations.
-static TEMPLATE_VAR_REGEX: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").expect("Invalid template regex"));
-
-/// Cached regex for checking if string contains template syntax
-#[allow(dead_code)]
-static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"\{\{|\{%").expect("Invalid template check regex"));
 
 use crate::diagnostics::template_syntax_error;
 use crate::error::Error;
