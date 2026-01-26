@@ -5071,6 +5071,7 @@ dependencies = [
  "minijinja",
  "mockall",
  "nix 0.30.1",
+ "num_cpus",
  "once_cell",
  "parking_lot",
  "petgraph",

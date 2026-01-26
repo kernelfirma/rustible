@@ -80,9 +80,106 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
+        Commands::Agent(args) => execute_agent(&args, &mut ctx).await?,
     };
 
     std::process::exit(exit_code);
+}
+
+/// Execute agent commands
+async fn execute_agent(args: &cli::AgentArgs, ctx: &mut CommandContext) -> Result<i32> {
+    use rustible::agent::AgentBuilder;
+
+    match &args.command {
+        cli::AgentCommand::Build(build_args) => {
+            ctx.output.banner("RUSTIBLE AGENT BUILD");
+
+            let mut builder = AgentBuilder::new();
+
+            if let Some(target) = &build_args.target {
+                builder = builder.target(target);
+            }
+
+            builder = builder
+                .release(!build_args.debug)
+                .output_dir(build_args.output.clone())
+                .strip(build_args.strip);
+
+            ctx.output.info(&format!(
+                "Building agent for target: {}",
+                builder.config().target
+            ));
+
+            match builder.build() {
+                Ok(path) => {
+                    ctx.output.success(&format!(
+                        "Agent binary built: {}",
+                        path.display()
+                    ));
+                    Ok(0)
+                }
+                Err(e) => {
+                    ctx.output.error(&format!("Build failed: {}", e));
+                    Ok(1)
+                }
+            }
+        }
+
+        cli::AgentCommand::Deploy(deploy_args) => {
+            ctx.output.banner("RUSTIBLE AGENT DEPLOY");
+
+            // If --build is specified, build first
+            if deploy_args.build {
+                let mut builder = AgentBuilder::new();
+                if let Some(target) = &deploy_args.target {
+                    builder = builder.target(target);
+                }
+
+                ctx.output.info("Building agent binary...");
+                match builder.build() {
+                    Ok(path) => {
+                        ctx.output.success(&format!("Built: {}", path.display()));
+                    }
+                    Err(e) => {
+                        ctx.output.error(&format!("Build failed: {}", e));
+                        return Ok(1);
+                    }
+                }
+            }
+
+            ctx.output.info("Agent deployment not yet implemented");
+            ctx.output.info(&format!(
+                "Would deploy to: {}",
+                deploy_args.remote_path
+            ));
+            Ok(0)
+        }
+
+        cli::AgentCommand::Status(status_args) => {
+            ctx.output.banner("RUSTIBLE AGENT STATUS");
+
+            if status_args.detailed {
+                ctx.output.info("Detailed agent status:");
+            }
+
+            ctx.output.info("Agent status check not yet implemented");
+            ctx.output.info("(Requires inventory to determine target hosts)");
+            Ok(0)
+        }
+
+        cli::AgentCommand::Stop(stop_args) => {
+            ctx.output.banner("RUSTIBLE AGENT STOP");
+
+            if stop_args.force {
+                ctx.output.info("Force stopping agents...");
+            } else {
+                ctx.output.info("Gracefully stopping agents...");
+            }
+
+            ctx.output.info("Agent stop not yet implemented");
+            Ok(0)
+        }
+    }
 }
 
 /// Initialize logging based on verbosity level

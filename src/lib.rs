@@ -820,6 +820,67 @@ pub mod galaxy;
 pub mod lockfile;
 
 // ============================================================================
+// Native System Bindings
+// ============================================================================
+
+/// Native bindings for system operations with reduced shell overhead.
+///
+/// This module provides direct system API access for common operations,
+/// improving performance by avoiding shell command invocation where possible.
+///
+/// # Features
+///
+/// - **APT**: Native dpkg status parsing for package queries
+/// - **Systemd**: Unit status and configuration via systemctl/D-Bus
+/// - **Users**: libc-based user/group lookups
+///
+/// # Example
+///
+/// ```rust,ignore,no_run
+/// use rustible::native::{apt, systemd, users};
+///
+/// // Native package lookup
+/// let mut apt = apt::AptNative::new()?;
+/// if let Some(pkg) = apt.get_package("nginx")? {
+///     println!("Version: {}", pkg.version);
+/// }
+///
+/// // Native user lookup
+/// if let Some(user) = users::get_user_by_name("www-data")? {
+///     println!("UID: {}", user.uid);
+/// }
+/// ```
+#[cfg(unix)]
+pub mod native;
+
+// ============================================================================
+// Agent Mode
+// ============================================================================
+
+/// Agent mode for persistent target execution.
+///
+/// This module provides an agent that can be deployed to target hosts for
+/// persistent, low-latency command execution without SSH connection overhead.
+///
+/// # Features
+///
+/// - **Agent Binary**: Deployable Rust binary for target hosts
+/// - **Persistent Connection**: Long-running process for rapid task execution
+/// - **Local Socket**: Unix socket or TCP for communication
+/// - **Checksum Verification**: Ensure binary integrity
+///
+/// # Example
+///
+/// ```bash
+/// # Build agent binary
+/// rustible agent-build --target x86_64-unknown-linux-gnu
+///
+/// # Run playbook in agent mode
+/// rustible run playbook.yml --agent-mode
+/// ```
+pub mod agent;
+
+// ============================================================================
 // Version Information
 // ============================================================================
 

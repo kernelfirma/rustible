@@ -234,6 +234,9 @@ is-terminal = "0.4"
 # Unix/POSIX functionality
 nix = { version = "0.30", features = ["user", "fs", "process", "signal", "term"] }
 
+# CPU/system information
+num_cpus = "1.16"
+
 # Temporary file handling
 tempfile = "3.9"
 
