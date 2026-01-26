@@ -36,8 +36,8 @@
 //! - `decrypt` - Decrypt ansible-vault encrypted script (default: true)
 
 use super::{
-    validate_path_param, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput,
-    ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
+    get_remote_tmp, validate_path_param, Module, ModuleClassification, ModuleContext, ModuleError,
+    ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
 };
 use crate::utils::shell_escape;
 use std::path::PathBuf;
@@ -137,9 +137,10 @@ impl ScriptModule {
     }
 
     /// Generate a unique temporary path on the remote system
-    fn generate_temp_path(&self) -> String {
+    fn generate_temp_path(&self, context: &ModuleContext) -> String {
         let uuid = uuid::Uuid::new_v4();
-        format!("/tmp/.ansible_script_{}.tmp", uuid.simple())
+        let remote_tmp = get_remote_tmp(context);
+        format!("{}/.ansible_script_{}.tmp", remote_tmp, uuid.simple())
     }
 }
 
@@ -232,7 +233,7 @@ impl Module for ScriptModule {
         })?;
 
         // Generate remote temporary path
-        let remote_path = self.generate_temp_path();
+        let remote_path = self.generate_temp_path(context);
         let remote_path_buf = PathBuf::from(&remote_path);
 
         // Use async runtime for connection operations
@@ -425,17 +426,27 @@ mod tests {
 
     #[test]
     fn test_script_generate_temp_path() {
+        use crate::modules::{ModuleContext, ModuleContextBuilder};
         let module = ScriptModule;
+        let context = ModuleContext::default();
 
-        let path1 = module.generate_temp_path();
-        let path2 = module.generate_temp_path();
+        let path1 = module.generate_temp_path(&context);
+        let path2 = module.generate_temp_path(&context);
 
-        // Should start with expected prefix
+        // Should start with expected prefix (default /tmp)
         assert!(path1.starts_with("/tmp/.ansible_script_"));
         assert!(path1.ends_with(".tmp"));
 
         // Should be unique
         assert_ne!(path1, path2);
+
+        // Test with custom remote_tmp
+        let context_custom = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .build()
+            .unwrap();
+        let path3 = module.generate_temp_path(&context_custom);
+        assert!(path3.starts_with("/var/tmp/.ansible_script_"));
     }
 
     #[test]
