@@ -1,0 +1,66 @@
+{
+  "name": "aws-core",
+  "version": "0.1.0",
+  "api_version": "1.0.0",
+  "description": "AWS Core Provider - Sample provider demonstrating the Rustible Provider SDK",
+  "author": "Rustible Contributors",
+  "license": "MIT",
+  "repository": "https://github.com/rustible/rustible",
+  "supported_targets": ["aws"],
+  "capabilities": ["read", "create", "update", "delete"],
+  "min_rustible_version": "0.1.0",
+  "modules": [
+    {
+      "name": "ec2_info",
+      "description": "Gather information about EC2 instances",
+      "parameters": [
+        {
+          "name": "instance_ids",
+          "description": "List of instance IDs to query",
+          "required": false,
+          "type": "array"
+        },
+        {
+          "name": "filters",
+          "description": "Filter criteria for instances",
+          "required": false,
+          "type": "object"
+        },
+        {
+          "name": "region",
+          "description": "AWS region to query",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "instances",
+          "description": "List of EC2 instance details",
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "name": "s3_bucket_info",
+      "description": "Gather information about S3 buckets",
+      "parameters": [
+        {
+          "name": "bucket_name",
+          "description": "Name of the bucket to query",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "buckets",
+          "description": "List of S3 bucket details",
+          "type": "array"
+        }
+      ]
+    }
+  ],
+  "dependencies": [],
+  "checksum_algorithm": "blake3"
+}
