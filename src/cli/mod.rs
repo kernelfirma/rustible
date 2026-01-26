@@ -3,6 +3,7 @@
 //! This module provides the command-line interface for Rustible,
 //! including argument parsing, configuration loading, and subcommand handling.
 
+pub mod change_detection;
 pub mod commands;
 pub mod completions;
 pub mod diff;
