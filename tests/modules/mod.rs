@@ -25,6 +25,7 @@ pub mod lineinfile_tests;
 pub mod mount_tests;
 pub mod network_tests;
 pub mod container_tests;
+pub mod cloud_tests;
 pub mod package_tests;
 pub mod pause_tests;
 pub mod pip_tests;

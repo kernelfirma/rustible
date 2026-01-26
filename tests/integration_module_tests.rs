@@ -18,3 +18,6 @@ pub use modules::network_tests;
 
 // Re-export container/K8s module tests
 pub use modules::container_tests;
+
+// Re-export cloud module tests
+pub use modules::cloud_tests;
