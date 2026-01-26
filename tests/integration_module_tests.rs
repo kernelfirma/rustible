@@ -15,3 +15,6 @@ pub use modules::sysctl_tests;
 
 // Re-export network module tests
 pub use modules::network_tests;
+
+// Re-export container/K8s module tests
+pub use modules::container_tests;
