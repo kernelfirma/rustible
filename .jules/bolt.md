@@ -14,3 +14,11 @@
 ## 2024-05-24 - [Unnecessary String Cloning in Serialization]
 **Learning:** Creating intermediate `String` objects (via `clone()` or `to_string()`) just to store them in a `Vec<String>` for a final `join()` operation is wasteful.
 **Action:** Use `Vec<&str>` or `Vec<Cow<str>>` to hold references to existing strings, and pre-allocate the vector with `Vec::with_capacity()` when the number of elements is known. This avoids heap allocations for temporary strings.
+
+## 2024-05-25 - [Cow into_owned trap]
+**Learning:** Calling `.into_owned()` on a `Cow<'_, str>` returned from a helper function (like `shell_escape`) forces allocation even if the helper returned `Cow::Borrowed`. When collecting into a `Vec`, ensure the target type is `Vec<Cow<'_, str>>` and avoid early conversion to `String` to preserve zero-allocation benefits for safe strings.
+**Action:** Use `Cow` throughout the transformation chain where possible.
+
+## 2024-05-25 - [Lineinfile Optimization]
+**Learning:** `lineinfile` module was unconditionally cloning the file content for diff generation even when diffs were not requested. It also allocated a vector of matching indices for regex replacement.
+**Action:** Guard expensive clones with feature flags (like `diff_mode`). Use in-place iteration or single-pass search (`position`, `find`) instead of `collect()` + loop when modifying data, especially for "first match" scenarios.
