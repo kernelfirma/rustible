@@ -21,3 +21,6 @@ pub use modules::container_tests;
 
 // Re-export cloud module tests
 pub use modules::cloud_tests;
+
+// Re-export Windows module tests
+pub use modules::windows_tests;
