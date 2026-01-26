@@ -5,6 +5,7 @@
 //!
 //! # Available Resources
 //!
+//! - `aws_autoscaling_group` - Auto Scaling Groups
 //! - `aws_db_subnet_group` - RDS DB Subnet Groups
 //! - `aws_ebs_volume` - EBS Volumes
 //! - `aws_eip` - Elastic IPs
@@ -12,13 +13,18 @@
 //! - `aws_iam_role` - IAM Roles
 //! - `aws_instance` - EC2 Instances
 //! - `aws_internet_gateway` - Internet Gateways
+//! - `aws_launch_template` - EC2 Launch Templates
+//! - `aws_lb` - Elastic Load Balancers (ALB/NLB/GWLB)
 //! - `aws_nat_gateway` - NAT Gateways
+//! - `aws_rds_instance` - RDS Database Instances
 //! - `aws_route_table` - Route Tables
+//! - `aws_s3_bucket` - S3 Buckets
 //! - `aws_security_group` - EC2 Security Groups
 //! - `aws_security_group_rule` - Individual Security Group Rules
 //! - `aws_subnet` - VPC Subnets
 //! - `aws_vpc` - Virtual Private Clouds
 
+pub mod autoscaling_group;
 pub mod db_subnet_group;
 pub mod ebs_volume;
 pub mod elastic_ip;
@@ -37,6 +43,9 @@ pub mod security_group_rule;
 pub mod subnet;
 pub mod vpc;
 
+pub use autoscaling_group::{
+    AwsAutoScalingGroupResource, AutoScalingGroupConfig, AutoScalingGroupState,
+};
 pub use db_subnet_group::{AwsDbSubnetGroupResource, DbSubnetGroupConfig, DbSubnetGroupState};
 pub use ebs_volume::{AwsEbsVolumeResource, EbsVolumeConfig, EbsVolumeState};
 pub use elastic_ip::{AwsElasticIpResource, ElasticIpAttributes, ElasticIpConfig};
