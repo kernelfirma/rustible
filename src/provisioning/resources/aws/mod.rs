@@ -27,6 +27,7 @@ pub mod iam_role;
 pub mod instance;
 pub mod internet_gateway;
 pub mod nat_gateway;
+pub mod rds_instance;
 pub mod route_table;
 pub mod security_group;
 pub mod security_group_rule;
@@ -47,6 +48,7 @@ pub use route_table::{
     AwsRouteTableResource, RouteConfig, RouteTableAssociation, RouteTableAttributes,
     RouteTableConfig,
 };
+pub use rds_instance::{AwsRdsInstanceResource, RdsInstanceConfig, RdsInstanceState};
 pub use security_group::AwsSecurityGroupResource;
 pub use security_group_rule::{
     AwsSecurityGroupRuleResource, RuleType, SecurityGroupRuleConfig, SecurityGroupRuleState,
