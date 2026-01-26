@@ -220,10 +220,22 @@ impl OutputFormatter {
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
+                print!(
+                    "{}{:width$}: [{}]",
+                    status_str,
+                    "",
+                    host_str,
+                    width = padding_len
+                );
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
+                print!(
+                    "{}{:width$}: [{}]",
+                    status_str,
+                    "",
+                    host_str,
+                    width = padding_len
+                );
             }
         }
 
