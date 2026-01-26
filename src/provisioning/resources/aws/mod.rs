@@ -26,6 +26,7 @@ pub mod iam_policy;
 pub mod iam_role;
 pub mod instance;
 pub mod internet_gateway;
+pub mod load_balancer;
 pub mod nat_gateway;
 pub mod rds_instance;
 pub mod route_table;
@@ -44,6 +45,7 @@ pub use instance::{AwsInstanceResource, InstanceAttributes, InstanceConfig, Root
 pub use internet_gateway::{
     AwsInternetGatewayResource, InternetGatewayAttributes, InternetGatewayConfig,
 };
+pub use load_balancer::{AwsLoadBalancerResource, LoadBalancerConfig, LoadBalancerState};
 pub use nat_gateway::{AwsNatGatewayResource, NatGatewayAttributes, NatGatewayConfig};
 pub use route_table::{
     AwsRouteTableResource, RouteConfig, RouteTableAssociation, RouteTableAttributes,
