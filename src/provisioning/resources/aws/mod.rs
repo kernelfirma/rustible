@@ -13,6 +13,7 @@
 //! - `aws_nat_gateway` - NAT Gateways
 //! - `aws_route_table` - Route Tables
 //! - `aws_security_group` - EC2 Security Groups
+//! - `aws_security_group_rule` - Individual Security Group Rules
 //! - `aws_subnet` - VPC Subnets
 //! - `aws_vpc` - Virtual Private Clouds
 
@@ -24,6 +25,7 @@ pub mod internet_gateway;
 pub mod nat_gateway;
 pub mod route_table;
 pub mod security_group;
+pub mod security_group_rule;
 pub mod subnet;
 pub mod vpc;
 
@@ -40,5 +42,8 @@ pub use route_table::{
     RouteTableConfig,
 };
 pub use security_group::AwsSecurityGroupResource;
+pub use security_group_rule::{
+    AwsSecurityGroupRuleResource, RuleType, SecurityGroupRuleConfig, SecurityGroupRuleState,
+};
 pub use subnet::AwsSubnetResource;
 pub use vpc::AwsVpcResource;
