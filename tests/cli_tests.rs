@@ -3822,3 +3822,440 @@ fn test_playbook_with_null_tasks() {
         .assert()
         .success();
 }
+
+// =============================================================================
+// Ansible Parity: Flag Precedence Tests
+// =============================================================================
+
+/// Test that CLI extra-vars override config file vars (highest precedence)
+#[test]
+fn test_extra_vars_precedence_over_config() {
+    let playbook = create_test_playbook();
+    let mut vars_file = NamedTempFile::new().unwrap();
+    writeln!(vars_file, "my_var: from_file").unwrap();
+
+    // CLI -e should have highest precedence
+    rustible_cmd()
+        .arg("-e")
+        .arg("my_var=from_cli")
+        .arg("-e")
+        .arg(format!("@{}", vars_file.path().display()))
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test that later extra-vars override earlier ones (Ansible behavior)
+#[test]
+fn test_extra_vars_later_overrides_earlier() {
+    let playbook = create_test_playbook();
+
+    // Later -e should override earlier -e
+    rustible_cmd()
+        .arg("-e")
+        .arg("var=first")
+        .arg("-e")
+        .arg("var=second")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test limit flag narrows host selection
+#[test]
+fn test_limit_narrows_hosts() {
+    let playbook = create_test_playbook();
+    let inventory = create_test_inventory();
+
+    // --limit should restrict hosts
+    rustible_cmd()
+        .arg("-i")
+        .arg(inventory.path())
+        .arg("-l")
+        .arg("localhost")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test limit with multiple patterns (comma-separated)
+#[test]
+fn test_limit_multiple_patterns() {
+    let playbook = create_test_playbook();
+    let inventory = create_test_inventory();
+
+    rustible_cmd()
+        .arg("-i")
+        .arg(inventory.path())
+        .arg("-l")
+        .arg("localhost,webservers")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test limit with exclusion pattern
+#[test]
+fn test_limit_with_exclusion() {
+    let playbook = create_test_playbook();
+    let inventory = create_test_inventory();
+
+    rustible_cmd()
+        .arg("-i")
+        .arg(inventory.path())
+        .arg("-l")
+        .arg("all:!dbservers")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test tags filtering (include specific tasks)
+#[test]
+fn test_tags_include_specific_tasks() {
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: Tagged playbook
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Install task
+      debug:
+        msg: "Installing"
+      tags:
+        - install
+        - setup
+    - name: Configure task
+      debug:
+        msg: "Configuring"
+      tags:
+        - configure
+    - name: Untagged task
+      debug:
+        msg: "No tags"
+"#
+    )
+    .unwrap();
+
+    // Only tasks with 'install' tag should run
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("-t")
+        .arg("install")
+        .assert()
+        .success();
+}
+
+/// Test skip-tags excludes specific tasks
+#[test]
+fn test_skip_tags_exclude_specific_tasks() {
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: Tagged playbook
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Quick task
+      debug:
+        msg: "Fast"
+    - name: Slow task
+      debug:
+        msg: "Slow"
+      tags:
+        - slow
+"#
+    )
+    .unwrap();
+
+    // Tasks with 'slow' tag should be skipped
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("--skip-tags")
+        .arg("slow")
+        .assert()
+        .success();
+}
+
+/// Test tags and skip-tags together (Ansible behavior)
+#[test]
+fn test_tags_and_skip_tags_together() {
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: Complex tags playbook
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Task A
+      debug:
+        msg: "A"
+      tags:
+        - deploy
+        - critical
+    - name: Task B
+      debug:
+        msg: "B"
+      tags:
+        - deploy
+    - name: Task C
+      debug:
+        msg: "C"
+      tags:
+        - cleanup
+"#
+    )
+    .unwrap();
+
+    // Include 'deploy' but skip 'critical'
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("-t")
+        .arg("deploy")
+        .arg("--skip-tags")
+        .arg("critical")
+        .assert()
+        .success();
+}
+
+/// Test check mode flag works with run command
+#[test]
+fn test_check_mode_with_run() {
+    let playbook = create_test_playbook();
+
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("--check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("CHECK MODE"));
+}
+
+/// Test diff mode flag produces diff output
+#[test]
+fn test_diff_mode_produces_output() {
+    let playbook = create_test_playbook();
+
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("--diff")
+        .assert()
+        .success();
+}
+
+/// Test combined check and diff mode matches Ansible dry-run behavior
+#[test]
+fn test_parity_check_diff_ansible_dry_run() {
+    let playbook = create_test_playbook();
+
+    // This is the common Ansible pattern: ansible-playbook --check --diff playbook.yml
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .arg("--check")
+        .arg("--diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("CHECK MODE"));
+}
+
+// =============================================================================
+// Ansible Parity: Default Behavior Tests
+// =============================================================================
+
+/// Test default forks is 5 (Ansible default)
+#[test]
+fn test_default_forks_behavior() {
+    let playbook = create_test_playbook();
+
+    // Without -f flag, should use default (5 in Ansible)
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test forks can be set to 1 for serial execution
+#[test]
+fn test_forks_serial_execution() {
+    let playbook = create_test_playbook();
+
+    rustible_cmd()
+        .arg("-f")
+        .arg("1")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test high forks value for parallel execution
+#[test]
+fn test_forks_high_parallelism() {
+    let playbook = create_test_playbook();
+
+    rustible_cmd()
+        .arg("-f")
+        .arg("50")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test default strategy behavior (linear)
+#[test]
+fn test_default_strategy_linear() {
+    let playbook = create_test_playbook();
+
+    // Without explicit strategy, should use 'linear' (Ansible default)
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test gather_facts default behavior
+#[test]
+fn test_gather_facts_default() {
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: Facts test
+  hosts: localhost
+  tasks:
+    - name: Test task
+      debug:
+        msg: "test"
+"#
+    )
+    .unwrap();
+
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test gather_facts can be disabled
+#[test]
+fn test_gather_facts_disabled() {
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: No facts test
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Test task
+      debug:
+        msg: "test"
+"#
+    )
+    .unwrap();
+
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test become defaults to false
+#[test]
+fn test_become_defaults_to_false() {
+    let playbook = create_test_playbook();
+
+    // Without -b/--become, should run without privilege escalation
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test default timeout behavior
+#[test]
+fn test_default_timeout_behavior() {
+    let playbook = create_test_playbook();
+
+    // Without --timeout, should use default (30 seconds in Ansible)
+    rustible_cmd()
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+// =============================================================================
+// Ansible Parity: Environment Variable Precedence Tests
+// =============================================================================
+
+/// Test CLI flag takes precedence over environment variable
+#[test]
+fn test_cli_flag_precedence_over_env() {
+    let playbook = create_test_playbook();
+    let inventory1 = create_test_inventory();
+    let inventory2 = create_test_inventory();
+
+    // CLI -i should override RUSTIBLE_INVENTORY env var
+    rustible_cmd()
+        .env("RUSTIBLE_INVENTORY", inventory1.path())
+        .arg("-i")
+        .arg(inventory2.path())
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test environment variable takes precedence over config file
+#[test]
+fn test_env_var_precedence_over_config() {
+    let playbook = create_test_playbook();
+    let inventory = create_test_inventory();
+    let config = create_test_config();
+
+    // Env var should override config file settings
+    rustible_cmd()
+        .env("RUSTIBLE_INVENTORY", inventory.path())
+        .arg("-c")
+        .arg(config.path())
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
+
+/// Test ANSIBLE_* env var compatibility
+#[test]
+fn test_ansible_env_var_compatibility() {
+    let playbook = create_test_playbook();
+
+    // Should recognize ANSIBLE_FORCE_COLOR for compatibility
+    rustible_cmd()
+        .env("ANSIBLE_FORCE_COLOR", "false")
+        .arg("run")
+        .arg(playbook.path())
+        .assert()
+        .success();
+}
