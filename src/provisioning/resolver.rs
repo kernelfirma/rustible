@@ -68,6 +68,12 @@ pub struct ResolverContext {
 
     /// Nested resource structure for MiniJinja (type -> name -> attributes)
     nested_resources: HashMap<String, HashMap<String, Value>>,
+
+    /// Path context for path.* references
+    path_context: Option<PathContext>,
+
+    /// Terraform context for terraform.* references
+    terraform_context: Option<TerraformContext>,
 }
 
 impl ResolverContext {
@@ -134,6 +140,15 @@ impl ResolverContext {
     }
 
     /// Get a value by path (e.g., "variables.vpc_cidr" or "resources.aws_vpc.main.id")
+    ///
+    /// Supports:
+    /// - variables.NAME or var.NAME
+    /// - locals.NAME or local.NAME
+    /// - resources.TYPE.NAME.ATTR or resource.TYPE.NAME.ATTR
+    /// - data.TYPE.NAME.ATTR
+    /// - outputs.NAME or output.NAME
+    /// - path.module, path.root, path.cwd
+    /// - terraform.workspace
     pub fn get_value(&self, path: &str) -> Option<Value> {
         let parts: Vec<&str> = path.splitn(2, '.').collect();
         if parts.len() < 2 {
@@ -148,6 +163,28 @@ impl ResolverContext {
             "resources" | "resource" => self.get_resource_value(rest),
             "data" => self.get_data_value(rest),
             "outputs" | "output" => self.outputs.get(rest).cloned(),
+            "path" => self.get_path_value(rest),
+            "terraform" => self.get_terraform_value(rest),
+            _ => None,
+        }
+    }
+
+    /// Get a path.* value
+    fn get_path_value(&self, attr: &str) -> Option<Value> {
+        let path_ctx = self.path_context.as_ref()?;
+        match attr {
+            "module" => Some(Value::String(path_ctx.module().to_string())),
+            "root" => Some(Value::String(path_ctx.root().to_string())),
+            "cwd" => Some(Value::String(path_ctx.cwd().to_string())),
+            _ => None,
+        }
+    }
+
+    /// Get a terraform.* value
+    fn get_terraform_value(&self, attr: &str) -> Option<Value> {
+        let tf_ctx = self.terraform_context.as_ref()?;
+        match attr {
+            "workspace" => Some(Value::String(tf_ctx.workspace().to_string())),
             _ => None,
         }
     }
@@ -276,6 +313,266 @@ impl ResolverContext {
         root.insert("data".to_string(), JinjaValue::from_serialize(&data_map));
 
         JinjaValue::from_serialize(&root)
+    }
+
+    /// Load variables from TF_VAR_* environment variables
+    ///
+    /// Environment variables in the format TF_VAR_name=value are parsed
+    /// and added to the variables map. JSON object/array values are automatically parsed,
+    /// but simple values (strings, numbers) are kept as strings to match Terraform behavior.
+    pub fn load_tf_var_environment(&mut self, env_vars: &[(&str, &str)]) {
+        for (key, value) in env_vars {
+            if let Some(var_name) = key.strip_prefix("TF_VAR_") {
+                // Try to parse as JSON first (only for objects and arrays)
+                let parsed_value = if value.starts_with('{') || value.starts_with('[') {
+                    serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_string()))
+                } else if *value == "true" {
+                    Value::Bool(true)
+                } else if *value == "false" {
+                    Value::Bool(false)
+                } else {
+                    // Keep simple values as strings (matches Terraform behavior)
+                    Value::String(value.to_string())
+                };
+
+                self.variables.insert(var_name.to_string(), parsed_value);
+            }
+        }
+    }
+
+    /// Set the path context for resolving path.* references
+    pub fn set_path_context(&mut self, path_ctx: PathContext) {
+        self.path_context = Some(path_ctx);
+    }
+
+    /// Set the Terraform context for resolving terraform.* references
+    pub fn set_terraform_context(&mut self, tf_ctx: TerraformContext) {
+        self.terraform_context = Some(tf_ctx);
+    }
+}
+
+// ============================================================================
+// Path Context (path.module, path.root, path.cwd)
+// ============================================================================
+
+/// Path context for Terraform-compatible path references
+#[derive(Debug, Clone)]
+pub struct PathContext {
+    /// Path to the current module
+    module_path: std::path::PathBuf,
+    /// Path to the root module
+    root_path: std::path::PathBuf,
+    /// Current working directory
+    cwd_path: std::path::PathBuf,
+}
+
+impl PathContext {
+    /// Create a new path context
+    pub fn new(
+        module_path: std::path::PathBuf,
+        root_path: std::path::PathBuf,
+        cwd_path: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            module_path,
+            root_path,
+            cwd_path,
+        }
+    }
+
+    /// Create from current working directory (all paths same)
+    pub fn from_cwd() -> Self {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        Self {
+            module_path: cwd.clone(),
+            root_path: cwd.clone(),
+            cwd_path: cwd,
+        }
+    }
+
+    /// Get path.module
+    pub fn module(&self) -> &str {
+        self.module_path.to_str().unwrap_or(".")
+    }
+
+    /// Get path.root
+    pub fn root(&self) -> &str {
+        self.root_path.to_str().unwrap_or(".")
+    }
+
+    /// Get path.cwd
+    pub fn cwd(&self) -> &str {
+        self.cwd_path.to_str().unwrap_or(".")
+    }
+}
+
+impl Default for PathContext {
+    fn default() -> Self {
+        Self::from_cwd()
+    }
+}
+
+// ============================================================================
+// Terraform Context (terraform.workspace)
+// ============================================================================
+
+/// Terraform context for terraform.* references
+#[derive(Debug, Clone)]
+pub struct TerraformContext {
+    /// Current workspace name
+    workspace: String,
+}
+
+impl TerraformContext {
+    /// Create a new Terraform context with default workspace
+    pub fn new() -> Self {
+        Self {
+            workspace: "default".to_string(),
+        }
+    }
+
+    /// Create with a specific workspace
+    pub fn with_workspace(workspace: impl Into<String>) -> Self {
+        let ws = workspace.into();
+        Self {
+            workspace: if ws.is_empty() {
+                "default".to_string()
+            } else {
+                ws
+            },
+        }
+    }
+
+    /// Create from environment variables
+    pub fn from_environment(env_vars: &[(&str, &str)]) -> Self {
+        for (key, value) in env_vars {
+            if *key == "TF_WORKSPACE" && !value.is_empty() {
+                return Self::with_workspace(*value);
+            }
+        }
+        Self::new()
+    }
+
+    /// Get the current workspace name
+    pub fn workspace(&self) -> &str {
+        &self.workspace
+    }
+}
+
+impl Default for TerraformContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Provisioner Context (self.*, connection, local-exec)
+// ============================================================================
+
+/// Context for provisioner execution (local-exec, remote-exec, file)
+#[derive(Debug, Clone, Default)]
+pub struct ProvisionerContext {
+    /// Self attributes (from the resource being provisioned)
+    self_attrs: HashMap<String, Value>,
+    /// Working directory for command execution
+    working_dir: Option<std::path::PathBuf>,
+    /// Command interpreter
+    interpreter: Vec<String>,
+    /// Additional environment variables
+    env_vars: HashMap<String, String>,
+}
+
+impl ProvisionerContext {
+    /// Create a new empty provisioner context
+    pub fn new() -> Self {
+        Self {
+            self_attrs: HashMap::new(),
+            working_dir: None,
+            interpreter: vec!["/bin/sh".to_string(), "-c".to_string()],
+            env_vars: HashMap::new(),
+        }
+    }
+
+    /// Create from a resource state (for self.* access)
+    pub fn from_resource(resource: &super::state::ResourceState) -> Self {
+        let mut self_attrs = HashMap::new();
+
+        // Merge config and attributes
+        if let Value::Object(config_map) = &resource.config {
+            for (k, v) in config_map {
+                self_attrs.insert(k.clone(), v.clone());
+            }
+        }
+
+        if let Value::Object(attrs_map) = &resource.attributes {
+            for (k, v) in attrs_map {
+                self_attrs.insert(k.clone(), v.clone());
+            }
+        }
+
+        // Ensure id is set from cloud_id
+        if !self_attrs.contains_key("id") {
+            self_attrs.insert("id".to_string(), Value::String(resource.cloud_id.clone()));
+        }
+
+        Self {
+            self_attrs,
+            working_dir: None,
+            interpreter: vec!["/bin/sh".to_string(), "-c".to_string()],
+            env_vars: HashMap::new(),
+        }
+    }
+
+    /// Get a self.* attribute
+    pub fn get(&self, attr: &str) -> Option<&Value> {
+        self.self_attrs.get(attr)
+    }
+
+    /// Set working directory
+    pub fn with_working_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.working_dir = Some(dir);
+        self
+    }
+
+    /// Get working directory
+    pub fn working_dir(&self) -> Option<&std::path::PathBuf> {
+        self.working_dir.as_ref()
+    }
+
+    /// Set interpreter
+    pub fn with_interpreter(mut self, interpreter: Vec<&str>) -> Self {
+        self.interpreter = interpreter.into_iter().map(String::from).collect();
+        self
+    }
+
+    /// Get interpreter
+    pub fn interpreter(&self) -> &[String] {
+        &self.interpreter
+    }
+
+    /// Build environment variables for local-exec
+    ///
+    /// Creates environment variables from self.* attributes:
+    /// - SELF_ID, SELF_PUBLIC_IP, SELF_PRIVATE_IP, etc.
+    pub fn build_environment(&self) -> HashMap<String, String> {
+        let mut env = self.env_vars.clone();
+
+        for (key, value) in &self.self_attrs {
+            let env_key = format!("SELF_{}", key.to_uppercase());
+            if let Some(s) = value.as_str() {
+                env.insert(env_key, s.to_string());
+            } else {
+                env.insert(env_key, value.to_string());
+            }
+        }
+
+        env
+    }
+
+    /// Add environment variable
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env_vars.insert(key.into(), value.into());
+        self
     }
 }
 
