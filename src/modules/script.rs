@@ -36,8 +36,9 @@
 //! - `decrypt` - Decrypt ansible-vault encrypted script (default: true)
 
 use super::{
-    get_remote_tmp, validate_path_param, Module, ModuleClassification, ModuleContext, ModuleError,
-    ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
+    get_remote_tmp, validate_command_args, validate_path_param, Module, ModuleClassification,
+    ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint,
+    ParamExt,
 };
 use crate::utils::shell_escape;
 use std::path::PathBuf;
@@ -174,6 +175,11 @@ impl Module for ScriptModule {
 
         if script_path.is_empty() {
             return Err(ModuleError::MissingParameter("script path".to_string()));
+        }
+
+        // Validate executable if present
+        if let Some(executable) = params.get_string("executable")? {
+            validate_command_args(&executable)?;
         }
 
         // Validate creates/removes paths if present
@@ -534,5 +540,39 @@ mod tests {
             exec_cmd,
             "cd '/tmp/dir with space' && /bin/bash /tmp/.ansible_script_123.tmp arg1 'arg with space'"
         );
+    }
+
+    #[test]
+    fn test_script_executable_validation() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        // Dangerous executable that should be blocked
+        params.insert(
+            "executable".to_string(),
+            Value::String("bash; rm -rf /".to_string()),
+        );
+
+        // Should now fail with InvalidParameter
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_script_executable_safe() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        params.insert(
+            "executable".to_string(),
+            Value::String("/usr/bin/python3".to_string()),
+        );
+
+        assert!(module.validate_params(&params).is_ok());
     }
 }

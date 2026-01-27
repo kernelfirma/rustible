@@ -47,3 +47,8 @@
 **Vulnerability:** The `user` and `script` modules were using hardcoded `/tmp` paths for temporary files. This ignores system configuration (`TMPDIR`) and can cause failures on systems where `/tmp` is mounted with `noexec` or is otherwise restricted.
 **Learning:** Hardcoding `/tmp` is brittle and potentially insecure in multi-tenant environments. Applications should respect environment variables or configuration for temporary directories.
 **Prevention:** Use a helper function to resolve the temporary directory from configuration (e.g., `ansible_remote_tmp`) or environment variables, falling back to `/tmp` only if necessary.
+
+## 2024-05-31 - Command Injection in Script Module Executable
+**Vulnerability:** The `script` module allowed arbitrary command injection via the `executable` parameter. This parameter was interpolated directly into the shell command string without validation, allowing execution of arbitrary commands (e.g., `bash; rm -rf /`).
+**Learning:** Parameters used to construct shell commands must be treated as untrusted input. Assuming that parameters named "executable" or "path" will only contain safe file paths is a dangerous assumption.
+**Prevention:** Explicitly validate all parameters that are interpolated into shell commands. Use strict validators like `validate_command_args` to reject shell metacharacters in parameters that should be simple strings or paths.
