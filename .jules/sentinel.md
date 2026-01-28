@@ -47,3 +47,8 @@
 **Vulnerability:** The `user` and `script` modules were using hardcoded `/tmp` paths for temporary files. This ignores system configuration (`TMPDIR`) and can cause failures on systems where `/tmp` is mounted with `noexec` or is otherwise restricted.
 **Learning:** Hardcoding `/tmp` is brittle and potentially insecure in multi-tenant environments. Applications should respect environment variables or configuration for temporary directories.
 **Prevention:** Use a helper function to resolve the temporary directory from configuration (e.g., `ansible_remote_tmp`) or environment variables, falling back to `/tmp` only if necessary.
+
+## 2025-05-31 - Insecure File Creation (TOCTOU) in Lineinfile/Blockinfile
+**Vulnerability:** The `lineinfile` and `blockinfile` modules were using `fs::write` followed by `fs::set_permissions`, creating a race condition where the file existed with default permissions (potentially world-readable) before being restricted.
+**Learning:** Convenience functions like `fs::write` are not secure when specific permissions are required for sensitive files. Atomicity is key.
+**Prevention:** Use `std::fs::OpenOptions` with platform-specific extensions (like `OpenOptionsExt` on Unix) to set permissions *at creation time* (e.g., `options.mode(0o600)`).

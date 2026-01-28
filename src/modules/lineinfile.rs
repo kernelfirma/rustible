@@ -12,11 +12,10 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
-use crate::utils::get_regex;
+use crate::utils::{get_regex, secure_write_file};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 /// Desired state for a line
@@ -99,11 +98,9 @@ impl LineinfileModule {
             format!("{}\n", lines.join("\n"))
         };
 
-        fs::write(path, content)?;
-
-        if let Some(mode) = mode {
-            fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
-        }
+        secure_write_file(path, &content, create, mode).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", path.display(), e))
+        })?;
 
         Ok(())
     }
