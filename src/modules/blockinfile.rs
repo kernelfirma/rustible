@@ -138,20 +138,34 @@ impl BlockinfileModule {
         insertafter: Option<&str>,
         insertbefore: Option<&str>,
     ) -> ModuleResult<bool> {
-        let block_lines: Vec<String> = block.lines().map(|s| s.to_string()).collect();
+        // Optimization: Avoid creating Vec<String> for block content initially.
+        // We'll use iterators for comparison and insertion.
 
         // Check if block already exists
         if let Some((start, end)) = Self::find_block(lines, begin_marker, end_marker) {
-            // Extract current block content (excluding markers)
-            let current_block: Vec<String> = lines[(start + 1)..end].to_vec();
+            let current_block_slice = &lines[(start + 1)..end];
 
-            // Check if content is the same
-            if current_block == block_lines {
+            // Check if content is the same efficiently
+            // Compare slice of Strings with iterator of &str lines
+            let mut matches = true;
+            if current_block_slice.len() != block.lines().count() {
+                matches = false;
+            } else {
+                for (line, block_line) in current_block_slice.iter().zip(block.lines()) {
+                    if line != block_line {
+                        matches = false;
+                        break;
+                    }
+                }
+            }
+
+            if matches {
                 return Ok(false); // No changes needed
             }
 
             // Replace the block content
-            lines.splice((start + 1)..end, block_lines.iter().cloned());
+            // We can splice directly from the iterator, mapping to String
+            lines.splice((start + 1)..end, block.lines().map(|s| s.to_string()));
             return Ok(true);
         }
 
@@ -185,7 +199,7 @@ impl BlockinfileModule {
 
         // Build complete block with markers
         let mut new_block = vec![begin_marker.to_string()];
-        new_block.extend(block_lines);
+        new_block.extend(block.lines().map(|s| s.to_string()));
         new_block.push(end_marker.to_string());
 
         // Insert the block
@@ -277,7 +291,12 @@ impl Module for BlockinfileModule {
 
         // Read current content
         let mut lines = Self::read_file(path)?;
-        let original_lines = lines.clone();
+        // Only clone if diff mode needs it
+        let original_lines = if context.diff_mode {
+            Some(lines.clone())
+        } else {
+            None
+        };
 
         // Apply changes based on state
         let changed = match state {
@@ -310,7 +329,10 @@ impl Module for BlockinfileModule {
         // In check mode, don't actually write
         if context.check_mode {
             let diff = if context.diff_mode {
-                Some(Diff::new(original_lines.join("\n"), lines.join("\n")))
+                Some(Diff::new(
+                    original_lines.as_ref().unwrap().join("\n"),
+                    lines.join("\n"),
+                ))
             } else {
                 None
             };
@@ -341,7 +363,10 @@ impl Module for BlockinfileModule {
         }
 
         if context.diff_mode {
-            output = output.with_diff(Diff::new(original_lines.join("\n"), lines.join("\n")));
+            output = output.with_diff(Diff::new(
+                original_lines.as_ref().unwrap().join("\n"),
+                lines.join("\n"),
+            ));
         }
 
         Ok(output)
