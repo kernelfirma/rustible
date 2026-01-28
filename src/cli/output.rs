@@ -948,8 +948,15 @@ fn format_duration(duration: Duration) -> String {
     } else if total_secs > 0 {
         let s = format!("{}.{:03}", total_secs, millis);
         format!("{}s", s.trim_end_matches('0').trim_end_matches('.'))
-    } else {
+    } else if millis > 0 {
         format!("{}ms", millis)
+    } else {
+        let micros = duration.subsec_micros();
+        if micros > 0 {
+            format!("{}µs", micros)
+        } else {
+            "0ms".to_string()
+        }
     }
 }
 
@@ -1008,6 +1015,9 @@ mod tests {
     #[test]
     fn test_format_duration() {
         assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
+        assert_eq!(format_duration(Duration::from_micros(500)), "500µs");
+        assert_eq!(format_duration(Duration::from_micros(5)), "5µs");
+        assert_eq!(format_duration(Duration::ZERO), "0ms");
         assert_eq!(format_duration(Duration::from_secs(5)), "5s");
         assert_eq!(format_duration(Duration::from_millis(5500)), "5.5s");
         assert_eq!(format_duration(Duration::from_millis(5050)), "5.05s");
