@@ -438,25 +438,25 @@ impl OutputFormatter {
             println!();
             if stats.has_failures() {
                 let failures = stats.total_failed();
-                let message = format!("FAILED ({} errors)", failures);
+                let message = format!("✖ FAILED ({} errors)", failures);
                 let width: usize = 60;
                 let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "=".repeat(padding);
-                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                let left_pad = "━".repeat(padding);
+                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("{} {} {}", left_pad, message, right_pad);
                 println!("{}", banner.red().bold());
             } else {
                 let changes = stats.total_changed();
                 let message = if changes > 0 {
-                    format!("SUCCESS ({} changed)", changes)
+                    format!("✔ SUCCESS ({} changed)", changes)
                 } else {
-                    "SUCCESS (no changes)".to_string()
+                    "✔ SUCCESS (no changes)".to_string()
                 };
                 let width: usize = 60;
                 let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "=".repeat(padding);
-                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                let left_pad = "━".repeat(padding);
+                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("{} {} {}", left_pad, message, right_pad);
                 println!("{}", banner.green().bold());
             }
 
@@ -498,7 +498,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            println!("{} {}", "SUCCESS:".green().bold(), message);
+            println!("{} {}", "✔ SUCCESS:".green().bold(), message);
         } else {
             println!("SUCCESS: {}", message);
         }
@@ -516,7 +516,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "ERROR:".red().bold(), message);
+            eprintln!("{} {}", "✖ ERROR:".red().bold(), message);
         } else {
             eprintln!("ERROR: {}", message);
         }
@@ -548,7 +548,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "WARNING:".yellow().bold(), message);
+            eprintln!("{} {}", "⚠ WARNING:".yellow().bold(), message);
         } else {
             eprintln!("WARNING: {}", message);
         }
@@ -566,7 +566,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "HINT:".cyan().bold(), message);
+            eprintln!("{} {}", "💡 HINT:".cyan().bold(), message);
         } else {
             eprintln!("HINT: {}", message);
         }
