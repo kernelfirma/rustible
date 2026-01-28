@@ -359,6 +359,70 @@ impl WaitForModule {
         Ok(false)
     }
 
+    /// Helper to parse output from ss/netstat and check for active connections.
+    /// Returns true if port is drained (no active connections found), false otherwise.
+    fn parse_port_drained_output(
+        stdout: &str,
+        port: u16,
+        exclude_hosts: &[String],
+        active_states: &[String],
+    ) -> bool {
+        let port_str = format!(":{}", port);
+
+        // Pre-calculate uppercase states to avoid repeated allocations in the loop
+        let active_states_upper: Vec<String> = active_states
+            .iter()
+            .map(|s| s.to_uppercase())
+            .collect();
+
+        for line in stdout.lines() {
+            // Skip header lines
+            if line.starts_with("State")
+                || line.starts_with("Proto")
+                || line.starts_with("Netid")
+            {
+                continue;
+            }
+
+            // Check if this line is about our port
+            if !line.contains(&port_str) {
+                continue;
+            }
+
+            // Check if the connection state is active
+            // Optimization: Try strict check first (avoid allocation if possible)
+            // Most outputs are uppercase, so check original line against upper states first.
+            let mut is_active = active_states_upper
+                .iter()
+                .any(|state| line.contains(state));
+
+            // Fallback to case-insensitive check if strict match failed
+            // This allocates but ensures correctness for mixed-case output
+            if !is_active {
+                let line_upper = line.to_uppercase();
+                is_active = active_states_upper
+                    .iter()
+                    .any(|state| line_upper.contains(state));
+            }
+
+            if !is_active {
+                continue;
+            }
+
+            // Check if the remote host is excluded
+            let is_excluded = exclude_hosts.iter().any(|host| line.contains(host));
+
+            if is_excluded {
+                continue;
+            }
+
+            // Found an active connection that's not excluded
+            return false;
+        }
+
+        true
+    }
+
     /// Check if port is drained (no active connections)
     /// This uses netstat/ss command to check active connections
     fn check_port_drained(
@@ -380,43 +444,12 @@ impl WaitForModule {
                 }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
-                let port_str = format!(":{}", port);
-
-                for line in stdout.lines() {
-                    // Skip header lines
-                    if line.starts_with("State")
-                        || line.starts_with("Proto")
-                        || line.starts_with("Netid")
-                    {
-                        continue;
-                    }
-
-                    // Check if this line is about our port
-                    if !line.contains(&port_str) {
-                        continue;
-                    }
-
-                    // Check if the connection state is active
-                    let is_active = active_states
-                        .iter()
-                        .any(|state| line.to_uppercase().contains(&state.to_uppercase()));
-
-                    if !is_active {
-                        continue;
-                    }
-
-                    // Check if the remote host is excluded
-                    let is_excluded = exclude_hosts.iter().any(|host| line.contains(host));
-
-                    if is_excluded {
-                        continue;
-                    }
-
-                    // Found an active connection that's not excluded
-                    return Ok(false);
-                }
-
-                Ok(true)
+                Ok(Self::parse_port_drained_output(
+                    &stdout,
+                    port,
+                    exclude_hosts,
+                    active_states,
+                ))
             }
             Err(_) => {
                 // If we can't run ss/netstat, assume drained
@@ -1018,5 +1051,40 @@ mod tests {
         if let Err(ModuleError::ExecutionFailed(msg)) = result {
             assert!(msg.contains("Custom error: service not available"));
         }
+    }
+
+    #[test]
+    fn test_parse_port_drained_output() {
+        let active_states = vec![
+            "ESTABLISHED".to_string(),
+            "TIME_WAIT".to_string(),
+        ];
+        let exclude_hosts = vec![];
+
+        // Case 1: Active connection (ESTABLISHED) on port 8080 -> Not drained (false)
+        let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
+                      ESTABLISHED 0      0      127.0.0.1:8080      127.0.0.1:54321";
+        assert!(!WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+
+        // Case 2: No connection on port 8080 -> Drained (true)
+        let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
+                      ESTABLISHED 0      0      127.0.0.1:9090      127.0.0.1:54321";
+        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+
+        // Case 3: Connection on 8080 but state is LISTEN (not in active_states) -> Drained (true)
+        let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
+                      LISTEN     0      0      0.0.0.0:8080        0.0.0.0:*";
+        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+
+        // Case 4: Mixed case output (hypothetical) -> Should handle case insensitivity
+        let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
+                      established 0      0      127.0.0.1:8080      127.0.0.1:54321";
+        assert!(!WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+
+        // Case 5: Excluded host
+        let exclude_hosts_local = vec!["127.0.0.1".to_string()];
+        let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
+                      ESTABLISHED 0      0      127.0.0.1:8080      127.0.0.1:54321";
+        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts_local, &active_states));
     }
 }
