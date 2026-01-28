@@ -20,6 +20,9 @@ aws = [
     "dep:aws-sdk-s3",
     "dep:aws-sdk-iam",
     "dep:aws-sdk-dynamodb",
+    "dep:aws-sdk-rds",
+    "dep:aws-sdk-elasticloadbalancingv2",
+    "dep:aws-sdk-autoscaling",
 ]
 # Azure cloud modules (VMs, Resource Groups, Networking) - stub implementation
 azure = []
@@ -37,6 +40,8 @@ startup-warmup = []
 api = ["dep:axum", "dep:tower-http", "dep:jsonwebtoken", "dep:futures-util"]
 # Infrastructure provisioning (Terraform-like) - requires AWS SDK
 provisioning = ["aws"]
+# Distributed execution with leader election and work distribution
+distributed = []
 # Full feature set with ssh2 backend
 full = ["russh", "local", "ssh2-backend", "docker", "kubernetes"]
 # Full feature set with all cloud providers (includes experimental flags)
@@ -199,6 +204,9 @@ aws-sdk-ec2 = { version = "1.15", optional = true }
 aws-sdk-s3 = { version = "1.15", optional = true }
 aws-sdk-iam = { version = "1.15", optional = true }
 aws-sdk-dynamodb = { version = "1.15", optional = true }
+aws-sdk-rds = { version = "1.15", optional = true }
+aws-sdk-elasticloadbalancingv2 = { version = "1.15", optional = true }
+aws-sdk-autoscaling = { version = "1.15", optional = true }
 
 # Hostname resolution
 hostname = "0.4"
@@ -225,6 +233,9 @@ is-terminal = "0.4"
 
 # Unix/POSIX functionality
 nix = { version = "0.30", features = ["user", "fs", "process", "signal", "term"] }
+
+# CPU/system information
+num_cpus = "1.16"
 
 # Temporary file handling
 tempfile = "3.9"

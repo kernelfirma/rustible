@@ -83,9 +83,11 @@
 pub mod dependencies;
 pub mod diff;
 pub mod hashing;
+pub mod locking;
+pub mod manager;
 pub mod manifest;
 pub mod persistence;
-pub mod rollback;
+pub mod storage;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

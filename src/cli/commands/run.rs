@@ -78,6 +78,14 @@ pub struct RunArgs {
     /// Plan mode - show what would be executed without running
     #[arg(long)]
     pub plan: bool,
+
+    /// Agent mode - use persistent agent on targets for faster execution
+    #[arg(long)]
+    pub agent_mode: bool,
+
+    /// Agent socket path on remote hosts
+    #[arg(long, default_value = "/var/run/rustible-agent.sock")]
+    pub agent_socket: String,
 }
 
 impl RunArgs {

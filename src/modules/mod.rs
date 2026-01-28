@@ -57,6 +57,7 @@ pub mod user;
 pub mod wait_for;
 pub mod windows;
 pub mod yum;
+pub mod parity;
 
 pub use python::PythonModuleExecutor;
 

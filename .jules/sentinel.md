@@ -52,3 +52,7 @@
 **Vulnerability:** The `job_ws_handler` allowed unauthenticated connections to stream job output, relying only on knowledge of the Job UUID.
 **Learning:** WebSocket handlers often bypass standard HTTP middleware stacks used for REST endpoints. Authentication must be explicitly implemented in the upgrade handler. Since browsers cannot easily set custom headers for WebSocket handshakes, tokens are often passed via query parameters.
 **Prevention:** Enforce authentication in WebSocket handlers before upgrading the connection. Use a strictly typed query parameter struct (e.g., `WsParams { token: String }`) to extract and validate credentials.
+## 2025-05-31 - Insecure File Creation (TOCTOU) in Lineinfile/Blockinfile
+**Vulnerability:** The `lineinfile` and `blockinfile` modules were using `fs::write` followed by `fs::set_permissions`, creating a race condition where the file existed with default permissions (potentially world-readable) before being restricted.
+**Learning:** Convenience functions like `fs::write` are not secure when specific permissions are required for sensitive files. Atomicity is key.
+**Prevention:** Use `std::fs::OpenOptions` with platform-specific extensions (like `OpenOptionsExt` on Unix) to set permissions *at creation time* (e.g., `options.mode(0o600)`).
