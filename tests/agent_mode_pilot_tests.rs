@@ -850,7 +850,10 @@ mod pilot_workflow_tests {
         let result = runtime.execute(params).await;
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.stdout.contains("/tmp/rustible-pilot-wd"));
+        assert!(
+            result.stdout.contains("/tmp/rustible-pilot-wd")
+                || result.stdout.contains("/private/tmp/rustible-pilot-wd")
+        );
 
         // Cleanup
         let params = ExecuteParams {
