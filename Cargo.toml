@@ -316,6 +316,10 @@ harness = false
 name = "unified_benchmark"
 harness = false
 
+[[bench]]
+name = "ssh_pipelining_benchmark"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1
