@@ -401,6 +401,8 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("<", "input redirection"),
         ("\n", "newline (multi-line command)"),
         ("\r", "carriage return"),
+        ("&", "background execution &"),
+        (";", "command separator ;"),
     ];
 
     for (pattern, description) in dangerous_patterns {
@@ -1899,6 +1901,9 @@ mod tests {
         assert!(validate_command_args("nginx; reboot").is_err());
         assert!(validate_command_args("pkg && reboot").is_err());
         assert!(validate_command_args("cmd || curl evil.com").is_err());
+        // Extended checks
+        assert!(validate_command_args("bash;echo").is_err());
+        assert!(validate_command_args("cmd&").is_err());
     }
 
     #[test]
