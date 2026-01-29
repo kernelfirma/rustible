@@ -151,7 +151,9 @@ impl CapacityAwareAssigner {
             .min_by(|a, b| {
                 let score_a = a.value().load_score();
                 let score_b = b.value().load_score();
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|entry| entry.key().clone())
     }
@@ -248,7 +250,9 @@ impl AffinityAssigner {
             .min_by(|a, b| {
                 let score_a = a.value().load_score();
                 let score_b = b.value().load_score();
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|entry| entry.key().clone())
     }
@@ -329,15 +333,14 @@ impl WorkQueue {
         let mut pending = self.pending.write().await;
 
         // Find first work unit with satisfied dependencies
-        let pos = pending.iter().position(|wu| {
-            wu.dependencies
-                .iter()
-                .all(|dep| completed.contains(dep))
-        });
+        let pos = pending
+            .iter()
+            .position(|wu| wu.dependencies.iter().all(|dep| completed.contains(dep)));
 
         if let Some(pos) = pos {
             let work_unit = pending.remove(pos)?;
-            self.by_id.insert(work_unit.id.clone(), WorkUnitState::Assigned);
+            self.by_id
+                .insert(work_unit.id.clone(), WorkUnitState::Assigned);
             Some(work_unit)
         } else {
             None
@@ -353,14 +356,16 @@ impl WorkQueue {
     /// Mark a work unit as completed
     pub async fn complete(&self, work_unit_id: WorkUnitId) {
         self.assigned.remove(&work_unit_id);
-        self.by_id.insert(work_unit_id.clone(), WorkUnitState::Completed);
+        self.by_id
+            .insert(work_unit_id.clone(), WorkUnitState::Completed);
         self.completed.write().await.insert(work_unit_id);
     }
 
     /// Mark a work unit as failed
     pub fn fail(&self, work_unit_id: WorkUnitId, error: String) {
         self.assigned.remove(&work_unit_id);
-        self.by_id.insert(work_unit_id, WorkUnitState::Failed { error });
+        self.by_id
+            .insert(work_unit_id, WorkUnitState::Failed { error });
     }
 
     /// Get work unit state
@@ -388,7 +393,10 @@ impl WorkQueue {
     }
 
     /// Reassign work units from a failed controller
-    pub async fn reassign_from_controller(&self, failed_controller: &ControllerId) -> Vec<WorkUnit> {
+    pub async fn reassign_from_controller(
+        &self,
+        failed_controller: &ControllerId,
+    ) -> Vec<WorkUnit> {
         let work_unit_ids: Vec<_> = self.work_units_for_controller(failed_controller);
 
         let reassigned = Vec::new();
@@ -451,7 +459,11 @@ impl LoadBalancer {
 
     /// Get overloaded controllers
     pub fn get_overloaded(&self) -> Vec<ControllerId> {
-        let avg: f64 = self.loads.iter().map(|e| e.value().load_score()).sum::<f64>()
+        let avg: f64 = self
+            .loads
+            .iter()
+            .map(|e| e.value().load_score())
+            .sum::<f64>()
             / self.loads.len() as f64;
 
         self.loads
@@ -463,7 +475,11 @@ impl LoadBalancer {
 
     /// Get underloaded controllers
     pub fn get_underloaded(&self) -> Vec<ControllerId> {
-        let avg: f64 = self.loads.iter().map(|e| e.value().load_score()).sum::<f64>()
+        let avg: f64 = self
+            .loads
+            .iter()
+            .map(|e| e.value().load_score())
+            .sum::<f64>()
             / self.loads.len() as f64;
 
         self.loads
@@ -481,7 +497,9 @@ impl LoadBalancer {
             .min_by(|a, b| {
                 let score_a = a.value().load_score();
                 let score_b = b.value().load_score();
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|e| e.key().clone())
     }

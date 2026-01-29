@@ -108,7 +108,11 @@ impl HostManifest {
     }
 
     /// Remove a resource from the manifest
-    pub fn remove_resource(&mut self, resource_type: &str, resource_id: &str) -> Option<ResourceState> {
+    pub fn remove_resource(
+        &mut self,
+        resource_type: &str,
+        resource_id: &str,
+    ) -> Option<ResourceState> {
         let key = Self::resource_key(resource_type, resource_id);
         self.resources.remove(&key)
     }
@@ -635,10 +639,15 @@ mod tests {
 
     #[test]
     fn test_resource_state_in_sync() {
-        let mut resource = ResourceState::new("file", "/etc/test.conf", "file", json!({
-            "owner": "root",
-            "mode": "0644"
-        }));
+        let mut resource = ResourceState::new(
+            "file",
+            "/etc/test.conf",
+            "file",
+            json!({
+                "owner": "root",
+                "mode": "0644"
+            }),
+        );
 
         resource.set_actual_state(json!({
             "owner": "root",
@@ -651,10 +660,15 @@ mod tests {
 
     #[test]
     fn test_resource_state_drifted() {
-        let mut resource = ResourceState::new("file", "/etc/test.conf", "file", json!({
-            "owner": "root",
-            "mode": "0644"
-        }));
+        let mut resource = ResourceState::new(
+            "file",
+            "/etc/test.conf",
+            "file",
+            json!({
+                "owner": "root",
+                "mode": "0644"
+            }),
+        );
 
         resource.set_actual_state(json!({
             "owner": "nobody",
@@ -670,9 +684,14 @@ mod tests {
 
     #[test]
     fn test_resource_state_missing() {
-        let mut resource = ResourceState::new("file", "/etc/test.conf", "file", json!({
-            "state": "present"
-        }));
+        let mut resource = ResourceState::new(
+            "file",
+            "/etc/test.conf",
+            "file",
+            json!({
+                "state": "present"
+            }),
+        );
 
         resource.mark_missing();
         assert_eq!(resource.drift_status, DriftState::Missing);
@@ -718,7 +737,12 @@ mod tests {
         let store = ManifestStore::new(dir.path());
 
         let mut manifest = HostManifest::new("testhost");
-        manifest.record_resource(ResourceState::new("file", "/etc/test.conf", "file", json!({})));
+        manifest.record_resource(ResourceState::new(
+            "file",
+            "/etc/test.conf",
+            "file",
+            json!({}),
+        ));
 
         store.save(&manifest).unwrap();
 

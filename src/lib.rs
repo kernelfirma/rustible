@@ -233,6 +233,9 @@ pub mod vars;
 /// Retry utilities with backoff and jitter strategies.
 pub mod retry;
 
+/// Pre-execution validation with syntax checking, schema validation, and linting.
+pub mod validation;
+
 // ============================================================================
 // Playbook Components
 // ============================================================================
@@ -411,6 +414,9 @@ pub mod strategy;
 /// let status = cache.status();
 /// println!("Cache hit rate: {:.2}%", status.facts_hit_rate * 100.0);
 /// # Ok(())
+
+/// Performance benchmarking and comparison against Ansible.
+pub mod benchmarks;
 /// # }
 /// ```
 pub mod cache;
@@ -469,6 +475,8 @@ pub mod modules;
 /// a syntax compatible with Ansible's Jinja2 templates. Supports filters,
 /// tests, and custom extensions.
 pub mod template;
+/// Jinja2-compatible template filters and extensions.
+pub mod templating;
 
 // ============================================================================
 // Plugins and Lookups
@@ -559,6 +567,9 @@ pub mod callback;
 // Diagnostics and Debugging
 // ============================================================================
 
+/// Language Server Protocol (LSP) for IDE integration.
+pub mod lsp;
+
 /// Diagnostic tools for debugging and troubleshooting.
 ///
 /// Provides debugging capabilities: Debug Mode, Variable Inspection,
@@ -600,6 +611,9 @@ pub mod telemetry;
 
 /// State management system for tracking execution state, diffs, and rollback.
 ///
+
+/// Configuration drift detection and reporting.
+pub mod drift;
 /// This module provides comprehensive state tracking, persistence, diff reporting,
 /// rollback capability, and dependency tracking between tasks.
 pub mod state;

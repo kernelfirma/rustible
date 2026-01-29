@@ -84,7 +84,7 @@ impl CheckArgs {
             user: self.user.clone(),
             private_key: self.private_key.clone(),
             ssh_common_args: None,
-            plan: false, // check mode doesn't need plan mode
+            plan: false,       // check mode doesn't need plan mode
             agent_mode: false, // check mode doesn't use agent mode
             agent_socket: "/var/run/rustible-agent.sock".to_string(),
         };

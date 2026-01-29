@@ -12,11 +12,11 @@ use super::{
     ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
-use crate::utils::get_regex;
+use crate::utils::{get_regex, secure_write_file};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::borrow::Cow;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 /// Desired state for a line
@@ -64,18 +64,18 @@ pub enum InsertPosition {
 pub struct LineinfileModule;
 
 impl LineinfileModule {
-    fn read_file(path: &Path) -> ModuleResult<Vec<String>> {
+    fn read_file_content(path: &Path) -> ModuleResult<Option<String>> {
         if !path.exists() {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let content = fs::read_to_string(path)?;
-        Ok(content.lines().map(|s| s.to_string()).collect())
+        Ok(Some(content))
     }
 
     fn write_file(
         path: &Path,
-        lines: &[String],
+        lines: &[Cow<str>],
         create: bool,
         mode: Option<u32>,
     ) -> ModuleResult<()> {
@@ -99,11 +99,13 @@ impl LineinfileModule {
             format!("{}\n", lines.join("\n"))
         };
 
-        fs::write(path, content)?;
-
-        if let Some(mode) = mode {
-            fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
-        }
+        secure_write_file(path, &content, create, mode).map_err(|e| {
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write file '{}': {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         Ok(())
     }
@@ -119,7 +121,7 @@ impl LineinfileModule {
     }
 
     fn find_insert_position(
-        lines: &[String],
+        lines: &[Cow<str>],
         insertafter: Option<&str>,
         insertbefore: Option<&str>,
     ) -> ModuleResult<(InsertPosition, Option<usize>)> {
@@ -153,7 +155,7 @@ impl LineinfileModule {
     }
 
     fn ensure_line_present(
-        lines: &mut Vec<String>,
+        lines: &mut Vec<Cow<'_, str>>,
         line: &str,
         regexp: Option<&Regex>,
         insertafter: Option<&str>,
@@ -177,7 +179,7 @@ impl LineinfileModule {
             if firstmatch {
                 // Optimized: find first match only and replace
                 if let Some(idx) = lines.iter().position(|l| re.is_match(l)) {
-                    lines[idx] = line.to_string();
+                    lines[idx] = Cow::Owned(line.to_string());
                     return Ok(true);
                 }
             } else {
@@ -185,7 +187,7 @@ impl LineinfileModule {
                 let mut changed = false;
                 for l in lines.iter_mut() {
                     if re.is_match(l) {
-                        *l = line.to_string();
+                        *l = Cow::Owned(line.to_string());
                         changed = true;
                     }
                 }
@@ -200,25 +202,25 @@ impl LineinfileModule {
 
         match position {
             InsertPosition::BeginningOfFile => {
-                lines.insert(0, line.to_string());
+                lines.insert(0, Cow::Owned(line.to_string()));
             }
             InsertPosition::EndOfFile => {
-                lines.push(line.to_string());
+                lines.push(Cow::Owned(line.to_string()));
             }
             InsertPosition::AfterMatch => {
                 if let Some(idx) = match_idx {
-                    lines.insert(idx + 1, line.to_string());
+                    lines.insert(idx + 1, Cow::Owned(line.to_string()));
                 } else {
                     // Pattern not found - append to end
-                    lines.push(line.to_string());
+                    lines.push(Cow::Owned(line.to_string()));
                 }
             }
             InsertPosition::BeforeMatch => {
                 if let Some(idx) = match_idx {
-                    lines.insert(idx, line.to_string());
+                    lines.insert(idx, Cow::Owned(line.to_string()));
                 } else {
                     // Pattern not found - append to end
-                    lines.push(line.to_string());
+                    lines.push(Cow::Owned(line.to_string()));
                 }
             }
         }
@@ -227,7 +229,7 @@ impl LineinfileModule {
     }
 
     fn ensure_line_absent(
-        lines: &mut Vec<String>,
+        lines: &mut Vec<Cow<'_, str>>,
         line: Option<&str>,
         regexp: Option<&Regex>,
     ) -> ModuleResult<bool> {
@@ -338,13 +340,9 @@ impl LineinfileModule {
 
                         // Parse lines from content
                         let content_str = String::from_utf8_lossy(&file_bytes);
-                        let mut lines: Vec<String> =
-                            content_str.lines().map(|s| s.to_string()).collect();
-                        let original_lines = if diff_mode {
-                            Some(lines.clone())
-                        } else {
-                            None
-                        };
+                        let mut lines: Vec<Cow<str>> =
+                            content_str.lines().map(Cow::Borrowed).collect();
+                        let original_lines = if diff_mode { Some(lines.clone()) } else { None };
 
                         // Apply changes based on state
                         let changed = match state {
@@ -512,7 +510,12 @@ impl LineinfileModule {
         }
 
         // Read current content
-        let mut lines = Self::read_file(path)?;
+        let content_opt = Self::read_file_content(path)?;
+        let mut lines: Vec<Cow<str>> = match &content_opt {
+            Some(c) => c.lines().map(Cow::Borrowed).collect(),
+            None => Vec::new(),
+        };
+
         let original_lines = if context.diff_mode {
             Some(lines.clone())
         } else {

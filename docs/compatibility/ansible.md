@@ -65,6 +65,10 @@ cargo build --release --features full-cloud
 | Vault encryption | Yes | Yes | Different format (AES-256-GCM) |
 | Check mode | Yes | Yes | `--check` flag |
 | Diff mode | Yes | Yes | `--diff` flag |
+| Async tasks (`async_tasks`) | Yes | Partial | Beta async execution |
+| Delegation (`delegate_to`) | Yes | Yes | Targeted host delegation |
+| Run once (`run_once`) | Yes | Yes | Single host execution |
+| SSH pipelining (`ssh_pipelining`) | Yes | Yes | Reduce SSH round trips |
 
 ---
 
@@ -75,6 +79,7 @@ cargo build --release --features full-cloud
 | `linear` | Yes | Yes | Default, task-by-task |
 | `free` | Yes | Yes | Maximum parallelism |
 | `host_pinned` | Yes | Yes | Connection affinity |
+| `serial` | Yes | Yes | Batch execution (serial_execution) |
 | `debug` | Yes | No | Planned |
 
 ---
@@ -91,6 +96,18 @@ cargo build --release --features full-cloud
 | WinRM | Yes | Partial | `winrm` | Experimental |
 | Podman | Yes | No | - | Planned for v1.0 |
 | AWS SSM | Yes | No | - | Planned for v1.0 |
+
+---
+
+## Provisioning and Agent Features
+
+| Feature | Ansible | Rustible | Notes |
+|---------|---------|----------|-------|
+| Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
+| State management (`state_management`) | No | Partial | Terraform-style state tracking |
+| Drift detection (`drift_detection`) | No | No | Experimental |
+| Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
+| Native bindings (`native_bindings`) | No | No | Experimental system integrations |
 
 ---
 

@@ -753,9 +753,8 @@ impl AwxCompatHandler {
     /// Updates the AWX inventory with hosts from the application state.
     pub fn sync_inventory(&self, inventory_id: i64) -> ApiResult<()> {
         let awx_inv = self.inventories.read().get(&inventory_id).cloned();
-        let awx_inv = awx_inv.ok_or_else(|| {
-            ApiError::NotFound(format!("Inventory {} not found", inventory_id))
-        })?;
+        let awx_inv = awx_inv
+            .ok_or_else(|| ApiError::NotFound(format!("Inventory {} not found", inventory_id)))?;
 
         // Load inventory from source path
         if let Some(ref source_path) = awx_inv.source_path {
@@ -797,9 +796,8 @@ impl AwxCompatHandler {
     ) -> ApiResult<JobLaunchResponse> {
         // Get the template
         let template = self.templates.read().get(&template_id).cloned();
-        let template = template.ok_or_else(|| {
-            ApiError::NotFound(format!("Job template {} not found", template_id))
-        })?;
+        let template = template
+            .ok_or_else(|| ApiError::NotFound(format!("Job template {} not found", template_id)))?;
 
         // Merge extra vars (template defaults + request overrides)
         let mut extra_vars: HashMap<String, serde_json::Value> = HashMap::new();
@@ -883,14 +881,16 @@ impl AwxCompatHandler {
     /// Returns AWX-compatible job details.
     pub async fn get_job(&self, awx_job_id: i64) -> ApiResult<AwxJobDetails> {
         // Map AWX ID to UUID
-        let job_uuid = self.job_id_mapper.get_uuid(awx_job_id).ok_or_else(|| {
-            ApiError::NotFound(format!("Job {} not found", awx_job_id))
-        })?;
+        let job_uuid = self
+            .job_id_mapper
+            .get_uuid(awx_job_id)
+            .ok_or_else(|| ApiError::NotFound(format!("Job {} not found", awx_job_id)))?;
 
         // Get the internal job
-        let job = self.state.get_job(job_uuid).ok_or_else(|| {
-            ApiError::NotFound(format!("Job {} not found", awx_job_id))
-        })?;
+        let job = self
+            .state
+            .get_job(job_uuid)
+            .ok_or_else(|| ApiError::NotFound(format!("Job {} not found", awx_job_id)))?;
 
         // Calculate elapsed time
         let elapsed = match (job.started_at, job.finished_at) {
@@ -947,14 +947,14 @@ impl AwxCompatHandler {
     ) -> ApiResult<InventoryHostsResponse> {
         // Get AWX inventory
         let awx_inv = self.inventories.read().get(&inventory_id).cloned();
-        let awx_inv = awx_inv.ok_or_else(|| {
-            ApiError::NotFound(format!("Inventory {} not found", inventory_id))
-        })?;
+        let awx_inv = awx_inv
+            .ok_or_else(|| ApiError::NotFound(format!("Inventory {} not found", inventory_id)))?;
 
         // Get internal inventory from state
-        let inventory = self.state.get_inventory().ok_or_else(|| {
-            ApiError::NotFound("No inventory loaded".to_string())
-        })?;
+        let inventory = self
+            .state
+            .get_inventory()
+            .ok_or_else(|| ApiError::NotFound("No inventory loaded".to_string()))?;
 
         // Convert hosts to AWX format
         let mut host_id = 1i64;

@@ -66,6 +66,7 @@ impl CommandModule {
                     "posix" | "sh" | "bash" => shell_escape(arg).into_owned(),
                     _ => shell_escape(arg).into_owned(), // Default to POSIX for safety/backward compatibility
                 })
+                .map(|s| s.into_owned())
                 .collect();
 
             Ok(escaped_args.join(" "))

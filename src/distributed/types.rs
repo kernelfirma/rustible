@@ -602,10 +602,8 @@ mod tests {
 
     #[test]
     fn test_controller_info_health() {
-        let mut info = ControllerInfo::new(
-            ControllerId::new("test"),
-            "127.0.0.1:9000".parse().unwrap(),
-        );
+        let mut info =
+            ControllerInfo::new(ControllerId::new("test"), "127.0.0.1:9000".parse().unwrap());
 
         assert!(info.is_healthy(Duration::from_secs(5)));
 

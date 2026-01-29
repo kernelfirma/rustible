@@ -83,9 +83,12 @@
 pub mod dependencies;
 pub mod diff;
 pub mod hashing;
+pub mod locking;
+pub mod manager;
 pub mod manifest;
 pub mod persistence;
 pub mod rollback;
+pub mod storage;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -102,11 +105,14 @@ use uuid::Uuid;
 
 pub use dependencies::{DependencyGraph, DependencyNode, TaskDependency};
 pub use diff::{DiffEngine, DiffReport, StateChange, StateDiff};
-pub use manifest::{DriftDetails, DriftState, DriftSummary, FieldDiff, HostManifest, ManifestStore, ResourceState};
 pub use hashing::{
     CachedTaskResult, HashCacheStats, HashingConfig, StateHashCache, TaskHashBuilder, TaskStateHash,
 };
+pub use manifest::{
+    DriftDetails, DriftState, DriftSummary, FieldDiff, HostManifest, ManifestStore, ResourceState,
+};
 pub use persistence::{JsonPersistence, PersistenceBackend, SqlitePersistence, StatePersistence};
+pub mod rollback;
 pub use rollback::{RollbackAction, RollbackExecutor, RollbackPlan, RollbackStatus};
 
 /// Errors that can occur during state management operations

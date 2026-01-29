@@ -554,10 +554,7 @@ pub async fn gather_facts_via_python_setup(
     let mut args: HashMap<String, serde_json::Value> = HashMap::new();
 
     if let Some(subset) = gather_subset {
-        args.insert(
-            "gather_subset".to_string(),
-            serde_json::json!(subset),
-        );
+        args.insert("gather_subset".to_string(), serde_json::json!(subset));
     }
 
     // Try to find and execute the setup module
@@ -566,12 +563,19 @@ pub async fn gather_facts_via_python_setup(
 
     for interpreter in &interpreters {
         // First check if the interpreter exists on the remote
-        if let Some(python_path) = execute_and_get_output(connection, &format!("which {}", interpreter)).await {
+        if let Some(python_path) =
+            execute_and_get_output(connection, &format!("which {}", interpreter)).await
+        {
             debug!("Found Python interpreter: {}", python_path);
 
             // Execute the setup module
             match executor
-                .execute(connection.as_ref(), "ansible.builtin.setup", &args, interpreter)
+                .execute(
+                    connection.as_ref(),
+                    "ansible.builtin.setup",
+                    &args,
+                    interpreter,
+                )
                 .await
             {
                 Ok(output) => {
@@ -616,19 +620,22 @@ pub async fn gather_facts_via_python_setup(
 ///
 /// This can be used to determine if the Python fallback will work before
 /// attempting to use it.
-pub async fn is_python_setup_available(
-    connection: &Arc<dyn Connection + Send + Sync>,
-) -> bool {
+pub async fn is_python_setup_available(connection: &Arc<dyn Connection + Send + Sync>) -> bool {
     // Check for Python first
-    let has_python = execute_and_get_output(connection, "which python3 || which python").await.is_some();
+    let has_python = execute_and_get_output(connection, "which python3 || which python")
+        .await
+        .is_some();
 
     if !has_python {
         return false;
     }
 
     // Check if ansible module can be imported
-    let check_cmd = "python3 -c 'import ansible' 2>/dev/null || python -c 'import ansible' 2>/dev/null";
-    execute_and_get_output(connection, check_cmd).await.is_some()
+    let check_cmd =
+        "python3 -c 'import ansible' 2>/dev/null || python -c 'import ansible' 2>/dev/null";
+    execute_and_get_output(connection, check_cmd)
+        .await
+        .is_some()
 }
 
 /// Helper to execute a command and get stdout if successful
@@ -1326,7 +1333,10 @@ mod tests {
 
         // Only assert if Ansible is available
         if let Some(facts) = facts {
-            debug!("Got {} facts from Python setup with 'min' subset", facts.len());
+            debug!(
+                "Got {} facts from Python setup with 'min' subset",
+                facts.len()
+            );
         }
     }
 

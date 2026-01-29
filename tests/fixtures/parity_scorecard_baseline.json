@@ -1,0 +1,1013 @@
+{
+  "modules": [
+    {
+      "name": "file",
+      "description": "File and directory management",
+      "usage_weight": 0.95,
+      "features": [
+        {
+          "name": "path",
+          "description": "Path management",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "State management (file/directory/absent/link)",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "mode",
+          "description": "Permission management",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "owner",
+          "description": "Owner management",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "group",
+          "description": "Group management",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "recurse",
+          "description": "Recursive operations",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "src",
+          "description": "Source for links",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "follow",
+          "description": "Follow symlinks",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "force",
+          "description": "Force operations",
+          "status": "Full",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "selevel",
+          "description": "SELinux level",
+          "status": "NotApplicable",
+          "weight": 0.1,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "copy",
+      "description": "Copy files to remote",
+      "usage_weight": 0.9,
+      "features": [
+        {
+          "name": "src",
+          "description": "Source file",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "dest",
+          "description": "Destination path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "content",
+          "description": "Inline content",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "backup",
+          "description": "Create backup",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "mode",
+          "description": "File mode",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "owner",
+          "description": "File owner",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "group",
+          "description": "File group",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "validate",
+          "description": "Validation command",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "remote_src",
+          "description": "Remote source",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "template",
+      "description": "Jinja2 template rendering",
+      "usage_weight": 0.9,
+      "features": [
+        {
+          "name": "src",
+          "description": "Template source",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "dest",
+          "description": "Destination path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "mode",
+          "description": "File mode",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "owner",
+          "description": "File owner",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "group",
+          "description": "File group",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "backup",
+          "description": "Create backup",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "validate",
+          "description": "Validation command",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "block_start",
+          "description": "Block markers",
+          "status": "Full",
+          "weight": 0.2,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "package",
+      "description": "Generic package management",
+      "usage_weight": 0.85,
+      "features": [
+        {
+          "name": "name",
+          "description": "Package name(s)",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Package state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "version",
+          "description": "Package version",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "use",
+          "description": "Package manager selection",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "service",
+      "description": "Service management",
+      "usage_weight": 0.85,
+      "features": [
+        {
+          "name": "name",
+          "description": "Service name",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Service state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "enabled",
+          "description": "Start on boot",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "pattern",
+          "description": "Process pattern match",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        },
+        {
+          "name": "sleep",
+          "description": "Sleep between actions",
+          "status": "Partial",
+          "weight": 0.2,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "command",
+      "description": "Execute commands",
+      "usage_weight": 0.8,
+      "features": [
+        {
+          "name": "cmd",
+          "description": "Command string",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "argv",
+          "description": "Command as list",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "chdir",
+          "description": "Working directory",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "creates",
+          "description": "Skip if exists",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "removes",
+          "description": "Skip if not exists",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "stdin",
+          "description": "Standard input",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "shell",
+      "description": "Execute shell commands",
+      "usage_weight": 0.75,
+      "features": [
+        {
+          "name": "cmd",
+          "description": "Shell command",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "chdir",
+          "description": "Working directory",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "executable",
+          "description": "Shell executable",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "creates",
+          "description": "Skip if exists",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "removes",
+          "description": "Skip if not exists",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "user",
+      "description": "User management",
+      "usage_weight": 0.7,
+      "features": [
+        {
+          "name": "name",
+          "description": "Username",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "User state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "uid",
+          "description": "User ID",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "groups",
+          "description": "Groups",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "shell",
+          "description": "Login shell",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "home",
+          "description": "Home directory",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "password",
+          "description": "Password hash",
+          "status": "Partial",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "ssh_key",
+          "description": "SSH key management",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "group",
+      "description": "Group management",
+      "usage_weight": 0.65,
+      "features": [
+        {
+          "name": "name",
+          "description": "Group name",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Group state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "gid",
+          "description": "Group ID",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "system",
+          "description": "System group",
+          "status": "Full",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "lineinfile",
+      "description": "Line in file management",
+      "usage_weight": 0.7,
+      "features": [
+        {
+          "name": "path",
+          "description": "File path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "line",
+          "description": "Line content",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "regexp",
+          "description": "Regex match",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Line state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "insertafter",
+          "description": "Insert after",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "insertbefore",
+          "description": "Insert before",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "backrefs",
+          "description": "Backreferences",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "firstmatch",
+          "description": "First match only",
+          "status": "Full",
+          "weight": 0.3,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "debug",
+      "description": "Debug output",
+      "usage_weight": 0.8,
+      "features": [
+        {
+          "name": "msg",
+          "description": "Message output",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "var",
+          "description": "Variable output",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "verbosity",
+          "description": "Verbosity level",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "stat",
+      "description": "File statistics",
+      "usage_weight": 0.65,
+      "features": [
+        {
+          "name": "path",
+          "description": "File path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "follow",
+          "description": "Follow symlinks",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "get_checksum",
+          "description": "Compute checksum",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "checksum_algorithm",
+          "description": "Hash algorithm",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "get_mime",
+          "description": "MIME type",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        },
+        {
+          "name": "get_attributes",
+          "description": "Extended attributes",
+          "status": "Partial",
+          "weight": 0.2,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "git",
+      "description": "Git repository management",
+      "usage_weight": 0.6,
+      "features": [
+        {
+          "name": "repo",
+          "description": "Repository URL",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "dest",
+          "description": "Destination path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "version",
+          "description": "Version/branch/tag",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "force",
+          "description": "Force checkout",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "update",
+          "description": "Update existing",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "depth",
+          "description": "Clone depth",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "key_file",
+          "description": "SSH key file",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "apt",
+      "description": "APT package management",
+      "usage_weight": 0.75,
+      "features": [
+        {
+          "name": "name",
+          "description": "Package name(s)",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Package state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "update_cache",
+          "description": "Update cache",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "cache_valid_time",
+          "description": "Cache validity",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "deb",
+          "description": "Install .deb file",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "dpkg_options",
+          "description": "dpkg options",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        },
+        {
+          "name": "autoremove",
+          "description": "Auto remove",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "yum",
+      "description": "YUM package management",
+      "usage_weight": 0.7,
+      "features": [
+        {
+          "name": "name",
+          "description": "Package name(s)",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Package state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "enablerepo",
+          "description": "Enable repo",
+          "status": "Partial",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "disablerepo",
+          "description": "Disable repo",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        },
+        {
+          "name": "update_cache",
+          "description": "Update cache",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "systemd",
+      "description": "Systemd unit management",
+      "usage_weight": 0.8,
+      "features": [
+        {
+          "name": "name",
+          "description": "Unit name",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Unit state",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "enabled",
+          "description": "Enable unit",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "daemon_reload",
+          "description": "Reload daemon",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "masked",
+          "description": "Mask unit",
+          "status": "Partial",
+          "weight": 0.3,
+          "notes": null
+        },
+        {
+          "name": "scope",
+          "description": "Scope",
+          "status": "Partial",
+          "weight": 0.2,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "uri",
+      "description": "HTTP requests",
+      "usage_weight": 0.55,
+      "features": [
+        {
+          "name": "url",
+          "description": "Request URL",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "method",
+          "description": "HTTP method",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "body",
+          "description": "Request body",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "headers",
+          "description": "HTTP headers",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "status_code",
+          "description": "Expected status",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "return_content",
+          "description": "Return content",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "validate_certs",
+          "description": "Cert validation",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "get_url",
+      "description": "Download files",
+      "usage_weight": 0.6,
+      "features": [
+        {
+          "name": "url",
+          "description": "Download URL",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "dest",
+          "description": "Destination path",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "checksum",
+          "description": "Checksum validation",
+          "status": "Full",
+          "weight": 0.7,
+          "notes": null
+        },
+        {
+          "name": "mode",
+          "description": "File mode",
+          "status": "Full",
+          "weight": 0.6,
+          "notes": null
+        },
+        {
+          "name": "owner",
+          "description": "File owner",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "force",
+          "description": "Force download",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "validate_certs",
+          "description": "Cert validation",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "set_fact",
+      "description": "Set host facts",
+      "usage_weight": 0.8,
+      "features": [
+        {
+          "name": "key_value",
+          "description": "Set facts",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "cacheable",
+          "description": "Cache facts",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "wait_for",
+      "description": "Wait for conditions",
+      "usage_weight": 0.55,
+      "features": [
+        {
+          "name": "host",
+          "description": "Host to wait for",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "port",
+          "description": "Port to wait for",
+          "status": "Full",
+          "weight": 1.0,
+          "notes": null
+        },
+        {
+          "name": "path",
+          "description": "Path to wait for",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "state",
+          "description": "Wait state",
+          "status": "Full",
+          "weight": 0.9,
+          "notes": null
+        },
+        {
+          "name": "timeout",
+          "description": "Timeout",
+          "status": "Full",
+          "weight": 0.8,
+          "notes": null
+        },
+        {
+          "name": "delay",
+          "description": "Initial delay",
+          "status": "Full",
+          "weight": 0.5,
+          "notes": null
+        },
+        {
+          "name": "search_regex",
+          "description": "Search pattern",
+          "status": "Partial",
+          "weight": 0.4,
+          "notes": null
+        }
+      ]
+    }
+  ],
+  "minimum_score": 0.7
+}

@@ -10,7 +10,7 @@
 use super::cluster::ClusterManager;
 use super::raft::{RaftNode, RaftState};
 use super::types::{
-    ClusterConfig, ControllerId, ControllerHealth, ControllerInfo, ControllerLoad, ControllerRole,
+    ClusterConfig, ControllerHealth, ControllerId, ControllerInfo, ControllerLoad, ControllerRole,
     WorkUnit, WorkUnitId, WorkUnitState,
 };
 use std::collections::HashMap;
@@ -273,7 +273,11 @@ impl Controller {
 
     /// Get work unit status
     pub async fn get_work_unit_status(&self, id: &WorkUnitId) -> Option<WorkUnitState> {
-        self.work_units.read().await.get(id).map(|wu| wu.state.clone())
+        self.work_units
+            .read()
+            .await
+            .get(id)
+            .map(|wu| wu.state.clone())
     }
 
     /// Get all active work units
