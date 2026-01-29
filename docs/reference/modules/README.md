@@ -28,18 +28,31 @@ This directory contains documentation for all Rustible modules. Modules are the 
 | [lineinfile](lineinfile.md) | Manage lines in text files |
 | [stat](stat.md) | Retrieve file or directory information |
 | [template](template.md) | Template files with Jinja2 |
+| [unarchive](unarchive.md) | Extract archive files on remote hosts |
 
 ### System Administration
 | Module | Description |
 |--------|-------------|
 | [group](group.md) | Manage system groups |
 | [service](service.md) | Manage system services |
+| [systemd_unit](systemd_unit.md) | Manage systemd unit files |
 | [user](user.md) | Manage user accounts |
 
 ### Source Control
 | Module | Description |
 |--------|-------------|
 | [git](git.md) | Clone and manage git repositories |
+
+### Network and HTTP
+| Module | Description |
+|--------|-------------|
+| [uri](uri.md) | Perform HTTP requests |
+
+### Cloud
+| Module | Description |
+|--------|-------------|
+| [aws_ec2](aws_ec2.md) | Manage AWS EC2 instances |
+| [aws_s3](aws_s3.md) | Manage AWS S3 objects |
 
 ### Flow Control
 | Module | Description |
