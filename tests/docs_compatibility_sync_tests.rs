@@ -1662,3 +1662,198 @@ fn test_ci_guard_error_detection_works() {
         "Error detection must find actual errors"
     );
 }
+
+// ============================================================================
+// Cargo Feature Flag Sync Tests
+// ============================================================================
+
+mod cargo_feature_tests {
+    use super::*;
+    use toml::Value as TomlValue;
+
+    fn load_cargo_features_table() -> toml::value::Table {
+        let cargo_toml = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
+        let parsed: TomlValue = cargo_toml
+            .parse()
+            .expect("Failed to parse Cargo.toml as TOML");
+        parsed
+            .get("features")
+            .and_then(|value| value.as_table())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn extract_cargo_features() -> HashSet<String> {
+        load_cargo_features_table().keys().cloned().collect()
+    }
+
+    fn feature_list_contains(feature_value: &TomlValue, name: &str) -> bool {
+        match feature_value {
+            TomlValue::Array(items) => items.iter().any(|item| {
+                item.as_str()
+                    .filter(|value| !value.starts_with("dep:"))
+                    .map(|value| value == name)
+                    .unwrap_or(false)
+            }),
+            _ => false,
+        }
+    }
+
+    fn resolve_feature_dependencies(
+        features: &toml::value::Table,
+        root: &str,
+    ) -> HashSet<String> {
+        let mut resolved = HashSet::new();
+        let mut stack = vec![root.to_string()];
+
+        while let Some(feature) = stack.pop() {
+            let Some(value) = features.get(&feature) else {
+                continue;
+            };
+            let TomlValue::Array(items) = value else {
+                continue;
+            };
+
+            for item in items {
+                let Some(entry) = item.as_str() else {
+                    continue;
+                };
+                if entry.starts_with("dep:") {
+                    continue;
+                }
+                if resolved.insert(entry.to_string()) && features.contains_key(entry) {
+                    stack.push(entry.to_string());
+                }
+            }
+        }
+
+        resolved
+    }
+
+    fn extract_documented_features() -> HashSet<String> {
+        let doc_path = "docs/compatibility/ansible.md";
+        let content = fs::read_to_string(doc_path)
+            .expect("Failed to read compatibility doc");
+
+        let mut features = HashSet::new();
+        let mut in_feature_table = false;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+
+            if trimmed.contains("Feature Flag") && trimmed.contains("Status") {
+                in_feature_table = true;
+                continue;
+            }
+
+            if in_feature_table && (trimmed.starts_with("---") && !trimmed.contains('|')) {
+                in_feature_table = false;
+                continue;
+            }
+
+            if in_feature_table && trimmed.starts_with('|') && trimmed.contains('`') {
+                if trimmed.contains("---") {
+                    continue;
+                }
+
+                if let Some(start) = trimmed.find('`') {
+                    if let Some(end) = trimmed[start + 1..].find('`') {
+                        let feature = &trimmed[start + 1..start + 1 + end];
+                        let feature_name = feature.split_whitespace().next().unwrap_or(feature);
+                        features.insert(feature_name.to_string());
+                    }
+                }
+            }
+        }
+
+        features
+    }
+
+    #[test]
+    fn test_cargo_toml_has_features_section() {
+        let features = extract_cargo_features();
+        assert!(!features.is_empty(), "Cargo.toml should have features defined");
+    }
+
+    #[test]
+    fn test_compatibility_doc_has_feature_table() {
+        let features = extract_documented_features();
+        assert!(
+            !features.is_empty(),
+            "Compatibility doc should have feature table"
+        );
+    }
+
+    #[test]
+    fn test_core_features_documented() {
+        let cargo_features = extract_cargo_features();
+        let documented_features = extract_documented_features();
+
+        let core_features = vec![
+            "russh",
+            "ssh2-backend",
+            "local",
+            "docker",
+            "kubernetes",
+            "aws",
+            "azure",
+            "gcp",
+            "winrm",
+            "provisioning",
+        ];
+
+        for feature in core_features {
+            assert!(
+                cargo_features.contains(feature),
+                "Core feature '{}' missing from Cargo.toml",
+                feature
+            );
+            assert!(
+                documented_features.contains(feature),
+                "Core feature '{}' missing from docs/compatibility/ansible.md",
+                feature
+            );
+        }
+    }
+
+    #[test]
+    fn test_documented_features_exist_in_cargo() {
+        let cargo_features = extract_cargo_features();
+        let documented_features = extract_documented_features();
+
+        for feature in &documented_features {
+            if feature == "default" {
+                continue;
+            }
+            assert!(
+                cargo_features.contains(feature),
+                "Feature '{}' documented but not in Cargo.toml",
+                feature
+            );
+        }
+    }
+
+    #[test]
+    fn test_feature_combinations_documented() {
+        let features = load_cargo_features_table();
+
+        if let Some(full) = features.get("full") {
+            let resolved = resolve_feature_dependencies(&features, "full");
+            assert!(
+                feature_list_contains(full, "russh")
+                    || feature_list_contains(full, "ssh2-backend")
+                    || resolved.contains("russh")
+                    || resolved.contains("ssh2-backend"),
+                "full feature should include SSH backend"
+            );
+        }
+
+        if let Some(full_cloud) = features.get("full-cloud") {
+            let resolved = resolve_feature_dependencies(&features, "full-cloud");
+            assert!(
+                feature_list_contains(full_cloud, "aws") || resolved.contains("aws"),
+                "full-cloud feature should include aws"
+            );
+        }
+    }
+}
