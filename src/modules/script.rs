@@ -36,8 +36,9 @@
 //! - `decrypt` - Decrypt ansible-vault encrypted script (default: true)
 
 use super::{
-    get_remote_tmp, validate_path_param, Module, ModuleClassification, ModuleContext, ModuleError,
-    ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
+    get_remote_tmp, validate_command_args, validate_path_param, Module, ModuleClassification,
+    ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint,
+    ParamExt,
 };
 use crate::utils::shell_escape;
 use std::path::PathBuf;
@@ -183,6 +184,11 @@ impl Module for ScriptModule {
 
         if let Some(removes) = params.get_string("removes")? {
             validate_path_param(&removes, "removes")?;
+        }
+
+        // Validate executable parameter for security
+        if let Some(executable) = params.get_string("executable")? {
+            validate_command_args(&executable)?;
         }
 
         Ok(())
@@ -491,6 +497,24 @@ mod tests {
         );
 
         assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_script_validate_params_invalid_executable() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        params.insert(
+            "executable".to_string(),
+            Value::String("/bin/bash; rm -rf /".to_string()),
+        );
+
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("potentially dangerous pattern"));
     }
 
     #[test]
