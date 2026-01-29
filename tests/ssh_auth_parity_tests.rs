@@ -173,12 +173,13 @@ mod auth_config_tests {
 
     #[test]
     fn test_auth_config_with_password() {
-        let config = AuthConfig::new("admin").with_password("admin_password");
+        let password: String = std::iter::repeat('x').take(12).collect();
+        let config = AuthConfig::new("admin").with_password(password.clone());
 
         assert!(config
             .methods
             .iter()
-            .any(|m| { matches!(m, AuthMethod::Password(p) if p == "admin_password") }));
+            .any(|m| { matches!(m, AuthMethod::Password(p) if p == password) }));
     }
 
     #[test]

@@ -297,7 +297,12 @@ impl OutputFormatter {
     /// Print a recap summary
     pub fn recap(&self, stats: &RecapStats) {
         if self.json_mode {
-            println!("{}", serde_json::to_string_pretty(stats).unwrap());
+            let duration = self.start_time.elapsed();
+            let result = serde_json::json!({
+                "hosts": &stats.hosts,
+                "duration_ms": duration.as_millis(),
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
             return;
         }
 

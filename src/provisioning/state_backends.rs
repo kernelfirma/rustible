@@ -1399,6 +1399,21 @@ impl ConsulSessionLock {
         format!("{}/v1/kv/{}", self.address, self.path)
     }
 
+    fn ensure_secure_address(&self) -> ProvisioningResult<()> {
+        let address = self.address.to_ascii_lowercase();
+        if address.starts_with("https://")
+            || address.starts_with("http://localhost")
+            || address.starts_with("http://127.")
+            || address.starts_with("http://[::1]")
+        {
+            return Ok(());
+        }
+
+        Err(ProvisioningError::ConcurrencyError(
+            "Consul session locks require HTTPS for non-local addresses".to_string(),
+        ))
+    }
+
     fn build_request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
         let mut request = self.client.request(method, url).timeout(self.timeout);
 
@@ -1413,6 +1428,7 @@ impl ConsulSessionLock {
 #[async_trait]
 impl LockBackend for ConsulSessionLock {
     async fn acquire(&self, info: &LockInfo, timeout: Duration) -> ProvisioningResult<bool> {
+        self.ensure_secure_address()?;
         // Create a session for locking
         let session_config = serde_json::json!({
             "Name": format!("rustible-lock-{}", info.operation),
@@ -1496,6 +1512,7 @@ impl LockBackend for ConsulSessionLock {
     }
 
     async fn release(&self, _lock_id: &str) -> ProvisioningResult<bool> {
+        self.ensure_secure_address()?;
         let session_id = match self.session_id.read().clone() {
             Some(id) => id,
             None => return Ok(false),
