@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::Digest;
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
