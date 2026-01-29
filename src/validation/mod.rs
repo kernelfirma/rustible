@@ -250,7 +250,7 @@ impl Validator {
         }
 
         // Convert warnings to errors if configured
-        if self.config.warning_severity == WarningSeverity::Error && !self.warnings.is_empty() {
+        if self.config.warning_severity == WarningSeverity::Error && !result.warnings.is_empty() {
             result.errors.extend(result.warnings.clone());
             result.warnings.clear();
             result.passed = false;
@@ -292,25 +292,18 @@ impl Validator {
     /// Validate module arguments
     fn validate_module_args(
         &self,
-        playbook_path: &Path,
-        source: &str,
+        _playbook_path: &Path,
+        _source: &str,
         playbook: &Playbook,
     ) -> ValidationResult {
-        let mut result = ValidationResult::new();
+        let result = ValidationResult::new();
 
-        for (play_idx, play) in playbook.plays.iter().enumerate() {
-            for (task_idx, task) in play.tasks.iter().enumerate() {
-                if let Some(module_name) = task.get_module_name() {
-                    // Validate module arguments against schema
-                    if let Err(diag) = self.schema_validator.validate_task_args(
-                        playbook_path,
-                        source,
-                        task,
-                        module_name,
-                    ) {
-                        result.add_error(diag);
-                    }
-                }
+        for (_play_idx, play) in playbook.plays.iter().enumerate() {
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
+                let _module_name = task.module_name();
+                // Validate module arguments against schema
+                // Note: validate_task_args is not yet implemented in SchemaValidator
+                // Placeholder for future implementation
             }
         }
 
@@ -327,12 +320,10 @@ impl Validator {
         let mut result = ValidationResult::new();
 
         // Collect all defined variables
-        let mut defined_vars = HashSet::new();
+        let mut defined_vars: HashSet<String> = HashSet::new();
         for play in &playbook.plays {
-            if let Some(vars) = &play.vars {
-                for key in vars.keys() {
-                    defined_vars.insert(key.clone());
-                }
+            for (key, _) in play.vars.as_map() {
+                defined_vars.insert(key.clone());
             }
         }
 
@@ -341,10 +332,10 @@ impl Validator {
         for (line_num, line) in source.lines().enumerate() {
             // Find {{ var }} patterns
             let mut chars = line.char_indices();
-            while let Some((start, _)) = chars.find(|(_, c)| *c == '{') {
+            while let Some((_start, _)) = chars.find(|(_, c)| *c == '{') {
                 if let Some((_, _)) = chars.next() {
                     if let Some((_, c)) = chars.next() {
-                        if *c == '{' {
+                        if c == '{' {
                             // Found opening {{, look for closing }}
                             let var_start = line_num + 1;
                             let var_content: String = chars
@@ -383,7 +374,7 @@ impl Validator {
                         line,
                         source.lines().nth(line - 1).unwrap_or("").find(var).unwrap_or(0) + 1,
                         var,
-                        &defined_vars.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                        &defined_vars.iter().map(|s: &String| s.as_str()).collect::<Vec<_>>(),
                     );
                     result.add_error(diag);
                 }
@@ -397,7 +388,7 @@ impl Validator {
     fn validate_handlers(
         &self,
         playbook_path: &Path,
-        source: &str,
+        _source: &str,
         playbook: &Playbook,
     ) -> ValidationResult {
         let mut result = ValidationResult::new();
@@ -410,23 +401,25 @@ impl Validator {
             }
 
             // Check handler notifications in tasks
-            for (task_idx, task) in play.tasks.iter().enumerate() {
-                if let Some(notify) = task.get_notify() {
-                    for handler_name in notify {
-                        if !defined_handlers.contains(handler_name) {
-                            let line_num = task_idx + 1; // Simplified
-                            let diag = RichDiagnostic::error(
-                                format!("handler '{}' not found", handler_name),
-                                playbook_path,
-                                crate::diagnostics::Span::new(0, 0),
-                            )
-                            .with_code("E0005")
-                            .with_label("handler not defined")
-                            .with_note(&format!("available handlers: {}", 
-                                defined_handlers.iter().cloned().collect::<Vec<_>>()
-                                    .join(", ")));
-                            result.add_error(diag);
-                        }
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
+                for handler_name in &task.notify {
+                    if !defined_handlers.contains(handler_name) {
+                        let diag = RichDiagnostic::error(
+                            format!("handler '{}' not found", handler_name),
+                            playbook_path,
+                            crate::diagnostics::Span::new(0, 0),
+                        )
+                        .with_code("E0005")
+                        .with_label("handler not defined")
+                        .with_note(&format!(
+                            "available handlers: {}",
+                            defined_handlers
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                        result.add_error(diag);
                     }
                 }
             }
@@ -452,21 +445,19 @@ impl Validator {
         ];
 
         for play in &playbook.plays {
-            for (task_idx, task) in play.tasks.iter().enumerate() {
-                if let Some(module_name) = task.get_module_name() {
-                    for (dep_mod, suggestion) in &deprecated_modules {
-                        if module_name == *dep_mod {
-                            let line_num = task_idx + 1; // Simplified
-                            let diag = RichDiagnostic::warning(
-                                format!("module '{}' is deprecated", module_name),
-                                playbook_path,
-                                crate::diagnostics::Span::new(0, 0),
-                            )
-                            .with_code("W0001")
-                            .with_label("deprecated module")
-                            .with_help(suggestion);
-                            result.add_warning(diag);
-                        }
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
+                let module_name = task.module_name();
+                for (dep_mod, suggestion) in &deprecated_modules {
+                    if module_name == *dep_mod {
+                        let diag = RichDiagnostic::warning(
+                            format!("module '{}' is deprecated", module_name),
+                            playbook_path,
+                            crate::diagnostics::Span::new(0, 0),
+                        )
+                        .with_code("W0001")
+                        .with_label("deprecated module")
+                        .with_help(*suggestion);
+                        result.add_warning(diag);
                     }
                 }
             }

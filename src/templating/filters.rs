@@ -300,7 +300,7 @@ fn filter_urldecode(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    Ok(Value::String(urlencoding::decode(s).unwrap_or_else(|_| s.to_string()).to_string()))
+    Ok(Value::String(urlencoding::decode(s).unwrap_or_else(|_| s.to_string().into()).into_owned()))
 }
 
 fn filter_basename(value: &Value) -> FilterResult<Value> {
@@ -407,7 +407,7 @@ fn filter_float(value: &Value) -> FilterResult<Value> {
         _ => None,
     };
     
-    Ok(Value::Number(n.unwrap_or(0.0).into()))
+    Ok(Value::Number(serde_json::Number::from_f64(n.unwrap_or(0.0)).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_string(value: &Value) -> FilterResult<Value> {
@@ -431,7 +431,7 @@ fn filter_abs(value: &Value) -> FilterResult<Value> {
             message: "Expected number".to_string(),
         })?;
     
-    Ok(Value::Number(n.abs().into()))
+    Ok(Value::Number(serde_json::Number::from_f64(n.abs()).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
@@ -449,7 +449,7 @@ fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
     let multiplier = 10_f64.powi(precision as i32);
     let rounded = (n * multiplier).round() / multiplier;
     
-    Ok(Value::Number(rounded.into()))
+    Ok(Value::Number(serde_json::Number::from_f64(rounded).unwrap_or_else(|| 0.into())))
 }
 
 // ============== JSON/YAML Filters ==============
@@ -535,8 +535,7 @@ fn filter_md5(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    use md5::{compute, Md5};
-    let hash = compute(s);
+    let hash = md5::compute(s.as_bytes());
     Ok(Value::String(format!("{:x}", hash)))
 }
 
@@ -546,10 +545,10 @@ fn filter_sha1(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    use sha1::Sha1;
+    use sha1::{Sha1, Digest};
     let mut hasher = Sha1::new();
     hasher.update(s.as_bytes());
-    let hash = hasher.digest();
+    let hash = hasher.finalize();
     Ok(Value::String(format!("{:x}", hash)))
 }
 
@@ -715,7 +714,7 @@ fn filter_sum(value: &Value) -> FilterResult<Value> {
         .filter_map(|v| v.as_f64())
         .sum();
     
-    Ok(Value::Number(sum.into()))
+    Ok(Value::Number(serde_json::Number::from_f64(sum).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_product(value: &Value) -> FilterResult<Value> {
@@ -728,7 +727,7 @@ fn filter_product(value: &Value) -> FilterResult<Value> {
         .filter_map(|v| v.as_f64())
         .product();
     
-    Ok(Value::Number(product.into()))
+    Ok(Value::Number(serde_json::Number::from_f64(product).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_mean(value: &Value) -> FilterResult<Value> {
@@ -746,7 +745,7 @@ fn filter_mean(value: &Value) -> FilterResult<Value> {
         .sum();
     
     let mean = sum / arr.len() as f64;
-    Ok(Value::Number(mean.into()))
+    Ok(Value::Number(serde_json::Number::from_f64(mean).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_median(value: &Value) -> FilterResult<Value> {
@@ -771,7 +770,7 @@ fn filter_median(value: &Value) -> FilterResult<Value> {
         nums[nums.len() / 2]
     };
     
-    Ok(Value::Number(median.into()))
+    Ok(Value::Number(serde_json::Number::from_f64(median).unwrap_or_else(|| 0.into())))
 }
 
 fn filter_first(value: &Value) -> FilterResult<Value> {
