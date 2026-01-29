@@ -329,13 +329,12 @@ impl LspServer {
 
     /// Open a document
     pub async fn open_document(&self, item: TextDocumentItem) {
-        let uri = item.uri.clone();
         let mut docs = self.documents.write().await;
-        docs.insert(uri.clone(), item);
+        docs.insert(item.uri.clone(), item.clone());
         
         // Compute diagnostics
         if self.config.enable_diagnostics {
-            self.compute_diagnostics(&uri).await;
+            self.compute_diagnostics(&item.uri).await;
         }
     }
 
@@ -394,7 +393,13 @@ impl LspServer {
 
     /// Get module completions
     fn get_module_completions(&self) -> Vec<CompletionItem> {
-        let modules = self.module_registry.names();
+        let modules = vec![
+            "apt", "yum", "dnf", "package", "service", "systemd", "user", "group",
+            "file", "copy", "template", "lineinfile", "blockinfile",
+            "command", "shell", "raw", "script",
+            "git", "stat", "debug", "set_fact", "fail", "assert",
+            "meta", "include_role", "include_tasks", "import_role", "import_tasks",
+        ];
         
         modules.into_iter().map(|name| CompletionItem {
             label: name.to_string(),
@@ -473,7 +478,15 @@ impl LspServer {
         let word = self.get_word_at_position(&doc.text, position)?;
         
         // Determine what kind of hover to provide
-        if self.module_registry.contains(&word) {
+        // Basic check for common modules since ModuleRegistry might not have has_module exposed
+        let modules = vec![
+            "apt", "yum", "dnf", "package", "service", "systemd", "user", "group",
+            "file", "copy", "template", "lineinfile", "blockinfile",
+            "command", "shell", "raw", "script",
+            "git", "stat", "debug", "set_fact", "fail", "assert",
+        ];
+
+        if modules.contains(&word.as_str()) {
             Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

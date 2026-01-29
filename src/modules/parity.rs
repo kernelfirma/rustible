@@ -4,7 +4,7 @@
 //! and maintain compatibility with existing playbooks.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -606,12 +606,12 @@ impl ModuleParityTracker {
         
         for module_name in modules {
             if let Some(info) = self.get_module(module_name).await {
-                match info.status.clone() {
+                match info.status {
                     ModuleStatus::FullyImplemented | ModuleStatus::CompatibilityLayer { .. } => {
                         compatible.push(info);
                     }
-                    ModuleStatus::Partial { missing_features, .. } => {
-                        partial.push((info, missing_features));
+                    ModuleStatus::Partial { ref missing_features, .. } => {
+                        partial.push((info.clone(), missing_features.clone()));
                     }
                     ModuleStatus::Planned | ModuleStatus::NotPlanned | ModuleStatus::Deprecated => {
                         missing.push(info);

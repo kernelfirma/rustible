@@ -526,7 +526,7 @@ impl<B: LockBackend> StateLock<B> {
     /// Get the holder identifier (hostname + process ID).
     fn get_holder_identifier(&self) -> String {
         let hostname = hostname::get()
-            .map(|h| h.to_string_lossy().to_string())
+            .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|_| "unknown".to_string());
         let pid = std::process::id();
         format!("{}:{}", hostname, pid)

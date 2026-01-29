@@ -141,12 +141,12 @@ impl DriftItem {
         expected: serde_json::Value,
         actual: serde_json::Value,
     ) -> Self {
-        let host = host.into();
-        let id = format!("{}-{}", host, uuid::Uuid::new_v4());
+        let host_string = host.into();
+        let id = format!("{}-{}", host_string, uuid::Uuid::new_v4());
         
         Self {
             id,
-            host,
+            host: host_string,
             drift_type,
             severity,
             expected_state: expected,

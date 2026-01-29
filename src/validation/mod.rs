@@ -292,18 +292,18 @@ impl Validator {
     /// Validate module arguments
     fn validate_module_args(
         &self,
-        playbook_path: &Path,
-        source: &str,
+        _playbook_path: &Path,
+        _source: &str,
         playbook: &Playbook,
     ) -> ValidationResult {
-        let mut result = ValidationResult::new();
+        let result = ValidationResult::new();
 
-        for (play_idx, play) in playbook.plays.iter().enumerate() {
-            for (task_idx, task) in play.tasks.iter().enumerate() {
-                let module_name = task.module_name();
+        for (_play_idx, play) in playbook.plays.iter().enumerate() {
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
+                let _module_name = task.module_name();
                 // Validate module arguments against schema
-                // Note: SchemaValidator integration pending update to match new API
-                // For now, we rely on parse-time validation
+                // Note: validate_task_args is not yet implemented in SchemaValidator
+                // Placeholder for future implementation
             }
         }
 
@@ -322,8 +322,7 @@ impl Validator {
         // Collect all defined variables
         let mut defined_vars: HashSet<String> = HashSet::new();
         for play in &playbook.plays {
-            let vars = &play.vars;
-            for key in vars.as_map().keys() {
+            for (key, _) in play.vars.as_map() {
                 defined_vars.insert(key.clone());
             }
         }
@@ -333,7 +332,7 @@ impl Validator {
         for (line_num, line) in source.lines().enumerate() {
             // Find {{ var }} patterns
             let mut chars = line.char_indices();
-            while let Some((start, _)) = chars.find(|(_, c)| *c == '{') {
+            while let Some((_start, _)) = chars.find(|(_, c)| *c == '{') {
                 if let Some((_, _)) = chars.next() {
                     if let Some((_, c)) = chars.next() {
                         if c == '{' {
@@ -375,7 +374,7 @@ impl Validator {
                         line,
                         source.lines().nth(line - 1).unwrap_or("").find(var).unwrap_or(0) + 1,
                         var,
-                        &defined_vars.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                        &defined_vars.iter().map(|s: &String| s.as_str()).collect::<Vec<_>>(),
                     );
                     result.add_error(diag);
                 }
@@ -389,7 +388,7 @@ impl Validator {
     fn validate_handlers(
         &self,
         playbook_path: &Path,
-        source: &str,
+        _source: &str,
         playbook: &Playbook,
     ) -> ValidationResult {
         let mut result = ValidationResult::new();
@@ -402,11 +401,9 @@ impl Validator {
             }
 
             // Check handler notifications in tasks
-            for (task_idx, task) in play.tasks.iter().enumerate() {
-                let notify = &task.notify;
-                for handler_name in notify {
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
+                for handler_name in &task.notify {
                     if !defined_handlers.contains(handler_name) {
-                        let line_num = task_idx + 1; // Simplified
                         let diag = RichDiagnostic::error(
                             format!("handler '{}' not found", handler_name),
                             playbook_path,
@@ -414,9 +411,14 @@ impl Validator {
                         )
                         .with_code("E0005")
                         .with_label("handler not defined")
-                        .with_note(&format!("available handlers: {}",
-                            defined_handlers.iter().cloned().collect::<Vec<_>>()
-                                .join(", ")));
+                        .with_note(&format!(
+                            "available handlers: {}",
+                            defined_handlers
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
                         result.add_error(diag);
                     }
                 }
@@ -443,11 +445,10 @@ impl Validator {
         ];
 
         for play in &playbook.plays {
-            for (task_idx, task) in play.tasks.iter().enumerate() {
+            for (_task_idx, task) in play.tasks.iter().enumerate() {
                 let module_name = task.module_name();
                 for (dep_mod, suggestion) in &deprecated_modules {
                     if module_name == *dep_mod {
-                        let line_num = task_idx + 1; // Simplified
                         let diag = RichDiagnostic::warning(
                             format!("module '{}' is deprecated", module_name),
                             playbook_path,
