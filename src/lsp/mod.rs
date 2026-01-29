@@ -329,12 +329,13 @@ impl LspServer {
 
     /// Open a document
     pub async fn open_document(&self, item: TextDocumentItem) {
+        let uri = item.uri.clone();
         let mut docs = self.documents.write().await;
-        docs.insert(item.uri.clone(), item);
+        docs.insert(uri.clone(), item);
         
         // Compute diagnostics
         if self.config.enable_diagnostics {
-            self.compute_diagnostics(&item.uri).await;
+            self.compute_diagnostics(&uri).await;
         }
     }
 
@@ -393,10 +394,10 @@ impl LspServer {
 
     /// Get module completions
     fn get_module_completions(&self) -> Vec<CompletionItem> {
-        let modules = self.module_registry.list_modules();
+        let modules = self.module_registry.names();
         
         modules.into_iter().map(|name| CompletionItem {
-            label: name.clone(),
+            label: name.to_string(),
             kind: Some(CompletionItemKind::Module),
             detail: Some("Module".to_string()),
             documentation: Some(format!("Module: {}", name)),
@@ -472,7 +473,7 @@ impl LspServer {
         let word = self.get_word_at_position(&doc.text, position)?;
         
         // Determine what kind of hover to provide
-        if self.module_registry.has_module(&word) {
+        if self.module_registry.contains(&word) {
             Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

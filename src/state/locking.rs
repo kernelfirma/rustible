@@ -95,7 +95,7 @@ impl LockMetadata {
     pub fn remaining_ttl(&self) -> Duration {
         let now = Utc::now();
         if self.expires_at > now {
-            (self.expires_at - now).to_std().unwrap_or(Duration::seconds(0))
+            self.expires_at - now
         } else {
             Duration::seconds(0)
         }
@@ -525,7 +525,9 @@ impl<B: LockBackend> StateLock<B> {
 
     /// Get the holder identifier (hostname + process ID).
     fn get_holder_identifier(&self) -> String {
-        let hostname = sys_info::hostname().unwrap_or_else(|_| "unknown".to_string());
+        let hostname = hostname::get()
+            .map(|h| h.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
         let pid = std::process::id();
         format!("{}:{}", hostname, pid)
     }

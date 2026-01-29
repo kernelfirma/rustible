@@ -7,6 +7,7 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Digest;
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
@@ -300,7 +301,7 @@ fn filter_urldecode(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    Ok(Value::String(urlencoding::decode(s).unwrap_or_else(|_| s.to_string()).to_string()))
+    Ok(Value::String(urlencoding::decode(s).unwrap_or_else(|_| std::borrow::Cow::Borrowed(s)).to_string()))
 }
 
 fn filter_basename(value: &Value) -> FilterResult<Value> {
@@ -407,7 +408,10 @@ fn filter_float(value: &Value) -> FilterResult<Value> {
         _ => None,
     };
     
-    Ok(Value::Number(n.unwrap_or(0.0).into()))
+    let val = n.unwrap_or(0.0);
+    serde_json::Number::from_f64(val)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_string(value: &Value) -> FilterResult<Value> {
@@ -431,7 +435,9 @@ fn filter_abs(value: &Value) -> FilterResult<Value> {
             message: "Expected number".to_string(),
         })?;
     
-    Ok(Value::Number(n.abs().into()))
+    serde_json::Number::from_f64(n.abs())
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
@@ -449,7 +455,9 @@ fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
     let multiplier = 10_f64.powi(precision as i32);
     let rounded = (n * multiplier).round() / multiplier;
     
-    Ok(Value::Number(rounded.into()))
+    serde_json::Number::from_f64(rounded)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 // ============== JSON/YAML Filters ==============
@@ -546,10 +554,10 @@ fn filter_sha1(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    use sha1::Sha1;
+    use sha1::{Sha1, Digest};
     let mut hasher = Sha1::new();
     hasher.update(s.as_bytes());
-    let hash = hasher.digest();
+    let hash = hasher.finalize();
     Ok(Value::String(format!("{:x}", hash)))
 }
 
@@ -715,7 +723,9 @@ fn filter_sum(value: &Value) -> FilterResult<Value> {
         .filter_map(|v| v.as_f64())
         .sum();
     
-    Ok(Value::Number(sum.into()))
+    serde_json::Number::from_f64(sum)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_product(value: &Value) -> FilterResult<Value> {
@@ -728,7 +738,9 @@ fn filter_product(value: &Value) -> FilterResult<Value> {
         .filter_map(|v| v.as_f64())
         .product();
     
-    Ok(Value::Number(product.into()))
+    serde_json::Number::from_f64(product)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_mean(value: &Value) -> FilterResult<Value> {
@@ -746,7 +758,9 @@ fn filter_mean(value: &Value) -> FilterResult<Value> {
         .sum();
     
     let mean = sum / arr.len() as f64;
-    Ok(Value::Number(mean.into()))
+    serde_json::Number::from_f64(mean)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_median(value: &Value) -> FilterResult<Value> {
@@ -771,7 +785,9 @@ fn filter_median(value: &Value) -> FilterResult<Value> {
         nums[nums.len() / 2]
     };
     
-    Ok(Value::Number(median.into()))
+    serde_json::Number::from_f64(median)
+        .map(Value::Number)
+        .ok_or_else(|| FilterError::Json("Invalid float value".to_string()))
 }
 
 fn filter_first(value: &Value) -> FilterResult<Value> {

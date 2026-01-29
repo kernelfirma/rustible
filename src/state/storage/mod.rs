@@ -83,9 +83,8 @@ impl StateFile {
 
     /// Calculate checksum of state data
     fn calculate_checksum(data: &serde_json::Value) -> String {
-        use blake3::Hash;
         let serialized = serde_json::to_string(data).unwrap_or_default();
-        let hash = Hash::hash(serialized.as_bytes());
+        let hash = blake3::hash(serialized.as_bytes());
         hex::encode(hash.as_bytes())
     }
 
