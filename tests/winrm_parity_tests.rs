@@ -42,7 +42,7 @@ mod winrm_connection_tests {
     #[test]
     fn test_ntlm_auth_simple() {
         let auth = WinRmAuth::ntlm("user", "password");
-        assert_eq!(auth.scheme(), "ntlm");
+        assert_eq!(auth.scheme(), "Negotiate");
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod winrm_connection_tests {
     #[test]
     fn test_basic_auth() {
         let auth = WinRmAuth::basic("admin", "secret");
-        assert_eq!(auth.scheme(), "basic");
+        assert_eq!(auth.scheme(), "Basic");
     }
 
     #[test]
@@ -132,13 +132,10 @@ mod winrm_connection_tests {
 
     #[test]
     fn test_auth_scheme_names() {
-        assert_eq!(WinRmAuth::basic("u", "p").scheme(), "basic");
-        assert_eq!(WinRmAuth::ntlm("u", "p").scheme(), "ntlm");
-        assert_eq!(WinRmAuth::kerberos("u", "R").scheme(), "kerberos");
-        assert_eq!(
-            WinRmAuth::certificate("c", "k").scheme(),
-            "http.certificate"
-        );
+        assert_eq!(WinRmAuth::basic("u", "p").scheme(), "Basic");
+        assert_eq!(WinRmAuth::ntlm("u", "p").scheme(), "Negotiate");
+        assert_eq!(WinRmAuth::kerberos("u", "R").scheme(), "Kerberos");
+        assert_eq!(WinRmAuth::certificate("c", "k").scheme(), "Certificate");
     }
 
     #[test]
