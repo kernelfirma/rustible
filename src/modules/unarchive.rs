@@ -52,7 +52,9 @@ use flate2::write::GzEncoder;
 #[cfg(test)]
 use flate2::Compression;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(test)]
+use std::io::Write;
 use std::path::Path;
 
 /// Supported archive formats for extraction
@@ -273,23 +275,25 @@ impl UnarchiveModule {
 
     /// Simple glob-like pattern matching
     fn pattern_matches(path: &str, pattern: &str) -> bool {
-        if pattern.contains('*') {
-            // Simple wildcard matching
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                let prefix = parts[0];
-                let suffix = parts[1];
-                if prefix.is_empty() && suffix.is_empty() {
-                    return true; // "*" matches everything
-                }
-                if prefix.is_empty() {
-                    return path.ends_with(suffix);
-                }
-                if suffix.is_empty() {
-                    return path.starts_with(prefix);
-                }
-                return path.starts_with(prefix) && path.ends_with(suffix);
+        if let Some(idx) = pattern.find('*') {
+            // Check if there are more wildcards (fallback to existing behavior if so)
+            if pattern[idx + 1..].contains('*') {
+                return path == pattern || path.contains(pattern);
             }
+
+            let prefix = &pattern[..idx];
+            let suffix = &pattern[idx + 1..];
+
+            if prefix.is_empty() && suffix.is_empty() {
+                return true; // "*" matches everything
+            }
+            if prefix.is_empty() {
+                return path.ends_with(suffix);
+            }
+            if suffix.is_empty() {
+                return path.starts_with(prefix);
+            }
+            return path.starts_with(prefix) && path.ends_with(suffix);
         }
 
         // Exact match or contains

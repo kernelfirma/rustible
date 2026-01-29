@@ -192,8 +192,14 @@ fn test_lineinfile_remove_all_matching() {
 
     assert!(result.changed);
     let content = fs::read_to_string(&path).unwrap();
-    assert!(!content.contains("dup"), "All matching lines should be removed");
-    assert!(content.contains("other"), "Non-matching lines should remain");
+    assert!(
+        !content.contains("dup"),
+        "All matching lines should be removed"
+    );
+    assert!(
+        content.contains("other"),
+        "Non-matching lines should remain"
+    );
 }
 
 // ============================================================================
@@ -243,7 +249,10 @@ fn test_lineinfile_regexp_remove() {
 
     assert!(result.changed);
     let content = fs::read_to_string(&path).unwrap();
-    assert!(!content.contains("remove="), "Matched line should be removed");
+    assert!(
+        !content.contains("remove="),
+        "Matched line should be removed"
+    );
     assert!(content.contains("keep=value"), "Other lines should remain");
     assert!(content.contains("# comment"), "Comments should remain");
 }
@@ -362,7 +371,10 @@ fn test_lineinfile_no_create_missing_file() {
 
     let result = module.execute(&params, &context);
 
-    assert!(result.is_err(), "Should fail when file doesn't exist and create=false");
+    assert!(
+        result.is_err(),
+        "Should fail when file doesn't exist and create=false"
+    );
 }
 
 // ============================================================================

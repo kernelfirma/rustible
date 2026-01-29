@@ -64,10 +64,7 @@ mod tests {
 
         // This test would use WinRmConnectionBuilder to connect
         // and verify the connection is established
-        println!(
-            "Connecting to {}:{} as {} (SSL: {})",
-            host, port, user, ssl
-        );
+        println!("Connecting to {}:{} as {} (SSL: {})", host, port, user, ssl);
 
         let conn = WinRmConnectionBuilder::new(&host)
             .port(port)
@@ -234,7 +231,10 @@ Set-Content -LiteralPath $dest -Value $content -Force -NoNewline
             test_path, test_content
         );
 
-        let result = conn.execute(&create_script, None).await.expect("Failed to execute");
+        let result = conn
+            .execute(&create_script, None)
+            .await
+            .expect("Failed to execute");
         assert_eq!(result.exit_code, 0, "Create file failed: {}", result.stderr);
 
         // Verify file exists and has correct content
@@ -251,9 +251,14 @@ if (Test-Path -LiteralPath $path) {{
             test_path
         );
 
-        let result = conn.execute(&verify_script, None).await.expect("Failed to verify");
-        assert!(result.stdout.contains("\"exists\":true") || result.stdout.contains("\"exists\": true"),
-                "File was not created");
+        let result = conn
+            .execute(&verify_script, None)
+            .await
+            .expect("Failed to verify");
+        assert!(
+            result.stdout.contains("\"exists\":true") || result.stdout.contains("\"exists\": true"),
+            "File was not created"
+        );
         assert!(result.stdout.contains(test_content), "Content mismatch");
 
         // Cleanup
@@ -295,17 +300,26 @@ Set-Content -LiteralPath '{}' -Value '{}' -Force -NoNewline
             test_path, test_content, test_path
         );
 
-        let result1 = conn.execute(&create_script, None).await.expect("First create failed");
+        let result1 = conn
+            .execute(&create_script, None)
+            .await
+            .expect("First create failed");
         let hash1 = result1.stdout.trim();
 
         // Create same content again - hash should match
-        let result2 = conn.execute(&create_script, None).await.expect("Second create failed");
+        let result2 = conn
+            .execute(&create_script, None)
+            .await
+            .expect("Second create failed");
         let hash2 = result2.stdout.trim();
 
         assert_eq!(hash1, hash2, "Checksums should match for identical content");
 
         // Cleanup
-        let cleanup = format!("Remove-Item -LiteralPath '{}' -Force -ErrorAction SilentlyContinue", test_path);
+        let cleanup = format!(
+            "Remove-Item -LiteralPath '{}' -Force -ErrorAction SilentlyContinue",
+            test_path
+        );
         let _ = conn.execute(&cleanup, None).await;
     }
 
@@ -329,7 +343,8 @@ Set-Content -LiteralPath '{}' -Value '{}' -Force -NoNewline
             .expect("Failed to connect");
 
         // Test simple command execution
-        let result = conn.execute("Write-Output 'Hello from win_command'", None)
+        let result = conn
+            .execute("Write-Output 'Hello from win_command'", None)
             .await
             .expect("Command failed");
 
@@ -381,17 +396,28 @@ try {
 $result | ConvertTo-Json -Compress
 "#;
 
-        let result = conn.execute(query_script, None).await.expect("Query failed");
-        assert_eq!(result.exit_code, 0, "Service query failed: {}", result.stderr);
+        let result = conn
+            .execute(query_script, None)
+            .await
+            .expect("Query failed");
+        assert_eq!(
+            result.exit_code, 0,
+            "Service query failed: {}",
+            result.stderr
+        );
 
         // Parse result
-        let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-            .expect("Failed to parse JSON");
+        let json: serde_json::Value =
+            serde_json::from_str(result.stdout.trim()).expect("Failed to parse JSON");
 
-        assert!(json["exists"].as_bool().unwrap_or(false),
-                "Windows Update service should exist");
-        assert!(!json["display_name"].as_str().unwrap_or("").is_empty(),
-                "Display name should not be empty");
+        assert!(
+            json["exists"].as_bool().unwrap_or(false),
+            "Windows Update service should exist"
+        );
+        assert!(
+            !json["display_name"].as_str().unwrap_or("").is_empty(),
+            "Display name should not be empty"
+        );
     }
 
     /// Test Windows module: win_service - start/stop service (requires admin)
@@ -422,7 +448,10 @@ $result | ConvertTo-Json -Compress
             service_name
         );
 
-        let result = conn.execute(&get_state_script, None).await.expect("Get state failed");
+        let result = conn
+            .execute(&get_state_script, None)
+            .await
+            .expect("Get state failed");
         let initial_state = result.stdout.trim().to_lowercase();
 
         // Toggle service state
@@ -446,7 +475,10 @@ Start-Sleep -Seconds 2
             )
         };
 
-        let result = conn.execute(&toggle_script, None).await.expect("Toggle failed");
+        let result = conn
+            .execute(&toggle_script, None)
+            .await
+            .expect("Toggle failed");
         let new_state = result.stdout.trim().to_lowercase();
 
         // Restore original state
@@ -458,9 +490,11 @@ Start-Sleep -Seconds 2
         let _ = conn.execute(&restore_script, None).await;
 
         // Verify state changed
-        assert_ne!(initial_state, new_state,
-                   "Service state should have changed from {} to {}",
-                   initial_state, new_state);
+        assert_ne!(
+            initial_state, new_state,
+            "Service state should have changed from {} to {}",
+            initial_state, new_state
+        );
     }
 
     /// Test Windows module: win_package - check Chocolatey availability
@@ -492,17 +526,22 @@ try {
 }
 "#;
 
-        let result = conn.execute(check_script, None).await.expect("Check failed");
+        let result = conn
+            .execute(check_script, None)
+            .await
+            .expect("Check failed");
         assert_eq!(result.exit_code, 0);
 
-        let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-            .expect("Failed to parse JSON");
+        let json: serde_json::Value =
+            serde_json::from_str(result.stdout.trim()).expect("Failed to parse JSON");
 
         // Just report status - Chocolatey may or may not be installed
         if json["installed"].as_bool().unwrap_or(false) {
-            println!("Chocolatey {} is installed at {}",
-                     json["version"].as_str().unwrap_or("unknown"),
-                     json["path"].as_str().unwrap_or("unknown"));
+            println!(
+                "Chocolatey {} is installed at {}",
+                json["version"].as_str().unwrap_or("unknown"),
+                json["path"].as_str().unwrap_or("unknown")
+            );
         } else {
             println!("Chocolatey is not installed");
         }
@@ -546,9 +585,15 @@ try {
             .unwrap_or(serde_json::json!({"success": false}));
 
         if json["success"].as_bool().unwrap_or(false) {
-            println!("Installed packages:\n{}", json["output"].as_str().unwrap_or(""));
+            println!(
+                "Installed packages:\n{}",
+                json["output"].as_str().unwrap_or("")
+            );
         } else {
-            println!("Could not list packages: {}", json["error"].as_str().unwrap_or("unknown"));
+            println!(
+                "Could not list packages: {}",
+                json["error"].as_str().unwrap_or("unknown")
+            );
         }
     }
 
@@ -588,9 +633,12 @@ if ($LASTEXITCODE -eq 0 -and $output -match "$pkg\s+(\S+)") {{
             test_package
         );
 
-        let result = conn.execute(&check_script, None).await.expect("Check failed");
-        let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-            .expect("Failed to parse");
+        let result = conn
+            .execute(&check_script, None)
+            .await
+            .expect("Check failed");
+        let json: serde_json::Value =
+            serde_json::from_str(result.stdout.trim()).expect("Failed to parse");
         let was_installed = json["installed"].as_bool().unwrap_or(false);
 
         if !was_installed {
@@ -603,19 +651,31 @@ $output = choco install -y {} 2>&1
                 test_package
             );
 
-            let result = conn.execute(&install_script, None).await.expect("Install failed");
-            let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-                .expect("Failed to parse");
+            let result = conn
+                .execute(&install_script, None)
+                .await
+                .expect("Install failed");
+            let json: serde_json::Value =
+                serde_json::from_str(result.stdout.trim()).expect("Failed to parse");
 
-            assert_eq!(json["exit_code"].as_i64().unwrap_or(-1), 0,
-                       "Package install failed: {}", json["output"]);
+            assert_eq!(
+                json["exit_code"].as_i64().unwrap_or(-1),
+                0,
+                "Package install failed: {}",
+                json["output"]
+            );
 
             // Verify installed
-            let result = conn.execute(&check_script, None).await.expect("Verify failed");
-            let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-                .expect("Failed to parse");
-            assert!(json["installed"].as_bool().unwrap_or(false),
-                    "Package should be installed after install command");
+            let result = conn
+                .execute(&check_script, None)
+                .await
+                .expect("Verify failed");
+            let json: serde_json::Value =
+                serde_json::from_str(result.stdout.trim()).expect("Failed to parse");
+            assert!(
+                json["installed"].as_bool().unwrap_or(false),
+                "Package should be installed after install command"
+            );
 
             // Uninstall package
             let uninstall_script = format!(
@@ -626,14 +686,24 @@ $output = choco uninstall -y {} 2>&1
                 test_package
             );
 
-            let result = conn.execute(&uninstall_script, None).await.expect("Uninstall failed");
-            let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-                .expect("Failed to parse");
+            let result = conn
+                .execute(&uninstall_script, None)
+                .await
+                .expect("Uninstall failed");
+            let json: serde_json::Value =
+                serde_json::from_str(result.stdout.trim()).expect("Failed to parse");
 
-            assert_eq!(json["exit_code"].as_i64().unwrap_or(-1), 0,
-                       "Package uninstall failed: {}", json["output"]);
+            assert_eq!(
+                json["exit_code"].as_i64().unwrap_or(-1),
+                0,
+                "Package uninstall failed: {}",
+                json["output"]
+            );
         } else {
-            println!("Package {} already installed, skipping install/uninstall cycle", test_package);
+            println!(
+                "Package {} already installed, skipping install/uninstall cycle",
+                test_package
+            );
         }
     }
 
@@ -667,13 +737,18 @@ try {
 }
 "#;
 
-        let result = conn.execute(check_script, None).await.expect("Check failed");
-        let json: serde_json::Value = serde_json::from_str(result.stdout.trim())
-            .expect("Failed to parse JSON");
+        let result = conn
+            .execute(check_script, None)
+            .await
+            .expect("Check failed");
+        let json: serde_json::Value =
+            serde_json::from_str(result.stdout.trim()).expect("Failed to parse JSON");
 
         if json["installed"].as_bool().unwrap_or(false) {
-            println!("Winget {} is available",
-                     json["version"].as_str().unwrap_or("unknown"));
+            println!(
+                "Winget {} is available",
+                json["version"].as_str().unwrap_or("unknown")
+            );
         } else {
             println!("Winget is not available");
         }

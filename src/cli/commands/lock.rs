@@ -93,12 +93,14 @@ impl LockArgs {
                 LockSubcommand::Verify => self.verify_lockfile().await,
                 LockSubcommand::Clean => self.clean_lockfile().await,
                 LockSubcommand::Checkpoint { name, description } => {
-                    self.create_checkpoint(name.clone(), description.clone()).await
+                    self.create_checkpoint(name.clone(), description.clone())
+                        .await
                 }
                 LockSubcommand::ListCheckpoints => self.list_checkpoints().await,
-                LockSubcommand::Rollback { checkpoint, dry_run } => {
-                    self.rollback_to_checkpoint(checkpoint, *dry_run).await
-                }
+                LockSubcommand::Rollback {
+                    checkpoint,
+                    dry_run,
+                } => self.rollback_to_checkpoint(checkpoint, *dry_run).await,
             };
         }
 
@@ -295,9 +297,8 @@ impl LockArgs {
         let checkpoint_dir = self.get_checkpoint_dir();
         std::fs::create_dir_all(&checkpoint_dir)?;
 
-        let checkpoint_name = name.unwrap_or_else(|| {
-            format!("checkpoint-{}", Utc::now().format("%Y%m%d-%H%M%S"))
-        });
+        let checkpoint_name =
+            name.unwrap_or_else(|| format!("checkpoint-{}", Utc::now().format("%Y%m%d-%H%M%S")));
 
         let checkpoint_path = checkpoint_dir.join(format!("{}.json", checkpoint_name));
 
@@ -361,7 +362,11 @@ impl LockArgs {
         println!("Available checkpoints:");
         println!();
         for cp in checkpoints {
-            println!("  {} ({})", cp.name, cp.created_at.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "  {} ({})",
+                cp.name,
+                cp.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
             if !cp.description.is_empty() {
                 println!("    {}", cp.description);
             }
@@ -394,7 +399,10 @@ impl LockArgs {
             println!("=== Rollback Dry Run ===");
             println!();
             println!("Would rollback to checkpoint: {}", checkpoint.name);
-            println!("  Created: {}", checkpoint.created_at.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "  Created: {}",
+                checkpoint.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
             println!("  Playbook: {}", checkpoint.playbook);
             if !checkpoint.description.is_empty() {
                 println!("  Description: {}", checkpoint.description);

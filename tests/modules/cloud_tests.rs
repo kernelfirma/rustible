@@ -43,7 +43,9 @@ mod aws_ec2_tests {
     fn test_aws_ec2_instance_module_parallelization() {
         let module = Ec2InstanceModule;
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
             }
             _ => panic!("Expected RateLimited parallelization hint for AWS EC2"),
@@ -131,7 +133,9 @@ mod aws_s3_tests {
     fn test_aws_s3_module_parallelization() {
         let module = AwsS3Module::new();
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
                 assert_eq!(requests_per_second, 100); // S3 has higher rate limit
             }
@@ -239,7 +243,9 @@ mod azure_vm_tests {
     fn test_azure_vm_module_parallelization() {
         let module = AzureVmModule;
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
                 assert_eq!(requests_per_second, 20); // Azure rate limit
             }
@@ -412,7 +418,10 @@ mod azure_nic_tests {
         params.insert("name".to_string(), serde_json::json!("test-nic"));
         params.insert("resource_group".to_string(), serde_json::json!("test-rg"));
         params.insert("location".to_string(), serde_json::json!("eastus"));
-        params.insert("subnet_id".to_string(), serde_json::json!("/subscriptions/.../subnets/default"));
+        params.insert(
+            "subnet_id".to_string(),
+            serde_json::json!("/subscriptions/.../subnets/default"),
+        );
         params.insert("state".to_string(), serde_json::json!("present"));
 
         let context = ModuleContext::default().with_check_mode(true);
@@ -440,8 +449,10 @@ mod gcp_compute_instance_tests {
     fn test_gcp_compute_instance_module_description() {
         let module = GcpComputeInstanceModule;
         assert!(!module.description().is_empty());
-        assert!(module.description().to_lowercase().contains("gcp") ||
-                module.description().to_lowercase().contains("compute"));
+        assert!(
+            module.description().to_lowercase().contains("gcp")
+                || module.description().to_lowercase().contains("compute")
+        );
     }
 
     #[test]
@@ -454,7 +465,9 @@ mod gcp_compute_instance_tests {
     fn test_gcp_compute_instance_module_parallelization() {
         let module = GcpComputeInstanceModule;
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
                 assert_eq!(requests_per_second, 10); // GCP rate limit
             }
@@ -575,9 +588,12 @@ mod gcp_firewall_tests {
         params.insert("name".to_string(), serde_json::json!("allow-http"));
         params.insert("network".to_string(), serde_json::json!("default"));
         params.insert("state".to_string(), serde_json::json!("present"));
-        params.insert("allowed".to_string(), serde_json::json!([
-            {"IPProtocol": "tcp", "ports": ["80", "443"]}
-        ]));
+        params.insert(
+            "allowed".to_string(),
+            serde_json::json!([
+                {"IPProtocol": "tcp", "ports": ["80", "443"]}
+            ]),
+        );
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.execute(&params, &context);
@@ -604,8 +620,10 @@ mod gcp_network_tests {
     fn test_gcp_network_module_description() {
         let module = GcpComputeNetworkModule;
         assert!(!module.description().is_empty());
-        assert!(module.description().to_lowercase().contains("network") ||
-                module.description().to_lowercase().contains("vpc"));
+        assert!(
+            module.description().to_lowercase().contains("network")
+                || module.description().to_lowercase().contains("vpc")
+        );
     }
 
     #[test]
@@ -628,7 +646,10 @@ mod gcp_network_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test-vpc"));
         params.insert("state".to_string(), serde_json::json!("present"));
-        params.insert("auto_create_subnetworks".to_string(), serde_json::json!(true));
+        params.insert(
+            "auto_create_subnetworks".to_string(),
+            serde_json::json!(true),
+        );
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.execute(&params, &context);
@@ -668,7 +689,9 @@ mod gcp_service_account_tests {
     fn test_gcp_service_account_module_parallelization() {
         let module = GcpServiceAccountModule;
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
                 assert_eq!(requests_per_second, 5); // IAM has lower rate limit
             }
@@ -689,7 +712,10 @@ mod gcp_service_account_tests {
         let module = GcpServiceAccountModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test-sa"));
-        params.insert("display_name".to_string(), serde_json::json!("Test Service Account"));
+        params.insert(
+            "display_name".to_string(),
+            serde_json::json!("Test Service Account"),
+        );
         params.insert("state".to_string(), serde_json::json!("present"));
 
         let context = ModuleContext::default().with_check_mode(true);
@@ -718,10 +744,13 @@ mod stub_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test"));
         params.insert("state".to_string(), serde_json::json!("present"));
-        params.insert("tags".to_string(), serde_json::json!({
-            "Environment": "test",
-            "Team": "dev"
-        }));
+        params.insert(
+            "tags".to_string(),
+            serde_json::json!({
+                "Environment": "test",
+                "Team": "dev"
+            }),
+        );
 
         assert!(params.contains_key("name"));
         assert!(params.contains_key("state"));
@@ -755,7 +784,14 @@ mod stub_tests {
     #[test]
     fn test_azure_specific_states() {
         // Azure VM states
-        let vm_states = vec!["present", "absent", "running", "stopped", "deallocated", "restarted"];
+        let vm_states = vec![
+            "present",
+            "absent",
+            "running",
+            "stopped",
+            "deallocated",
+            "restarted",
+        ];
         for state in vm_states {
             assert!(!state.is_empty());
         }

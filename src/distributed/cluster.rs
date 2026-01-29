@@ -7,7 +7,7 @@
 
 use super::raft::{HeartbeatRequest, HeartbeatResponse, VoteRequest, VoteResponse};
 use super::types::{
-    ClusterConfig, ControllerId, ControllerHealth, ControllerInfo, WorkUnit, WorkUnitId,
+    ClusterConfig, ControllerHealth, ControllerId, ControllerInfo, WorkUnit, WorkUnitId,
     WorkUnitState,
 };
 use std::collections::HashMap;
@@ -274,7 +274,7 @@ impl ClusterManager {
 
         ClusterState {
             controllers: peer_info.clone(),
-            leader: None, // TODO: Get from Raft state
+            leader: None,                              // TODO: Get from Raft state
             healthy: healthy_count + 1 >= quorum_size, // +1 for self
             total_capacity,
             total_load: 0, // TODO: Aggregate from peer load reports

@@ -125,10 +125,9 @@ impl VaultLookup {
             SecretValue::String(s) => s.clone(),
             SecretValue::Integer(i) => i.to_string(),
             SecretValue::Boolean(b) => b.to_string(),
-            SecretValue::Binary(b) => base64::Engine::encode(
-                &base64::engine::general_purpose::STANDARD,
-                b,
-            ),
+            SecretValue::Binary(b) => {
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b)
+            }
             SecretValue::Null => String::new(),
         }
     }

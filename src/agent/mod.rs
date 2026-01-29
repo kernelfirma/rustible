@@ -350,8 +350,7 @@ impl AgentBuilder {
         }
 
         if !self.config.features.is_empty() {
-            cmd.arg("--features")
-                .arg(self.config.features.join(","));
+            cmd.arg("--features").arg(self.config.features.join(","));
         }
 
         let output = cmd.output()?;
@@ -362,7 +361,11 @@ impl AgentBuilder {
         }
 
         // Determine binary path
-        let profile = if self.config.release { "release" } else { "debug" };
+        let profile = if self.config.release {
+            "release"
+        } else {
+            "debug"
+        };
         let binary_name = if cfg!(target_os = "windows") {
             "rustible-agent.exe"
         } else {
@@ -373,10 +376,10 @@ impl AgentBuilder {
             .join(profile)
             .join(binary_name);
 
-        let dest_path = self.config.output_dir.join(format!(
-            "rustible-agent-{}",
-            self.config.target
-        ));
+        let dest_path = self
+            .config
+            .output_dir
+            .join(format!("rustible-agent-{}", self.config.target));
 
         std::fs::copy(&src_path, &dest_path)?;
 
@@ -483,9 +486,9 @@ impl AgentRuntime {
             cmd.env(key, value);
         }
 
-        let output = cmd.output().map_err(|e| {
-            AgentError::ExecutionFailed(format!("Failed to execute: {}", e))
-        })?;
+        let output = cmd
+            .output()
+            .map_err(|e| AgentError::ExecutionFailed(format!("Failed to execute: {}", e)))?;
 
         Ok(ExecuteResult {
             exit_code: output.status.code().unwrap_or(-1),
@@ -561,9 +564,10 @@ impl AgentClient {
         let request = AgentRequest {
             id: uuid::Uuid::new_v4().to_string(),
             method: AgentMethod::Execute,
-            params: Some(serde_json::to_value(&params).map_err(|e| {
-                AgentError::Serialization(e.to_string())
-            })?),
+            params: Some(
+                serde_json::to_value(&params)
+                    .map_err(|e| AgentError::Serialization(e.to_string()))?,
+            ),
         };
 
         self.send_request(request).await

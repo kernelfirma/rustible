@@ -3,6 +3,9 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+pub mod fs;
+pub use fs::secure_write_file;
+
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;

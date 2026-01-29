@@ -54,14 +54,18 @@ fn test_boolean_coercion_true_false_strings() {
     // Case-insensitive true
     for val in ["true", "True", "TRUE"] {
         let template = format!("{{{{ '{}' | bool }}}}", val);
-        let result = engine.evaluate_condition(&template, &vars_from_json(json!({}))).unwrap();
+        let result = engine
+            .evaluate_condition(&template, &vars_from_json(json!({})))
+            .unwrap();
         assert!(result, "'{}' should be truthy", val);
     }
 
     // Case-insensitive false
     for val in ["false", "False", "FALSE"] {
         let template = format!("{{{{ '{}' | bool }}}}", val);
-        let result = engine.evaluate_condition(&template, &vars_from_json(json!({}))).unwrap();
+        let result = engine
+            .evaluate_condition(&template, &vars_from_json(json!({})))
+            .unwrap();
         assert!(!result, "'{}' should be falsy", val);
     }
 }
@@ -235,12 +239,8 @@ fn test_block_with_null_rescue_always() {
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].block.len(), 1);
     // Null should be treated as empty/None
-    assert!(
-        tasks[0].rescue.is_none() || tasks[0].rescue.as_ref().unwrap().is_empty()
-    );
-    assert!(
-        tasks[0].always.is_none() || tasks[0].always.as_ref().unwrap().is_empty()
-    );
+    assert!(tasks[0].rescue.is_none() || tasks[0].rescue.as_ref().unwrap().is_empty());
+    assert!(tasks[0].always.is_none() || tasks[0].always.as_ref().unwrap().is_empty());
 }
 
 #[test]
@@ -416,10 +416,7 @@ fn test_undefined_variable_default() {
     let engine = TemplateEngine::new();
 
     let result = engine
-        .render_with_json(
-            "{{ undefined_var | default('fallback') }}",
-            &json!({}),
-        )
+        .render_with_json("{{ undefined_var | default('fallback') }}", &json!({}))
         .unwrap();
     assert_eq!(result, "fallback");
 }

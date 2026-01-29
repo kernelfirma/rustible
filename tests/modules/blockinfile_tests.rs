@@ -171,7 +171,10 @@ fn test_blockinfile_update_existing() {
 
     assert!(result.changed, "Should report changed when updating block");
     let content = fs::read_to_string(&path).unwrap();
-    assert!(content.contains("new content"), "New content should be present");
+    assert!(
+        content.contains("new content"),
+        "New content should be present"
+    );
     assert!(
         !content.contains("old content"),
         "Old content should be replaced"
@@ -235,7 +238,10 @@ fn test_blockinfile_remove() {
 
     assert!(result.changed, "Should report changed when removing block");
     let content = fs::read_to_string(&path).unwrap();
-    assert!(!content.contains("block content"), "Block should be removed");
+    assert!(
+        !content.contains("block content"),
+        "Block should be removed"
+    );
     assert!(
         !content.contains("BEGIN ANSIBLE MANAGED BLOCK"),
         "Markers should be removed"
@@ -401,7 +407,10 @@ fn test_blockinfile_no_create() {
 
     let result = module.execute(&params, &context);
 
-    assert!(result.is_err(), "Should fail when file doesn't exist and create=false");
+    assert!(
+        result.is_err(),
+        "Should fail when file doesn't exist and create=false"
+    );
 }
 
 // ============================================================================
@@ -489,7 +498,10 @@ fn test_blockinfile_preserves_file_structure() {
     let module = BlockinfileModule;
     let mut params = with_path(create_params(), path.to_str().unwrap());
     params = with_block(params, "added=content");
-    params.insert("insertafter".to_string(), serde_json::json!(r"\[section1\]"));
+    params.insert(
+        "insertafter".to_string(),
+        serde_json::json!(r"\[section1\]"),
+    );
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context).unwrap();

@@ -8,9 +8,9 @@ pub mod explain;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
+pub mod provider;
 pub mod provision;
 pub mod provisioner;
-pub mod provider;
 pub mod run;
 pub mod vault;
 

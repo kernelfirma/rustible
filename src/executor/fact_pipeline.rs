@@ -504,11 +504,9 @@ impl AsyncFactGatherer for ConnectionFactGatherer {
         };
 
         // Delegate to the facts module's connection-based gathering
-        let facts_map = crate::modules::facts::gather_facts_via_connection(
-            &self.connection,
-            effective_subset,
-        )
-        .await;
+        let facts_map =
+            crate::modules::facts::gather_facts_via_connection(&self.connection, effective_subset)
+                .await;
 
         // Convert HashMap to IndexMap
         let facts: IndexMap<String, JsonValue> = facts_map.into_iter().collect();
@@ -721,8 +719,7 @@ mod tests {
         let connection: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::default());
 
         // Create the gatherer with specific subset
-        let gatherer =
-            ConnectionFactGatherer::with_subset(connection, vec!["network".to_string()]);
+        let gatherer = ConnectionFactGatherer::with_subset(connection, vec!["network".to_string()]);
 
         // Create pipeline
         let config = FactPipelineConfig {

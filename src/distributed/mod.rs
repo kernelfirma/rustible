@@ -60,21 +60,21 @@ pub use distribution::{
     AffinityAssigner, AssignmentStrategy, CapacityAwareAssigner, LoadBalancer, RoundRobinAssigner,
     WorkAssigner, WorkQueue,
 };
-pub use raft::{RaftError, RaftEvent, RaftNode, RaftState};
-pub use recovery::{
-    CachedTaskResult, CheckpointManager, ExecutionState, ExecutionTracker, IdempotencyKey,
-    IdempotencyTracker, LeaderRecovery, PartitionDetector, PartitionState, RecoveryAction,
-};
 pub use observability::{
     ClusterStatusResponse, ComponentHealth, ControllerStatusInfo, HealthResponse, HealthStatus,
     LiveResponse, LoadMetrics, MetricValue, MetricsResponse, ObservabilityCollector,
     PrometheusMetric, ReadyResponse, WorkUnitInfo, WorkUnitStats, WorkUnitStatusResponse,
 };
+pub use raft::{RaftError, RaftEvent, RaftNode, RaftState};
+pub use recovery::{
+    CachedTaskResult, CheckpointManager, ExecutionState, ExecutionTracker, IdempotencyKey,
+    IdempotencyTracker, LeaderRecovery, PartitionDetector, PartitionState, RecoveryAction,
+};
 pub use state::{
-    ConsistencyLevel, DistributedStateStore, FactsStore, HLC, LWWEntry, LWWMap, SyncRequest,
-    SyncResponse,
+    ConsistencyLevel, DistributedStateStore, FactsStore, LWWEntry, LWWMap, SyncRequest,
+    SyncResponse, HLC,
 };
 pub use types::{
-    ClusterConfig, ControllerId, ControllerHealth, ControllerInfo, ControllerLoad, ControllerRole,
+    ClusterConfig, ControllerHealth, ControllerId, ControllerInfo, ControllerLoad, ControllerRole,
     Heartbeat, HostId, RunId, TaskSpec, WorkUnit, WorkUnitCheckpoint, WorkUnitId, WorkUnitState,
 };

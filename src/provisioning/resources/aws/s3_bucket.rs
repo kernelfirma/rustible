@@ -246,7 +246,10 @@ impl AwsS3BucketResource {
             Ok(_) => Ok(true),
             Err(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("404") || err_str.contains("NoSuchBucket") || err_str.contains("NotFound") {
+                if err_str.contains("404")
+                    || err_str.contains("NoSuchBucket")
+                    || err_str.contains("NotFound")
+                {
                     Ok(false)
                 } else if err_str.contains("403") || err_str.contains("Forbidden") {
                     // Bucket exists but we don't have access
@@ -287,7 +290,8 @@ impl AwsS3BucketResource {
 
         // Get versioning status
         if let Ok(versioning) = client.get_bucket_versioning().bucket(bucket).send().await {
-            state.versioning_enabled = versioning.status() == Some(&BucketVersioningStatus::Enabled);
+            state.versioning_enabled =
+                versioning.status() == Some(&BucketVersioningStatus::Enabled);
         }
 
         // Get encryption configuration
@@ -304,7 +308,9 @@ impl AwsS3BucketResource {
         // Get tags
         if let Ok(tagging) = client.get_bucket_tagging().bucket(bucket).send().await {
             for tag in tagging.tag_set() {
-                state.tags.insert(tag.key().to_string(), tag.value().to_string());
+                state
+                    .tags
+                    .insert(tag.key().to_string(), tag.value().to_string());
             }
         }
 
@@ -772,11 +778,20 @@ impl Resource for AwsS3BucketResource {
 
                 // Check for deletions
                 let computed_fields = [
-                    "id", "arn", "bucket_domain_name", "bucket_regional_domain_name",
-                    "hosted_zone_id", "region", "website_endpoint", "website_domain",
+                    "id",
+                    "arn",
+                    "bucket_domain_name",
+                    "bucket_regional_domain_name",
+                    "hosted_zone_id",
+                    "region",
+                    "website_endpoint",
+                    "website_domain",
                 ];
                 for key in current_obj.keys() {
-                    if !desired_obj.contains_key(key) && !key.starts_with('_') && !computed_fields.contains(&key.as_str()) {
+                    if !desired_obj.contains_key(key)
+                        && !key.starts_with('_')
+                        && !computed_fields.contains(&key.as_str())
+                    {
                         diff.deletions.push(key.clone());
                     }
                 }
@@ -824,7 +839,8 @@ impl Resource for AwsS3BucketResource {
 
         // Set ACL if specified
         if let Some(ref acl) = bucket_config.acl {
-            create_bucket = create_bucket.acl(aws_sdk_s3::types::BucketCannedAcl::from(acl.as_str()));
+            create_bucket =
+                create_bucket.acl(aws_sdk_s3::types::BucketCannedAcl::from(acl.as_str()));
         }
 
         // Set object lock if enabled
@@ -867,8 +883,8 @@ impl Resource for AwsS3BucketResource {
                 _ => ServerSideEncryption::Aes256,
             };
 
-            let mut default_builder = ServerSideEncryptionByDefault::builder()
-                .sse_algorithm(algorithm);
+            let mut default_builder =
+                ServerSideEncryptionByDefault::builder().sse_algorithm(algorithm);
 
             if let Some(ref kms_key) = sse.kms_master_key_id {
                 default_builder = default_builder.kms_master_key_id(kms_key);
@@ -901,8 +917,8 @@ impl Resource for AwsS3BucketResource {
 
         // Configure logging if specified
         if let Some(ref logging) = bucket_config.logging {
-            let mut logging_config = aws_sdk_s3::types::LoggingEnabled::builder()
-                .target_bucket(&logging.target_bucket);
+            let mut logging_config =
+                aws_sdk_s3::types::LoggingEnabled::builder().target_bucket(&logging.target_bucket);
 
             if let Some(ref prefix) = logging.target_prefix {
                 logging_config = logging_config.target_prefix(prefix);
@@ -1001,8 +1017,14 @@ impl Resource for AwsS3BucketResource {
         Ok(ResourceResult::success(&bucket_config.bucket, attributes)
             .with_output("id", Value::String(state.id.clone()))
             .with_output("arn", Value::String(state.arn.clone()))
-            .with_output("bucket_domain_name", Value::String(state.bucket_domain_name.clone()))
-            .with_output("bucket_regional_domain_name", Value::String(state.bucket_regional_domain_name.clone())))
+            .with_output(
+                "bucket_domain_name",
+                Value::String(state.bucket_domain_name.clone()),
+            )
+            .with_output(
+                "bucket_regional_domain_name",
+                Value::String(state.bucket_regional_domain_name.clone()),
+            ))
     }
 
     async fn update(
@@ -1050,8 +1072,8 @@ impl Resource for AwsS3BucketResource {
                 _ => ServerSideEncryption::Aes256,
             };
 
-            let mut default_builder = ServerSideEncryptionByDefault::builder()
-                .sse_algorithm(algorithm);
+            let mut default_builder =
+                ServerSideEncryptionByDefault::builder().sse_algorithm(algorithm);
 
             if let Some(ref kms_key) = sse.kms_master_key_id {
                 default_builder = default_builder.kms_master_key_id(kms_key);
@@ -1149,13 +1171,14 @@ impl Resource for AwsS3BucketResource {
         let client = self.create_client(ctx).await?;
         let region = ctx.region.as_deref().unwrap_or("us-east-1");
 
-        let state = self.get_bucket_state(&client, id, region).await?.ok_or_else(|| {
-            ProvisioningError::ImportError {
+        let state = self
+            .get_bucket_state(&client, id, region)
+            .await?
+            .ok_or_else(|| ProvisioningError::ImportError {
                 resource_type: "aws_s3_bucket".to_string(),
                 resource_id: id.to_string(),
                 message: "Bucket not found".to_string(),
-            }
-        })?;
+            })?;
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
             ProvisioningError::SerializationError(format!("Failed to serialize attributes: {}", e))
@@ -1187,10 +1210,7 @@ impl Resource for AwsS3BucketResource {
     }
 
     fn forces_replacement(&self) -> Vec<String> {
-        vec![
-            "bucket".to_string(),
-            "object_lock_enabled".to_string(),
-        ]
+        vec!["bucket".to_string(), "object_lock_enabled".to_string()]
     }
 
     fn validate(&self, config: &Value) -> ProvisioningResult<()> {
@@ -1214,14 +1234,23 @@ impl Resource for AwsS3BucketResource {
             }
 
             // Check valid characters
-            if !bucket.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-') {
+            if !bucket
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+            {
                 return Err(ProvisioningError::ValidationError(
-                    "bucket name can only contain lowercase letters, numbers, hyphens, and periods".to_string(),
+                    "bucket name can only contain lowercase letters, numbers, hyphens, and periods"
+                        .to_string(),
                 ));
             }
 
             // Must start with letter or number
-            if !bucket.chars().next().map(|c| c.is_ascii_lowercase() || c.is_ascii_digit()).unwrap_or(false) {
+            if !bucket
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                .unwrap_or(false)
+            {
                 return Err(ProvisioningError::ValidationError(
                     "bucket name must start with a lowercase letter or number".to_string(),
                 ));
@@ -1238,8 +1267,14 @@ impl Resource for AwsS3BucketResource {
         // Validate ACL if specified
         if let Some(acl) = obj.get("acl").and_then(|v| v.as_str()) {
             let valid_acls = [
-                "private", "public-read", "public-read-write", "authenticated-read",
-                "aws-exec-read", "bucket-owner-read", "bucket-owner-full-control", "log-delivery-write",
+                "private",
+                "public-read",
+                "public-read-write",
+                "authenticated-read",
+                "aws-exec-read",
+                "bucket-owner-read",
+                "bucket-owner-full-control",
+                "log-delivery-write",
             ];
             if !valid_acls.contains(&acl) {
                 return Err(ProvisioningError::ValidationError(format!(
@@ -1264,7 +1299,10 @@ impl Resource for AwsS3BucketResource {
 
                 // KMS key required for aws:kms
                 if (algorithm == "aws:kms" || algorithm == "aws:kms:dsse")
-                    && !sse.get("kms_master_key_id").map(|v| v.is_string()).unwrap_or(false)
+                    && !sse
+                        .get("kms_master_key_id")
+                        .map(|v| v.is_string())
+                        .unwrap_or(false)
                 {
                     // KMS key is optional - AWS will use default key if not specified
                 }
@@ -1446,8 +1484,14 @@ mod tests {
         assert_eq!(bucket_config.acl, Some("private".to_string()));
         assert!(bucket_config.force_destroy);
         assert!(bucket_config.versioning.unwrap().enabled);
-        assert_eq!(bucket_config.server_side_encryption.unwrap().sse_algorithm, "AES256");
-        assert_eq!(bucket_config.tags.get("Name"), Some(&"my-bucket".to_string()));
+        assert_eq!(
+            bucket_config.server_side_encryption.unwrap().sse_algorithm,
+            "AES256"
+        );
+        assert_eq!(
+            bucket_config.tags.get("Name"),
+            Some(&"my-bucket".to_string())
+        );
     }
 
     #[test]
@@ -1491,7 +1535,10 @@ mod tests {
 
         assert_eq!(resource.get_hosted_zone_id("us-east-1"), "Z3AQBSTGFYJSTF");
         assert_eq!(resource.get_hosted_zone_id("eu-west-1"), "Z1BKCTXD74EZPE");
-        assert_eq!(resource.get_hosted_zone_id("ap-northeast-1"), "Z2M4EHUR26P7ZW");
+        assert_eq!(
+            resource.get_hosted_zone_id("ap-northeast-1"),
+            "Z2M4EHUR26P7ZW"
+        );
     }
 
     #[test]

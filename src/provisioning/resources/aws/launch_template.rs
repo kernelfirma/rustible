@@ -33,8 +33,8 @@ use aws_config::BehaviorVersion;
 use aws_sdk_ec2::types::{
     LaunchTemplateBlockDeviceMappingRequest, LaunchTemplateEbsBlockDeviceRequest,
     LaunchTemplateIamInstanceProfileSpecificationRequest,
-    LaunchTemplateInstanceNetworkInterfaceSpecificationRequest,
-    LaunchTemplateInstanceMarketOptionsRequest, LaunchTemplatePlacementRequest,
+    LaunchTemplateInstanceMarketOptionsRequest,
+    LaunchTemplateInstanceNetworkInterfaceSpecificationRequest, LaunchTemplatePlacementRequest,
     LaunchTemplateTagSpecificationRequest, MarketType, RequestLaunchTemplateData, ResourceType,
     SpotInstanceType, Tag, TagSpecification,
 };
@@ -485,9 +485,10 @@ impl AwsLaunchTemplateResource {
 
         // Network interfaces
         for ni in &config.network_interfaces {
-            let mut ni_builder = LaunchTemplateInstanceNetworkInterfaceSpecificationRequest::builder()
-                .device_index(ni.device_index)
-                .delete_on_termination(ni.delete_on_termination);
+            let mut ni_builder =
+                LaunchTemplateInstanceNetworkInterfaceSpecificationRequest::builder()
+                    .device_index(ni.device_index)
+                    .delete_on_termination(ni.delete_on_termination);
 
             if let Some(associate_public) = ni.associate_public_ip_address {
                 ni_builder = ni_builder.associate_public_ip_address(associate_public);
@@ -932,7 +933,15 @@ impl Resource for AwsLaunchTemplateResource {
             .clone()
             .or_else(|| {
                 lt_config.name_prefix.as_ref().map(|prefix| {
-                    format!("{}{}", prefix, uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or(""))
+                    format!(
+                        "{}{}",
+                        prefix,
+                        uuid::Uuid::new_v4()
+                            .to_string()
+                            .split('-')
+                            .next()
+                            .unwrap_or("")
+                    )
                 })
             })
             .ok_or_else(|| {
@@ -988,7 +997,10 @@ impl Resource for AwsLaunchTemplateResource {
         let template_id = lt.launch_template_id().unwrap_or_default().to_string();
         let region = ctx.region.as_deref().unwrap_or("us-east-1");
 
-        info!("Created launch template: {} ({})", template_name, template_id);
+        info!(
+            "Created launch template: {} ({})",
+            template_name, template_id
+        );
 
         let state = LaunchTemplateState {
             id: template_id.clone(),
@@ -1006,7 +1018,10 @@ impl Resource for AwsLaunchTemplateResource {
         Ok(ResourceResult::success(&template_id, attributes)
             .with_output("id", Value::String(state.id.clone()))
             .with_output("arn", Value::String(state.arn.clone()))
-            .with_output("default_version", Value::Number(state.default_version.into()))
+            .with_output(
+                "default_version",
+                Value::Number(state.default_version.into()),
+            )
             .with_output("latest_version", Value::Number(state.latest_version.into())))
     }
 
@@ -1036,9 +1051,12 @@ impl Resource for AwsLaunchTemplateResource {
         }
 
         // Source version (use latest)
-        let current_state = self.describe_launch_template(&client, id).await?.ok_or_else(|| {
-            ProvisioningError::CloudApiError("Launch template not found".to_string())
-        })?;
+        let current_state = self
+            .describe_launch_template(&client, id)
+            .await?
+            .ok_or_else(|| {
+                ProvisioningError::CloudApiError("Launch template not found".to_string())
+            })?;
         create_version = create_version.source_version(current_state.latest_version.to_string());
 
         let version_resp = create_version.send().await.map_err(|e| {
@@ -1219,7 +1237,8 @@ impl Resource for AwsLaunchTemplateResource {
         // Validate AMI format if provided
         if let Some(image_id) = obj.get("image_id").and_then(|v| v.as_str()) {
             // Skip validation if it's a reference
-            if !image_id.contains("${") && !image_id.contains("{{") && !image_id.starts_with("ami-") {
+            if !image_id.contains("${") && !image_id.contains("{{") && !image_id.starts_with("ami-")
+            {
                 return Err(ProvisioningError::ValidationError(format!(
                     "Invalid image_id format: {}. Must start with 'ami-'",
                     image_id
@@ -1350,12 +1369,18 @@ mod tests {
         let lt_config = LaunchTemplateConfig::from_value(&config).unwrap();
 
         assert_eq!(lt_config.name, Some("web-template".to_string()));
-        assert_eq!(lt_config.description, Some("Web server template".to_string()));
+        assert_eq!(
+            lt_config.description,
+            Some("Web server template".to_string())
+        );
         assert_eq!(lt_config.image_id, Some("ami-12345678".to_string()));
         assert_eq!(lt_config.instance_type, Some("t3.micro".to_string()));
         assert_eq!(lt_config.ebs_optimized, Some(true));
         assert_eq!(lt_config.monitoring, Some(true));
-        assert_eq!(lt_config.tags.get("Name"), Some(&"web-template".to_string()));
+        assert_eq!(
+            lt_config.tags.get("Name"),
+            Some(&"web-template".to_string())
+        );
     }
 
     #[test]

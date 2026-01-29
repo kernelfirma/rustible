@@ -622,9 +622,7 @@ fn test_condition_null_handling() {
     let engine = TemplateEngine::new();
 
     let vars = vars_from_json(json!({"myvar": null}));
-    let result = engine
-        .evaluate_condition("myvar is none", &vars)
-        .unwrap();
+    let result = engine.evaluate_condition("myvar is none", &vars).unwrap();
     assert!(result);
 
     let vars = vars_from_json(json!({"myvar": "value"}));

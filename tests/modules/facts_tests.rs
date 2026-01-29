@@ -11,10 +11,7 @@ fn create_params() -> ModuleParams {
 }
 
 fn with_gather_subset(mut params: ModuleParams, subset: Vec<&str>) -> ModuleParams {
-    let subset_json: Vec<serde_json::Value> = subset
-        .iter()
-        .map(|s| serde_json::json!(s))
-        .collect();
+    let subset_json: Vec<serde_json::Value> = subset.iter().map(|s| serde_json::json!(s)).collect();
     params.insert("gather_subset".to_string(), serde_json::json!(subset_json));
     params
 }
@@ -30,7 +27,8 @@ fn test_facts_module_name() {
     let name = module.name();
     assert!(
         name == "facts" || name == "setup" || name == "gather_facts",
-        "Module name should be facts-related, got: {}", name
+        "Module name should be facts-related, got: {}",
+        name
     );
 }
 
@@ -53,8 +51,8 @@ fn test_facts_module_classification() {
     let classification = module.classification();
     assert!(
         classification == ModuleClassification::LocalLogic
-        || classification == ModuleClassification::NativeTransport
-        || classification == ModuleClassification::RemoteCommand,
+            || classification == ModuleClassification::NativeTransport
+            || classification == ModuleClassification::RemoteCommand,
         "Facts module should have a valid classification"
     );
 }
@@ -64,7 +62,10 @@ fn test_facts_required_params() {
     let module = FactsModule;
     let required = module.required_params();
     // Facts module typically has no required params
-    assert!(required.is_empty(), "Facts module should have no required params");
+    assert!(
+        required.is_empty(),
+        "Facts module should have no required params"
+    );
 }
 
 // ============================================================================
@@ -122,7 +123,11 @@ fn test_facts_gather_basic() {
     let result = module.execute(&params, &context);
 
     // Facts gathering should succeed
-    assert!(result.is_ok(), "Facts gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Facts gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
