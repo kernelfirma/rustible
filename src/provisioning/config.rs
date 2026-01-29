@@ -46,6 +46,12 @@ pub enum ReferenceType {
     },
     /// Local value reference: `locals.NAME`
     Local { name: String },
+    /// Self-reference in provisioner context: `self.ATTR`
+    SelfAttribute { attribute: String },
+    /// Path reference: `path.module`, `path.root`, `path.cwd`
+    Path { path_type: String },
+    /// Terraform reference: `terraform.workspace`
+    Terraform { attribute: String },
 }
 
 // ============================================================================
@@ -394,6 +400,20 @@ impl InfrastructureConfig {
 
     /// Parse a reference expression into a ReferenceType
     fn parse_reference(&self, expr: &str) -> Option<ReferenceType> {
+        self.parse_reference_type(expr)
+    }
+
+    /// Parse a reference expression into a ReferenceType (public API)
+    ///
+    /// Supports:
+    /// - `resources.TYPE.NAME.attr`
+    /// - `variables.NAME`
+    /// - `data.TYPE.NAME.attr`
+    /// - `locals.NAME`
+    /// - `self.attr`
+    /// - `path.module`, `path.root`, `path.cwd`
+    /// - `terraform.workspace`
+    pub fn parse_reference_type(&self, expr: &str) -> Option<ReferenceType> {
         let parts: Vec<&str> = expr.split('.').collect();
 
         if parts.is_empty() {
@@ -435,6 +455,25 @@ impl InfrastructureConfig {
             "locals" if parts.len() >= 2 => Some(ReferenceType::Local {
                 name: parts[1..].join("."),
             }),
+            "self" if parts.len() >= 2 => Some(ReferenceType::SelfAttribute {
+                attribute: parts[1..].join("."),
+            }),
+            "path" if parts.len() >= 2 => {
+                let path_type = parts[1].to_string();
+                if ["module", "root", "cwd"].contains(&path_type.as_str()) {
+                    Some(ReferenceType::Path { path_type })
+                } else {
+                    None
+                }
+            }
+            "terraform" if parts.len() >= 2 => {
+                let attribute = parts[1].to_string();
+                if attribute == "workspace" {
+                    Some(ReferenceType::Terraform { attribute })
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -611,6 +650,10 @@ impl InfrastructureConfig {
                                 ));
                             }
                         }
+                        // self.*, path.*, terraform.* are resolved at runtime, no validation needed
+                        ReferenceType::SelfAttribute { .. }
+                        | ReferenceType::Path { .. }
+                        | ReferenceType::Terraform { .. } => {}
                     }
                 }
             }
@@ -665,6 +708,10 @@ impl InfrastructureConfig {
                             ));
                         }
                     }
+                    // self.*, path.*, terraform.* are resolved at runtime, no validation needed
+                    ReferenceType::SelfAttribute { .. }
+                    | ReferenceType::Path { .. }
+                    | ReferenceType::Terraform { .. } => {}
                 }
             }
         }
