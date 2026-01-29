@@ -41,9 +41,45 @@ mod feature_flag_tests {
 
     fn feature_list_contains(feature_value: &TomlValue, name: &str) -> bool {
         match feature_value {
-            TomlValue::Array(items) => items.iter().any(|item| item.as_str() == Some(name)),
+            TomlValue::Array(items) => items.iter().any(|item| {
+                item.as_str()
+                    .filter(|value| !value.starts_with("dep:"))
+                    .map(|value| value == name)
+                    .unwrap_or(false)
+            }),
             _ => false,
         }
+    }
+
+    fn resolve_feature_dependencies(
+        features: &toml::value::Table,
+        root: &str,
+    ) -> HashSet<String> {
+        let mut resolved = HashSet::new();
+        let mut stack = vec![root.to_string()];
+
+        while let Some(feature) = stack.pop() {
+            let Some(value) = features.get(&feature) else {
+                continue;
+            };
+            let TomlValue::Array(items) = value else {
+                continue;
+            };
+
+            for item in items {
+                let Some(entry) = item.as_str() else {
+                    continue;
+                };
+                if entry.starts_with("dep:") {
+                    continue;
+                }
+                if resolved.insert(entry.to_string()) && features.contains_key(entry) {
+                    stack.push(entry.to_string());
+                }
+            }
+        }
+
+        resolved
     }
 
     /// Extract documented feature flags from compatibility matrix
@@ -175,16 +211,21 @@ mod feature_flag_tests {
 
         // Check that 'full' includes expected features
         if let Some(full) = features.get("full") {
+            let resolved = resolve_feature_dependencies(&features, "full");
             assert!(
-                feature_list_contains(full, "russh") || feature_list_contains(full, "ssh2-backend"),
+                feature_list_contains(full, "russh")
+                    || feature_list_contains(full, "ssh2-backend")
+                    || resolved.contains("russh")
+                    || resolved.contains("ssh2-backend"),
                 "full feature should include SSH backend"
             );
         }
 
         // Check that 'full-cloud' includes cloud providers
         if let Some(full_cloud) = features.get("full-cloud") {
+            let resolved = resolve_feature_dependencies(&features, "full-cloud");
             assert!(
-                feature_list_contains(full_cloud, "aws"),
+                feature_list_contains(full_cloud, "aws") || resolved.contains("aws"),
                 "full-cloud feature should include aws"
             );
         }
