@@ -469,15 +469,14 @@ pub mod modules;
 // Templating and Variables
 // ============================================================================
 
-
-/// Jinja2-compatible template filters and extensions.
-pub mod templating;
 /// Jinja2-compatible template engine powered by minijinja.
 ///
 /// This module provides template rendering for files and strings using
 /// a syntax compatible with Ansible's Jinja2 templates. Supports filters,
 /// tests, and custom extensions.
 pub mod template;
+/// Jinja2-compatible template filters and extensions.
+pub mod templating;
 
 // ============================================================================
 // Plugins and Lookups

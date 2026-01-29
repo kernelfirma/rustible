@@ -3,10 +3,10 @@
 //! This module provides comprehensive drift detection capabilities to identify
 //! when actual system state diverges from desired configuration state.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Drift detection configuration
 #[derive(Debug, Clone)]
@@ -63,10 +63,7 @@ impl DriftConfig {
             check_services: true,
             check_users: false,
             check_permissions: false,
-            ignore_patterns: vec![
-                "/var/log/*".to_string(),
-                "/tmp/*".to_string(),
-            ],
+            ignore_patterns: vec!["/var/log/*".to_string(), "/tmp/*".to_string()],
         }
     }
 }
@@ -142,7 +139,7 @@ impl DriftItem {
         actual: serde_json::Value,
     ) -> Self {
         let id = format!("{}-{}", host.into(), uuid::Uuid::new_v4());
-        
+
         Self {
             id,
             host: host.into(),
@@ -257,7 +254,7 @@ impl HostDriftReport {
         if self.low_count > 0 {
             parts.push(format!("{} low", self.low_count));
         }
-        
+
         if parts.is_empty() {
             "No drift detected".to_string()
         } else {
@@ -303,12 +300,12 @@ impl DriftReport {
             self.hosts_with_drift += 1;
         }
         self.total_drifts += host_report.total_count;
-        
+
         self.summary.critical += host_report.critical_count;
         self.summary.high += host_report.high_count;
         self.summary.medium += host_report.medium_count;
         self.summary.low += host_report.low_count;
-        
+
         self.hosts.push(host_report);
     }
 
@@ -323,13 +320,16 @@ impl DriftReport {
             "Drift Report - {}\n",
             self.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
         );
-        output.push_str(&format!("Hosts checked: {}/{}\n", self.hosts_with_drift, self.total_hosts));
+        output.push_str(&format!(
+            "Hosts checked: {}/{}\n",
+            self.hosts_with_drift, self.total_hosts
+        ));
         output.push_str(&format!("Total drifts: {}\n", self.total_drifts));
         output.push_str(&format!("  Critical: {}\n", self.summary.critical));
         output.push_str(&format!("  High: {}\n", self.summary.high));
         output.push_str(&format!("  Medium: {}\n", self.summary.medium));
         output.push_str(&format!("  Low: {}\n", self.summary.low));
-        
+
         output
     }
 }
@@ -487,12 +487,14 @@ mod tests {
     fn test_drift_item() {
         let drift = DriftItem::new(
             "test-host",
-            DriftType::FileContent { path: "/etc/hosts".to_string() },
+            DriftType::FileContent {
+                path: "/etc/hosts".to_string(),
+            },
             DriftSeverity::Critical,
             serde_json::json!("expected"),
             serde_json::json!("actual"),
         );
-        
+
         assert_eq!(drift.host, "test-host");
         assert!(drift.is_new());
     }
@@ -501,15 +503,17 @@ mod tests {
     fn test_host_drift_report() {
         let mut report = HostDriftReport::new("test-host");
         assert!(!report.has_drift());
-        
+
         let drift = DriftItem::new(
             "test-host",
-            DriftType::PackageVersion { name: "nginx".to_string() },
+            DriftType::PackageVersion {
+                name: "nginx".to_string(),
+            },
             DriftSeverity::High,
             serde_json::json!("1.18.0"),
             serde_json::json!("1.19.0"),
         );
-        
+
         report.add_drift(drift);
         assert!(report.has_drift());
         assert_eq!(report.high_count, 1);
@@ -519,17 +523,19 @@ mod tests {
     fn test_drift_report() {
         let mut report = DriftReport::new();
         assert!(!report.has_drift());
-        
+
         let mut host_report = HostDriftReport::new("host1");
         let drift = DriftItem::new(
             "host1",
-            DriftType::ServiceStatus { name: "nginx".to_string() },
+            DriftType::ServiceStatus {
+                name: "nginx".to_string(),
+            },
             DriftSeverity::Medium,
             serde_json::json!("running"),
             serde_json::json!("stopped"),
         );
         host_report.add_drift(drift);
-        
+
         report.add_host_report(host_report);
         assert!(report.has_drift());
     }

@@ -292,9 +292,7 @@ impl AwsLoadBalancerResource {
             .resource_arns(arn)
             .send()
             .await
-            .map_err(|e| {
-                ProvisioningError::CloudApiError(format!("Failed to get tags: {}", e))
-            })?;
+            .map_err(|e| ProvisioningError::CloudApiError(format!("Failed to get tags: {}", e)))?;
 
         let mut tags = HashMap::new();
         for tag_desc in resp.tag_descriptions() {
@@ -324,11 +322,8 @@ impl AwsLoadBalancerResource {
         let scheme = lb.scheme();
         let internal = scheme == Some(&LoadBalancerSchemeEnum::Internal);
 
-        let security_groups: Vec<String> = lb
-            .security_groups()
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let security_groups: Vec<String> =
+            lb.security_groups().iter().map(|s| s.to_string()).collect();
 
         let subnets: Vec<String> = lb
             .availability_zones()
@@ -352,7 +347,10 @@ impl AwsLoadBalancerResource {
             arn: arn.clone(),
             arn_suffix: self.extract_arn_suffix(&arn),
             dns_name: lb.dns_name().unwrap_or_default().to_string(),
-            zone_id: lb.canonical_hosted_zone_id().unwrap_or_default().to_string(),
+            zone_id: lb
+                .canonical_hosted_zone_id()
+                .unwrap_or_default()
+                .to_string(),
             name,
             load_balancer_type: lb_type,
             vpc_id: lb.vpc_id().map(|s| s.to_string()),
@@ -408,7 +406,10 @@ impl AwsLoadBalancerResource {
                     ));
                 }
 
-                debug!("Load balancer state: {}, waiting for {:?}", state.state, desired_state);
+                debug!(
+                    "Load balancer state: {}, waiting for {:?}",
+                    state.state, desired_state
+                );
             }
 
             tokio::time::sleep(poll_interval).await;
@@ -567,8 +568,7 @@ impl Resource for AwsLoadBalancerResource {
                 SchemaField {
                     name: "enable_cross_zone_load_balancing".to_string(),
                     field_type: FieldType::Boolean,
-                    description: "If true, cross-zone load balancing is enabled (NLB)"
-                        .to_string(),
+                    description: "If true, cross-zone load balancing is enabled (NLB)".to_string(),
                     default: Some(Value::Bool(true)),
                     constraints: vec![],
                     sensitive: false,
@@ -732,7 +732,13 @@ impl Resource for AwsLoadBalancerResource {
 
                 // Check for deletions
                 let computed_fields = [
-                    "id", "arn", "arn_suffix", "dns_name", "zone_id", "vpc_id", "state",
+                    "id",
+                    "arn",
+                    "arn_suffix",
+                    "dns_name",
+                    "zone_id",
+                    "vpc_id",
+                    "state",
                 ];
                 for key in current_obj.keys() {
                     if !desired_obj.contains_key(key)
@@ -839,12 +845,9 @@ impl Resource for AwsLoadBalancerResource {
             ProvisioningError::CloudApiError(format!("Failed to create load balancer: {}", e))
         })?;
 
-        let lb = resp
-            .load_balancers()
-            .first()
-            .ok_or_else(|| {
-                ProvisioningError::CloudApiError("No load balancer returned".to_string())
-            })?;
+        let lb = resp.load_balancers().first().ok_or_else(|| {
+            ProvisioningError::CloudApiError("No load balancer returned".to_string())
+        })?;
 
         let arn = lb.load_balancer_arn().unwrap_or_default().to_string();
 

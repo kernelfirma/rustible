@@ -238,7 +238,10 @@ impl ProvisionerArgs {
             port: self.port,
             connection_info: ConnectionInfo {
                 connection_type: self.connection.clone(),
-                private_key: self.private_key.as_ref().map(|p: &PathBuf| p.to_string_lossy().to_string()),
+                private_key: self
+                    .private_key
+                    .as_ref()
+                    .map(|p: &PathBuf| p.to_string_lossy().to_string()),
                 timeout: self.timeout,
                 retries: self.retries,
                 retry_delay: self.retry_delay,
@@ -312,10 +315,8 @@ impl ProvisionerArgs {
     /// Parse extra vars from JSON string
     fn parse_extra_vars(&self) -> Result<HashMap<String, serde_json::Value>> {
         match &self.extra_vars {
-            Some(json_str) => {
-                serde_json::from_str(json_str)
-                    .map_err(|e| ProvisionerError::InvalidExtraVars(e.to_string()).into())
-            }
+            Some(json_str) => serde_json::from_str(json_str)
+                .map_err(|e| ProvisionerError::InvalidExtraVars(e.to_string()).into()),
             None => Ok(HashMap::new()),
         }
     }
@@ -347,7 +348,8 @@ impl ProvisionerArgs {
         Err(ProvisionerError::ConnectionFailed {
             host: self.host.clone(),
             retries: self.retries,
-        }.into())
+        }
+        .into())
     }
 
     /// Check if the host is reachable via TCP
@@ -358,19 +360,15 @@ impl ProvisionerArgs {
         // Use blocking TCP connect in spawn_blocking for better async compatibility
         let addr_clone = addr.clone();
         let result = tokio::task::spawn_blocking(move || {
-            TcpStream::connect_timeout(
-                &addr_clone.parse().unwrap(),
-                timeout,
-            )
+            TcpStream::connect_timeout(&addr_clone.parse().unwrap(), timeout)
         })
         .await?;
 
         match result {
             Ok(_) => Ok(()),
-            Err(e) => Err(ProvisionerError::HostNotReachable(format!(
-                "{}: {}",
-                self.host, e
-            )).into()),
+            Err(e) => {
+                Err(ProvisionerError::HostNotReachable(format!("{}: {}", self.host, e)).into())
+            }
         }
     }
 
@@ -454,10 +452,7 @@ impl ProvisionerArgs {
 
         // Add become settings
         if self.r#become {
-            vars.set(
-                "ansible_become".to_string(),
-                serde_json::Value::Bool(true),
-            );
+            vars.set("ansible_become".to_string(), serde_json::Value::Bool(true));
             if let Some(ref become_user) = self.become_user {
                 let user: &String = become_user;
                 vars.set(
@@ -617,7 +612,8 @@ resource "null_resource" "rustible_provisioner" {
     }
   }
 }
-"#.to_string()
+"#
+    .to_string()
 }
 
 #[cfg(test)]
@@ -628,11 +624,16 @@ mod tests {
     fn test_provisioner_args_defaults() {
         let args = ProvisionerArgs::try_parse_from([
             "provisioner",
-            "--playbook", "site.yml",
-            "--host", "192.168.1.100",
-            "--resource-type", "aws_instance",
-            "--resource-name", "web",
-        ]).unwrap();
+            "--playbook",
+            "site.yml",
+            "--host",
+            "192.168.1.100",
+            "--resource-type",
+            "aws_instance",
+            "--resource-name",
+            "web",
+        ])
+        .unwrap();
 
         assert_eq!(args.playbook, PathBuf::from("site.yml"));
         assert_eq!(args.host, "192.168.1.100");
@@ -649,19 +650,30 @@ mod tests {
     fn test_provisioner_args_custom() {
         let args = ProvisionerArgs::try_parse_from([
             "provisioner",
-            "--playbook", "configure.yml",
-            "--host", "10.0.0.5",
-            "--user", "ubuntu",
-            "--port", "2222",
-            "--resource-type", "azure_vm",
-            "--resource-name", "backend",
-            "--timeout", "60",
-            "--retries", "5",
-            "--retry-delay", "15",
+            "--playbook",
+            "configure.yml",
+            "--host",
+            "10.0.0.5",
+            "--user",
+            "ubuntu",
+            "--port",
+            "2222",
+            "--resource-type",
+            "azure_vm",
+            "--resource-name",
+            "backend",
+            "--timeout",
+            "60",
+            "--retries",
+            "5",
+            "--retry-delay",
+            "15",
             "--dry-run",
             "--become",
-            "--become-user", "admin",
-        ]).unwrap();
+            "--become-user",
+            "admin",
+        ])
+        .unwrap();
 
         assert_eq!(args.user, "ubuntu");
         assert_eq!(args.port, 2222);
@@ -677,12 +689,18 @@ mod tests {
     fn test_parse_extra_vars_json() {
         let args = ProvisionerArgs::try_parse_from([
             "provisioner",
-            "--playbook", "site.yml",
-            "--host", "192.168.1.100",
-            "--resource-type", "aws_instance",
-            "--resource-name", "web",
-            "-e", r#"{"instance_id": "i-12345", "region": "us-east-1"}"#,
-        ]).unwrap();
+            "--playbook",
+            "site.yml",
+            "--host",
+            "192.168.1.100",
+            "--resource-type",
+            "aws_instance",
+            "--resource-name",
+            "web",
+            "-e",
+            r#"{"instance_id": "i-12345", "region": "us-east-1"}"#,
+        ])
+        .unwrap();
 
         let vars = args.parse_extra_vars().unwrap();
         assert_eq!(vars.get("instance_id"), Some(&serde_json::json!("i-12345")));
@@ -693,12 +711,18 @@ mod tests {
     fn test_parse_extra_vars_nested() {
         let args = ProvisionerArgs::try_parse_from([
             "provisioner",
-            "--playbook", "site.yml",
-            "--host", "192.168.1.100",
-            "--resource-type", "aws_instance",
-            "--resource-name", "web",
-            "-e", r#"{"tags": {"env": "prod", "app": "web"}}"#,
-        ]).unwrap();
+            "--playbook",
+            "site.yml",
+            "--host",
+            "192.168.1.100",
+            "--resource-type",
+            "aws_instance",
+            "--resource-name",
+            "web",
+            "-e",
+            r#"{"tags": {"env": "prod", "app": "web"}}"#,
+        ])
+        .unwrap();
 
         let vars = args.parse_extra_vars().unwrap();
         let tags = vars.get("tags").unwrap();
@@ -710,11 +734,16 @@ mod tests {
     fn test_parse_extra_vars_none() {
         let args = ProvisionerArgs::try_parse_from([
             "provisioner",
-            "--playbook", "site.yml",
-            "--host", "192.168.1.100",
-            "--resource-type", "aws_instance",
-            "--resource-name", "web",
-        ]).unwrap();
+            "--playbook",
+            "site.yml",
+            "--host",
+            "192.168.1.100",
+            "--resource-type",
+            "aws_instance",
+            "--resource-name",
+            "web",
+        ])
+        .unwrap();
 
         let vars = args.parse_extra_vars().unwrap();
         assert!(vars.is_empty());

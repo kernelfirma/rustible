@@ -7,10 +7,12 @@
 
 #![cfg(feature = "provisioning")]
 
-use rustible::provisioning::plan::{ExecutionPlan, FieldChange, PlanBuilder, PlannedAction, ResourceChange};
+use rustible::provisioning::plan::{
+    ExecutionPlan, FieldChange, PlanBuilder, PlannedAction, ResourceChange,
+};
 use rustible::provisioning::state::{
-    DiffSummary, ProvisioningState, ProvisioningStateDiff, ResourceId, ResourceState,
-    StateChange, StateChangeType,
+    DiffSummary, ProvisioningState, ProvisioningStateDiff, ResourceId, ResourceState, StateChange,
+    StateChangeType,
 };
 use rustible::provisioning::traits::{ChangeType, ResourceDiff};
 use serde_json::json;
@@ -101,8 +103,14 @@ fn test_plan_detects_multiple_creates() {
 
     let plan = PlanBuilder::new(state)
         .with_resource(vpc_id.clone(), json!({"cidr_block": "10.0.0.0/16"}))
-        .with_resource(subnet_id.clone(), json!({"vpc_id": "vpc-123", "cidr_block": "10.0.1.0/24"}))
-        .with_resource(instance_id.clone(), json!({"subnet_id": "subnet-456", "instance_type": "t3.micro"}))
+        .with_resource(
+            subnet_id.clone(),
+            json!({"vpc_id": "vpc-123", "cidr_block": "10.0.1.0/24"}),
+        )
+        .with_resource(
+            instance_id.clone(),
+            json!({"subnet_id": "subnet-456", "instance_type": "t3.micro"}),
+        )
         .build()
         .unwrap();
 
@@ -225,9 +233,16 @@ fn test_update_diff_contains_modified_fields() {
         .unwrap();
 
     let action = plan.actions.iter().find(|a| a.resource_id == id).unwrap();
-    assert!(action.diff.modifications.contains_key("enable_dns_hostnames"));
+    assert!(action
+        .diff
+        .modifications
+        .contains_key("enable_dns_hostnames"));
 
-    let (old_val, new_val) = action.diff.modifications.get("enable_dns_hostnames").unwrap();
+    let (old_val, new_val) = action
+        .diff
+        .modifications
+        .get("enable_dns_hostnames")
+        .unwrap();
     assert_eq!(*old_val, json!(true));
     assert_eq!(*new_val, json!(false));
 }
@@ -269,7 +284,10 @@ fn test_update_diff_contains_deleted_fields() {
         .unwrap();
 
     let action = plan.actions.iter().find(|a| a.resource_id == id).unwrap();
-    assert!(action.diff.deletions.contains(&"enable_dns_hostnames".to_string()));
+    assert!(action
+        .diff
+        .deletions
+        .contains(&"enable_dns_hostnames".to_string()));
 }
 
 #[test]
@@ -302,13 +320,14 @@ fn test_plan_detects_destroy_for_removed_resource() {
     let state = create_state_with_vpc();
 
     // Don't include the VPC in desired config
-    let plan = PlanBuilder::new(state)
-        .build()
-        .unwrap();
+    let plan = PlanBuilder::new(state).build().unwrap();
 
     assert!(plan.has_changes());
     assert_eq!(plan.to_destroy.len(), 1);
-    assert!(plan.to_destroy.iter().any(|id| id.address() == "aws_vpc.main"));
+    assert!(plan
+        .to_destroy
+        .iter()
+        .any(|id| id.address() == "aws_vpc.main"));
 }
 
 #[test]
@@ -325,19 +344,25 @@ fn test_plan_detects_multiple_destroys() {
         .unwrap();
 
     assert_eq!(plan.to_destroy.len(), 2);
-    assert!(plan.to_destroy.iter().any(|id| id.address() == "aws_subnet.public"));
-    assert!(plan.to_destroy.iter().any(|id| id.address() == "aws_instance.web"));
+    assert!(plan
+        .to_destroy
+        .iter()
+        .any(|id| id.address() == "aws_subnet.public"));
+    assert!(plan
+        .to_destroy
+        .iter()
+        .any(|id| id.address() == "aws_instance.web"));
 }
 
 #[test]
 fn test_destroy_action_has_correct_change_type() {
     let state = create_state_with_vpc();
 
-    let plan = PlanBuilder::new(state)
-        .build()
-        .unwrap();
+    let plan = PlanBuilder::new(state).build().unwrap();
 
-    let action = plan.actions.iter()
+    let action = plan
+        .actions
+        .iter()
         .find(|a| a.resource_id.address() == "aws_vpc.main")
         .unwrap();
 
@@ -349,10 +374,7 @@ fn test_destroy_action_has_correct_change_type() {
 fn test_destroy_plan_destroys_all_resources() {
     let state = create_state_with_multiple_resources();
 
-    let plan = PlanBuilder::new(state)
-        .destroy()
-        .build()
-        .unwrap();
+    let plan = PlanBuilder::new(state).destroy().build().unwrap();
 
     assert!(plan.is_destroy);
     assert_eq!(plan.to_destroy.len(), 3);
@@ -372,7 +394,10 @@ fn test_replace_action_creation() {
         additions: HashMap::new(),
         modifications: {
             let mut m = HashMap::new();
-            m.insert("cidr_block".to_string(), (json!("10.0.0.0/16"), json!("192.168.0.0/16")));
+            m.insert(
+                "cidr_block".to_string(),
+                (json!("10.0.0.0/16"), json!("192.168.0.0/16")),
+            );
             m
         },
         deletions: Vec::new(),
@@ -400,7 +425,9 @@ fn test_replace_diff_has_replacement_fields() {
 
     assert!(diff.requires_replacement);
     assert_eq!(diff.replacement_fields.len(), 2);
-    assert!(diff.replacement_fields.contains(&"availability_zone".to_string()));
+    assert!(diff
+        .replacement_fields
+        .contains(&"availability_zone".to_string()));
     assert!(diff.replacement_fields.contains(&"vpc_id".to_string()));
 }
 
@@ -419,8 +446,14 @@ fn test_plan_handles_mixed_create_update_destroy() {
 
     let plan = PlanBuilder::new(state)
         .with_resource(vpc_id.clone(), json!({"cidr_block": "10.0.0.0/8"})) // Changed CIDR
-        .with_resource(subnet_id.clone(), json!({"vpc_id": "vpc-12345", "cidr_block": "10.0.1.0/24"})) // Unchanged
-        .with_resource(sg_id.clone(), json!({"vpc_id": "vpc-12345", "name": "web-sg"})) // New
+        .with_resource(
+            subnet_id.clone(),
+            json!({"vpc_id": "vpc-12345", "cidr_block": "10.0.1.0/24"}),
+        ) // Unchanged
+        .with_resource(
+            sg_id.clone(),
+            json!({"vpc_id": "vpc-12345", "name": "web-sg"}),
+        ) // New
         .build()
         .unwrap();
 
@@ -431,7 +464,10 @@ fn test_plan_handles_mixed_create_update_destroy() {
     assert!(plan.to_update.contains(&vpc_id));
 
     assert_eq!(plan.to_destroy.len(), 1);
-    assert!(plan.to_destroy.iter().any(|id| id.address() == "aws_instance.web"));
+    assert!(plan
+        .to_destroy
+        .iter()
+        .any(|id| id.address() == "aws_instance.web"));
 
     assert!(plan.unchanged.contains(&subnet_id));
 }
@@ -482,8 +518,7 @@ fn test_action_with_dependency() {
     let dep = ResourceId::new("aws_vpc", "main");
     let diff = ResourceDiff::create(json!({"cidr_block": "10.0.1.0/24"}));
 
-    let action = PlannedAction::create(id.clone(), "aws", diff)
-        .with_dependency(dep.clone());
+    let action = PlannedAction::create(id.clone(), "aws", diff).with_dependency(dep.clone());
 
     assert_eq!(action.depends_on.len(), 1);
     assert!(action.depends_on.contains(&dep));
@@ -503,7 +538,9 @@ fn test_plan_with_dependencies() {
         .build()
         .unwrap();
 
-    let subnet_action = plan.actions.iter()
+    let subnet_action = plan
+        .actions
+        .iter()
         .find(|a| a.resource_id == subnet_id)
         .unwrap();
 
@@ -551,8 +588,14 @@ fn test_plan_with_targets_only_includes_targeted_resources() {
 
     let plan = PlanBuilder::new(state)
         .with_resource(vpc_id.clone(), json!({"cidr_block": "10.0.0.0/8"})) // Changed
-        .with_resource(subnet_id.clone(), json!({"vpc_id": "vpc-12345", "cidr_block": "10.0.2.0/24"})) // Changed
-        .with_resource(instance_id.clone(), json!({"subnet_id": "subnet-67890", "instance_type": "t3.small"})) // Changed
+        .with_resource(
+            subnet_id.clone(),
+            json!({"vpc_id": "vpc-12345", "cidr_block": "10.0.2.0/24"}),
+        ) // Changed
+        .with_resource(
+            instance_id.clone(),
+            json!({"subnet_id": "subnet-67890", "instance_type": "t3.small"}),
+        ) // Changed
         .with_targets(vec![vpc_id.clone()])
         .build()
         .unwrap();
@@ -719,15 +762,13 @@ fn test_resource_change_structure() {
         before: Some(json!({"cidr_block": "10.0.0.0/16"})),
         after: Some(json!({"cidr_block": "192.168.0.0/16"})),
         change_type: ChangeType::Update,
-        field_changes: vec![
-            FieldChange {
-                path: "cidr_block".to_string(),
-                old_value: Some(json!("10.0.0.0/16")),
-                new_value: Some(json!("192.168.0.0/16")),
-                forces_replacement: true,
-                sensitive: false,
-            }
-        ],
+        field_changes: vec![FieldChange {
+            path: "cidr_block".to_string(),
+            old_value: Some(json!("10.0.0.0/16")),
+            new_value: Some(json!("192.168.0.0/16")),
+            forces_replacement: true,
+            sensitive: false,
+        }],
         sensitive: false,
     };
 
@@ -864,7 +905,10 @@ fn test_state_change_type_display() {
     assert_eq!(format!("{}", StateChangeType::ResourceCreated), "created");
     assert_eq!(format!("{}", StateChangeType::ResourceUpdated), "updated");
     assert_eq!(format!("{}", StateChangeType::ResourceDeleted), "deleted");
-    assert_eq!(format!("{}", StateChangeType::OutputChanged), "output_changed");
+    assert_eq!(
+        format!("{}", StateChangeType::OutputChanged),
+        "output_changed"
+    );
     assert_eq!(format!("{}", StateChangeType::StateMigrated), "migrated");
 }
 
@@ -942,7 +986,9 @@ fn test_plan_add_warning() {
     plan.add_warning("Deprecated feature used");
 
     assert_eq!(plan.warnings.len(), 2);
-    assert!(plan.warnings.contains(&"Resource may require manual intervention".to_string()));
+    assert!(plan
+        .warnings
+        .contains(&"Resource may require manual intervention".to_string()));
 }
 
 #[test]
@@ -997,9 +1043,7 @@ fn test_change_type_is_hashable() {
 fn test_plan_with_empty_config() {
     let state = create_empty_state();
 
-    let plan = PlanBuilder::new(state)
-        .build()
-        .unwrap();
+    let plan = PlanBuilder::new(state).build().unwrap();
 
     assert!(!plan.has_changes());
     assert_eq!(plan.change_count(), 0);
@@ -1084,8 +1128,7 @@ fn test_action_with_custom_reason() {
     let id = ResourceId::new("aws_vpc", "main");
     let diff = ResourceDiff::create(json!({}));
 
-    let action = PlannedAction::create(id, "aws", diff)
-        .with_reason("Custom reason for creation");
+    let action = PlannedAction::create(id, "aws", diff).with_reason("Custom reason for creation");
 
     assert_eq!(action.reason, "Custom reason for creation");
 }

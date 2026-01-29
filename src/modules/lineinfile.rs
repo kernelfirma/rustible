@@ -100,7 +100,11 @@ impl LineinfileModule {
         };
 
         secure_write_file(path, &content, create, mode).map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", path.display(), e))
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write file '{}': {}",
+                path.display(),
+                e
+            ))
         })?;
 
         Ok(())
@@ -338,11 +342,7 @@ impl LineinfileModule {
                         let content_str = String::from_utf8_lossy(&file_bytes);
                         let mut lines: Vec<Cow<str>> =
                             content_str.lines().map(Cow::Borrowed).collect();
-                        let original_lines = if diff_mode {
-                            Some(lines.clone())
-                        } else {
-                            None
-                        };
+                        let original_lines = if diff_mode { Some(lines.clone()) } else { None };
 
                         // Apply changes based on state
                         let changed = match state {

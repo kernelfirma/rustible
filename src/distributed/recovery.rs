@@ -6,9 +6,7 @@
 //! - Idempotency tracking
 //! - Network partition detection
 
-use super::types::{
-    ControllerId, HostId, WorkUnit, WorkUnitCheckpoint, WorkUnitId, WorkUnitState,
-};
+use super::types::{ControllerId, HostId, WorkUnit, WorkUnitCheckpoint, WorkUnitId, WorkUnitState};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -198,7 +196,8 @@ impl IdempotencyTracker {
 
         let ttl_ms = self.ttl.as_millis() as u64;
 
-        self.executed.retain(|_, v| now.saturating_sub(v.cached_at_ms) < ttl_ms);
+        self.executed
+            .retain(|_, v| now.saturating_sub(v.cached_at_ms) < ttl_ms);
     }
 
     /// Clear all entries for a work unit
@@ -523,7 +522,8 @@ impl ExecutionTracker {
     /// Start tracking a work unit execution
     pub fn start_execution(&self, work_unit: WorkUnit, controller: ControllerId) {
         let id = work_unit.id.clone();
-        self.executions.insert(id.clone(), ExecutionState::new(work_unit));
+        self.executions
+            .insert(id.clone(), ExecutionState::new(work_unit));
         self.assignments.insert(id, controller);
     }
 
@@ -609,11 +609,7 @@ mod tests {
     fn test_idempotency_tracker() {
         let tracker = IdempotencyTracker::new(Duration::from_secs(300));
 
-        let key = IdempotencyKey::new(
-            WorkUnitId::new("wu-1"),
-            HostId::new("host-1"),
-            0,
-        );
+        let key = IdempotencyKey::new(WorkUnitId::new("wu-1"), HostId::new("host-1"), 0);
 
         // First check - not executed
         assert!(tracker.check(&key).is_none());
@@ -632,10 +628,12 @@ mod tests {
     async fn test_partition_detector() {
         let detector = PartitionDetector::new(ControllerId::new("local"), 3);
 
-        detector.set_members(vec![
-            ControllerId::new("node-1"),
-            ControllerId::new("node-2"),
-        ]).await;
+        detector
+            .set_members(vec![
+                ControllerId::new("node-1"),
+                ControllerId::new("node-2"),
+            ])
+            .await;
 
         // Initial state - all healthy
         assert_eq!(detector.check_partition().await, PartitionState::Healthy);
@@ -704,24 +702,18 @@ mod tests {
         let recovery = LeaderRecovery::new(Duration::from_secs(5), Duration::from_secs(300));
 
         // Pending work unit - should reassign
-        let action = recovery.determine_recovery_action(
-            &WorkUnitId::new("wu-1"),
-            Some(WorkUnitState::Pending),
-        );
+        let action = recovery
+            .determine_recovery_action(&WorkUnitId::new("wu-1"), Some(WorkUnitState::Pending));
         assert!(matches!(action, RecoveryAction::Reassign));
 
         // Completed work unit - no action
-        let action = recovery.determine_recovery_action(
-            &WorkUnitId::new("wu-2"),
-            Some(WorkUnitState::Completed),
-        );
+        let action = recovery
+            .determine_recovery_action(&WorkUnitId::new("wu-2"), Some(WorkUnitState::Completed));
         assert!(matches!(action, RecoveryAction::NoAction));
 
         // Running without checkpoint - restart
-        let action = recovery.determine_recovery_action(
-            &WorkUnitId::new("wu-3"),
-            Some(WorkUnitState::Running),
-        );
+        let action = recovery
+            .determine_recovery_action(&WorkUnitId::new("wu-3"), Some(WorkUnitState::Running));
         assert!(matches!(action, RecoveryAction::Restart));
     }
 }

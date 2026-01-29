@@ -96,7 +96,9 @@ impl Provider for TestProvider {
             return Ok(params);
         }
         if module == "fail" {
-            return Err(ProviderError::ExecutionFailed("intentional failure".to_string()));
+            return Err(ProviderError::ExecutionFailed(
+                "intentional failure".to_string(),
+            ));
         }
         Err(ProviderError::ModuleNotFound(module.to_string()))
     }
@@ -163,9 +165,15 @@ mod registration_tests {
     fn test_multiple_providers() {
         let mut registry = ProviderRegistry::new();
 
-        registry.register(Arc::new(TestProvider::new("aws"))).unwrap();
-        registry.register(Arc::new(TestProvider::new("azure"))).unwrap();
-        registry.register(Arc::new(TestProvider::new("gcp"))).unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("aws")))
+            .unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("azure")))
+            .unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("gcp")))
+            .unwrap();
 
         assert_eq!(registry.list().len(), 3);
     }
@@ -181,7 +189,9 @@ mod discovery_tests {
     #[test]
     fn test_get_provider_by_name() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(TestProvider::new("findme"))).unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("findme")))
+            .unwrap();
 
         let found = registry.get("findme");
         assert!(found.is_some());
@@ -198,8 +208,12 @@ mod discovery_tests {
     #[test]
     fn test_list_providers() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(TestProvider::new("alpha"))).unwrap();
-        registry.register(Arc::new(TestProvider::new("beta"))).unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("alpha")))
+            .unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("beta")))
+            .unwrap();
 
         let list = registry.list();
         assert_eq!(list.len(), 2);
@@ -210,9 +224,11 @@ mod discovery_tests {
     #[test]
     fn test_list_with_metadata() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(
-            TestProvider::new("versioned").with_version(2, 1, 0)
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("versioned").with_version(2, 1, 0),
+            ))
+            .unwrap();
 
         let metadata_list = registry.list_with_metadata();
         assert_eq!(metadata_list.len(), 1);
@@ -223,15 +239,21 @@ mod discovery_tests {
     #[test]
     fn test_find_by_target() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(
-            TestProvider::new("aws-provider").with_targets(vec!["aws", "cloud"])
-        )).unwrap();
-        registry.register(Arc::new(
-            TestProvider::new("azure-provider").with_targets(vec!["azure", "cloud"])
-        )).unwrap();
-        registry.register(Arc::new(
-            TestProvider::new("onprem-provider").with_targets(vec!["onprem"])
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("aws-provider").with_targets(vec!["aws", "cloud"]),
+            ))
+            .unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("azure-provider").with_targets(vec!["azure", "cloud"]),
+            ))
+            .unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("onprem-provider").with_targets(vec!["onprem"]),
+            ))
+            .unwrap();
 
         let cloud_providers = registry.find_by_target("cloud");
         assert_eq!(cloud_providers.len(), 2);
@@ -247,18 +269,19 @@ mod discovery_tests {
     #[test]
     fn test_find_by_capability() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(
-            TestProvider::new("readonly").with_capabilities(vec![ProviderCapability::Read])
-        )).unwrap();
-        registry.register(Arc::new(
-            TestProvider::new("full")
-                .with_capabilities(vec![
-                    ProviderCapability::Read,
-                    ProviderCapability::Create,
-                    ProviderCapability::Update,
-                    ProviderCapability::Delete,
-                ])
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("readonly").with_capabilities(vec![ProviderCapability::Read]),
+            ))
+            .unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("full").with_capabilities(vec![
+                ProviderCapability::Read,
+                ProviderCapability::Create,
+                ProviderCapability::Update,
+                ProviderCapability::Delete,
+            ])))
+            .unwrap();
 
         let readers = registry.find_by_capability(ProviderCapability::Read);
         assert_eq!(readers.len(), 2);
@@ -414,7 +437,9 @@ mod invocation_tests {
         let provider = TestProvider::new("invoker");
         let ctx = ModuleContext::default();
 
-        let result = provider.invoke("nonexistent", serde_json::json!({}), ctx).await;
+        let result = provider
+            .invoke("nonexistent", serde_json::json!({}), ctx)
+            .await;
         assert!(result.is_err());
 
         let err = result.unwrap_err();
@@ -436,12 +461,16 @@ mod invocation_tests {
     #[tokio::test]
     async fn test_invoke_through_registry() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(TestProvider::new("registered"))).unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("registered")))
+            .unwrap();
 
         let params = serde_json::json!({"data": "test"});
         let ctx = ModuleContext::default();
 
-        let result = registry.invoke("registered", "echo", params.clone(), ctx).await;
+        let result = registry
+            .invoke("registered", "echo", params.clone(), ctx)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), params);
     }
@@ -451,7 +480,9 @@ mod invocation_tests {
         let registry = ProviderRegistry::new();
         let ctx = ModuleContext::default();
 
-        let result = registry.invoke("unregistered", "echo", serde_json::json!({}), ctx).await;
+        let result = registry
+            .invoke("unregistered", "echo", serde_json::json!({}), ctx)
+            .await;
         assert!(result.is_err());
 
         let err = result.unwrap_err().to_string();
@@ -602,7 +633,8 @@ mod context_tests {
     #[test]
     fn test_context_with_variables() {
         let mut ctx = ModuleContext::default();
-        ctx.variables.insert("key".to_string(), serde_json::json!("value"));
+        ctx.variables
+            .insert("key".to_string(), serde_json::json!("value"));
 
         assert_eq!(ctx.variables.len(), 1);
         assert_eq!(ctx.variables["key"], serde_json::json!("value"));
@@ -639,7 +671,8 @@ mod context_tests {
     #[test]
     fn test_context_extra_data() {
         let mut ctx = ModuleContext::default();
-        ctx.extra.insert("custom".to_string(), serde_json::json!({"nested": true}));
+        ctx.extra
+            .insert("custom".to_string(), serde_json::json!({"nested": true}));
 
         assert_eq!(ctx.extra.len(), 1);
     }
@@ -841,30 +874,33 @@ mod e2e_workflow_tests {
         let mut registry = ProviderRegistry::new();
 
         // Register multiple cloud providers
-        registry.register(Arc::new(
-            TestProvider::new("aws")
-                .with_targets(vec!["aws", "cloud"])
-                .with_capabilities(vec![
-                    ProviderCapability::Read,
-                    ProviderCapability::Create,
-                    ProviderCapability::Delete,
-                ])
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("aws")
+                    .with_targets(vec!["aws", "cloud"])
+                    .with_capabilities(vec![
+                        ProviderCapability::Read,
+                        ProviderCapability::Create,
+                        ProviderCapability::Delete,
+                    ]),
+            ))
+            .unwrap();
 
-        registry.register(Arc::new(
-            TestProvider::new("azure")
-                .with_targets(vec!["azure", "cloud"])
-                .with_capabilities(vec![
-                    ProviderCapability::Read,
-                    ProviderCapability::Create,
-                ])
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("azure")
+                    .with_targets(vec!["azure", "cloud"])
+                    .with_capabilities(vec![ProviderCapability::Read, ProviderCapability::Create]),
+            ))
+            .unwrap();
 
-        registry.register(Arc::new(
-            TestProvider::new("gcp")
-                .with_targets(vec!["gcp", "cloud"])
-                .with_capabilities(vec![ProviderCapability::Read])
-        )).unwrap();
+        registry
+            .register(Arc::new(
+                TestProvider::new("gcp")
+                    .with_targets(vec!["gcp", "cloud"])
+                    .with_capabilities(vec![ProviderCapability::Read]),
+            ))
+            .unwrap();
 
         // Find all cloud providers
         let cloud_providers = registry.find_by_target("cloud");
@@ -891,7 +927,9 @@ mod debug_tests {
     #[test]
     fn test_registry_debug_output() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(TestProvider::new("debug-provider"))).unwrap();
+        registry
+            .register(Arc::new(TestProvider::new("debug-provider")))
+            .unwrap();
 
         let debug_output = format!("{:?}", registry);
         assert!(debug_output.contains("ProviderRegistry"));

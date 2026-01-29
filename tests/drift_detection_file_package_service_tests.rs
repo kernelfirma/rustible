@@ -185,7 +185,11 @@ fn test_file_drift_multiple_changes() {
     assert!(details.changed_fields.len() >= 3);
 
     // Verify we can identify each drift
-    let fields: Vec<&str> = details.changed_fields.iter().map(|f| f.field.as_str()).collect();
+    let fields: Vec<&str> = details
+        .changed_fields
+        .iter()
+        .map(|f| f.field.as_str())
+        .collect();
     assert!(fields.contains(&"mode"));
     assert!(fields.contains(&"owner"));
     assert!(fields.contains(&"group"));
@@ -859,12 +863,8 @@ fn test_manifest_persistence_preserves_drift_details() {
     let store = ManifestStore::new(dir.path());
 
     let mut manifest = HostManifest::new("testhost");
-    let mut resource = ResourceState::new(
-        "file",
-        "/etc/test.conf",
-        "file",
-        json!({"mode": "0644"}),
-    );
+    let mut resource =
+        ResourceState::new("file", "/etc/test.conf", "file", json!({"mode": "0644"}));
     resource.set_actual_state(json!({"mode": "0755"}));
     manifest.record_resource(resource);
     store.save(&manifest).unwrap();

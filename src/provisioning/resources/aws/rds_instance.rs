@@ -32,7 +32,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use aws_sdk_rds::types::{Tag as RdsTag};
+use aws_sdk_rds::types::Tag as RdsTag;
 use aws_sdk_rds::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -332,15 +332,18 @@ impl AwsRdsInstanceResource {
 
     /// Convert SDK DB instance to state struct
     fn instance_to_state(&self, instance: &aws_sdk_rds::types::DbInstance) -> RdsInstanceState {
-        let identifier = instance.db_instance_identifier().unwrap_or_default().to_string();
+        let identifier = instance
+            .db_instance_identifier()
+            .unwrap_or_default()
+            .to_string();
         let arn = instance.db_instance_arn().unwrap_or_default().to_string();
-        let status = instance.db_instance_status().unwrap_or_default().to_string();
+        let status = instance
+            .db_instance_status()
+            .unwrap_or_default()
+            .to_string();
 
         let (address, port) = if let Some(endpoint) = instance.endpoint() {
-            (
-                endpoint.address().map(|s| s.to_string()),
-                endpoint.port(),
-            )
+            (endpoint.address().map(|s| s.to_string()), endpoint.port())
         } else {
             (None, None)
         };
@@ -555,7 +558,8 @@ impl Resource for AwsRdsInstanceResource {
     fn schema(&self) -> ResourceSchema {
         ResourceSchema {
             resource_type: "aws_db_instance".to_string(),
-            description: "Provides an RDS instance resource. Manages an RDS database instance.".to_string(),
+            description: "Provides an RDS instance resource. Manages an RDS database instance."
+                .to_string(),
             required_args: vec![
                 SchemaField {
                     name: "identifier".to_string(),
@@ -886,9 +890,20 @@ impl Resource for AwsRdsInstanceResource {
                 }
 
                 // Check for deletions (excluding computed fields)
-                let computed_fields = ["id", "arn", "address", "port", "status", "resource_id", "vpc_id"];
+                let computed_fields = [
+                    "id",
+                    "arn",
+                    "address",
+                    "port",
+                    "status",
+                    "resource_id",
+                    "vpc_id",
+                ];
                 for key in current_obj.keys() {
-                    if !desired_obj.contains_key(key) && !key.starts_with('_') && !computed_fields.contains(&key.as_str()) {
+                    if !desired_obj.contains_key(key)
+                        && !key.starts_with('_')
+                        && !computed_fields.contains(&key.as_str())
+                    {
                         diff.deletions.push(key.clone());
                     }
                 }
@@ -1182,11 +1197,13 @@ impl Resource for AwsRdsInstanceResource {
         }
 
         // IAM auth
-        modify = modify.enable_iam_database_authentication(rds_config.iam_database_authentication_enabled);
+        modify = modify
+            .enable_iam_database_authentication(rds_config.iam_database_authentication_enabled);
 
         // Security groups
         if !rds_config.vpc_security_group_ids.is_empty() {
-            modify = modify.set_vpc_security_group_ids(Some(rds_config.vpc_security_group_ids.clone()));
+            modify =
+                modify.set_vpc_security_group_ids(Some(rds_config.vpc_security_group_ids.clone()));
         }
 
         // CloudWatch logs exports
@@ -1225,10 +1242,15 @@ impl Resource for AwsRdsInstanceResource {
         // Wait for available state if applying immediately
         if rds_config.apply_immediately {
             let timeout = Duration::from_secs(ctx.timeout_seconds);
-            let state = self.wait_for_status(&client, id, "available", timeout).await?;
+            let state = self
+                .wait_for_status(&client, id, "available", timeout)
+                .await?;
 
             let attributes = serde_json::to_value(&state).map_err(|e| {
-                ProvisioningError::SerializationError(format!("Failed to serialize attributes: {}", e))
+                ProvisioningError::SerializationError(format!(
+                    "Failed to serialize attributes: {}",
+                    e
+                ))
             })?;
 
             return Ok(ResourceResult::success(id, attributes));
@@ -1403,7 +1425,12 @@ impl Resource for AwsRdsInstanceResource {
                     "identifier must be between 1 and 63 characters".to_string(),
                 ));
             }
-            if !identifier.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+            if !identifier
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_lowercase())
+                .unwrap_or(false)
+            {
                 return Err(ProvisioningError::ValidationError(
                     "identifier must start with a lowercase letter".to_string(),
                 ));
@@ -1413,8 +1440,15 @@ impl Resource for AwsRdsInstanceResource {
         // Validate engine
         if let Some(engine) = obj.get("engine").and_then(|v| v.as_str()) {
             let valid_engines = [
-                "mysql", "postgres", "mariadb", "oracle-ee", "oracle-se2",
-                "sqlserver-ee", "sqlserver-se", "sqlserver-ex", "sqlserver-web",
+                "mysql",
+                "postgres",
+                "mariadb",
+                "oracle-ee",
+                "oracle-se2",
+                "sqlserver-ee",
+                "sqlserver-se",
+                "sqlserver-ex",
+                "sqlserver-web",
             ];
             if !valid_engines.contains(&engine) {
                 return Err(ProvisioningError::ValidationError(format!(
@@ -1515,23 +1549,13 @@ impl AwsRdsInstanceResource {
         // Add default tags
         for (key, value) in default_tags {
             if !tags.contains_key(key) {
-                result.push(
-                    RdsTag::builder()
-                        .key(key)
-                        .value(value)
-                        .build(),
-                );
+                result.push(RdsTag::builder().key(key).value(value).build());
             }
         }
 
         // Add resource tags
         for (key, value) in tags {
-            result.push(
-                RdsTag::builder()
-                    .key(key)
-                    .value(value)
-                    .build(),
-            );
+            result.push(RdsTag::builder().key(key).value(value).build());
         }
 
         result
@@ -1574,7 +1598,11 @@ mod tests {
         assert_eq!(schema.resource_type, "aws_db_instance");
         assert!(!schema.required_args.is_empty());
 
-        let required_names: Vec<_> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+        let required_names: Vec<_> = schema
+            .required_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(required_names.contains(&"identifier"));
         assert!(required_names.contains(&"engine"));
         assert!(required_names.contains(&"instance_class"));
@@ -1764,7 +1792,10 @@ mod tests {
         assert!(rds_config.multi_az);
         assert!(rds_config.storage_encrypted);
         assert_eq!(rds_config.backup_retention_period, 14);
-        assert_eq!(rds_config.tags.get("Name"), Some(&"my-database".to_string()));
+        assert_eq!(
+            rds_config.tags.get("Name"),
+            Some(&"my-database".to_string())
+        );
     }
 
     #[test]
@@ -2000,7 +2031,9 @@ mod tests {
 
         let has_name = result.iter().any(|t| t.key() == Some("Name"));
         let has_env = result.iter().any(|t| t.key() == Some("Environment"));
-        let has_project = result.iter().any(|t| t.key() == Some("Project") && t.value() == Some("myproject"));
+        let has_project = result
+            .iter()
+            .any(|t| t.key() == Some("Project") && t.value() == Some("myproject"));
 
         assert!(has_name);
         assert!(has_env);

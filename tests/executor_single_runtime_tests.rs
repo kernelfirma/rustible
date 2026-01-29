@@ -35,7 +35,10 @@ fn build_playbook() -> Playbook {
     playbook
 }
 
-async fn run_with_strategy(strategy: ExecutionStrategy, hosts: &[&str]) -> rustible::executor::ExecutionStats {
+async fn run_with_strategy(
+    strategy: ExecutionStrategy,
+    hosts: &[&str],
+) -> rustible::executor::ExecutionStats {
     let runtime = build_runtime(hosts);
     let config = ExecutorConfig {
         gather_facts: false,

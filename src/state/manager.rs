@@ -3,16 +3,16 @@
 //! This module provides comprehensive state management for configuration management,
 //! including state tracking, versioning, and dependency resolution.
 
-use crate::error::{RustibleError, Result};
+use crate::error::{Result, RustibleError};
 use crate::state::storage::{StateBackend, StateFile};
 use async_trait::async_trait;
+use blake3::Hash;
+use chrono::{DateTime, Utc};
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use blake3::Hash;
-use futures::future::join_all;
 
 /// Represents the lifecycle state of a resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,7 +190,8 @@ impl StateManager {
                     resource.state,
                     "State updated".to_string(),
                     resource.config_hash.clone(),
-                )).await?;
+                ))
+                .await?;
             }
         } else {
             self.record_transition(StateTransition::new(
@@ -199,7 +200,8 @@ impl StateManager {
                 resource.state,
                 "Resource created".to_string(),
                 resource.config_hash.clone(),
-            )).await?;
+            ))
+            .await?;
         }
 
         Ok(())
@@ -234,7 +236,8 @@ impl StateManager {
                 new_state,
                 reason.to_string(),
                 resource.config_hash.clone(),
-            )).await?;
+            ))
+            .await?;
 
             Ok(())
         } else {

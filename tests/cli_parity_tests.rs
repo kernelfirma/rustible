@@ -123,10 +123,7 @@ fn test_tags_are_appended_without_splitting() {
 
     match cli.command {
         cli::Commands::Run(args) => {
-            assert_eq!(
-                args.tags,
-                vec!["one,two".to_string(), "three".to_string()]
-            );
+            assert_eq!(args.tags, vec!["one,two".to_string(), "three".to_string()]);
         }
         _ => panic!("expected run subcommand"),
     }
@@ -172,12 +169,7 @@ fn test_check_subcommand_parsing() {
 
 #[test]
 fn test_invalid_forks_value_errors() {
-    let err = cli::Cli::try_parse_from([
-        "rustible",
-        "--forks",
-        "not-a-number",
-        "run",
-        "playbook.yml",
-    ]);
+    let err =
+        cli::Cli::try_parse_from(["rustible", "--forks", "not-a-number", "run", "playbook.yml"]);
     assert!(err.is_err());
 }

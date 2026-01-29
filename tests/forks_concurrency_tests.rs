@@ -42,12 +42,11 @@ impl ConcurrencyController {
             if new_current <= max {
                 break;
             }
-            if self.max_observed.compare_exchange(
-                max,
-                new_current,
-                Ordering::SeqCst,
-                Ordering::SeqCst
-            ).is_ok() {
+            if self
+                .max_observed
+                .compare_exchange(max, new_current, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
                 break;
             }
         }
@@ -129,7 +128,8 @@ impl TestExecutor {
 
     fn execute_hosts_with_controller(&self) -> ExecutionResult {
         let mut results = Vec::new();
-        let mut pending: Vec<HostExecutionContext> = self.hosts
+        let mut pending: Vec<HostExecutionContext> = self
+            .hosts
             .iter()
             .map(|h| HostExecutionContext::new(h))
             .collect();
@@ -154,7 +154,9 @@ impl TestExecutor {
 
                 while !pending.is_empty() || !in_progress.is_empty() {
                     // Start new hosts up to forks limit
-                    while !pending.is_empty() && self.controller.current() < self.controller.forks_limit() {
+                    while !pending.is_empty()
+                        && self.controller.current() < self.controller.forks_limit()
+                    {
                         if self.controller.acquire() {
                             let mut host = pending.remove(0);
                             host.start();
@@ -329,7 +331,11 @@ fn test_per_task_forks_limit_with_many_hosts() {
 
     assert!(result.verify_concurrency_limit());
     assert!(result.all_hosts_executed(&hosts));
-    assert!(result.max_concurrent <= 10, "Max concurrent was {}", result.max_concurrent);
+    assert!(
+        result.max_concurrent <= 10,
+        "Max concurrent was {}",
+        result.max_concurrent
+    );
 }
 
 #[test]
@@ -386,11 +392,11 @@ fn test_forks_with_single_host() {
 fn test_forks_limit_boundaries() {
     // Test various boundary conditions
     let test_cases = vec![
-        (1, 1),   // Minimum
-        (1, 10),  // Many hosts, forks=1
-        (10, 1),  // Many forks, one host
-        (5, 5),   // Equal
-        (3, 7),   // Odd numbers
+        (1, 1),    // Minimum
+        (1, 10),   // Many hosts, forks=1
+        (10, 1),   // Many forks, one host
+        (5, 5),    // Equal
+        (3, 7),    // Odd numbers
         (50, 100), // Large scale
     ];
 
@@ -741,10 +747,7 @@ fn test_play_level_forks_respected() {
     }
 
     assert!(controller.max_concurrent() <= forks);
-    assert_eq!(
-        controller.total(),
-        play1_hosts.len() + play2_hosts.len()
-    );
+    assert_eq!(controller.total(), play1_hosts.len() + play2_hosts.len());
 }
 
 // =============================================================================

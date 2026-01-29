@@ -5,8 +5,8 @@
 use super::{CommandContext, Runnable};
 use crate::cli::output::RecapStats;
 use anyhow::Result;
-use dialoguer::theme::ColorfulTheme;
 use clap::Parser;
+use dialoguer::theme::ColorfulTheme;
 use indexmap::IndexMap;
 use regex::Regex;
 use rustible::diagnostics::yaml_syntax_error;
@@ -370,13 +370,6 @@ impl RunArgs {
 
         // Print recap
         ctx.output.recap(&stats);
-
-        // Print timing
-        let duration = start_time.elapsed();
-        ctx.output.info(&format!(
-            "Playbook finished in {:.2}s",
-            duration.as_secs_f64()
-        ));
 
         // Return exit code
         if has_failures {

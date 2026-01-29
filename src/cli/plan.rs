@@ -118,7 +118,12 @@ impl PlanDiff {
             use_color: true,
             ..Default::default()
         });
-        differ.diff(&self.before, &self.after, &self.before_label, &self.after_label)
+        differ.diff(
+            &self.before,
+            &self.after,
+            &self.before_label,
+            &self.after_label,
+        )
     }
 }
 
@@ -345,7 +350,9 @@ impl PlanFormatter {
         if creates + modifies + deletes > 0 {
             output.push_str("Plan includes changes. Run without --plan to apply.\n");
         } else if unknowns > 0 {
-            output.push_str("Plan has conditional tasks. Actual changes depend on runtime conditions.\n");
+            output.push_str(
+                "Plan has conditional tasks. Actual changes depend on runtime conditions.\n",
+            );
         } else {
             output.push_str("No changes planned.\n");
         }
@@ -378,8 +385,14 @@ pub fn classify_action(module: &str, args: Option<&serde_yaml::Value>) -> Action
         }
 
         // Package management
-        "apt" | "ansible.builtin.apt" | "yum" | "ansible.builtin.yum" | "dnf"
-        | "ansible.builtin.dnf" | "package" | "ansible.builtin.package" => {
+        "apt"
+        | "ansible.builtin.apt"
+        | "yum"
+        | "ansible.builtin.yum"
+        | "dnf"
+        | "ansible.builtin.dnf"
+        | "package"
+        | "ansible.builtin.package" => {
             if let Some(args) = args {
                 match args.get("state").and_then(|s| s.as_str()) {
                     Some("absent") | Some("removed") => ActionType::Delete,
@@ -410,17 +423,32 @@ pub fn classify_action(module: &str, args: Option<&serde_yaml::Value>) -> Action
         }
 
         // Command/shell - unknown effect
-        "command" | "ansible.builtin.command" | "shell" | "ansible.builtin.shell" | "raw"
-        | "ansible.builtin.raw" | "script" | "ansible.builtin.script" => ActionType::Unknown,
+        "command"
+        | "ansible.builtin.command"
+        | "shell"
+        | "ansible.builtin.shell"
+        | "raw"
+        | "ansible.builtin.raw"
+        | "script"
+        | "ansible.builtin.script" => ActionType::Unknown,
 
         // Debug - no change
-        "debug" | "ansible.builtin.debug" | "set_fact" | "ansible.builtin.set_fact"
-        | "assert" | "ansible.builtin.assert" => ActionType::NoChange,
+        "debug"
+        | "ansible.builtin.debug"
+        | "set_fact"
+        | "ansible.builtin.set_fact"
+        | "assert"
+        | "ansible.builtin.assert" => ActionType::NoChange,
 
         // Include/import - no direct change
-        "include_tasks" | "ansible.builtin.include_tasks" | "import_tasks"
-        | "ansible.builtin.import_tasks" | "include_role" | "ansible.builtin.include_role"
-        | "import_role" | "ansible.builtin.import_role" => ActionType::NoChange,
+        "include_tasks"
+        | "ansible.builtin.include_tasks"
+        | "import_tasks"
+        | "ansible.builtin.import_tasks"
+        | "include_role"
+        | "ansible.builtin.include_role"
+        | "import_role"
+        | "ansible.builtin.import_role" => ActionType::NoChange,
 
         // Default - unknown
         _ => ActionType::Unknown,
@@ -466,8 +494,14 @@ pub fn describe_action(
             format!("will {} from template: {}", action_verb, dest)
         }
 
-        "apt" | "ansible.builtin.apt" | "yum" | "ansible.builtin.yum" | "dnf"
-        | "ansible.builtin.dnf" | "package" | "ansible.builtin.package" => {
+        "apt"
+        | "ansible.builtin.apt"
+        | "yum"
+        | "ansible.builtin.yum"
+        | "dnf"
+        | "ansible.builtin.dnf"
+        | "package"
+        | "ansible.builtin.package" => {
             let name = args
                 .and_then(|a| a.get("name"))
                 .and_then(|n| n.as_str())
@@ -613,8 +647,8 @@ mod tests {
 
     #[test]
     fn test_plan_diff() {
-        let diff = PlanDiff::new("old content\n", "new content\n")
-            .with_labels("original", "modified");
+        let diff =
+            PlanDiff::new("old content\n", "new content\n").with_labels("original", "modified");
 
         let rendered = diff.render();
         assert!(rendered.contains("original") || rendered.contains("modified"));

@@ -401,10 +401,7 @@ impl RaftNode {
                 RaftEvent::SendHeartbeats => {
                     // In a real implementation, this would send heartbeats to all peers
                     // For now, we just log it
-                    tracing::trace!(
-                        "Leader {} sending heartbeats",
-                        state.controller_id()
-                    );
+                    tracing::trace!("Leader {} sending heartbeats", state.controller_id());
                 }
                 RaftEvent::Shutdown => {
                     tracing::info!("Raft node shutting down");

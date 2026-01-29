@@ -112,7 +112,8 @@ impl GroupInfo {
 /// Get user information by name using libc
 #[cfg(unix)]
 pub fn get_user_by_name(name: &str) -> NativeResult<Option<UserInfo>> {
-    let c_name = CString::new(name).map_err(|_| NativeError::InvalidArgument("Invalid username".to_string()))?;
+    let c_name = CString::new(name)
+        .map_err(|_| NativeError::InvalidArgument("Invalid username".to_string()))?;
 
     // Use getpwnam_r for thread safety
     unsafe {
@@ -140,7 +141,9 @@ pub fn get_user_by_name(name: &str) -> NativeResult<Option<UserInfo>> {
 
 #[cfg(not(unix))]
 pub fn get_user_by_name(_name: &str) -> NativeResult<Option<UserInfo>> {
-    Err(NativeError::NotAvailable("User lookup not available on this platform".to_string()))
+    Err(NativeError::NotAvailable(
+        "User lookup not available on this platform".to_string(),
+    ))
 }
 
 /// Get user information by UID using libc
@@ -172,13 +175,16 @@ pub fn get_user_by_uid(uid: u32) -> NativeResult<Option<UserInfo>> {
 
 #[cfg(not(unix))]
 pub fn get_user_by_uid(_uid: u32) -> NativeResult<Option<UserInfo>> {
-    Err(NativeError::NotAvailable("User lookup not available on this platform".to_string()))
+    Err(NativeError::NotAvailable(
+        "User lookup not available on this platform".to_string(),
+    ))
 }
 
 /// Get group information by name using libc
 #[cfg(unix)]
 pub fn get_group_by_name(name: &str) -> NativeResult<Option<GroupInfo>> {
-    let c_name = CString::new(name).map_err(|_| NativeError::InvalidArgument("Invalid group name".to_string()))?;
+    let c_name = CString::new(name)
+        .map_err(|_| NativeError::InvalidArgument("Invalid group name".to_string()))?;
 
     unsafe {
         let grp = libc::getgrnam(c_name.as_ptr());
@@ -191,7 +197,11 @@ pub fn get_group_by_name(name: &str) -> NativeResult<Option<GroupInfo>> {
         let mut members = Vec::new();
         let mut i = 0;
         while !(*grp.gr_mem.add(i)).is_null() {
-            members.push(CStr::from_ptr(*grp.gr_mem.add(i)).to_string_lossy().to_string());
+            members.push(
+                CStr::from_ptr(*grp.gr_mem.add(i))
+                    .to_string_lossy()
+                    .to_string(),
+            );
             i += 1;
         }
 
@@ -208,7 +218,9 @@ pub fn get_group_by_name(name: &str) -> NativeResult<Option<GroupInfo>> {
 
 #[cfg(not(unix))]
 pub fn get_group_by_name(_name: &str) -> NativeResult<Option<GroupInfo>> {
-    Err(NativeError::NotAvailable("Group lookup not available on this platform".to_string()))
+    Err(NativeError::NotAvailable(
+        "Group lookup not available on this platform".to_string(),
+    ))
 }
 
 /// Get group information by GID using libc
@@ -225,7 +237,11 @@ pub fn get_group_by_gid(gid: u32) -> NativeResult<Option<GroupInfo>> {
         let mut members = Vec::new();
         let mut i = 0;
         while !(*grp.gr_mem.add(i)).is_null() {
-            members.push(CStr::from_ptr(*grp.gr_mem.add(i)).to_string_lossy().to_string());
+            members.push(
+                CStr::from_ptr(*grp.gr_mem.add(i))
+                    .to_string_lossy()
+                    .to_string(),
+            );
             i += 1;
         }
 
@@ -242,13 +258,16 @@ pub fn get_group_by_gid(gid: u32) -> NativeResult<Option<GroupInfo>> {
 
 #[cfg(not(unix))]
 pub fn get_group_by_gid(_gid: u32) -> NativeResult<Option<GroupInfo>> {
-    Err(NativeError::NotAvailable("Group lookup not available on this platform".to_string()))
+    Err(NativeError::NotAvailable(
+        "Group lookup not available on this platform".to_string(),
+    ))
 }
 
 /// Get all groups a user belongs to
 #[cfg(unix)]
 pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
-    let c_name = CString::new(username).map_err(|_| NativeError::InvalidArgument("Invalid username".to_string()))?;
+    let c_name = CString::new(username)
+        .map_err(|_| NativeError::InvalidArgument("Invalid username".to_string()))?;
 
     // Get the user's primary group directly using getpwnam
     let primary_gid = unsafe {
@@ -299,7 +318,9 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
 
 #[cfg(not(unix))]
 pub fn get_user_groups(_username: &str) -> NativeResult<Vec<String>> {
-    Err(NativeError::NotAvailable("Group lookup not available on this platform".to_string()))
+    Err(NativeError::NotAvailable(
+        "Group lookup not available on this platform".to_string(),
+    ))
 }
 
 /// Parse /etc/passwd file directly for batch operations
@@ -310,7 +331,10 @@ pub fn parse_passwd_file() -> NativeResult<Vec<UserInfo>> {
 /// Parse passwd file at a specific path
 pub fn parse_passwd_file_at(path: &str) -> NativeResult<Vec<UserInfo>> {
     if !Path::new(path).exists() {
-        return Err(NativeError::NotFound(format!("Passwd file not found: {}", path)));
+        return Err(NativeError::NotFound(format!(
+            "Passwd file not found: {}",
+            path
+        )));
     }
 
     let file = File::open(path)?;
@@ -355,7 +379,10 @@ pub fn parse_group_file() -> NativeResult<Vec<GroupInfo>> {
 /// Parse group file at a specific path
 pub fn parse_group_file_at(path: &str) -> NativeResult<Vec<GroupInfo>> {
     if !Path::new(path).exists() {
-        return Err(NativeError::NotFound(format!("Group file not found: {}", path)));
+        return Err(NativeError::NotFound(format!(
+            "Group file not found: {}",
+            path
+        )));
     }
 
     let file = File::open(path)?;

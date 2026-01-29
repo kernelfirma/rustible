@@ -3,10 +3,10 @@
 //! This module provides comprehensive benchmarking infrastructure to measure
 //! and track Rustible's performance against Ansible and across different scenarios.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
 /// Benchmark configuration
 #[derive(Debug, Clone)]
@@ -140,19 +140,22 @@ impl BenchmarkResult {
             "Benchmark: {} ({} hosts, {} tasks)\n",
             self.name, self.host_count, self.task_count
         );
-        output.push_str(&format!("  Rustible: {:.3}s\n", self.rustible_time.as_secs_f64()));
-        
+        output.push_str(&format!(
+            "  Rustible: {:.3}s\n",
+            self.rustible_time.as_secs_f64()
+        ));
+
         if let Some(ansible_time) = self.ansible_time {
             output.push_str(&format!("  Ansible:  {:.3}s\n", ansible_time.as_secs_f64()));
             if let Some(speedup) = self.speedup {
                 output.push_str(&format!("  Speedup:  {:.2}x\n", speedup));
             }
         }
-        
+
         if let Some(memory) = self.memory_mb {
             output.push_str(&format!("  Memory:   {:.2} MB\n", memory));
         }
-        
+
         output
     }
 
@@ -186,11 +189,23 @@ impl BenchmarkRunner {
         let mut results = Vec::new();
 
         // Run different benchmark scenarios
-        results.push(self.run_benchmark("simple_playbook", SimplePlaybookScenario).await?);
+        results.push(
+            self.run_benchmark("simple_playbook", SimplePlaybookScenario)
+                .await?,
+        );
         results.push(self.run_benchmark("file_copy", FileCopyScenario).await?);
-        results.push(self.run_benchmark("template_render", TemplateRenderScenario).await?);
-        results.push(self.run_benchmark("package_install", PackageInstallScenario).await?);
-        results.push(self.run_benchmark("service_management", ServiceManagementScenario).await?);
+        results.push(
+            self.run_benchmark("template_render", TemplateRenderScenario)
+                .await?,
+        );
+        results.push(
+            self.run_benchmark("package_install", PackageInstallScenario)
+                .await?,
+        );
+        results.push(
+            self.run_benchmark("service_management", ServiceManagementScenario)
+                .await?,
+        );
 
         // Save results
         self.save_results(&results)?;
@@ -238,7 +253,11 @@ impl BenchmarkRunner {
         let mut times = Vec::new();
 
         for iteration in 0..self.config.iterations {
-            println!("  Rustible iteration {} of {}", iteration + 1, self.config.iterations);
+            println!(
+                "  Rustible iteration {} of {}",
+                iteration + 1,
+                self.config.iterations
+            );
             let start = Instant::now();
 
             scenario.run_rustible().await?;
@@ -261,7 +280,11 @@ impl BenchmarkRunner {
         let mut times = Vec::new();
 
         for iteration in 0..self.config.iterations {
-            println!("  Ansible iteration {} of {}", iteration + 1, self.config.iterations);
+            println!(
+                "  Ansible iteration {} of {}",
+                iteration + 1,
+                self.config.iterations
+            );
             let start = Instant::now();
 
             scenario.run_ansible().await?;
@@ -323,7 +346,7 @@ impl BenchmarkRunner {
     /// Generate HTML report
     fn generate_html_report(&self, results: &[BenchmarkResult]) -> Result<String, std::io::Error> {
         let mut html = String::new();
-        
+
         html.push_str("<!DOCTYPE html>\n");
         html.push_str("<html>\n<head>\n");
         html.push_str("<title>Rustible Benchmark Results</title>\n");
@@ -335,12 +358,17 @@ impl BenchmarkRunner {
         html.push_str("tr:nth-child(even) { background-color: #f2f2f2; }\n");
         html.push_str("</style>\n");
         html.push_str("</head>\n<body>\n");
-        
+
         html.push_str("<h1>Rustible Performance Benchmark Results</h1>\n");
-        html.push_str(&format!("<p>Generated: {}</p>\n", chrono::Utc::now().to_rfc3339()));
-        html.push_str(&format!("<p>Configuration: {} hosts, {} tasks, {} iterations</p>\n",
-            self.config.host_count, self.config.task_count, self.config.iterations));
-        
+        html.push_str(&format!(
+            "<p>Generated: {}</p>\n",
+            chrono::Utc::now().to_rfc3339()
+        ));
+        html.push_str(&format!(
+            "<p>Configuration: {} hosts, {} tasks, {} iterations</p>\n",
+            self.config.host_count, self.config.task_count, self.config.iterations
+        ));
+
         html.push_str("<table>\n");
         html.push_str("<tr>\n");
         html.push_str("<th>Benchmark</th>\n");
@@ -349,11 +377,14 @@ impl BenchmarkRunner {
         html.push_str("<th>Speedup</th>\n");
         html.push_str("<th>Memory</th>\n");
         html.push_str("</tr>\n");
-        
+
         for result in results {
             html.push_str("<tr>\n");
             html.push_str(&format!("<td>{}</td>\n", result.name));
-            html.push_str(&format!("<td>{:.3}s</td>\n", result.rustible_time.as_secs_f64()));
+            html.push_str(&format!(
+                "<td>{:.3}s</td>\n",
+                result.rustible_time.as_secs_f64()
+            ));
             if let Some(ansible_time) = result.ansible_time {
                 html.push_str(&format!("<td>{:.3}s</td>\n", ansible_time.as_secs_f64()));
             } else {
@@ -371,10 +402,10 @@ impl BenchmarkRunner {
             }
             html.push_str("</tr>\n");
         }
-        
+
         html.push_str("</table>\n");
         html.push_str("</body>\n</html>\n");
-        
+
         Ok(html)
     }
 }
@@ -556,7 +587,7 @@ mod tests {
         let mut result = BenchmarkResult::new("test", 10, 20);
         result = result.with_rustible_time(Duration::from_secs(5));
         result = result.with_ansible_time(Duration::from_secs(10));
-        
+
         assert_eq!(result.speedup, Some(2.0));
     }
 

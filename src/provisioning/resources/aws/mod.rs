@@ -44,7 +44,7 @@ pub mod subnet;
 pub mod vpc;
 
 pub use autoscaling_group::{
-    AwsAutoScalingGroupResource, AutoScalingGroupConfig, AutoScalingGroupState,
+    AutoScalingGroupConfig, AutoScalingGroupState, AwsAutoScalingGroupResource,
 };
 pub use db_subnet_group::{AwsDbSubnetGroupResource, DbSubnetGroupConfig, DbSubnetGroupState};
 pub use ebs_volume::{AwsEbsVolumeResource, EbsVolumeConfig, EbsVolumeState};
@@ -58,11 +58,11 @@ pub use internet_gateway::{
 pub use launch_template::{AwsLaunchTemplateResource, LaunchTemplateConfig, LaunchTemplateState};
 pub use load_balancer::{AwsLoadBalancerResource, LoadBalancerConfig, LoadBalancerState};
 pub use nat_gateway::{AwsNatGatewayResource, NatGatewayAttributes, NatGatewayConfig};
+pub use rds_instance::{AwsRdsInstanceResource, RdsInstanceConfig, RdsInstanceState};
 pub use route_table::{
     AwsRouteTableResource, RouteConfig, RouteTableAssociation, RouteTableAttributes,
     RouteTableConfig,
 };
-pub use rds_instance::{AwsRdsInstanceResource, RdsInstanceConfig, RdsInstanceState};
 pub use s3_bucket::{AwsS3BucketResource, S3BucketConfig, S3BucketState};
 pub use security_group::AwsSecurityGroupResource;
 pub use security_group_rule::{

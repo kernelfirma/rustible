@@ -86,10 +86,7 @@ fn test_unarchive_zip_basic() {
 
     create_test_zip(
         &archive,
-        &[
-            ("file1.txt", "content1"),
-            ("file2.txt", "content2"),
-        ],
+        &[("file1.txt", "content1"), ("file2.txt", "content2")],
     );
 
     let module = UnarchiveModule;
@@ -100,8 +97,14 @@ fn test_unarchive_zip_basic() {
     let result = module.execute(&params, &context).unwrap();
 
     assert!(result.changed, "Should report changed when extracting");
-    assert!(dest.join("file1.txt").exists(), "file1.txt should be extracted");
-    assert!(dest.join("file2.txt").exists(), "file2.txt should be extracted");
+    assert!(
+        dest.join("file1.txt").exists(),
+        "file1.txt should be extracted"
+    );
+    assert!(
+        dest.join("file2.txt").exists(),
+        "file2.txt should be extracted"
+    );
     assert_eq!(
         fs::read_to_string(dest.join("file1.txt")).unwrap(),
         "content1"
@@ -235,7 +238,10 @@ fn test_unarchive_creates_skip() {
     let module = UnarchiveModule;
     let mut params = with_src(create_params(), archive.to_str().unwrap());
     params = with_dest(params, dest.to_str().unwrap());
-    params.insert("creates".to_string(), serde_json::json!(marker.to_str().unwrap()));
+    params.insert(
+        "creates".to_string(),
+        serde_json::json!(marker.to_str().unwrap()),
+    );
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context).unwrap();
@@ -263,7 +269,10 @@ fn test_unarchive_creates_extract() {
     let module = UnarchiveModule;
     let mut params = with_src(create_params(), archive.to_str().unwrap());
     params = with_dest(params, dest.to_str().unwrap());
-    params.insert("creates".to_string(), serde_json::json!(marker.to_str().unwrap()));
+    params.insert(
+        "creates".to_string(),
+        serde_json::json!(marker.to_str().unwrap()),
+    );
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context).unwrap();
@@ -301,16 +310,16 @@ fn test_unarchive_exclude() {
     let module = UnarchiveModule;
     let mut params = with_src(create_params(), archive.to_str().unwrap());
     params = with_dest(params, dest.to_str().unwrap());
-    params.insert(
-        "exclude".to_string(),
-        serde_json::json!(["exclude.txt"]),
-    );
+    params.insert("exclude".to_string(), serde_json::json!(["exclude.txt"]));
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context).unwrap();
 
     assert!(result.changed);
-    assert!(dest.join("keep.txt").exists(), "keep.txt should be extracted");
+    assert!(
+        dest.join("keep.txt").exists(),
+        "keep.txt should be extracted"
+    );
     assert!(dest.join("also_keep.txt").exists());
     assert!(
         !dest.join("exclude.txt").exists(),
@@ -389,7 +398,10 @@ fn test_unarchive_check_mode_creates() {
     let module = UnarchiveModule;
     let mut params = with_src(create_params(), archive.to_str().unwrap());
     params = with_dest(params, dest.to_str().unwrap());
-    params.insert("creates".to_string(), serde_json::json!(marker.to_str().unwrap()));
+    params.insert(
+        "creates".to_string(),
+        serde_json::json!(marker.to_str().unwrap()),
+    );
     let context = ModuleContext::default().with_check_mode(true);
 
     let result = module.execute(&params, &context).unwrap();

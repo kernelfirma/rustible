@@ -221,8 +221,7 @@ impl Validator {
         let mut result = ValidationResult::new();
 
         // Read playbook source for diagnostics
-        let source = std::fs::read_to_string(playbook_path)
-            .unwrap_or_else(|_| String::new());
+        let source = std::fs::read_to_string(playbook_path).unwrap_or_else(|_| String::new());
 
         // Validate syntax
         if self.config.validate_syntax {
@@ -352,7 +351,7 @@ impl Validator {
                                 .take_while(|(_, c)| *c != '}')
                                 .map(|(_, c)| c)
                                 .collect();
-                            
+
                             if !var_content.is_empty() {
                                 // Extract variable name (simplified)
                                 let var_name = var_content
@@ -361,7 +360,7 @@ impl Validator {
                                     .next()
                                     .unwrap_or("")
                                     .to_string();
-                                
+
                                 if !var_name.is_empty() && !var_name.contains('|') {
                                     used_vars.insert(var_name);
                                 }
@@ -381,7 +380,13 @@ impl Validator {
                         playbook_path,
                         source,
                         line,
-                        source.lines().nth(line - 1).unwrap_or("").find(var).unwrap_or(0) + 1,
+                        source
+                            .lines()
+                            .nth(line - 1)
+                            .unwrap_or("")
+                            .find(var)
+                            .unwrap_or(0)
+                            + 1,
                         var,
                         &defined_vars.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
                     );
@@ -422,9 +427,14 @@ impl Validator {
                             )
                             .with_code("E0005")
                             .with_label("handler not defined")
-                            .with_note(&format!("available handlers: {}", 
-                                defined_handlers.iter().cloned().collect::<Vec<_>>()
-                                    .join(", ")));
+                            .with_note(&format!(
+                                "available handlers: {}",
+                                defined_handlers
+                                    .iter()
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ));
                             result.add_error(diag);
                         }
                     }
@@ -447,8 +457,14 @@ impl Validator {
         // List of deprecated modules
         let deprecated_modules = vec![
             ("apt_key", "Use 'apt_repository' instead"),
-            ("docker_container", "Use 'community.docker.docker_container' instead"),
-            ("docker_image", "Use 'community.docker.docker_image' instead"),
+            (
+                "docker_container",
+                "Use 'community.docker.docker_container' instead",
+            ),
+            (
+                "docker_image",
+                "Use 'community.docker.docker_image' instead",
+            ),
         ];
 
         for play in &playbook.plays {
@@ -531,9 +547,12 @@ mod tests {
     fn test_validation_result() {
         let mut result = ValidationResult::new();
         assert!(result.passed);
-        
-        let diag = RichDiagnostic::error("test error", "test.yml", 
-            crate::diagnostics::Span::new(0, 0));
+
+        let diag = RichDiagnostic::error(
+            "test error",
+            "test.yml",
+            crate::diagnostics::Span::new(0, 0),
+        );
         result.add_error(diag);
         assert!(!result.passed);
     }

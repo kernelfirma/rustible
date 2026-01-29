@@ -141,13 +141,13 @@ fn filter_capitalize(value: &Value) -> FilterResult<Value> {
         filter: "capitalize".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     let mut chars = s.chars();
     let result = match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
         None => String::new(),
     };
-    
+
     Ok(Value::String(result))
 }
 
@@ -156,8 +156,9 @@ fn filter_title(value: &Value) -> FilterResult<Value> {
         filter: "title".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    let result = s.split_whitespace()
+
+    let result = s
+        .split_whitespace()
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
@@ -167,7 +168,7 @@ fn filter_title(value: &Value) -> FilterResult<Value> {
         })
         .collect::<Vec<_>>()
         .join(" ");
-    
+
     Ok(Value::String(result))
 }
 
@@ -181,7 +182,7 @@ fn filter_trim(value: &Value) -> FilterResult<Value> {
 
 fn filter_default(value: &Value, args: &[Value]) -> FilterResult<Value> {
     let default_value = args.get(0).unwrap_or(&Value::Null).clone();
-    
+
     // Return default if value is null, undefined, or empty string
     match value {
         Value::Null => Ok(default_value),
@@ -197,21 +198,23 @@ fn filter_replace(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "replace".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    let old = args.get(0)
+
+    let old = args
+        .get(0)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "replace".to_string(),
             message: "Expected search string as first argument".to_string(),
         })?;
-    
-    let new = args.get(1)
+
+    let new = args
+        .get(1)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "replace".to_string(),
             message: "Expected replacement string as second argument".to_string(),
         })?;
-    
+
     Ok(Value::String(s.replace(old, new)))
 }
 
@@ -220,24 +223,26 @@ fn filter_regex_replace(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "regex_replace".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    let pattern = args.get(0)
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| FilterError::InvalidInput {
-            filter: "regex_replace".to_string(),
-            message: "Expected regex pattern as first argument".to_string(),
-        })?;
-    
-    let replacement = args.get(1)
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| FilterError::InvalidInput {
-            filter: "regex_replace".to_string(),
-            message: "Expected replacement string as second argument".to_string(),
-        })?;
-    
+
+    let pattern =
+        args.get(0)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| FilterError::InvalidInput {
+                filter: "regex_replace".to_string(),
+                message: "Expected regex pattern as first argument".to_string(),
+            })?;
+
+    let replacement =
+        args.get(1)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| FilterError::InvalidInput {
+                filter: "regex_replace".to_string(),
+                message: "Expected replacement string as second argument".to_string(),
+            })?;
+
     let regex = Regex::new(pattern).map_err(|e| FilterError::Regex(e.to_string()))?;
     let result = regex.replace_all(s, replacement).to_string();
-    
+
     Ok(Value::String(result))
 }
 
@@ -246,15 +251,14 @@ fn filter_split(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "split".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    let delimiter = args.get(0)
-        .and_then(|v| v.as_str())
-        .unwrap_or(" ");
-    
-    let result: Vec<Value> = s.split(delimiter)
+
+    let delimiter = args.get(0).and_then(|v| v.as_str()).unwrap_or(" ");
+
+    let result: Vec<Value> = s
+        .split(delimiter)
         .map(|part| Value::String(part.to_string()))
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
@@ -263,15 +267,11 @@ fn filter_join(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "join".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let separator = args.get(0)
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    
-    let strings: Vec<&str> = arr.iter()
-        .map(|v| v.as_str().unwrap_or(""))
-        .collect();
-    
+
+    let separator = args.get(0).and_then(|v| v.as_str()).unwrap_or("");
+
+    let strings: Vec<&str> = arr.iter().map(|v| v.as_str().unwrap_or("")).collect();
+
     Ok(Value::String(strings.join(separator)))
 }
 
@@ -280,7 +280,7 @@ fn filter_wordcount(value: &Value) -> FilterResult<Value> {
         filter: "wordcount".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     let count = s.split_whitespace().count();
     Ok(Value::Number(count.into()))
 }
@@ -290,7 +290,7 @@ fn filter_urlencode(value: &Value) -> FilterResult<Value> {
         filter: "urlencode".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     Ok(Value::String(urlencoding::encode(s).to_string()))
 }
 
@@ -299,8 +299,12 @@ fn filter_urldecode(value: &Value) -> FilterResult<Value> {
         filter: "urldecode".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    Ok(Value::String(urlencoding::decode(s).unwrap_or_else(|_| s.to_string()).to_string()))
+
+    Ok(Value::String(
+        urlencoding::decode(s)
+            .unwrap_or_else(|_| s.to_string())
+            .to_string(),
+    ))
 }
 
 fn filter_basename(value: &Value) -> FilterResult<Value> {
@@ -308,12 +312,13 @@ fn filter_basename(value: &Value) -> FilterResult<Value> {
         filter: "basename".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     Ok(Value::String(
-        Path::new(s).file_name()
+        Path::new(s)
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(s)
-            .to_string()
+            .to_string(),
     ))
 }
 
@@ -322,12 +327,13 @@ fn filter_dirname(value: &Value) -> FilterResult<Value> {
         filter: "dirname".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     Ok(Value::String(
-        Path::new(s).parent()
+        Path::new(s)
+            .parent()
             .and_then(|p| p.to_str())
             .unwrap_or(".")
-            .to_string()
+            .to_string(),
     ))
 }
 
@@ -336,11 +342,12 @@ fn filter_realpath(value: &Value) -> FilterResult<Value> {
         filter: "realpath".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     Ok(Value::String(
-        Path::new(s).canonicalize()
+        Path::new(s)
+            .canonicalize()
             .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| s.to_string())
+            .unwrap_or_else(|_| s.to_string()),
     ))
 }
 
@@ -349,13 +356,17 @@ fn filter_expanduser(value: &Value) -> FilterResult<Value> {
         filter: "expanduser".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     let result = if s.starts_with("~/") {
-        format!("{}{}", env::var("HOME").unwrap_or_else(|_| "~".to_string()), &s[1..])
+        format!(
+            "{}{}",
+            env::var("HOME").unwrap_or_else(|_| "~".to_string()),
+            &s[1..]
+        )
     } else {
         s.to_string()
     };
-    
+
     Ok(Value::String(result))
 }
 
@@ -366,12 +377,14 @@ fn filter_length(value: &Value) -> FilterResult<Value> {
         Value::Array(arr) => arr.len(),
         Value::String(s) => s.chars().count(),
         Value::Object(obj) => obj.len(),
-        _ => return Err(FilterError::InvalidInput {
-            filter: "length".to_string(),
-            message: "Expected array, string, or object".to_string(),
-        }),
+        _ => {
+            return Err(FilterError::InvalidInput {
+                filter: "length".to_string(),
+                message: "Expected array, string, or object".to_string(),
+            })
+        }
     };
-    
+
     Ok(Value::Number(len.into()))
 }
 
@@ -384,7 +397,7 @@ fn filter_bool(value: &Value) -> FilterResult<Value> {
         Value::Object(obj) => !obj.is_empty(),
         Value::Null => false,
     };
-    
+
     Ok(Value::Bool(result))
 }
 
@@ -395,7 +408,7 @@ fn filter_int(value: &Value) -> FilterResult<Value> {
         Value::Bool(b) => Some(if *b { 1 } else { 0 }),
         _ => None,
     };
-    
+
     Ok(Value::Number(n.unwrap_or(0).into()))
 }
 
@@ -406,7 +419,7 @@ fn filter_float(value: &Value) -> FilterResult<Value> {
         Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
         _ => None,
     };
-    
+
     Ok(Value::Number(n.unwrap_or(0.0).into()))
 }
 
@@ -419,44 +432,45 @@ fn filter_string(value: &Value) -> FilterResult<Value> {
         Value::Array(_) => "[...]".to_string(),
         Value::Object(_) => "{...}".to_string(),
     };
-    
+
     Ok(Value::String(s))
 }
 
 fn filter_abs(value: &Value) -> FilterResult<Value> {
-    let n = value.as_number()
-        .and_then(|n| n.as_f64())
-        .ok_or_else(|| FilterError::InvalidInput {
-            filter: "abs".to_string(),
-            message: "Expected number".to_string(),
-        })?;
-    
+    let n =
+        value
+            .as_number()
+            .and_then(|n| n.as_f64())
+            .ok_or_else(|| FilterError::InvalidInput {
+                filter: "abs".to_string(),
+                message: "Expected number".to_string(),
+            })?;
+
     Ok(Value::Number(n.abs().into()))
 }
 
 fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let n = value.as_number()
-        .and_then(|n| n.as_f64())
-        .ok_or_else(|| FilterError::InvalidInput {
-            filter: "round".to_string(),
-            message: "Expected number".to_string(),
-        })?;
-    
-    let precision = args.get(0)
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0) as usize;
-    
+    let n =
+        value
+            .as_number()
+            .and_then(|n| n.as_f64())
+            .ok_or_else(|| FilterError::InvalidInput {
+                filter: "round".to_string(),
+                message: "Expected number".to_string(),
+            })?;
+
+    let precision = args.get(0).and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+
     let multiplier = 10_f64.powi(precision as i32);
     let rounded = (n * multiplier).round() / multiplier;
-    
+
     Ok(Value::Number(rounded.into()))
 }
 
 // ============== JSON/YAML Filters ==============
 
 fn filter_to_json(value: &Value) -> FilterResult<Value> {
-    let json = serde_json::to_string(value)
-        .map_err(|e| FilterError::Json(e.to_string()))?;
+    let json = serde_json::to_string(value).map_err(|e| FilterError::Json(e.to_string()))?;
     Ok(Value::String(json))
 }
 
@@ -465,18 +479,16 @@ fn filter_from_json(value: &Value) -> FilterResult<Value> {
         filter: "from_json".to_string(),
         message: "Expected JSON string".to_string(),
     })?;
-    
-    let parsed: Value = serde_json::from_str(s)
-        .map_err(|e| FilterError::Json(e.to_string()))?;
+
+    let parsed: Value = serde_json::from_str(s).map_err(|e| FilterError::Json(e.to_string()))?;
     Ok(parsed)
 }
 
 fn filter_to_yaml(value: &Value) -> FilterResult<Value> {
-    let yaml = serde_yaml::to_string(value)
-        .map_err(|e| FilterError::FilterFailed {
-            filter: "to_yaml".to_string(),
-            message: e.to_string(),
-        })?;
+    let yaml = serde_yaml::to_string(value).map_err(|e| FilterError::FilterFailed {
+        filter: "to_yaml".to_string(),
+        message: e.to_string(),
+    })?;
     Ok(Value::String(yaml))
 }
 
@@ -485,18 +497,16 @@ fn filter_from_yaml(value: &Value) -> FilterResult<Value> {
         filter: "from_yaml".to_string(),
         message: "Expected YAML string".to_string(),
     })?;
-    
-    let parsed: Value = serde_yaml::from_str(s)
-        .map_err(|e| FilterError::FilterFailed {
-            filter: "from_yaml".to_string(),
-            message: e.to_string(),
-        })?;
+
+    let parsed: Value = serde_yaml::from_str(s).map_err(|e| FilterError::FilterFailed {
+        filter: "from_yaml".to_string(),
+        message: e.to_string(),
+    })?;
     Ok(parsed)
 }
 
 fn filter_to_nice_json(value: &Value) -> FilterResult<Value> {
-    let json = serde_json::to_string_pretty(value)
-        .map_err(|e| FilterError::Json(e.to_string()))?;
+    let json = serde_json::to_string_pretty(value).map_err(|e| FilterError::Json(e.to_string()))?;
     Ok(Value::String(json))
 }
 
@@ -511,7 +521,7 @@ fn filter_b64encode(value: &Value) -> FilterResult<Value> {
         filter: "b64encode".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     Ok(Value::String(base64::encode(s)))
 }
 
@@ -520,10 +530,9 @@ fn filter_b64decode(value: &Value) -> FilterResult<Value> {
         filter: "b64decode".to_string(),
         message: "Expected base64 string".to_string(),
     })?;
-    
-    let decoded = base64::decode(s)
-        .map_err(|e| FilterError::Base64(e.to_string()))?;
-    
+
+    let decoded = base64::decode(s).map_err(|e| FilterError::Base64(e.to_string()))?;
+
     String::from_utf8(decoded)
         .map(|s| Value::String(s))
         .map_err(|e| FilterError::Base64(e.to_string()))
@@ -534,7 +543,7 @@ fn filter_md5(value: &Value) -> FilterResult<Value> {
         filter: "md5".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     use md5::{compute, Md5};
     let hash = compute(s);
     Ok(Value::String(format!("{:x}", hash)))
@@ -545,7 +554,7 @@ fn filter_sha1(value: &Value) -> FilterResult<Value> {
         filter: "sha1".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
+
     use sha1::Sha1;
     let mut hasher = Sha1::new();
     hasher.update(s.as_bytes());
@@ -558,8 +567,8 @@ fn filter_sha256(value: &Value) -> FilterResult<Value> {
         filter: "sha256".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    use sha2::{Sha256, Digest};
+
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(s.as_bytes());
     let hash = hasher.finalize();
@@ -571,8 +580,8 @@ fn filter_sha512(value: &Value) -> FilterResult<Value> {
         filter: "sha512".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    use sha2::{Sha512, Digest};
+
+    use sha2::{Digest, Sha512};
     let mut hasher = Sha512::new();
     hasher.update(s.as_bytes());
     let hash = hasher.finalize();
@@ -586,8 +595,9 @@ fn filter_quote(value: &Value) -> FilterResult<Value> {
         filter: "quote".to_string(),
         message: "Expected string".to_string(),
     })?;
-    
-    let quoted = s.chars()
+
+    let quoted = s
+        .chars()
         .flat_map(|c| match c {
             '"' => vec!['\\', '"'],
             '\'' => vec!['\\', '\''],
@@ -595,23 +605,23 @@ fn filter_quote(value: &Value) -> FilterResult<Value> {
             _ => vec![c],
         })
         .collect::<String>();
-    
+
     Ok(Value::String(format!("\"{}\"", quoted)))
 }
 
 fn filter_shuffle(value: &Value) -> FilterResult<Value> {
     use rand::seq::SliceRandom;
     use rand::thread_rng;
-    
+
     let arr = value.as_array().ok_or_else(|| FilterError::InvalidInput {
         filter: "shuffle".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     let mut result = arr.clone();
     let mut rng = thread_rng();
     result.shuffle(&mut rng);
-    
+
     Ok(Value::Array(result))
 }
 
@@ -620,29 +630,31 @@ fn filter_sort(value: &Value) -> FilterResult<Value> {
         filter: "sort".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     let mut result = arr.clone();
-    result.sort_by(|a, b| {
-        match (a.as_str(), b.as_str()) {
-            (Some(sa), Some(sb)) => sa.cmp(sb),
-            (Some(sa), None) => {
-                if let Some(nb) = b.as_i64() {
-                    sa.parse::<i64>().map(|ia| ia.cmp(&nb)).unwrap_or(std::cmp::Ordering::Greater)
-                } else {
-                    std::cmp::Ordering::Greater
-                }
+    result.sort_by(|a, b| match (a.as_str(), b.as_str()) {
+        (Some(sa), Some(sb)) => sa.cmp(sb),
+        (Some(sa), None) => {
+            if let Some(nb) = b.as_i64() {
+                sa.parse::<i64>()
+                    .map(|ia| ia.cmp(&nb))
+                    .unwrap_or(std::cmp::Ordering::Greater)
+            } else {
+                std::cmp::Ordering::Greater
             }
-            (None, Some(sb)) => {
-                if let Some(na) = a.as_i64() {
-                    sb.parse::<i64>().map(|ib| na.cmp(&ib)).unwrap_or(std::cmp::Ordering::Less)
-                } else {
-                    std::cmp::Ordering::Less
-                }
-            }
-            (None, None) => std::cmp::Ordering::Equal,
         }
+        (None, Some(sb)) => {
+            if let Some(na) = a.as_i64() {
+                sb.parse::<i64>()
+                    .map(|ib| na.cmp(&ib))
+                    .unwrap_or(std::cmp::Ordering::Less)
+            } else {
+                std::cmp::Ordering::Less
+            }
+        }
+        (None, None) => std::cmp::Ordering::Equal,
     });
-    
+
     Ok(Value::Array(result))
 }
 
@@ -651,13 +663,14 @@ fn filter_unique(value: &Value) -> FilterResult<Value> {
         filter: "unique".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     let mut seen = std::collections::HashSet::new();
-    let result: Vec<Value> = arr.iter()
+    let result: Vec<Value> = arr
+        .iter()
         .filter(|v| seen.insert(v.to_string()))
         .cloned()
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
@@ -666,20 +679,18 @@ fn filter_min(value: &Value) -> FilterResult<Value> {
         filter: "min".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     if arr.is_empty() {
         return Ok(Value::Null);
     }
-    
-    let min = arr.iter().min_by(|a, b| {
-        match (a.as_f64(), b.as_f64()) {
-            (Some(fa), Some(fb)) => fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => std::cmp::Ordering::Equal,
-        }
+
+    let min = arr.iter().min_by(|a, b| match (a.as_f64(), b.as_f64()) {
+        (Some(fa), Some(fb)) => fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
     });
-    
+
     Ok(min.cloned().unwrap_or(Value::Null))
 }
 
@@ -688,20 +699,18 @@ fn filter_max(value: &Value) -> FilterResult<Value> {
         filter: "max".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     if arr.is_empty() {
         return Ok(Value::Null);
     }
-    
-    let max = arr.iter().max_by(|a, b| {
-        match (a.as_f64(), b.as_f64()) {
-            (Some(fa), Some(fb)) => fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => std::cmp::Ordering::Equal,
-        }
+
+    let max = arr.iter().max_by(|a, b| match (a.as_f64(), b.as_f64()) {
+        (Some(fa), Some(fb)) => fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
     });
-    
+
     Ok(max.cloned().unwrap_or(Value::Null))
 }
 
@@ -710,11 +719,9 @@ fn filter_sum(value: &Value) -> FilterResult<Value> {
         filter: "sum".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let sum: f64 = arr.iter()
-        .filter_map(|v| v.as_f64())
-        .sum();
-    
+
+    let sum: f64 = arr.iter().filter_map(|v| v.as_f64()).sum();
+
     Ok(Value::Number(sum.into()))
 }
 
@@ -723,11 +730,9 @@ fn filter_product(value: &Value) -> FilterResult<Value> {
         filter: "product".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let product: f64 = arr.iter()
-        .filter_map(|v| v.as_f64())
-        .product();
-    
+
+    let product: f64 = arr.iter().filter_map(|v| v.as_f64()).product();
+
     Ok(Value::Number(product.into()))
 }
 
@@ -736,15 +741,13 @@ fn filter_mean(value: &Value) -> FilterResult<Value> {
         filter: "mean".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     if arr.is_empty() {
         return Ok(Value::Null);
     }
-    
-    let sum: f64 = arr.iter()
-        .filter_map(|v| v.as_f64())
-        .sum();
-    
+
+    let sum: f64 = arr.iter().filter_map(|v| v.as_f64()).sum();
+
     let mean = sum / arr.len() as f64;
     Ok(Value::Number(mean.into()))
 }
@@ -754,23 +757,21 @@ fn filter_median(value: &Value) -> FilterResult<Value> {
         filter: "median".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     if arr.is_empty() {
         return Ok(Value::Null);
     }
-    
-    let mut nums: Vec<f64> = arr.iter()
-        .filter_map(|v| v.as_f64())
-        .collect();
-    
+
+    let mut nums: Vec<f64> = arr.iter().filter_map(|v| v.as_f64()).collect();
+
     nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    
+
     let median = if nums.len() % 2 == 0 {
         (nums[nums.len() / 2 - 1] + nums[nums.len() / 2]) / 2.0
     } else {
         nums[nums.len() / 2]
     };
-    
+
     Ok(Value::Number(median.into()))
 }
 
@@ -779,7 +780,7 @@ fn filter_first(value: &Value) -> FilterResult<Value> {
         filter: "first".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     Ok(arr.first().cloned().unwrap_or(Value::Null))
 }
 
@@ -788,7 +789,7 @@ fn filter_last(value: &Value) -> FilterResult<Value> {
         filter: "last".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     Ok(arr.last().cloned().unwrap_or(Value::Null))
 }
 
@@ -797,17 +798,15 @@ fn filter_nth(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "nth".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let index = args.get(0)
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0) as usize;
-    
+
+    let index = args.get(0).and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+
     Ok(arr.get(index).cloned().unwrap_or(Value::Null))
 }
 
 fn filter_flatten(value: &Value) -> FilterResult<Value> {
     let mut result = Vec::new();
-    
+
     fn flatten(arr: &[Value], result: &mut Vec<Value>) {
         for item in arr {
             if let Value::Array(inner) = item {
@@ -817,12 +816,12 @@ fn filter_flatten(value: &Value) -> FilterResult<Value> {
             }
         }
     }
-    
+
     let arr = value.as_array().ok_or_else(|| FilterError::InvalidInput {
         filter: "flatten".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     flatten(arr, &mut result);
     Ok(Value::Array(result))
 }
@@ -834,13 +833,12 @@ fn filter_items(value: &Value) -> FilterResult<Value> {
         filter: "items".to_string(),
         message: "Expected object".to_string(),
     })?;
-    
-    let result: Vec<Value> = obj.iter()
-        .map(|(k, v)| {
-            Value::Array(vec![Value::String(k.clone()), v.clone()])
-        })
+
+    let result: Vec<Value> = obj
+        .iter()
+        .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()]))
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
@@ -853,9 +851,9 @@ fn filter_items2dict(value: &Value) -> FilterResult<Value> {
         filter: "items2dict".to_string(),
         message: "Expected array of [key, value] pairs".to_string(),
     })?;
-    
+
     let mut result = serde_json::Map::new();
-    
+
     for item in arr {
         if let Value::Array(pair) = item {
             if pair.len() >= 2 {
@@ -865,18 +863,19 @@ fn filter_items2dict(value: &Value) -> FilterResult<Value> {
             }
         }
     }
-    
+
     Ok(Value::Object(result))
 }
 
 fn filter_combine(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let mut result = value.as_object()
+    let mut result = value
+        .as_object()
         .cloned()
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "combine".to_string(),
             message: "Expected object".to_string(),
         })?;
-    
+
     for arg in args {
         if let Value::Object(other) = arg {
             for (k, v) in other {
@@ -884,13 +883,13 @@ fn filter_combine(value: &Value, args: &[Value]) -> FilterResult<Value> {
             }
         }
     }
-    
+
     Ok(Value::Object(result))
 }
 
 fn filter_dict(args: &[Value]) -> FilterResult<Value> {
     let mut result = serde_json::Map::new();
-    
+
     for arg in args {
         if let Value::Array(pair) = arg {
             if pair.len() >= 2 {
@@ -900,7 +899,7 @@ fn filter_dict(args: &[Value]) -> FilterResult<Value> {
             }
         }
     }
-    
+
     Ok(Value::Object(result))
 }
 
@@ -926,7 +925,7 @@ fn filter_range(value: &Value) -> FilterResult<Value> {
         filter: "range".to_string(),
         message: "Expected integer".to_string(),
     })?;
-    
+
     let result: Vec<Value> = (0..n).map(|i| Value::Number(i.into())).collect();
     Ok(Value::Array(result))
 }
@@ -936,35 +935,35 @@ fn filter_zip(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "zip".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
+
     let mut iterators: Vec<std::slice::Iter<Value>> = vec![arr1.iter()];
     for arg in args {
         if let Value::Array(arr) = arg {
             iterators.push(arr.iter());
         }
     }
-    
+
     let mut result = Vec::new();
     loop {
         let mut row = Vec::new();
         let mut all_empty = true;
-        
+
         for iter in &mut iterators {
             if let Some(item) = iter.next() {
                 row.push(item.clone());
                 all_empty = false;
             }
         }
-        
+
         if all_empty {
             break;
         }
-        
+
         if row.len() == iterators.len() {
             result.push(Value::Array(row));
         }
     }
-    
+
     Ok(Value::Array(result))
 }
 
@@ -973,15 +972,17 @@ fn filter_map(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "map".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let attr = args.get(0)
+
+    let attr = args
+        .get(0)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "map".to_string(),
             message: "Expected attribute name as first argument".to_string(),
         })?;
-    
-    let result: Vec<Value> = arr.iter()
+
+    let result: Vec<Value> = arr
+        .iter()
         .filter_map(|v| {
             if let Value::Object(obj) = v {
                 obj.get(attr).cloned()
@@ -990,7 +991,7 @@ fn filter_map(value: &Value, args: &[Value]) -> FilterResult<Value> {
             }
         })
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
@@ -999,44 +1000,51 @@ fn filter_select(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "select".to_string(),
         message: "Expected array".to_string(),
     })?;
-    
-    let test = args.get(0)
+
+    let test = args
+        .get(0)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "select".to_string(),
             message: "Expected test name as first argument".to_string(),
         })?;
-    
-    let result: Vec<Value> = arr.iter()
-        .filter(|v| {
-            match test {
-                "defined" => !matches!(v, Value::Null),
-                "undefined" => matches!(v, Value::Null),
-                "truthy" => filter_bool(v).unwrap_or(Value::Bool(false)).as_bool().unwrap_or(false),
-                "falsy" => !filter_bool(v).unwrap_or(Value::Bool(true)).as_bool().unwrap_or(true),
-                _ => true,
-            }
+
+    let result: Vec<Value> = arr
+        .iter()
+        .filter(|v| match test {
+            "defined" => !matches!(v, Value::Null),
+            "undefined" => matches!(v, Value::Null),
+            "truthy" => filter_bool(v)
+                .unwrap_or(Value::Bool(false))
+                .as_bool()
+                .unwrap_or(false),
+            "falsy" => !filter_bool(v)
+                .unwrap_or(Value::Bool(true))
+                .as_bool()
+                .unwrap_or(true),
+            _ => true,
         })
         .cloned()
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
 fn filter_reject(value: &Value, args: &[Value]) -> FilterResult<Value> {
     let selected = filter_select(value, args)?;
-    
+
     if let Value::Array(selected_arr) = selected {
         if let Value::Array(original_arr) = value {
             let selected_set: std::collections::HashSet<&Value> = selected_arr.iter().collect();
-            let result: Vec<Value> = original_arr.iter()
+            let result: Vec<Value> = original_arr
+                .iter()
                 .filter(|v| !selected_set.contains(v))
                 .cloned()
                 .collect();
             return Ok(Value::Array(result));
         }
     }
-    
+
     Ok(value.clone())
 }
 
@@ -1045,15 +1053,17 @@ fn filter_selectattr(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "selectattr".to_string(),
         message: "Expected array of objects".to_string(),
     })?;
-    
-    let attr = args.get(0)
+
+    let attr = args
+        .get(0)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "selectattr".to_string(),
             message: "Expected attribute name as first argument".to_string(),
         })?;
-    
-    let result: Vec<Value> = arr.iter()
+
+    let result: Vec<Value> = arr
+        .iter()
         .filter(|v| {
             if let Value::Object(obj) = v {
                 obj.contains_key(attr)
@@ -1063,24 +1073,25 @@ fn filter_selectattr(value: &Value, args: &[Value]) -> FilterResult<Value> {
         })
         .cloned()
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
 fn filter_rejectattr(value: &Value, args: &[Value]) -> FilterResult<Value> {
     let selected = filter_selectattr(value, args)?;
-    
+
     if let Value::Array(selected_arr) = selected {
         if let Value::Array(original_arr) = value {
             let selected_set: std::collections::HashSet<&Value> = selected_arr.iter().collect();
-            let result: Vec<Value> = original_arr.iter()
+            let result: Vec<Value> = original_arr
+                .iter()
                 .filter(|v| !selected_set.contains(v))
                 .cloned()
                 .collect();
             return Ok(Value::Array(result));
         }
     }
-    
+
     Ok(value.clone())
 }
 
@@ -1089,41 +1100,46 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
         filter: "groupby".to_string(),
         message: "Expected array of objects".to_string(),
     })?;
-    
-    let attr = args.get(0)
+
+    let attr = args
+        .get(0)
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "groupby".to_string(),
             message: "Expected attribute name as first argument".to_string(),
         })?;
-    
-    let mut groups: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
-    
+
+    let mut groups: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
+
     for item in arr {
         if let Value::Object(obj) = item {
             if let Some(key_value) = obj.get(attr) {
                 let key = key_value.to_string();
-                groups.entry(key).or_insert_with(Vec::new).push(item.clone());
+                groups
+                    .entry(key)
+                    .or_insert_with(Vec::new)
+                    .push(item.clone());
             }
         }
     }
-    
-    let result: Vec<Value> = groups.into_iter()
-        .map(|(key, items)| {
-            Value::Array(vec![Value::String(key), Value::Array(items)])
-        })
+
+    let result: Vec<Value> = groups
+        .into_iter()
+        .map(|(key, items)| Value::Array(vec![Value::String(key), Value::Array(items)]))
         .collect();
-    
+
     Ok(Value::Array(result))
 }
 
 // ============== Date/Time Filters ==============
 
 fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let format = args.get(0)
+    let format = args
+        .get(0)
         .and_then(|v| v.as_str())
         .unwrap_or("%Y-%m-%d %H:%M:%S");
-    
+
     let dt = match value {
         Value::String(s) => {
             // Try parsing ISO 8601
@@ -1133,13 +1149,16 @@ fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
         }
         Value::Number(n) => {
             // Unix timestamp
-            n.as_i64().map(|ts| Utc.timestamp_opt(ts, 0).single()).flatten()
+            n.as_i64()
+                .map(|ts| Utc.timestamp_opt(ts, 0).single())
+                .flatten()
         }
         _ => None,
     };
-    
-    let dt = dt.ok_or_else(|| FilterError::InvalidDateTime("Invalid datetime format".to_string()))?;
-    
+
+    let dt =
+        dt.ok_or_else(|| FilterError::InvalidDateTime("Invalid datetime format".to_string()))?;
+
     Ok(Value::String(dt.format(format).to_string()))
 }
 
@@ -1148,10 +1167,10 @@ fn filter_to_datetime(value: &Value) -> FilterResult<Value> {
         filter: "to_datetime".to_string(),
         message: "Expected datetime string".to_string(),
     })?;
-    
+
     let dt = DateTime::parse_from_rfc3339(s)
         .map_err(|_| FilterError::InvalidDateTime("Invalid datetime format".to_string()))?;
-    
+
     Ok(Value::String(dt.to_rfc3339()))
 }
 
@@ -1195,7 +1214,7 @@ fn filter_env(value: &Value) -> FilterResult<Value> {
         filter: "env".to_string(),
         message: "Expected environment variable name".to_string(),
     })?;
-    
+
     Ok(Value::String(env::var(key).unwrap_or_default()))
 }
 
@@ -1221,11 +1240,14 @@ mod tests {
     fn test_split_filter() {
         let value = Value::String("a,b,c".to_string());
         let result = apply_filter("split", &value, &[Value::String(",".to_string())]).unwrap();
-        assert_eq!(result, Value::Array(vec![
-            Value::String("a".to_string()),
-            Value::String("b".to_string()),
-            Value::String("c".to_string()),
-        ]));
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::String("a".to_string()),
+                Value::String("b".to_string()),
+                Value::String("c".to_string()),
+            ])
+        );
     }
 
     #[test]
@@ -1244,7 +1266,7 @@ mod tests {
         let mut map = serde_json::Map::new();
         map.insert("key".to_string(), Value::String("value".to_string()));
         let value = Value::Object(map);
-        
+
         let result = apply_filter("to_json", &value, &[]).unwrap();
         assert_eq!(result, Value::String(r#"{"key":"value"}"#.to_string()));
     }

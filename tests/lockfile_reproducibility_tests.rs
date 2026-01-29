@@ -365,8 +365,7 @@ async fn test_lock_manager_provides_consistent_lock_info() {
 #[tokio::test]
 async fn test_lock_manager_expiration_configuration() {
     let backend = Box::new(InMemoryLock::new());
-    let manager = StateLockManager::new(backend)
-        .with_lock_expiration(Duration::from_secs(7200)); // 2 hours
+    let manager = StateLockManager::new(backend).with_lock_expiration(Duration::from_secs(7200)); // 2 hours
 
     let _guard = manager.lock("test").await.unwrap();
     let info = manager.get_lock_info().await.unwrap().unwrap();
@@ -386,8 +385,7 @@ async fn test_lock_manager_expiration_configuration() {
 #[tokio::test]
 async fn test_lock_manager_no_expiration_configuration() {
     let backend = Box::new(InMemoryLock::new());
-    let manager = StateLockManager::new(backend)
-        .without_lock_expiration();
+    let manager = StateLockManager::new(backend).without_lock_expiration();
 
     let _guard = manager.lock("eternal").await.unwrap();
     let info = manager.get_lock_info().await.unwrap().unwrap();
@@ -417,7 +415,9 @@ async fn test_concurrent_lock_attempts_produce_consistent_results() {
         let lock = lock_clone.clone();
         async move {
             let info = LockInfo::new(format!("attempt-{}", i));
-            lock.acquire(&info, Duration::from_millis(10)).await.unwrap()
+            lock.acquire(&info, Duration::from_millis(10))
+                .await
+                .unwrap()
         }
     }))
     .await;
@@ -619,10 +619,7 @@ fn test_lock_guard_state_tracking_is_consistent() {
     let lock_ids = vec!["id-1", "id-2", "id-3"];
 
     for id in lock_ids {
-        let guard = AsyncLockGuard::new_file(
-            id.to_string(),
-            PathBuf::from("/tmp/test.lock"),
-        );
+        let guard = AsyncLockGuard::new_file(id.to_string(), PathBuf::from("/tmp/test.lock"));
 
         assert_eq!(guard.lock_id(), id);
     }

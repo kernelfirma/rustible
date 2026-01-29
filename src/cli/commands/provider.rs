@@ -154,10 +154,8 @@ fn default_providers_path() -> PathBuf {
 async fn execute_install(args: &InstallArgs, ctx: &CommandContext) -> Result<i32> {
     let providers_path = args.path.clone().unwrap_or_else(default_providers_path);
 
-    ctx.output.info(&format!(
-        "Installing provider from: {}",
-        args.source
-    ));
+    ctx.output
+        .info(&format!("Installing provider from: {}", args.source));
 
     // Ensure providers directory exists
     if !providers_path.exists() {
@@ -186,7 +184,8 @@ async fn install_from_url(
     args: &InstallArgs,
     ctx: &CommandContext,
 ) -> Result<i32> {
-    ctx.output.info(&format!("Downloading provider from: {}", url));
+    ctx.output
+        .info(&format!("Downloading provider from: {}", url));
 
     // Create a temporary directory for download
     let temp_dir = tempfile::tempdir()?;
@@ -210,12 +209,14 @@ async fn install_from_url(
     // Verify signature if not skipped
     if !args.skip_verify {
         if let Err(e) = verify_provider_archive(&temp_file) {
-            ctx.output.error(&format!("Signature verification failed: {}", e));
+            ctx.output
+                .error(&format!("Signature verification failed: {}", e));
             return Ok(1);
         }
         ctx.output.info("Signature verification passed");
     } else {
-        ctx.output.warning("Skipping signature verification (--skip-verify)");
+        ctx.output
+            .warning("Skipping signature verification (--skip-verify)");
     }
 
     // Extract and install
@@ -232,22 +233,26 @@ async fn install_from_path(
     ctx: &CommandContext,
 ) -> Result<i32> {
     let source_path = PathBuf::from(path);
-    ctx.output.info(&format!("Installing from local path: {:?}", source_path));
+    ctx.output
+        .info(&format!("Installing from local path: {:?}", source_path));
 
     if !source_path.exists() {
-        ctx.output.error(&format!("Provider file not found: {:?}", source_path));
+        ctx.output
+            .error(&format!("Provider file not found: {:?}", source_path));
         return Ok(1);
     }
 
     // Verify signature if not skipped
     if !args.skip_verify {
         if let Err(e) = verify_provider_archive(&source_path) {
-            ctx.output.error(&format!("Signature verification failed: {}", e));
+            ctx.output
+                .error(&format!("Signature verification failed: {}", e));
             return Ok(1);
         }
         ctx.output.info("Signature verification passed");
     } else {
-        ctx.output.warning("Skipping signature verification (--skip-verify)");
+        ctx.output
+            .warning("Skipping signature verification (--skip-verify)");
     }
 
     // Extract and install
@@ -264,18 +269,23 @@ async fn install_from_registry(
     ctx: &CommandContext,
 ) -> Result<i32> {
     // Parse registry source: name, name@version, or registry::name@version
-    let (registry, provider_name, version) = parse_registry_source(name, args.target_version.as_deref());
+    let (registry, provider_name, version) =
+        parse_registry_source(name, args.target_version.as_deref());
 
     ctx.output.info(&format!(
         "Looking up provider '{}' in registry '{}'{}",
         provider_name,
         registry.as_deref().unwrap_or("default"),
-        version.as_ref().map(|v| format!(" (version {})", v)).unwrap_or_default()
+        version
+            .as_ref()
+            .map(|v| format!(" (version {})", v))
+            .unwrap_or_default()
     ));
 
     // For now, we'll use a placeholder implementation
     // In a full implementation, this would query the registry API
-    ctx.output.warning("Registry installation not yet fully implemented");
+    ctx.output
+        .warning("Registry installation not yet fully implemented");
     ctx.output.info(&format!(
         "Provider '{}' would be installed to {:?}",
         provider_name, providers_path
@@ -295,7 +305,10 @@ async fn install_from_registry(
 }
 
 /// Parse a registry source string
-fn parse_registry_source(source: &str, version_arg: Option<&str>) -> (Option<String>, String, Option<String>) {
+fn parse_registry_source(
+    source: &str,
+    version_arg: Option<&str>,
+) -> (Option<String>, String, Option<String>) {
     // Handle registry::name@version format
     if let Some((registry, rest)) = source.split_once("::") {
         let (name, version) = if let Some((n, v)) = rest.split_once('@') {
@@ -374,9 +387,7 @@ fn install_provider_archive(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Manifest missing 'name' field"))?;
 
-    let version = manifest["version"]
-        .as_str()
-        .unwrap_or("unknown");
+    let version = manifest["version"].as_str().unwrap_or("unknown");
 
     ctx.output.info(&format!(
         "Installing provider: {} v{}",
@@ -487,17 +498,20 @@ async fn execute_update(args: &UpdateArgs, ctx: &CommandContext) -> Result<i32> 
         }
         ctx.output.info("All providers are up to date");
     } else {
-        ctx.output.info(&format!("Updating provider: {}", args.name));
+        ctx.output
+            .info(&format!("Updating provider: {}", args.name));
 
         let provider_dir = providers_path.join(&args.name);
         if !provider_dir.exists() {
-            ctx.output.error(&format!("Provider '{}' is not installed", args.name));
+            ctx.output
+                .error(&format!("Provider '{}' is not installed", args.name));
             return Ok(1);
         }
 
         // In full implementation, query registry for newer version and install
         if let Some(version) = &args.target_version {
-            ctx.output.info(&format!("Would update to version: {}", version));
+            ctx.output
+                .info(&format!("Would update to version: {}", version));
         } else {
             ctx.output.info("Would update to latest version");
         }
@@ -510,7 +524,8 @@ async fn execute_update(args: &UpdateArgs, ctx: &CommandContext) -> Result<i32> 
 async fn execute_list(args: &ListArgs, ctx: &CommandContext) -> Result<i32> {
     let providers_path = args.path.clone().unwrap_or_else(default_providers_path);
 
-    ctx.output.info(&format!("Installed providers from: {:?}", providers_path));
+    ctx.output
+        .info(&format!("Installed providers from: {:?}", providers_path));
 
     if !providers_path.exists() {
         ctx.output.warning("Provider directory does not exist");
@@ -574,7 +589,8 @@ async fn execute_info(args: &InfoArgs, ctx: &CommandContext) -> Result<i32> {
     let provider_dir = providers_path.join(&args.name);
 
     if !provider_dir.exists() {
-        ctx.output.error(&format!("Provider '{}' is not installed", args.name));
+        ctx.output
+            .error(&format!("Provider '{}' is not installed", args.name));
         return Ok(1);
     }
 
@@ -612,10 +628,7 @@ async fn execute_info(args: &InfoArgs, ctx: &CommandContext) -> Result<i32> {
 
     // Show supported targets
     if let Some(targets) = manifest["supported_targets"].as_array() {
-        let target_strs: Vec<&str> = targets
-            .iter()
-            .filter_map(|t| t.as_str())
-            .collect();
+        let target_strs: Vec<&str> = targets.iter().filter_map(|t| t.as_str()).collect();
         if !target_strs.is_empty() {
             println!("Supported Targets: {}", target_strs.join(", "));
         }
@@ -623,10 +636,7 @@ async fn execute_info(args: &InfoArgs, ctx: &CommandContext) -> Result<i32> {
 
     // Show capabilities
     if let Some(capabilities) = manifest["capabilities"].as_array() {
-        let cap_strs: Vec<&str> = capabilities
-            .iter()
-            .filter_map(|c| c.as_str())
-            .collect();
+        let cap_strs: Vec<&str> = capabilities.iter().filter_map(|c| c.as_str()).collect();
         if !cap_strs.is_empty() {
             println!("Capabilities: {}", cap_strs.join(", "));
         }
@@ -676,7 +686,8 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
             .unwrap_or("unknown");
 
         if !provider_path.exists() {
-            ctx.output.error(&format!("Provider '{}' is not installed", provider_name));
+            ctx.output
+                .error(&format!("Provider '{}' is not installed", provider_name));
             failed += 1;
             continue;
         }
@@ -684,7 +695,8 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
         // Check manifest exists
         let manifest_path = provider_path.join("manifest.json");
         if !manifest_path.exists() {
-            ctx.output.error(&format!("✗ {} - missing manifest.json", provider_name));
+            ctx.output
+                .error(&format!("✗ {} - missing manifest.json", provider_name));
             failed += 1;
             continue;
         }
@@ -693,13 +705,17 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
         match std::fs::read_to_string(&manifest_path) {
             Ok(content) => {
                 if serde_json::from_str::<serde_json::Value>(&content).is_err() {
-                    ctx.output.error(&format!("✗ {} - invalid manifest.json", provider_name));
+                    ctx.output
+                        .error(&format!("✗ {} - invalid manifest.json", provider_name));
                     failed += 1;
                     continue;
                 }
             }
             Err(e) => {
-                ctx.output.error(&format!("✗ {} - cannot read manifest: {}", provider_name, e));
+                ctx.output.error(&format!(
+                    "✗ {} - cannot read manifest: {}",
+                    provider_name, e
+                ));
                 failed += 1;
                 continue;
             }
@@ -710,7 +726,10 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
         if checksum_path.exists() {
             // Verify file checksums
             if let Err(e) = verify_checksums(&provider_path, &checksum_path) {
-                ctx.output.error(&format!("✗ {} - checksum verification failed: {}", provider_name, e));
+                ctx.output.error(&format!(
+                    "✗ {} - checksum verification failed: {}",
+                    provider_name, e
+                ));
                 failed += 1;
                 continue;
             }
@@ -720,9 +739,13 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
         let sig_path = provider_path.join("SIGNATURE");
         if sig_path.exists() {
             // In production, verify cryptographic signature
-            ctx.output.info(&format!("✓ {} - signature present (not cryptographically verified)", provider_name));
+            ctx.output.info(&format!(
+                "✓ {} - signature present (not cryptographically verified)",
+                provider_name
+            ));
         } else {
-            ctx.output.warning(&format!("⚠ {} - no signature file", provider_name));
+            ctx.output
+                .warning(&format!("⚠ {} - no signature file", provider_name));
         }
 
         ctx.output.info(&format!("✓ {} - verified", provider_name));
@@ -740,7 +763,10 @@ async fn execute_verify(args: &VerifyArgs, ctx: &CommandContext) -> Result<i32> 
 }
 
 /// Verify checksums for provider files
-fn verify_checksums(provider_path: &std::path::Path, checksum_path: &std::path::Path) -> Result<()> {
+fn verify_checksums(
+    provider_path: &std::path::Path,
+    checksum_path: &std::path::Path,
+) -> Result<()> {
     let content = std::fs::read_to_string(checksum_path)?;
 
     for line in content.lines() {
@@ -786,7 +812,8 @@ async fn execute_remove(args: &RemoveArgs, ctx: &CommandContext) -> Result<i32> 
     let provider_path = providers_path.join(&args.name);
 
     if !provider_path.exists() {
-        ctx.output.error(&format!("Provider '{}' is not installed", args.name));
+        ctx.output
+            .error(&format!("Provider '{}' is not installed", args.name));
         return Ok(1);
     }
 
@@ -802,9 +829,11 @@ async fn execute_remove(args: &RemoveArgs, ctx: &CommandContext) -> Result<i32> 
         return Ok(1);
     }
 
-    ctx.output.info(&format!("Removing provider: {}", args.name));
+    ctx.output
+        .info(&format!("Removing provider: {}", args.name));
     std::fs::remove_dir_all(&provider_path)?;
-    ctx.output.info(&format!("Provider '{}' removed", args.name));
+    ctx.output
+        .info(&format!("Provider '{}' removed", args.name));
 
     Ok(0)
 }
@@ -893,7 +922,8 @@ mod tests {
         std::fs::write(
             aws_provider.join("manifest.json"),
             r#"{"name": "aws", "version": "1.0.0", "api_version": "1.0.0"}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let args = ListArgs {
             path: Some(providers_path),
@@ -941,7 +971,8 @@ mod tests {
                     {"name": "ec2_instance", "description": "Manage EC2 instances"}
                 ]
             }"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let args = InfoArgs {
             name: "aws".to_string(),
@@ -980,7 +1011,8 @@ mod tests {
         std::fs::write(
             aws_provider.join("manifest.json"),
             r#"{"name": "aws", "version": "1.0.0"}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let args = RemoveArgs {
             name: "aws".to_string(),
@@ -1023,7 +1055,8 @@ mod tests {
         std::fs::write(
             aws_provider.join("manifest.json"),
             r#"{"name": "aws", "version": "1.0.0"}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let args = VerifyArgs {
             name: Some("aws".to_string()),

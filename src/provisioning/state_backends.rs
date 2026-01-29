@@ -498,7 +498,10 @@ impl GcsBackend {
     }
 
     /// Get token from service account JSON file
-    async fn get_token_from_service_account(&self, path: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_token_from_service_account(
+        &self,
+        path: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let content = tokio::fs::read_to_string(path).await?;
         let creds: serde_json::Value = serde_json::from_str(&content)?;
 
@@ -515,7 +518,9 @@ impl GcsBackend {
     }
 
     /// Get token from gcloud CLI
-    async fn get_token_from_gcloud(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_token_from_gcloud(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = tokio::process::Command::new("gcloud")
             .args(["auth", "application-default", "print-access-token"])
             .output()
@@ -532,7 +537,9 @@ impl GcsBackend {
     }
 
     /// Get token from GCE metadata service
-    async fn get_token_from_metadata(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_token_from_metadata(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
             .get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token")
             .header("Metadata-Flavor", "Google")
@@ -551,9 +558,14 @@ impl GcsBackend {
     }
 
     /// Build authenticated request
-    async fn build_request(&self, method: reqwest::Method, url: &str) -> ProvisioningResult<reqwest::RequestBuilder> {
+    async fn build_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+    ) -> ProvisioningResult<reqwest::RequestBuilder> {
         let token = self.get_access_token().await?;
-        Ok(self.client
+        Ok(self
+            .client
             .request(method, url)
             .timeout(self.timeout)
             .bearer_auth(token))
@@ -568,16 +580,20 @@ impl StateBackend for GcsBackend {
     }
 
     async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
-        let request = self.build_request(reqwest::Method::GET, &self.download_url()).await?;
-        let response = request.send().await.map_err(|e| {
-            ProvisioningError::CloudApiError(format!("GCS GET failed: {}", e))
-        })?;
+        let request = self
+            .build_request(reqwest::Method::GET, &self.download_url())
+            .await?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ProvisioningError::CloudApiError(format!("GCS GET failed: {}", e)))?;
 
         match response.status() {
             status if status.is_success() => {
                 let content = response.text().await.map_err(|e| {
                     ProvisioningError::StatePersistenceError(format!(
-                        "Failed to read GCS response: {}", e
+                        "Failed to read GCS response: {}",
+                        e
                     ))
                 })?;
 
@@ -590,7 +606,8 @@ impl StateBackend for GcsBackend {
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => Err(ProvisioningError::CloudApiError(format!(
-                "GCS GET returned status {}", status
+                "GCS GET returned status {}",
+                status
             ))),
         }
     }
@@ -598,19 +615,23 @@ impl StateBackend for GcsBackend {
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
         let content = serde_json::to_string_pretty(state)?;
 
-        let request = self.build_request(reqwest::Method::POST, &self.upload_url()).await?
+        let request = self
+            .build_request(reqwest::Method::POST, &self.upload_url())
+            .await?
             .header("Content-Type", "application/json")
             .body(content);
 
-        let response = request.send().await.map_err(|e| {
-            ProvisioningError::CloudApiError(format!("GCS upload failed: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ProvisioningError::CloudApiError(format!("GCS upload failed: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(ProvisioningError::CloudApiError(format!(
-                "GCS upload returned status {}: {}", status, body
+                "GCS upload returned status {}: {}",
+                status, body
             )));
         }
 
@@ -618,14 +639,18 @@ impl StateBackend for GcsBackend {
     }
 
     async fn delete(&self) -> ProvisioningResult<()> {
-        let request = self.build_request(reqwest::Method::DELETE, &self.object_url()).await?;
-        let response = request.send().await.map_err(|e| {
-            ProvisioningError::CloudApiError(format!("GCS DELETE failed: {}", e))
-        })?;
+        let request = self
+            .build_request(reqwest::Method::DELETE, &self.object_url())
+            .await?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ProvisioningError::CloudApiError(format!("GCS DELETE failed: {}", e)))?;
 
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             return Err(ProvisioningError::CloudApiError(format!(
-                "GCS DELETE returned status {}", response.status()
+                "GCS DELETE returned status {}",
+                response.status()
             )));
         }
 
@@ -633,10 +658,13 @@ impl StateBackend for GcsBackend {
     }
 
     async fn exists(&self) -> ProvisioningResult<bool> {
-        let request = self.build_request(reqwest::Method::GET, &self.object_url()).await?;
-        let response = request.send().await.map_err(|e| {
-            ProvisioningError::CloudApiError(format!("GCS HEAD failed: {}", e))
-        })?;
+        let request = self
+            .build_request(reqwest::Method::GET, &self.object_url())
+            .await?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ProvisioningError::CloudApiError(format!("GCS HEAD failed: {}", e)))?;
 
         Ok(response.status().is_success())
     }
@@ -766,9 +794,20 @@ impl AzureBlobBackend {
     }
 
     /// Get token from Azure CLI
-    async fn get_token_from_azure_cli(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_token_from_azure_cli(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = tokio::process::Command::new("az")
-            .args(["account", "get-access-token", "--resource", "https://storage.azure.com/", "--query", "accessToken", "-o", "tsv"])
+            .args([
+                "account",
+                "get-access-token",
+                "--resource",
+                "https://storage.azure.com/",
+                "--query",
+                "accessToken",
+                "-o",
+                "tsv",
+            ])
             .output()
             .await?;
 
@@ -783,11 +822,16 @@ impl AzureBlobBackend {
     }
 
     /// Build authenticated request
-    async fn build_request(&self, method: reqwest::Method, url: &str) -> ProvisioningResult<reqwest::RequestBuilder> {
+    async fn build_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+    ) -> ProvisioningResult<reqwest::RequestBuilder> {
         let url_with_sas = format!("{}{}", url, self.get_sas_suffix());
         let (header_name, header_value) = self.get_auth_header().await?;
 
-        let mut request = self.client
+        let mut request = self
+            .client
             .request(method, &url_with_sas)
             .timeout(self.timeout)
             .header("x-ms-version", "2021-06-08");
@@ -813,7 +857,9 @@ impl StateBackend for AzureBlobBackend {
     }
 
     async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
-        let request = self.build_request(reqwest::Method::GET, &self.blob_url()).await?;
+        let request = self
+            .build_request(reqwest::Method::GET, &self.blob_url())
+            .await?;
         let response = request.send().await.map_err(|e| {
             ProvisioningError::CloudApiError(format!("Azure Blob GET failed: {}", e))
         })?;
@@ -822,7 +868,8 @@ impl StateBackend for AzureBlobBackend {
             status if status.is_success() => {
                 let content = response.text().await.map_err(|e| {
                     ProvisioningError::StatePersistenceError(format!(
-                        "Failed to read Azure response: {}", e
+                        "Failed to read Azure response: {}",
+                        e
                     ))
                 })?;
 
@@ -837,7 +884,8 @@ impl StateBackend for AzureBlobBackend {
             status => {
                 let body = response.text().await.unwrap_or_default();
                 Err(ProvisioningError::CloudApiError(format!(
-                    "Azure Blob GET returned status {}: {}", status, body
+                    "Azure Blob GET returned status {}: {}",
+                    status, body
                 )))
             }
         }
@@ -846,7 +894,9 @@ impl StateBackend for AzureBlobBackend {
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
         let content = serde_json::to_string_pretty(state)?;
 
-        let request = self.build_request(reqwest::Method::PUT, &self.blob_url()).await?
+        let request = self
+            .build_request(reqwest::Method::PUT, &self.blob_url())
+            .await?
             .header("Content-Type", "application/json")
             .header("x-ms-blob-type", "BlockBlob")
             .body(content);
@@ -859,7 +909,8 @@ impl StateBackend for AzureBlobBackend {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(ProvisioningError::CloudApiError(format!(
-                "Azure Blob PUT returned status {}: {}", status, body
+                "Azure Blob PUT returned status {}: {}",
+                status, body
             )));
         }
 
@@ -867,14 +918,17 @@ impl StateBackend for AzureBlobBackend {
     }
 
     async fn delete(&self) -> ProvisioningResult<()> {
-        let request = self.build_request(reqwest::Method::DELETE, &self.blob_url()).await?;
+        let request = self
+            .build_request(reqwest::Method::DELETE, &self.blob_url())
+            .await?;
         let response = request.send().await.map_err(|e| {
             ProvisioningError::CloudApiError(format!("Azure Blob DELETE failed: {}", e))
         })?;
 
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             return Err(ProvisioningError::CloudApiError(format!(
-                "Azure Blob DELETE returned status {}", response.status()
+                "Azure Blob DELETE returned status {}",
+                response.status()
             )));
         }
 
@@ -882,7 +936,9 @@ impl StateBackend for AzureBlobBackend {
     }
 
     async fn exists(&self) -> ProvisioningResult<bool> {
-        let request = self.build_request(reqwest::Method::HEAD, &self.blob_url()).await?;
+        let request = self
+            .build_request(reqwest::Method::HEAD, &self.blob_url())
+            .await?;
         let response = request.send().await.map_err(|e| {
             ProvisioningError::CloudApiError(format!("Azure Blob HEAD failed: {}", e))
         })?;
@@ -943,14 +999,22 @@ impl AzureBlobLeaseLock {
 #[async_trait]
 impl LockBackend for AzureBlobLeaseLock {
     async fn acquire(&self, info: &LockInfo, timeout: Duration) -> ProvisioningResult<bool> {
-        let url = format!("{}?comp=lease{}", self.blob_url(), self.get_sas_suffix().replace('?', "&"));
+        let url = format!(
+            "{}?comp=lease{}",
+            self.blob_url(),
+            self.get_sas_suffix().replace('?', "&")
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .timeout(self.timeout)
             .header("x-ms-version", "2021-06-08")
             .header("x-ms-lease-action", "acquire")
-            .header("x-ms-lease-duration", timeout.as_secs().min(60).max(15).to_string())
+            .header(
+                "x-ms-lease-duration",
+                timeout.as_secs().min(60).max(15).to_string(),
+            )
             .header("x-ms-proposed-lease-id", &info.id)
             .send()
             .await
@@ -975,14 +1039,20 @@ impl LockBackend for AzureBlobLeaseLock {
         }
 
         Err(ProvisioningError::ConcurrencyError(format!(
-            "Lease acquire returned status {}", response.status()
+            "Lease acquire returned status {}",
+            response.status()
         )))
     }
 
     async fn release(&self, lock_id: &str) -> ProvisioningResult<bool> {
-        let url = format!("{}?comp=lease{}", self.blob_url(), self.get_sas_suffix().replace('?', "&"));
+        let url = format!(
+            "{}?comp=lease{}",
+            self.blob_url(),
+            self.get_sas_suffix().replace('?', "&")
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .timeout(self.timeout)
             .header("x-ms-version", "2021-06-08")
@@ -1005,15 +1075,21 @@ impl LockBackend for AzureBlobLeaseLock {
         }
 
         Err(ProvisioningError::ConcurrencyError(format!(
-            "Lease release returned status {}", response.status()
+            "Lease release returned status {}",
+            response.status()
         )))
     }
 
     async fn get_lock(&self) -> ProvisioningResult<Option<LockInfo>> {
         // Azure doesn't store arbitrary lock info, just check if leased
-        let url = format!("{}?comp=lease{}", self.blob_url(), self.get_sas_suffix().replace('?', "&"));
+        let url = format!(
+            "{}?comp=lease{}",
+            self.blob_url(),
+            self.get_sas_suffix().replace('?', "&")
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .head(&url)
             .timeout(self.timeout)
             .header("x-ms-version", "2021-06-08")
@@ -1025,7 +1101,8 @@ impl LockBackend for AzureBlobLeaseLock {
 
         if let Some(lease_state) = response.headers().get("x-ms-lease-state") {
             if lease_state.to_str().unwrap_or("") == "leased" {
-                let lease_id = response.headers()
+                let lease_id = response
+                    .headers()
                     .get("x-ms-lease-id")
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("unknown")
@@ -1046,9 +1123,14 @@ impl LockBackend for AzureBlobLeaseLock {
     }
 
     async fn force_unlock(&self, lock_id: &str) -> ProvisioningResult<()> {
-        let url = format!("{}?comp=lease{}", self.blob_url(), self.get_sas_suffix().replace('?', "&"));
+        let url = format!(
+            "{}?comp=lease{}",
+            self.blob_url(),
+            self.get_sas_suffix().replace('?', "&")
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .timeout(self.timeout)
             .header("x-ms-version", "2021-06-08")
@@ -1066,7 +1148,8 @@ impl LockBackend for AzureBlobLeaseLock {
         }
 
         Err(ProvisioningError::ConcurrencyError(format!(
-            "Lease break returned status {}", response.status()
+            "Lease break returned status {}",
+            response.status()
         )))
     }
 
@@ -1164,9 +1247,7 @@ impl ConsulBackend {
 
     /// Build request with optional auth
     fn build_request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
-        let mut request = self.client
-            .request(method, url)
-            .timeout(self.timeout);
+        let mut request = self.client.request(method, url).timeout(self.timeout);
 
         if let Some(ref token) = self.token {
             request = request.header("X-Consul-Token", token);
@@ -1188,7 +1269,8 @@ impl StateBackend for ConsulBackend {
     }
 
     async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
-        let response = self.build_request(reqwest::Method::GET, &self.kv_url())
+        let response = self
+            .build_request(reqwest::Method::GET, &self.kv_url())
             .query(&[("raw", "true")])
             .send()
             .await
@@ -1200,7 +1282,8 @@ impl StateBackend for ConsulBackend {
             status if status.is_success() => {
                 let content = response.text().await.map_err(|e| {
                     ProvisioningError::StatePersistenceError(format!(
-                        "Failed to read Consul response: {}", e
+                        "Failed to read Consul response: {}",
+                        e
                     ))
                 })?;
 
@@ -1213,7 +1296,8 @@ impl StateBackend for ConsulBackend {
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => Err(ProvisioningError::StatePersistenceError(format!(
-                "Consul GET returned status {}", status
+                "Consul GET returned status {}",
+                status
             ))),
         }
     }
@@ -1221,7 +1305,8 @@ impl StateBackend for ConsulBackend {
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
         let content = serde_json::to_string(state)?;
 
-        let response = self.build_request(reqwest::Method::PUT, &self.kv_url())
+        let response = self
+            .build_request(reqwest::Method::PUT, &self.kv_url())
             .body(content)
             .send()
             .await
@@ -1231,7 +1316,8 @@ impl StateBackend for ConsulBackend {
 
         if !response.status().is_success() {
             return Err(ProvisioningError::StatePersistenceError(format!(
-                "Consul PUT returned status {}", response.status()
+                "Consul PUT returned status {}",
+                response.status()
             )));
         }
 
@@ -1239,7 +1325,7 @@ impl StateBackend for ConsulBackend {
         let body = response.text().await.unwrap_or_default();
         if body.trim() == "false" {
             return Err(ProvisioningError::ConcurrencyError(
-                "Consul CAS operation failed - state may have changed".to_string()
+                "Consul CAS operation failed - state may have changed".to_string(),
             ));
         }
 
@@ -1247,7 +1333,8 @@ impl StateBackend for ConsulBackend {
     }
 
     async fn delete(&self) -> ProvisioningResult<()> {
-        let response = self.build_request(reqwest::Method::DELETE, &self.kv_url())
+        let response = self
+            .build_request(reqwest::Method::DELETE, &self.kv_url())
             .send()
             .await
             .map_err(|e| {
@@ -1256,7 +1343,8 @@ impl StateBackend for ConsulBackend {
 
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             return Err(ProvisioningError::StatePersistenceError(format!(
-                "Consul DELETE returned status {}", response.status()
+                "Consul DELETE returned status {}",
+                response.status()
             )));
         }
 
@@ -1264,7 +1352,8 @@ impl StateBackend for ConsulBackend {
     }
 
     async fn exists(&self) -> ProvisioningResult<bool> {
-        let response = self.build_request(reqwest::Method::GET, &self.kv_url())
+        let response = self
+            .build_request(reqwest::Method::GET, &self.kv_url())
             .query(&[("keys", "")])
             .send()
             .await
@@ -1311,9 +1400,7 @@ impl ConsulSessionLock {
     }
 
     fn build_request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
-        let mut request = self.client
-            .request(method, url)
-            .timeout(self.timeout);
+        let mut request = self.client.request(method, url).timeout(self.timeout);
 
         if let Some(ref token) = self.token {
             request = request.header("X-Consul-Token", token);
@@ -1334,7 +1421,11 @@ impl LockBackend for ConsulSessionLock {
             "LockDelay": "0s"
         });
 
-        let response = self.build_request(reqwest::Method::PUT, &format!("{}/create", self.session_url()))
+        let response = self
+            .build_request(
+                reqwest::Method::PUT,
+                &format!("{}/create", self.session_url()),
+            )
             .json(&session_config)
             .send()
             .await
@@ -1344,7 +1435,8 @@ impl LockBackend for ConsulSessionLock {
 
         if !response.status().is_success() {
             return Err(ProvisioningError::ConcurrencyError(format!(
-                "Session create returned status {}", response.status()
+                "Session create returned status {}",
+                response.status()
             )));
         }
 
@@ -1352,16 +1444,20 @@ impl LockBackend for ConsulSessionLock {
             ProvisioningError::ConcurrencyError(format!("Failed to parse session response: {}", e))
         })?;
 
-        let session_id = body.get("ID")
+        let session_id = body
+            .get("ID")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ProvisioningError::ConcurrencyError("No session ID in response".to_string()))?
+            .ok_or_else(|| {
+                ProvisioningError::ConcurrencyError("No session ID in response".to_string())
+            })?
             .to_string();
 
         // Try to acquire lock with session
         let lock_info_json = serde_json::to_string(info)?;
         let lock_url = format!("{}/.lock?acquire={}", self.kv_url(), session_id);
 
-        let response = self.build_request(reqwest::Method::PUT, &lock_url)
+        let response = self
+            .build_request(reqwest::Method::PUT, &lock_url)
             .body(lock_info_json)
             .send()
             .await
@@ -1371,7 +1467,11 @@ impl LockBackend for ConsulSessionLock {
 
         if !response.status().is_success() {
             // Clean up session
-            let _ = self.build_request(reqwest::Method::PUT, &format!("{}/destroy/{}", self.session_url(), session_id))
+            let _ = self
+                .build_request(
+                    reqwest::Method::PUT,
+                    &format!("{}/destroy/{}", self.session_url(), session_id),
+                )
                 .send()
                 .await;
             return Ok(false);
@@ -1384,7 +1484,11 @@ impl LockBackend for ConsulSessionLock {
         }
 
         // Clean up session
-        let _ = self.build_request(reqwest::Method::PUT, &format!("{}/destroy/{}", self.session_url(), session_id))
+        let _ = self
+            .build_request(
+                reqwest::Method::PUT,
+                &format!("{}/destroy/{}", self.session_url(), session_id),
+            )
             .send()
             .await;
 
@@ -1399,12 +1503,17 @@ impl LockBackend for ConsulSessionLock {
 
         // Release lock
         let lock_url = format!("{}/.lock?release={}", self.kv_url(), session_id);
-        let _ = self.build_request(reqwest::Method::PUT, &lock_url)
+        let _ = self
+            .build_request(reqwest::Method::PUT, &lock_url)
             .send()
             .await;
 
         // Destroy session
-        let response = self.build_request(reqwest::Method::PUT, &format!("{}/destroy/{}", self.session_url(), session_id))
+        let response = self
+            .build_request(
+                reqwest::Method::PUT,
+                &format!("{}/destroy/{}", self.session_url(), session_id),
+            )
             .send()
             .await
             .map_err(|e| {
@@ -1419,7 +1528,8 @@ impl LockBackend for ConsulSessionLock {
     async fn get_lock(&self) -> ProvisioningResult<Option<LockInfo>> {
         let lock_url = format!("{}/.lock?raw=true", self.kv_url());
 
-        let response = self.build_request(reqwest::Method::GET, &lock_url)
+        let response = self
+            .build_request(reqwest::Method::GET, &lock_url)
             .send()
             .await
             .map_err(|e| {
@@ -1432,7 +1542,8 @@ impl LockBackend for ConsulSessionLock {
 
         if !response.status().is_success() {
             return Err(ProvisioningError::ConcurrencyError(format!(
-                "Lock check returned status {}", response.status()
+                "Lock check returned status {}",
+                response.status()
             )));
         }
 
@@ -1451,7 +1562,8 @@ impl LockBackend for ConsulSessionLock {
     async fn force_unlock(&self, _lock_id: &str) -> ProvisioningResult<()> {
         // Delete the lock key
         let lock_url = format!("{}/.lock", self.kv_url());
-        let response = self.build_request(reqwest::Method::DELETE, &lock_url)
+        let response = self
+            .build_request(reqwest::Method::DELETE, &lock_url)
             .send()
             .await
             .map_err(|e| {
@@ -1460,7 +1572,8 @@ impl LockBackend for ConsulSessionLock {
 
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             return Err(ProvisioningError::ConcurrencyError(format!(
-                "Force unlock returned status {}", response.status()
+                "Force unlock returned status {}",
+                response.status()
             )));
         }
 
@@ -1911,19 +2024,25 @@ impl BackendConfig {
                 message: "GCS backend requires the 'gcp' feature".to_string(),
             }),
             #[cfg(feature = "azure")]
-            BackendConfig::AzureBlob { storage_account, container, name } => {
-                Ok(Box::new(AzureBlobBackend::new(
-                    storage_account.clone(),
-                    container.clone(),
-                    name.clone(),
-                )))
-            }
+            BackendConfig::AzureBlob {
+                storage_account,
+                container,
+                name,
+            } => Ok(Box::new(AzureBlobBackend::new(
+                storage_account.clone(),
+                container.clone(),
+                name.clone(),
+            ))),
             #[cfg(not(feature = "azure"))]
             BackendConfig::AzureBlob { .. } => Err(ProvisioningError::ProviderConfigError {
                 provider: "azure".to_string(),
                 message: "Azure Blob backend requires the 'azure' feature".to_string(),
             }),
-            BackendConfig::Consul { address, path, token } => {
+            BackendConfig::Consul {
+                address,
+                path,
+                token,
+            } => {
                 let mut backend = ConsulBackend::new(path.clone());
                 if let Some(addr) = address {
                     backend = backend.with_address(addr);
@@ -2301,8 +2420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_consul_backend_no_lock() {
-        let backend = ConsulBackend::new("rustible/state".to_string())
-            .without_session_lock();
+        let backend = ConsulBackend::new("rustible/state".to_string()).without_session_lock();
 
         assert_eq!(backend.name(), "consul");
         assert!(backend.lock_backend().is_none());
@@ -2333,7 +2451,11 @@ mod tests {
         let deserialized: BackendConfig = serde_json::from_str(&json).unwrap();
 
         match deserialized {
-            BackendConfig::Consul { address, path, token } => {
+            BackendConfig::Consul {
+                address,
+                path,
+                token,
+            } => {
                 assert_eq!(address, Some("http://consul.example.com:8500".to_string()));
                 assert_eq!(path, "terraform/state");
                 assert!(token.is_none());
@@ -2373,7 +2495,11 @@ mod tests {
         let deserialized: BackendConfig = serde_json::from_str(&json).unwrap();
 
         match deserialized {
-            BackendConfig::AzureBlob { storage_account, container, name } => {
+            BackendConfig::AzureBlob {
+                storage_account,
+                container,
+                name,
+            } => {
                 assert_eq!(storage_account, "myaccount");
                 assert_eq!(container, "tfstate");
                 assert_eq!(name, "terraform.tfstate");
