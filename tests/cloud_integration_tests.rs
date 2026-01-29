@@ -99,7 +99,10 @@ mod aws_playbook_integration {
         // Set AWS-specific vars
         play.set_var("aws_region".to_string(), serde_json::json!("us-east-1"));
         play.set_var("instance_type".to_string(), serde_json::json!("t3.micro"));
-        play.set_var("ami_id".to_string(), serde_json::json!("ami-0123456789abcdef0"));
+        play.set_var(
+            "ami_id".to_string(),
+            serde_json::json!("ami-0123456789abcdef0"),
+        );
 
         // Create EC2 instance task (if module available)
         play.add_task(
@@ -121,7 +124,10 @@ mod aws_playbook_integration {
         let mut play = Play::new("Manage S3 buckets", "localhost");
         play.gather_facts = false;
 
-        play.set_var("bucket_name".to_string(), serde_json::json!("my-test-bucket"));
+        play.set_var(
+            "bucket_name".to_string(),
+            serde_json::json!("my-test-bucket"),
+        );
         play.set_var("region".to_string(), serde_json::json!("us-west-2"));
 
         // S3 bucket operations
@@ -166,9 +172,8 @@ mod aws_playbook_integration {
         // Compute play
         let mut compute_play = Play::new("Launch Instances", "localhost");
         compute_play.gather_facts = false;
-        compute_play.add_task(
-            Task::new("Launch EC2 instances", "debug").arg("msg", "Launching instances"),
-        );
+        compute_play
+            .add_task(Task::new("Launch EC2 instances", "debug").arg("msg", "Launching instances"));
         playbook.add_play(compute_play);
 
         assert_eq!(playbook.plays.len(), 3);
@@ -203,8 +208,7 @@ mod azure_playbook_integration {
         );
 
         play.add_task(
-            Task::new("Create VM", "debug")
-                .arg("msg", "Would create VM size: {{ vm_size }}"),
+            Task::new("Create VM", "debug").arg("msg", "Would create VM size: {{ vm_size }}"),
         );
 
         playbook.add_play(play);
@@ -222,14 +226,10 @@ mod azure_playbook_integration {
         play.gather_facts = false;
 
         play.set_var("vnet_name".to_string(), serde_json::json!("main-vnet"));
-        play.set_var(
-            "vnet_address".to_string(),
-            serde_json::json!("10.0.0.0/16"),
-        );
+        play.set_var("vnet_address".to_string(), serde_json::json!("10.0.0.0/16"));
 
         play.add_task(
-            Task::new("Create VNet", "debug")
-                .arg("msg", "Would create VNet: {{ vnet_name }}"),
+            Task::new("Create VNet", "debug").arg("msg", "Would create VNet: {{ vnet_name }}"),
         );
 
         play.add_task(
@@ -238,8 +238,7 @@ mod azure_playbook_integration {
         );
 
         play.add_task(
-            Task::new("Create NSG", "debug")
-                .arg("msg", "Would create network security group"),
+            Task::new("Create NSG", "debug").arg("msg", "Would create network security group"),
         );
 
         playbook.add_play(play);
@@ -258,8 +257,7 @@ mod azure_playbook_integration {
         let mut rg_play = Play::new("Create Resource Group", "localhost");
         rg_play.gather_facts = false;
         rg_play.add_task(
-            Task::new("Create RG", "debug")
-                .arg("msg", "Creating resource group in eastus"),
+            Task::new("Create RG", "debug").arg("msg", "Creating resource group in eastus"),
         );
         playbook.add_play(rg_play);
 
@@ -327,8 +325,7 @@ mod gcp_playbook_integration {
         );
 
         play.add_task(
-            Task::new("Create firewall rules", "debug")
-                .arg("msg", "Would create firewall rules"),
+            Task::new("Create firewall rules", "debug").arg("msg", "Would create firewall rules"),
         );
 
         playbook.add_play(play);
@@ -345,7 +342,10 @@ mod gcp_playbook_integration {
         let mut play = Play::new("Configure GCP IAM", "localhost");
         play.gather_facts = false;
 
-        play.set_var("sa_name".to_string(), serde_json::json!("app-service-account"));
+        play.set_var(
+            "sa_name".to_string(),
+            serde_json::json!("app-service-account"),
+        );
         play.set_var(
             "sa_display_name".to_string(),
             serde_json::json!("Application Service Account"),
@@ -357,8 +357,7 @@ mod gcp_playbook_integration {
         );
 
         play.add_task(
-            Task::new("Assign IAM role", "debug")
-                .arg("msg", "Would assign roles to {{ sa_name }}"),
+            Task::new("Assign IAM role", "debug").arg("msg", "Would assign roles to {{ sa_name }}"),
         );
 
         playbook.add_play(play);
@@ -375,9 +374,15 @@ mod gcp_playbook_integration {
         let mut play = Play::new("Create GKE cluster", "localhost");
         play.gather_facts = false;
 
-        play.set_var("cluster_name".to_string(), serde_json::json!("main-cluster"));
+        play.set_var(
+            "cluster_name".to_string(),
+            serde_json::json!("main-cluster"),
+        );
         play.set_var("node_count".to_string(), serde_json::json!(3));
-        play.set_var("machine_type".to_string(), serde_json::json!("e2-standard-4"));
+        play.set_var(
+            "machine_type".to_string(),
+            serde_json::json!("e2-standard-4"),
+        );
 
         play.add_task(
             Task::new("Create GKE cluster", "debug")
@@ -420,7 +425,8 @@ mod multi_cloud_integration {
         let mut azure_play = Play::new("Deploy to Azure", "localhost");
         azure_play.gather_facts = false;
         azure_play.set_var("azure_location".to_string(), serde_json::json!("eastus"));
-        azure_play.add_task(Task::new("Deploy to Azure VM", "debug").arg("msg", "Deploying to Azure"));
+        azure_play
+            .add_task(Task::new("Deploy to Azure VM", "debug").arg("msg", "Deploying to Azure"));
         playbook.add_play(azure_play);
 
         // GCP play
@@ -442,33 +448,24 @@ mod multi_cloud_integration {
         play.gather_facts = false;
 
         // Primary region (AWS)
-        play.set_var(
-            "primary_provider".to_string(),
-            serde_json::json!("aws"),
-        );
+        play.set_var("primary_provider".to_string(), serde_json::json!("aws"));
         play.set_var("primary_region".to_string(), serde_json::json!("us-east-1"));
 
         // DR region (Azure)
-        play.set_var(
-            "dr_provider".to_string(),
-            serde_json::json!("azure"),
-        );
+        play.set_var("dr_provider".to_string(), serde_json::json!("azure"));
         play.set_var("dr_location".to_string(), serde_json::json!("westeurope"));
 
-        play.add_task(
-            Task::new("Verify primary", "debug")
-                .arg("msg", "Checking {{ primary_provider }} in {{ primary_region }}"),
-        );
+        play.add_task(Task::new("Verify primary", "debug").arg(
+            "msg",
+            "Checking {{ primary_provider }} in {{ primary_region }}",
+        ));
 
-        play.add_task(
-            Task::new("Setup DR replication", "debug")
-                .arg("msg", "Setting up DR to {{ dr_provider }} in {{ dr_location }}"),
-        );
+        play.add_task(Task::new("Setup DR replication", "debug").arg(
+            "msg",
+            "Setting up DR to {{ dr_provider }} in {{ dr_location }}",
+        ));
 
-        play.add_task(
-            Task::new("Test failover", "debug")
-                .arg("msg", "Testing failover procedure"),
-        );
+        play.add_task(Task::new("Test failover", "debug").arg("msg", "Testing failover procedure"));
 
         playbook.add_play(play);
 
@@ -549,19 +546,25 @@ mod cloud_patterns {
         // Resource naming conventions
         let aws_pattern = |name: &str| -> bool {
             name.len() <= 255
-                && name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
         };
 
         let azure_pattern = |name: &str| -> bool {
             name.len() >= 1
                 && name.len() <= 80
-                && name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
         };
 
         let gcp_pattern = |name: &str| -> bool {
             name.len() >= 1
                 && name.len() <= 63
-                && name.chars().all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '-')
+                && name
+                    .chars()
+                    .all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '-')
                 && !name.starts_with('-')
                 && !name.ends_with('-')
         };
@@ -606,10 +609,7 @@ mod cloud_patterns {
         tags.insert("Environment".to_string(), "production".to_string());
         tags.insert("Team".to_string(), "platform".to_string());
         tags.insert("CostCenter".to_string(), "12345".to_string());
-        tags.insert(
-            "CreatedBy".to_string(),
-            "rustible-automation".to_string(),
-        );
+        tags.insert("CreatedBy".to_string(), "rustible-automation".to_string());
 
         assert!(tags.contains_key("Environment"));
         assert_eq!(tags.get("Team").unwrap(), "platform");
@@ -738,7 +738,7 @@ mod cloud_credentials {
 #[cfg(feature = "aws")]
 mod aws_specific_tests {
     use super::*;
-    use rustible::modules::cloud::{Ec2InstanceModule, AwsS3Module};
+    use rustible::modules::cloud::{AwsS3Module, Ec2InstanceModule};
     use rustible::modules::Module;
 
     #[test]
@@ -757,7 +757,10 @@ mod aws_specific_tests {
     fn test_aws_s3_bucket_validation() {
         let module = AwsS3Module::new();
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
-        params.insert("bucket".to_string(), serde_json::json!("my-valid-bucket-name"));
+        params.insert(
+            "bucket".to_string(),
+            serde_json::json!("my-valid-bucket-name"),
+        );
         params.insert("mode".to_string(), serde_json::json!("put"));
 
         assert!(module.validate_params(&params).is_ok());
@@ -767,7 +770,7 @@ mod aws_specific_tests {
 #[cfg(feature = "azure")]
 mod azure_specific_tests {
     use super::*;
-    use rustible::modules::cloud::{AzureVmModule, AzureResourceGroupModule};
+    use rustible::modules::cloud::{AzureResourceGroupModule, AzureVmModule};
     use rustible::modules::Module;
 
     #[test]
@@ -796,7 +799,7 @@ mod azure_specific_tests {
 #[cfg(feature = "gcp")]
 mod gcp_specific_tests {
     use super::*;
-    use rustible::modules::cloud::{GcpComputeInstanceModule, GcpComputeFirewallModule};
+    use rustible::modules::cloud::{GcpComputeFirewallModule, GcpComputeInstanceModule};
     use rustible::modules::Module;
 
     #[test]

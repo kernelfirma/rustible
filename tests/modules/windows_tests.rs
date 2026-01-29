@@ -28,14 +28,19 @@ mod win_copy_tests {
     fn test_win_copy_module_description() {
         let module = WinCopyModule;
         assert!(!module.description().is_empty());
-        assert!(module.description().to_lowercase().contains("copy") ||
-                module.description().to_lowercase().contains("windows"));
+        assert!(
+            module.description().to_lowercase().contains("copy")
+                || module.description().to_lowercase().contains("windows")
+        );
     }
 
     #[test]
     fn test_win_copy_module_classification() {
         let module = WinCopyModule;
-        assert_eq!(module.classification(), ModuleClassification::NativeTransport);
+        assert_eq!(
+            module.classification(),
+            ModuleClassification::NativeTransport
+        );
     }
 
     #[test]
@@ -234,7 +239,10 @@ mod win_user_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("testuser"));
         params.insert("state".to_string(), serde_json::json!("present"));
-        params.insert("groups".to_string(), serde_json::json!(["Users", "Administrators"]));
+        params.insert(
+            "groups".to_string(),
+            serde_json::json!(["Users", "Administrators"]),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }
@@ -355,7 +363,10 @@ mod win_feature_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("Web-Server"));
         params.insert("include_sub_features".to_string(), serde_json::json!(true));
-        params.insert("include_management_tools".to_string(), serde_json::json!(true));
+        params.insert(
+            "include_management_tools".to_string(),
+            serde_json::json!(true),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }
@@ -378,8 +389,8 @@ mod win_feature_tests {
 
 mod windows_validation_tests {
     use rustible::modules::windows::{
-        validate_windows_path, validate_service_name, validate_windows_username,
-        validate_package_name, validate_feature_name,
+        validate_feature_name, validate_package_name, validate_service_name, validate_windows_path,
+        validate_windows_username,
     };
 
     #[test]

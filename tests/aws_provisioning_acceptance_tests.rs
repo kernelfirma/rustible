@@ -12,12 +12,12 @@
 
 #![cfg(feature = "provisioning")]
 
+use rustible::provisioning::resources::aws::autoscaling_group::LaunchTemplateSpec;
 use rustible::provisioning::resources::aws::{
-    AutoScalingGroupConfig, AwsAutoScalingGroupResource, AwsInstanceResource, AwsLoadBalancerResource,
-    AwsRdsInstanceResource, AwsVpcResource, InstanceConfig,
+    AutoScalingGroupConfig, AwsAutoScalingGroupResource, AwsInstanceResource,
+    AwsLoadBalancerResource, AwsRdsInstanceResource, AwsVpcResource, InstanceConfig,
     LoadBalancerConfig, RdsInstanceConfig,
 };
-use rustible::provisioning::resources::aws::autoscaling_group::LaunchTemplateSpec;
 use rustible::provisioning::traits::{
     ChangeType, DebugCredentials, ProviderContext, Resource, ResourceDiff, RetryConfig,
 };
@@ -76,7 +76,11 @@ fn test_vpc_schema_has_required_fields() {
     assert!(has_cidr, "cidr_block should be required");
 
     // Check optional fields
-    let optional_names: Vec<_> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+    let optional_names: Vec<_> = schema
+        .optional_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(optional_names.contains(&"enable_dns_support"));
     assert!(optional_names.contains(&"enable_dns_hostnames"));
     assert!(optional_names.contains(&"instance_tenancy"));
@@ -88,7 +92,11 @@ fn test_vpc_schema_computed_attrs() {
     let resource = AwsVpcResource::new();
     let schema = resource.schema();
 
-    let computed_names: Vec<_> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+    let computed_names: Vec<_> = schema
+        .computed_attrs
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(computed_names.contains(&"id"));
     assert!(computed_names.contains(&"arn"));
     assert!(computed_names.contains(&"main_route_table_id"));
@@ -268,7 +276,11 @@ fn test_ec2_schema_has_required_fields() {
     assert!(has_ami, "ami should be required");
 
     // Check optional fields
-    let optional_names: Vec<_> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+    let optional_names: Vec<_> = schema
+        .optional_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(optional_names.contains(&"instance_type"));
     assert!(optional_names.contains(&"subnet_id"));
     assert!(optional_names.contains(&"vpc_security_group_ids"));
@@ -282,7 +294,11 @@ fn test_ec2_schema_computed_attrs() {
     let resource = AwsInstanceResource::new();
     let schema = resource.schema();
 
-    let computed_names: Vec<_> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+    let computed_names: Vec<_> = schema
+        .computed_attrs
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(computed_names.contains(&"id"));
     assert!(computed_names.contains(&"arn"));
     assert!(computed_names.contains(&"public_ip"));
@@ -373,7 +389,10 @@ fn test_ec2_config_parsing() {
 
     assert_eq!(instance_config.ami, "ami-12345678");
     assert_eq!(instance_config.instance_type, "t3.small");
-    assert_eq!(instance_config.subnet_id, Some("subnet-12345678".to_string()));
+    assert_eq!(
+        instance_config.subnet_id,
+        Some("subnet-12345678".to_string())
+    );
     assert_eq!(instance_config.vpc_security_group_ids.len(), 2);
     assert_eq!(instance_config.key_name, Some("my-key".to_string()));
     assert!(instance_config.monitoring);
@@ -405,8 +424,12 @@ fn test_ec2_dependencies_extraction() {
 
     let deps = resource.dependencies(&config);
 
-    let has_subnet = deps.iter().any(|d| d.resource_type == "aws_subnet" && d.resource_name == "main");
-    let has_sg = deps.iter().any(|d| d.resource_type == "aws_security_group" && d.resource_name == "web");
+    let has_subnet = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_subnet" && d.resource_name == "main");
+    let has_sg = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_security_group" && d.resource_name == "web");
 
     assert!(has_subnet, "Should detect subnet dependency");
     assert!(has_sg, "Should detect security group dependency");
@@ -487,7 +510,11 @@ fn test_rds_schema_has_required_fields() {
     assert_eq!(schema.resource_type, "aws_db_instance");
 
     // Check required fields
-    let required_names: Vec<_> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+    let required_names: Vec<_> = schema
+        .required_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(required_names.contains(&"identifier"));
     assert!(required_names.contains(&"engine"));
     assert!(required_names.contains(&"instance_class"));
@@ -499,7 +526,11 @@ fn test_rds_schema_optional_fields() {
     let resource = AwsRdsInstanceResource::new();
     let schema = resource.schema();
 
-    let optional_names: Vec<_> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+    let optional_names: Vec<_> = schema
+        .optional_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(optional_names.contains(&"engine_version"));
     assert!(optional_names.contains(&"username"));
     assert!(optional_names.contains(&"db_name"));
@@ -514,7 +545,11 @@ fn test_rds_schema_computed_attrs() {
     let resource = AwsRdsInstanceResource::new();
     let schema = resource.schema();
 
-    let computed_names: Vec<_> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+    let computed_names: Vec<_> = schema
+        .computed_attrs
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(computed_names.contains(&"id"));
     assert!(computed_names.contains(&"arn"));
     assert!(computed_names.contains(&"address"));
@@ -655,7 +690,9 @@ fn test_rds_dependencies_extraction() {
 
     let deps = resource.dependencies(&config);
 
-    let has_subnet_group = deps.iter().any(|d| d.resource_type == "aws_db_subnet_group");
+    let has_subnet_group = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_db_subnet_group");
     let has_sg = deps.iter().any(|d| d.resource_type == "aws_security_group");
 
     assert!(has_subnet_group, "Should detect DB subnet group dependency");
@@ -700,7 +737,10 @@ async fn test_rds_plan_update() {
 
     let diff = resource.plan(&desired, Some(&current), &ctx).await.unwrap();
     assert_eq!(diff.change_type, ChangeType::Update);
-    assert!(diff.modifications.contains_key("instance_class") || diff.modifications.contains_key("allocated_storage"));
+    assert!(
+        diff.modifications.contains_key("instance_class")
+            || diff.modifications.contains_key("allocated_storage")
+    );
 }
 
 // ============================================================================
@@ -721,7 +761,11 @@ fn test_alb_schema_has_required_fields() {
 
     assert_eq!(schema.resource_type, "aws_lb");
 
-    let required_names: Vec<_> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+    let required_names: Vec<_> = schema
+        .required_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(required_names.contains(&"name") || required_names.is_empty());
 }
 
@@ -730,7 +774,11 @@ fn test_alb_schema_optional_fields() {
     let resource = AwsLoadBalancerResource::new();
     let schema = resource.schema();
 
-    let optional_names: Vec<_> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+    let optional_names: Vec<_> = schema
+        .optional_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(optional_names.contains(&"load_balancer_type"));
     assert!(optional_names.contains(&"internal"));
     assert!(optional_names.contains(&"security_groups"));
@@ -742,7 +790,11 @@ fn test_alb_schema_computed_attrs() {
     let resource = AwsLoadBalancerResource::new();
     let schema = resource.schema();
 
-    let computed_names: Vec<_> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+    let computed_names: Vec<_> = schema
+        .computed_attrs
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(computed_names.contains(&"id"));
     assert!(computed_names.contains(&"arn"));
     assert!(computed_names.contains(&"dns_name"));
@@ -869,7 +921,11 @@ fn test_asg_schema_has_required_fields() {
 
     assert_eq!(schema.resource_type, "aws_autoscaling_group");
 
-    let required_names: Vec<_> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+    let required_names: Vec<_> = schema
+        .required_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(required_names.contains(&"min_size"));
     assert!(required_names.contains(&"max_size"));
 }
@@ -879,7 +935,11 @@ fn test_asg_schema_optional_fields() {
     let resource = AwsAutoScalingGroupResource::new();
     let schema = resource.schema();
 
-    let optional_names: Vec<_> = schema.optional_args.iter().map(|f| f.name.as_str()).collect();
+    let optional_names: Vec<_> = schema
+        .optional_args
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(optional_names.contains(&"name"));
     assert!(optional_names.contains(&"desired_capacity"));
     assert!(optional_names.contains(&"launch_template"));
@@ -893,7 +953,11 @@ fn test_asg_schema_computed_attrs() {
     let resource = AwsAutoScalingGroupResource::new();
     let schema = resource.schema();
 
-    let computed_names: Vec<_> = schema.computed_attrs.iter().map(|f| f.name.as_str()).collect();
+    let computed_names: Vec<_> = schema
+        .computed_attrs
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(computed_names.contains(&"id"));
     assert!(computed_names.contains(&"arn"));
     assert!(computed_names.contains(&"status"));
@@ -1018,11 +1082,18 @@ fn test_asg_dependencies_extraction() {
 
     let deps = resource.dependencies(&config);
 
-    let has_launch_template = deps.iter().any(|d| d.resource_type == "aws_launch_template");
+    let has_launch_template = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_launch_template");
     let has_subnet = deps.iter().any(|d| d.resource_type == "aws_subnet");
-    let has_target_group = deps.iter().any(|d| d.resource_type == "aws_lb_target_group");
+    let has_target_group = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_lb_target_group");
 
-    assert!(has_launch_template, "Should detect launch template dependency");
+    assert!(
+        has_launch_template,
+        "Should detect launch template dependency"
+    );
     assert!(has_subnet, "Should detect subnet dependency");
     assert!(has_target_group, "Should detect target group dependency");
 }
@@ -1104,7 +1175,10 @@ fn test_full_stack_vpc_ec2_pattern() {
     assert!(instance.validate(&ec2_config).is_ok());
 
     let deps = instance.dependencies(&ec2_config);
-    assert!(!deps.is_empty(), "EC2 should have dependencies on subnet and SG");
+    assert!(
+        !deps.is_empty(),
+        "EC2 should have dependencies on subnet and SG"
+    );
 }
 
 #[test]
@@ -1126,7 +1200,9 @@ fn test_full_stack_rds_pattern() {
     assert!(rds.validate(&rds_config).is_ok());
 
     let deps = rds.dependencies(&rds_config);
-    let has_subnet_group = deps.iter().any(|d| d.resource_type == "aws_db_subnet_group");
+    let has_subnet_group = deps
+        .iter()
+        .any(|d| d.resource_type == "aws_db_subnet_group");
     let has_sg = deps.iter().any(|d| d.resource_type == "aws_security_group");
 
     assert!(has_subnet_group);
@@ -1171,13 +1247,19 @@ fn test_full_stack_alb_asg_pattern() {
     let asg_deps = asg.dependencies(&asg_config);
 
     // ALB depends on security groups and subnets
-    assert!(alb_deps.iter().any(|d| d.resource_type == "aws_security_group"));
+    assert!(alb_deps
+        .iter()
+        .any(|d| d.resource_type == "aws_security_group"));
     assert!(alb_deps.iter().any(|d| d.resource_type == "aws_subnet"));
 
     // ASG depends on launch template, subnets, and target groups
-    assert!(asg_deps.iter().any(|d| d.resource_type == "aws_launch_template"));
+    assert!(asg_deps
+        .iter()
+        .any(|d| d.resource_type == "aws_launch_template"));
     assert!(asg_deps.iter().any(|d| d.resource_type == "aws_subnet"));
-    assert!(asg_deps.iter().any(|d| d.resource_type == "aws_lb_target_group"));
+    assert!(asg_deps
+        .iter()
+        .any(|d| d.resource_type == "aws_lb_target_group"));
 }
 
 #[test]
@@ -1276,7 +1358,10 @@ fn test_context_with_default_tags() {
 
     let ctx = create_test_context_with_tags(tags);
 
-    assert_eq!(ctx.default_tags.get("Project"), Some(&"MyProject".to_string()));
+    assert_eq!(
+        ctx.default_tags.get("Project"),
+        Some(&"MyProject".to_string())
+    );
     assert_eq!(ctx.default_tags.get("Owner"), Some(&"Platform".to_string()));
     assert_eq!(ctx.region, Some("us-west-2".to_string()));
 }
@@ -1309,16 +1394,31 @@ fn test_all_resources_have_valid_schemas() {
         let schema = resource.schema();
 
         // Schema should have a non-empty resource type
-        assert!(!schema.resource_type.is_empty(), "Resource type should not be empty");
+        assert!(
+            !schema.resource_type.is_empty(),
+            "Resource type should not be empty"
+        );
 
         // Schema should have a description
-        assert!(!schema.description.is_empty(), "Description should not be empty");
+        assert!(
+            !schema.description.is_empty(),
+            "Description should not be empty"
+        );
 
         // Timeouts should be reasonable
-        assert!(schema.timeouts.create > 0, "Create timeout should be positive");
+        assert!(
+            schema.timeouts.create > 0,
+            "Create timeout should be positive"
+        );
         assert!(schema.timeouts.read > 0, "Read timeout should be positive");
-        assert!(schema.timeouts.update > 0, "Update timeout should be positive");
-        assert!(schema.timeouts.delete > 0, "Delete timeout should be positive");
+        assert!(
+            schema.timeouts.update > 0,
+            "Update timeout should be positive"
+        );
+        assert!(
+            schema.timeouts.delete > 0,
+            "Delete timeout should be positive"
+        );
     }
 }
 
@@ -1333,7 +1433,11 @@ fn test_all_resources_have_consistent_provider() {
     ];
 
     for resource in resources {
-        assert_eq!(resource.provider(), "aws", "All AWS resources should have 'aws' provider");
+        assert_eq!(
+            resource.provider(),
+            "aws",
+            "All AWS resources should have 'aws' provider"
+        );
     }
 }
 
@@ -1354,7 +1458,13 @@ fn test_resource_type_naming_convention() {
     ];
 
     for (expected, actual) in resource_types {
-        assert_eq!(expected, actual, "Resource type should follow aws_<service> convention");
-        assert!(actual.starts_with("aws_"), "AWS resources should start with 'aws_'");
+        assert_eq!(
+            expected, actual,
+            "Resource type should follow aws_<service> convention"
+        );
+        assert!(
+            actual.starts_with("aws_"),
+            "AWS resources should start with 'aws_'"
+        );
     }
 }

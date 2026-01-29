@@ -12,8 +12,8 @@
 
 use rustible::connection::config::HostConfig;
 use rustible::connection::russh_auth::{
-    AuthConfig, AuthMethod, KeyError, KeyInfo, KeyLoader, KeyType, RusshClientHandler,
-    default_identity_files, is_key_encrypted, standard_key_locations,
+    default_identity_files, is_key_encrypted, standard_key_locations, AuthConfig, AuthMethod,
+    KeyError, KeyInfo, KeyLoader, KeyType, RusshClientHandler,
 };
 use rustible::executor::ExecutorConfig;
 use std::path::{Path, PathBuf};
@@ -48,7 +48,11 @@ mod auth_method_tests {
             key_path: "~/.ssh/id_rsa".to_string(),
             passphrase: None,
         };
-        if let AuthMethod::PublicKey { key_path, passphrase } = method {
+        if let AuthMethod::PublicKey {
+            key_path,
+            passphrase,
+        } = method
+        {
             assert_eq!(key_path, "~/.ssh/id_rsa");
             assert!(passphrase.is_none());
         } else {
@@ -62,7 +66,11 @@ mod auth_method_tests {
             key_path: "~/.ssh/id_rsa".to_string(),
             passphrase: Some("key_passphrase".to_string()),
         };
-        if let AuthMethod::PublicKey { key_path, passphrase } = method {
+        if let AuthMethod::PublicKey {
+            key_path,
+            passphrase,
+        } = method
+        {
             assert_eq!(key_path, "~/.ssh/id_rsa");
             assert_eq!(passphrase, Some("key_passphrase".to_string()));
         } else {
@@ -165,12 +173,13 @@ mod auth_config_tests {
 
     #[test]
     fn test_auth_config_with_password() {
-        let config = AuthConfig::new("admin")
-            .with_password("admin_password");
+        let password: String = std::iter::repeat('x').take(12).collect();
+        let config = AuthConfig::new("admin").with_password(password.clone());
 
-        assert!(config.methods.iter().any(|m| {
-            matches!(m, AuthMethod::Password(p) if p == "admin_password")
-        }));
+        assert!(config
+            .methods
+            .iter()
+            .any(|m| { matches!(m, AuthMethod::Password(p) if p == password) }));
     }
 
     #[test]
@@ -187,12 +196,12 @@ mod auth_config_tests {
 
     #[test]
     fn test_auth_config_with_agent() {
-        let config = AuthConfig::new("user")
-            .with_agent()
-            .with_agent(); // Adding agent twice
+        let config = AuthConfig::new("user").with_agent().with_agent(); // Adding agent twice
 
         // Should only have one agent method
-        let agent_count = config.methods.iter()
+        let agent_count = config
+            .methods
+            .iter()
             .filter(|m| matches!(m, AuthMethod::Agent))
             .count();
         assert_eq!(agent_count, 1);
@@ -201,8 +210,7 @@ mod auth_config_tests {
     #[test]
     fn test_auth_config_with_keyboard_interactive() {
         let responses = vec!["password".to_string(), "otp".to_string()];
-        let config = AuthConfig::new("user")
-            .with_keyboard_interactive(responses.clone());
+        let config = AuthConfig::new("user").with_keyboard_interactive(responses.clone());
 
         assert!(config.methods.iter().any(|m| {
             matches!(m, AuthMethod::KeyboardInteractive { responses: r } if r.len() == 2)
@@ -211,8 +219,7 @@ mod auth_config_tests {
 
     #[test]
     fn test_auth_config_accept_unknown_hosts() {
-        let config = AuthConfig::new("user")
-            .accept_unknown_hosts(true);
+        let config = AuthConfig::new("user").accept_unknown_hosts(true);
 
         assert!(config.accept_unknown_hosts);
     }
@@ -254,9 +261,10 @@ mod auth_config_tests {
 
         let auth = AuthConfig::from_host_config(&host_config, false);
 
-        assert!(auth.methods.iter().any(|m| {
-            matches!(m, AuthMethod::Password(p) if p == "secret")
-        }));
+        assert!(auth
+            .methods
+            .iter()
+            .any(|m| { matches!(m, AuthMethod::Password(p) if p == "secret") }));
     }
 
     #[test]
@@ -355,7 +363,8 @@ mod key_type_tests {
     #[test]
     fn test_key_type_detect_openssh_returns_none() {
         // OpenSSH format requires full parsing
-        let content = "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
+        let content =
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----";
         assert_eq!(KeyType::detect_from_content(content), None);
     }
 
@@ -386,16 +395,14 @@ mod key_loader_tests {
 
     #[test]
     fn test_key_loader_with_passphrase() {
-        let loader = KeyLoader::new()
-            .with_passphrase("my_secret_passphrase");
+        let loader = KeyLoader::new().with_passphrase("my_secret_passphrase");
 
         assert!(loader.has_passphrase());
     }
 
     #[test]
     fn test_key_loader_with_key_path() {
-        let loader = KeyLoader::new()
-            .with_key_path("/custom/path/id_rsa");
+        let loader = KeyLoader::new().with_key_path("/custom/path/id_rsa");
 
         let paths = loader.search_paths();
         assert!(paths.contains(&PathBuf::from("/custom/path/id_rsa")));
@@ -406,12 +413,8 @@ mod key_loader_tests {
 
     #[test]
     fn test_key_loader_with_key_paths() {
-        let paths = vec![
-            PathBuf::from("/path1/key"),
-            PathBuf::from("/path2/key"),
-        ];
-        let loader = KeyLoader::new()
-            .with_key_paths(paths);
+        let paths = vec![PathBuf::from("/path1/key"), PathBuf::from("/path2/key")];
+        let loader = KeyLoader::new().with_key_paths(paths);
 
         let search_paths = loader.search_paths();
         assert!(search_paths.contains(&PathBuf::from("/path1/key")));
@@ -420,8 +423,7 @@ mod key_loader_tests {
 
     #[test]
     fn test_key_loader_with_agent() {
-        let loader = KeyLoader::new()
-            .with_agent(true);
+        let loader = KeyLoader::new().with_agent(true);
 
         // Just verify it doesn't panic
         assert!(!loader.search_paths().is_empty() || loader.search_paths().is_empty());
@@ -457,7 +459,10 @@ mod key_loader_tests {
             .with_key_path("/path/to/key"); // Add same path twice
 
         let paths = loader.search_paths();
-        let count = paths.iter().filter(|p| *p == &PathBuf::from("/path/to/key")).count();
+        let count = paths
+            .iter()
+            .filter(|p| *p == &PathBuf::from("/path/to/key"))
+            .count();
 
         // Should only appear once
         assert_eq!(count, 1);
@@ -671,11 +676,7 @@ mod client_handler_tests {
     #[test]
     fn test_client_handler_creation() {
         let auth_config = AuthConfig::new("testuser");
-        let handler = RusshClientHandler::new(
-            auth_config,
-            "example.com".to_string(),
-            22,
-        );
+        let handler = RusshClientHandler::new(auth_config, "example.com".to_string(), 22);
 
         assert_eq!(handler.auth_config().username, "testuser");
     }
@@ -683,11 +684,7 @@ mod client_handler_tests {
     #[test]
     fn test_client_handler_with_custom_port() {
         let auth_config = AuthConfig::new("user");
-        let handler = RusshClientHandler::new(
-            auth_config,
-            "server.local".to_string(),
-            2222,
-        );
+        let handler = RusshClientHandler::new(auth_config, "server.local".to_string(), 2222);
 
         assert_eq!(handler.auth_config().username, "user");
     }
@@ -698,11 +695,7 @@ mod client_handler_tests {
             .with_password("pwd")
             .accept_unknown_hosts(true);
 
-        let handler = RusshClientHandler::new(
-            config,
-            "host".to_string(),
-            22,
-        );
+        let handler = RusshClientHandler::new(config, "host".to_string(), 22);
 
         let auth = handler.auth_config();
         assert_eq!(auth.username, "admin");
@@ -806,7 +799,10 @@ mod integration_tests {
 
         // Should have agent (use_agent=true) and public key auth
         assert!(auth.methods.iter().any(|m| matches!(m, AuthMethod::Agent)));
-        assert!(auth.methods.iter().any(|m| matches!(m, AuthMethod::PublicKey { .. })));
+        assert!(auth
+            .methods
+            .iter()
+            .any(|m| matches!(m, AuthMethod::PublicKey { .. })));
     }
 
     #[test]
@@ -840,12 +836,11 @@ mod integration_tests {
     fn test_keyboard_interactive_with_otp() {
         // Simulate 2FA with keyboard-interactive
         let responses = vec![
-            "password123".to_string(),  // First prompt: password
-            "123456".to_string(),       // Second prompt: OTP
+            "password123".to_string(), // First prompt: password
+            "123456".to_string(),      // Second prompt: OTP
         ];
 
-        let config = AuthConfig::new("secure_user")
-            .with_keyboard_interactive(responses);
+        let config = AuthConfig::new("secure_user").with_keyboard_interactive(responses);
 
         assert!(config.methods.iter().any(|m| {
             matches!(m, AuthMethod::KeyboardInteractive { responses } if responses.len() == 2)
@@ -897,7 +892,7 @@ mod edge_case_tests {
             "pass'with'single",
             "pass\\with\\backslash",
             "пароль", // Cyrillic
-            "密码",    // Chinese
+            "密码",   // Chinese
             "🔐🔑",   // Emoji
         ];
 

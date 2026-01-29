@@ -33,6 +33,7 @@ pub mod meta;
 pub mod mount;
 pub mod network;
 pub mod package;
+pub mod parity;
 pub mod pause;
 pub mod pip;
 pub mod proxmox_lxc;
@@ -57,7 +58,6 @@ pub mod user;
 pub mod wait_for;
 pub mod windows;
 pub mod yum;
-pub mod parity;
 
 pub use python::PythonModuleExecutor;
 

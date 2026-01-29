@@ -529,10 +529,7 @@ mod version_sorting_tests {
 
         let req: VersionReq = "^1.0.0".parse().unwrap();
 
-        let compatible: Vec<_> = available
-            .iter()
-            .filter(|v| req.matches(v))
-            .collect();
+        let compatible: Vec<_> = available.iter().filter(|v| req.matches(v)).collect();
 
         assert_eq!(compatible.len(), 3);
 

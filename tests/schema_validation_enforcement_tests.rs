@@ -41,7 +41,8 @@ fn fails_missing_required_args_for_copy() {
 
 #[test]
 fn fails_mutually_exclusive_args_for_copy() {
-    let playbook = playbook_with_task("copy:\n  dest: /tmp/file\n  src: /tmp/source\n  content: hi");
+    let playbook =
+        playbook_with_task("copy:\n  dest: /tmp/file\n  src: /tmp/source\n  content: hi");
     let result = validate(&playbook);
 
     assert!(!result.valid);

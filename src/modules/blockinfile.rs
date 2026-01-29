@@ -81,7 +81,11 @@ impl BlockinfileModule {
         };
 
         secure_write_file(path, &content, create, mode).map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", path.display(), e))
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write file '{}': {}",
+                path.display(),
+                e
+            ))
         })?;
 
         Ok(())

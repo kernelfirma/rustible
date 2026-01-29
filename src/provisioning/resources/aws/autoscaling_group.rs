@@ -539,7 +539,10 @@ impl AwsAutoScalingGroupResource {
         }
 
         // Service-linked role
-        if let Some(role) = config.get("service_linked_role_arn").and_then(|v| v.as_str()) {
+        if let Some(role) = config
+            .get("service_linked_role_arn")
+            .and_then(|v| v.as_str())
+        {
             if role.starts_with("${") {
                 refs.push(role.to_string());
             }
@@ -1376,7 +1379,10 @@ impl Resource for AwsAutoScalingGroupResource {
             info!("Imported Auto Scaling Group: {}", id);
             Ok(ResourceResult::success(id, result.attributes))
         } else {
-            Err(ProvisioningError::resource_not_found("aws", "autoscaling_group"))
+            Err(ProvisioningError::resource_not_found(
+                "aws",
+                "autoscaling_group",
+            ))
         }
     }
 
@@ -1384,14 +1390,13 @@ impl Resource for AwsAutoScalingGroupResource {
         let refs = self.extract_references(config);
         refs.iter()
             .filter_map(|r| {
-                self.parse_reference(r).map(|(res_type, res_name, attr)| {
-                    ResourceDependency {
+                self.parse_reference(r)
+                    .map(|(res_type, res_name, attr)| ResourceDependency {
                         resource_type: res_type,
                         resource_name: res_name,
                         attribute: attr,
                         hard: true,
-                    }
-                })
+                    })
             })
             .collect()
     }
@@ -1506,7 +1511,10 @@ impl Resource for AwsAutoScalingGroupResource {
         }
 
         // Validate health_check_grace_period
-        if let Some(hcgp) = obj.get("health_check_grace_period").and_then(|v| v.as_i64()) {
+        if let Some(hcgp) = obj
+            .get("health_check_grace_period")
+            .and_then(|v| v.as_i64())
+        {
             if hcgp < 0 || hcgp > 7200 {
                 return Err(ProvisioningError::ValidationError(
                     "health_check_grace_period must be between 0 and 7200".to_string(),

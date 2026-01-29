@@ -297,7 +297,12 @@ impl OutputFormatter {
     /// Print a recap summary
     pub fn recap(&self, stats: &RecapStats) {
         if self.json_mode {
-            println!("{}", serde_json::to_string_pretty(stats).unwrap());
+            let duration = self.start_time.elapsed();
+            let result = serde_json::json!({
+                "hosts": &stats.hosts,
+                "duration_ms": duration.as_millis(),
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
             return;
         }
 
@@ -405,8 +410,8 @@ impl OutputFormatter {
             println!("{}", line);
 
             println!(
-                "  {:<12} : {}",
-                "Duration".bright_white(),
+                "  {} : {}",
+                format!("{:<15}", "⏱️  Duration").bright_white(),
                 duration_str.cyan()
             );
 
@@ -414,8 +419,8 @@ impl OutputFormatter {
                 let failures = stats.total_failed();
                 let status_msg = format!("✖ FAILED ({} errors)", failures);
                 println!(
-                    "  {:<12} : {}",
-                    "Status".bright_white(),
+                    "  {} : {}",
+                    format!("{:<14}", "🏁 Status").bright_white(),
                     status_msg.red().bold()
                 );
             } else {
@@ -429,8 +434,8 @@ impl OutputFormatter {
                     ("✔ SUCCESS (no changes)".to_string(), colored::Color::Green)
                 };
                 println!(
-                    "  {:<12} : {}",
-                    "Status".bright_white(),
+                    "  {} : {}",
+                    format!("{:<14}", "🏁 Status").bright_white(),
                     status_msg.color(status_color).bold()
                 );
             }

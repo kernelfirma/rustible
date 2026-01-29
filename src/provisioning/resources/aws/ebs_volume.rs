@@ -78,10 +78,7 @@ impl AwsEbsVolumeResource {
     /// Parse configuration from JSON Value
     fn parse_config(&self, config: &Value) -> ProvisioningResult<EbsVolumeConfig> {
         serde_json::from_value(config.clone()).map_err(|e| {
-            ProvisioningError::ValidationError(format!(
-                "Invalid EBS volume configuration: {}",
-                e
-            ))
+            ProvisioningError::ValidationError(format!("Invalid EBS volume configuration: {}", e))
         })
     }
 
@@ -93,11 +90,7 @@ impl AwsEbsVolumeResource {
     ) -> ProvisioningResult<Option<EbsVolumeState>> {
         let client = self.create_client(ctx).await?;
 
-        let resp = client
-            .describe_volumes()
-            .volume_ids(volume_id)
-            .send()
-            .await;
+        let resp = client.describe_volumes().volume_ids(volume_id).send().await;
 
         match resp {
             Ok(r) => {
@@ -465,13 +458,13 @@ impl Resource for AwsEbsVolumeResource {
                 Ok(ResourceDiff::create(desired.clone()))
             }
             Some(current_value) => {
-                let current_state: EbsVolumeState =
-                    serde_json::from_value(current_value.clone()).map_err(|e| {
-                        ProvisioningError::SerializationError(format!(
-                            "Failed to parse current state: {}",
-                            e
-                        ))
-                    })?;
+                let current_state: EbsVolumeState = serde_json::from_value(current_value.clone())
+                    .map_err(|e| {
+                    ProvisioningError::SerializationError(format!(
+                        "Failed to parse current state: {}",
+                        e
+                    ))
+                })?;
 
                 // Check for force_new fields
                 let mut requires_replacement = false;
@@ -759,8 +752,10 @@ impl Resource for AwsEbsVolumeResource {
                 .collect();
 
             if !old_keys.is_empty() {
-                let delete_tags: Vec<Tag> =
-                    old_keys.iter().map(|k| Tag::builder().key(k).build()).collect();
+                let delete_tags: Vec<Tag> = old_keys
+                    .iter()
+                    .map(|k| Tag::builder().key(k).build())
+                    .collect();
 
                 client
                     .delete_tags()
@@ -830,13 +825,14 @@ impl Resource for AwsEbsVolumeResource {
     async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         debug!("Importing EBS volume: {}", id);
 
-        let state = self.find_by_id(id, ctx).await?.ok_or_else(|| {
-            ProvisioningError::ImportError {
-                resource_type: "aws_ebs_volume".to_string(),
-                resource_id: id.to_string(),
-                message: "EBS volume not found".to_string(),
-            }
-        })?;
+        let state =
+            self.find_by_id(id, ctx)
+                .await?
+                .ok_or_else(|| ProvisioningError::ImportError {
+                    resource_type: "aws_ebs_volume".to_string(),
+                    resource_id: id.to_string(),
+                    message: "EBS volume not found".to_string(),
+                })?;
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
             ProvisioningError::SerializationError(format!(
@@ -889,10 +885,7 @@ impl Resource for AwsEbsVolumeResource {
 
         // Validate size or snapshot_id is present
         let has_size = config.get("size").and_then(|v| v.as_i64()).is_some();
-        let has_snapshot = config
-            .get("snapshot_id")
-            .and_then(|v| v.as_str())
-            .is_some();
+        let has_snapshot = config.get("snapshot_id").and_then(|v| v.as_str()).is_some();
 
         if !has_size && !has_snapshot {
             return Err(ProvisioningError::ValidationError(
@@ -914,10 +907,7 @@ impl Resource for AwsEbsVolumeResource {
 
         // Validate IOPS for supported volume types
         if let Some(iops) = config.get("iops").and_then(|v| v.as_i64()) {
-            let vol_type = config
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("gp3");
+            let vol_type = config.get("type").and_then(|v| v.as_str()).unwrap_or("gp3");
             if !["gp3", "io1", "io2"].contains(&vol_type.to_lowercase().as_str()) {
                 return Err(ProvisioningError::ValidationError(format!(
                     "IOPS can only be specified for gp3, io1, or io2 volumes, not {}",
@@ -933,10 +923,7 @@ impl Resource for AwsEbsVolumeResource {
 
         // Validate throughput for gp3
         if let Some(throughput) = config.get("throughput").and_then(|v| v.as_i64()) {
-            let vol_type = config
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("gp3");
+            let vol_type = config.get("type").and_then(|v| v.as_str()).unwrap_or("gp3");
             if vol_type.to_lowercase() != "gp3" {
                 return Err(ProvisioningError::ValidationError(
                     "Throughput can only be specified for gp3 volumes".to_string(),
@@ -951,10 +938,7 @@ impl Resource for AwsEbsVolumeResource {
 
         // Validate multi-attach for supported types
         if let Some(true) = config.get("multi_attach_enabled").and_then(|v| v.as_bool()) {
-            let vol_type = config
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("gp3");
+            let vol_type = config.get("type").and_then(|v| v.as_str()).unwrap_or("gp3");
             if !["io1", "io2"].contains(&vol_type.to_lowercase().as_str()) {
                 return Err(ProvisioningError::ValidationError(
                     "Multi-attach can only be enabled for io1 or io2 volumes".to_string(),

@@ -10,9 +10,9 @@
 //! Closes Issue #306: Raised bar: Network modules parity tests
 
 use rustible::modules::network::{
-    calculate_config_checksum, generate_backup_filename, generate_config_diff,
-    ConfigSource, EosConfigModule, IosConfigModule, JunosConfigModule,
-    NetworkConfig, NetworkPlatform, NetworkTransport, NxosConfigModule,
+    calculate_config_checksum, generate_backup_filename, generate_config_diff, ConfigSource,
+    EosConfigModule, IosConfigModule, JunosConfigModule, NetworkConfig, NetworkPlatform,
+    NetworkTransport, NxosConfigModule,
 };
 use rustible::modules::network::{escape_config_text, extract_config_sections, parse_ios_config};
 use rustible::modules::{Module, ModuleRegistry};
@@ -106,14 +106,38 @@ mod transport_tests {
 
     #[test]
     fn test_transport_from_str() {
-        assert_eq!("ssh".parse::<NetworkTransport>().unwrap(), NetworkTransport::Ssh);
-        assert_eq!("cli".parse::<NetworkTransport>().unwrap(), NetworkTransport::Ssh);
-        assert_eq!("netconf".parse::<NetworkTransport>().unwrap(), NetworkTransport::Netconf);
-        assert_eq!("nc".parse::<NetworkTransport>().unwrap(), NetworkTransport::Netconf);
-        assert_eq!("gnmi".parse::<NetworkTransport>().unwrap(), NetworkTransport::Gnmi);
-        assert_eq!("grpc".parse::<NetworkTransport>().unwrap(), NetworkTransport::Gnmi);
-        assert_eq!("restapi".parse::<NetworkTransport>().unwrap(), NetworkTransport::RestApi);
-        assert_eq!("rest".parse::<NetworkTransport>().unwrap(), NetworkTransport::RestApi);
+        assert_eq!(
+            "ssh".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Ssh
+        );
+        assert_eq!(
+            "cli".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Ssh
+        );
+        assert_eq!(
+            "netconf".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Netconf
+        );
+        assert_eq!(
+            "nc".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Netconf
+        );
+        assert_eq!(
+            "gnmi".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Gnmi
+        );
+        assert_eq!(
+            "grpc".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::Gnmi
+        );
+        assert_eq!(
+            "restapi".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::RestApi
+        );
+        assert_eq!(
+            "rest".parse::<NetworkTransport>().unwrap(),
+            NetworkTransport::RestApi
+        );
     }
 
     #[test]
@@ -133,43 +157,91 @@ mod platform_tests {
     fn test_platform_display() {
         assert_eq!(format!("{}", NetworkPlatform::CiscoIos), "cisco_ios");
         assert_eq!(format!("{}", NetworkPlatform::CiscoNxos), "cisco_nxos");
-        assert_eq!(format!("{}", NetworkPlatform::JuniperJunos), "juniper_junos");
+        assert_eq!(
+            format!("{}", NetworkPlatform::JuniperJunos),
+            "juniper_junos"
+        );
         assert_eq!(format!("{}", NetworkPlatform::AristaEos), "arista_eos");
     }
 
     #[test]
     fn test_platform_from_str_ios() {
-        assert_eq!("cisco_ios".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoIos);
-        assert_eq!("ios".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoIos);
-        assert_eq!("ios_xe".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoIos);
-        assert_eq!("iosxe".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoIos);
+        assert_eq!(
+            "cisco_ios".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoIos
+        );
+        assert_eq!(
+            "ios".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoIos
+        );
+        assert_eq!(
+            "ios_xe".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoIos
+        );
+        assert_eq!(
+            "iosxe".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoIos
+        );
     }
 
     #[test]
     fn test_platform_from_str_nxos() {
-        assert_eq!("cisco_nxos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoNxos);
-        assert_eq!("nxos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoNxos);
-        assert_eq!("nexus".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::CiscoNxos);
+        assert_eq!(
+            "cisco_nxos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoNxos
+        );
+        assert_eq!(
+            "nxos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoNxos
+        );
+        assert_eq!(
+            "nexus".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::CiscoNxos
+        );
     }
 
     #[test]
     fn test_platform_from_str_junos() {
-        assert_eq!("juniper_junos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::JuniperJunos);
-        assert_eq!("junos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::JuniperJunos);
-        assert_eq!("juniper".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::JuniperJunos);
+        assert_eq!(
+            "juniper_junos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::JuniperJunos
+        );
+        assert_eq!(
+            "junos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::JuniperJunos
+        );
+        assert_eq!(
+            "juniper".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::JuniperJunos
+        );
     }
 
     #[test]
     fn test_platform_from_str_eos() {
-        assert_eq!("arista_eos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::AristaEos);
-        assert_eq!("eos".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::AristaEos);
-        assert_eq!("arista".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::AristaEos);
+        assert_eq!(
+            "arista_eos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::AristaEos
+        );
+        assert_eq!(
+            "eos".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::AristaEos
+        );
+        assert_eq!(
+            "arista".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::AristaEos
+        );
     }
 
     #[test]
     fn test_platform_from_str_generic() {
-        assert_eq!("generic".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::Generic);
-        assert_eq!("auto".parse::<NetworkPlatform>().unwrap(), NetworkPlatform::Generic);
+        assert_eq!(
+            "generic".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::Generic
+        );
+        assert_eq!(
+            "auto".parse::<NetworkPlatform>().unwrap(),
+            NetworkPlatform::Generic
+        );
     }
 
     #[test]
@@ -223,11 +295,8 @@ mod network_config_tests {
         ];
 
         for platform in platforms {
-            let config = NetworkConfig::new(
-                "test config".to_string(),
-                platform,
-                ConfigSource::Running,
-            );
+            let config =
+                NetworkConfig::new("test config".to_string(), platform, ConfigSource::Running);
             assert_eq!(config.platform, platform);
         }
     }
@@ -322,14 +391,20 @@ mod checksum_tests {
     fn test_checksum_same_content() {
         let checksum1 = calculate_config_checksum("hostname router1");
         let checksum2 = calculate_config_checksum("hostname router1");
-        assert_eq!(checksum1, checksum2, "Same content should produce same checksum");
+        assert_eq!(
+            checksum1, checksum2,
+            "Same content should produce same checksum"
+        );
     }
 
     #[test]
     fn test_checksum_different_content() {
         let checksum1 = calculate_config_checksum("hostname router1");
         let checksum2 = calculate_config_checksum("hostname router2");
-        assert_ne!(checksum1, checksum2, "Different content should produce different checksum");
+        assert_ne!(
+            checksum1, checksum2,
+            "Different content should produce different checksum"
+        );
     }
 
     #[test]
@@ -351,17 +426,23 @@ mod backup_tests {
 
     #[test]
     fn test_backup_filename_format() {
-        let filename = generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
+        let filename =
+            generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
 
         assert!(filename.contains("router1"), "Should contain hostname");
-        assert!(filename.ends_with(".cfg") || filename.contains("."), "Should have extension");
+        assert!(
+            filename.ends_with(".cfg") || filename.contains("."),
+            "Should have extension"
+        );
     }
 
     #[test]
     fn test_backup_filename_unique() {
-        let filename1 = generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
+        let filename1 =
+            generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
         std::thread::sleep(std::time::Duration::from_millis(1100));
-        let filename2 = generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
+        let filename2 =
+            generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
 
         assert_ne!(filename1, filename2, "Backup filenames should be unique");
     }
@@ -409,7 +490,11 @@ interface GigabitEthernet0/1
 
         let sections = extract_config_sections(config, "interface");
 
-        assert!(sections.len() >= 2, "Should extract multiple interface sections, found {}", sections.len());
+        assert!(
+            sections.len() >= 2,
+            "Should extract multiple interface sections, found {}",
+            sections.len()
+        );
     }
 
     #[test]
@@ -474,10 +559,7 @@ ip access-list extended MANAGEMENT
 
         let diff = generate_config_diff(config, config);
 
-        assert!(
-            is_idempotent(&diff),
-            "IOS ACL config should be idempotent"
-        );
+        assert!(is_idempotent(&diff), "IOS ACL config should be idempotent");
     }
 
     #[test]
@@ -497,10 +579,7 @@ router bgp 65000
 
         let diff = generate_config_diff(config, config);
 
-        assert!(
-            is_idempotent(&diff),
-            "IOS BGP config should be idempotent"
-        );
+        assert!(is_idempotent(&diff), "IOS BGP config should be idempotent");
     }
 
     #[test]
@@ -560,10 +639,7 @@ router ospf 1
 
         let diff = generate_config_diff(config, config);
 
-        assert!(
-            is_idempotent(&diff),
-            "EOS OSPF config should be idempotent"
-        );
+        assert!(is_idempotent(&diff), "EOS OSPF config should be idempotent");
     }
 }
 
@@ -587,10 +663,7 @@ mod diff_accuracy_tests {
 
         let diff = generate_config_diff(before, after);
 
-        assert!(
-            has_changes(&diff),
-            "Should detect IP address change"
-        );
+        assert!(has_changes(&diff), "Should detect IP address change");
     }
 
     #[test]
@@ -600,10 +673,7 @@ mod diff_accuracy_tests {
 
         let diff = generate_config_diff(before, after);
 
-        assert!(
-            has_changes(&diff),
-            "Should detect description change"
-        );
+        assert!(has_changes(&diff), "Should detect description change");
     }
 
     #[test]
@@ -633,10 +703,7 @@ mod diff_accuracy_tests {
 
         let diff = generate_config_diff(before, after);
 
-        assert!(
-            has_changes(&diff),
-            "Should detect line reordering"
-        );
+        assert!(has_changes(&diff), "Should detect line reordering");
     }
 
     #[test]
@@ -716,7 +783,10 @@ router ospf 1
 
         let interface_sections = extract_config_sections(config, "interface");
 
-        assert!(interface_sections.len() >= 2, "Should extract multiple interface sections");
+        assert!(
+            interface_sections.len() >= 2,
+            "Should extract multiple interface sections"
+        );
     }
 }
 

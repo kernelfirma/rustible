@@ -15,11 +15,7 @@ fn host_set(hosts: Vec<&Host>) -> HashSet<String> {
     hosts.into_iter().map(|h| h.name().to_string()).collect()
 }
 
-fn add_host_with_group(
-    inventory: &mut Inventory,
-    host_name: &str,
-    group_name: Option<&str>,
-) {
+fn add_host_with_group(inventory: &mut Inventory, host_name: &str, group_name: Option<&str>) {
     let mut host = Host::new(host_name);
     if let Some(group) = group_name {
         host.add_to_group(group);
@@ -57,7 +53,10 @@ fn test_group_and_host_match() {
     add_host_with_group(&mut inv, "db1", None);
 
     let web_hosts = host_set(inv.get_hosts_for_pattern("web").unwrap());
-    assert_eq!(web_hosts, HashSet::from(["web1".to_string(), "web2".to_string()]));
+    assert_eq!(
+        web_hosts,
+        HashSet::from(["web1".to_string(), "web2".to_string()])
+    );
 
     let host = inv.get_hosts_for_pattern("web1").unwrap();
     assert_eq!(host.len(), 1);
@@ -84,7 +83,10 @@ fn test_glob_patterns() {
     );
 
     let web_q = host_set(inv.get_hosts_for_pattern("web?").unwrap());
-    assert_eq!(web_q, HashSet::from(["web1".to_string(), "web2".to_string()]));
+    assert_eq!(
+        web_q,
+        HashSet::from(["web1".to_string(), "web2".to_string()])
+    );
 
     let suffix = host_set(inv.get_hosts_for_pattern("*-web").unwrap());
     assert_eq!(suffix, HashSet::from(["prod-web".to_string()]));

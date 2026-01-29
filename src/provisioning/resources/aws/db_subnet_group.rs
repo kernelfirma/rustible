@@ -122,7 +122,10 @@ impl AwsDbSubnetGroupResource {
         DbSubnetGroupState {
             name: group.db_subnet_group_name().unwrap_or_default().to_string(),
             arn: group.db_subnet_group_arn().unwrap_or_default().to_string(),
-            description: group.db_subnet_group_description().unwrap_or_default().to_string(),
+            description: group
+                .db_subnet_group_description()
+                .unwrap_or_default()
+                .to_string(),
             subnet_ids,
             vpc_id: group.vpc_id().unwrap_or_default().to_string(),
             status: group.subnet_group_status().unwrap_or_default().to_string(),
@@ -518,13 +521,14 @@ impl Resource for AwsDbSubnetGroupResource {
     async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         debug!("Importing DB subnet group: {}", id);
 
-        let state = self.find_by_name(id, ctx).await?.ok_or_else(|| {
-            ProvisioningError::ImportError {
-                resource_type: "aws_db_subnet_group".to_string(),
-                resource_id: id.to_string(),
-                message: "DB subnet group not found".to_string(),
-            }
-        })?;
+        let state =
+            self.find_by_name(id, ctx)
+                .await?
+                .ok_or_else(|| ProvisioningError::ImportError {
+                    resource_type: "aws_db_subnet_group".to_string(),
+                    resource_id: id.to_string(),
+                    message: "DB subnet group not found".to_string(),
+                })?;
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
             ProvisioningError::SerializationError(format!(
@@ -573,9 +577,7 @@ impl Resource for AwsDbSubnetGroupResource {
         }
 
         // Validate subnet_ids is present and has at least 2 entries
-        let subnet_ids = config
-            .get("subnet_ids")
-            .and_then(|v| v.as_array());
+        let subnet_ids = config.get("subnet_ids").and_then(|v| v.as_array());
 
         if subnet_ids.is_none() {
             return Err(ProvisioningError::ValidationError(
@@ -586,7 +588,8 @@ impl Resource for AwsDbSubnetGroupResource {
         let subnet_ids = subnet_ids.unwrap();
         if subnet_ids.len() < 2 {
             return Err(ProvisioningError::ValidationError(
-                "subnet_ids must contain at least 2 subnet IDs in different availability zones".to_string(),
+                "subnet_ids must contain at least 2 subnet IDs in different availability zones"
+                    .to_string(),
             ));
         }
 

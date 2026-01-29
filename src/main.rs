@@ -64,21 +64,19 @@ async fn main() -> Result<()> {
             args.execute().await?;
             0
         }
-        Commands::Provisioner(args) => {
-            match args.execute().await {
-                Ok(result) => {
-                    if result.success {
-                        0
-                    } else {
-                        1
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Provisioner error: {}", e);
+        Commands::Provisioner(args) => match args.execute().await {
+            Ok(result) => {
+                if result.success {
+                    0
+                } else {
                     1
                 }
             }
-        }
+            Err(e) => {
+                eprintln!("Provisioner error: {}", e);
+                1
+            }
+        },
         Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
         Commands::Agent(args) => execute_agent(&args, &mut ctx).await?,
     };
@@ -112,10 +110,8 @@ async fn execute_agent(args: &cli::AgentArgs, ctx: &mut CommandContext) -> Resul
 
             match builder.build() {
                 Ok(path) => {
-                    ctx.output.success(&format!(
-                        "Agent binary built: {}",
-                        path.display()
-                    ));
+                    ctx.output
+                        .success(&format!("Agent binary built: {}", path.display()));
                     Ok(0)
                 }
                 Err(e) => {
@@ -148,10 +144,8 @@ async fn execute_agent(args: &cli::AgentArgs, ctx: &mut CommandContext) -> Resul
             }
 
             ctx.output.info("Agent deployment not yet implemented");
-            ctx.output.info(&format!(
-                "Would deploy to: {}",
-                deploy_args.remote_path
-            ));
+            ctx.output
+                .info(&format!("Would deploy to: {}", deploy_args.remote_path));
             Ok(0)
         }
 
@@ -163,7 +157,8 @@ async fn execute_agent(args: &cli::AgentArgs, ctx: &mut CommandContext) -> Resul
             }
 
             ctx.output.info("Agent status check not yet implemented");
-            ctx.output.info("(Requires inventory to determine target hosts)");
+            ctx.output
+                .info("(Requires inventory to determine target hosts)");
             Ok(0)
         }
 

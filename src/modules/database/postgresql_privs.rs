@@ -222,7 +222,10 @@ impl PrivConfig {
         // Validate privileges against object type
         let valid = obj_type.valid_privileges();
         for privilege in &privs {
-            if !valid.contains(&privilege.as_ref()) && privilege != "ALL" && privilege != "ALL PRIVILEGES" {
+            if !valid.contains(&privilege.as_ref())
+                && privilege != "ALL"
+                && privilege != "ALL PRIVILEGES"
+            {
                 return Err(ModuleError::InvalidParameter(format!(
                     "Invalid privilege '{}' for object type '{:?}'. Valid privileges: {:?}",
                     privilege, obj_type, valid
@@ -432,13 +435,9 @@ impl PostgresqlPrivsModule {
                     query
                 );
 
-                let (success, stdout, _) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, stdout, _) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if success {
                     for line in stdout.lines() {
@@ -554,13 +553,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -589,13 +584,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -748,13 +739,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -793,13 +780,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -823,13 +806,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -965,13 +944,9 @@ impl PostgresqlPrivsModule {
                     sql
                 );
 
-                let (success, _, stderr) = Self::execute_command(
-                    connection,
-                    &cmd,
-                    context,
-                    config.conn.build_env_vars(),
-                )
-                .await?;
+                let (success, _, stderr) =
+                    Self::execute_command(connection, &cmd, context, config.conn.build_env_vars())
+                        .await?;
 
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -1020,8 +995,7 @@ impl PostgresqlPrivsModule {
                     )));
                 }
 
-                let changed =
-                    Self::grant_privileges(connection.as_ref(), &config, context).await?;
+                let changed = Self::grant_privileges(connection.as_ref(), &config, context).await?;
 
                 if changed {
                     Ok(ModuleOutput::changed(format!(
@@ -1031,7 +1005,10 @@ impl PostgresqlPrivsModule {
                     ))
                     .with_data("role", serde_json::json!(config.role))
                     .with_data("privileges", serde_json::json!(config.privs))
-                    .with_data("object_type", serde_json::json!(format!("{:?}", config.obj_type))))
+                    .with_data(
+                        "object_type",
+                        serde_json::json!(format!("{:?}", config.obj_type)),
+                    ))
                 } else {
                     Ok(ModuleOutput::ok(format!(
                         "Role '{}' already has requested privileges",
@@ -1060,7 +1037,10 @@ impl PostgresqlPrivsModule {
                     ))
                     .with_data("role", serde_json::json!(config.role))
                     .with_data("privileges", serde_json::json!(config.privs))
-                    .with_data("object_type", serde_json::json!(format!("{:?}", config.obj_type))))
+                    .with_data(
+                        "object_type",
+                        serde_json::json!(format!("{:?}", config.obj_type)),
+                    ))
                 } else {
                     Ok(ModuleOutput::ok(format!(
                         "Role '{}' did not have specified privileges",

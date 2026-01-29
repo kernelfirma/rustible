@@ -279,7 +279,12 @@ impl PrometheusMetric {
                     .iter()
                     .map(|(k, v)| format!("{}=\"{}\"", k, v))
                     .collect();
-                output.push_str(&format!("{}{{{}}} {}\n", self.name, label_str.join(","), value));
+                output.push_str(&format!(
+                    "{}{{{}}} {}\n",
+                    self.name,
+                    label_str.join(","),
+                    value
+                ));
             }
         }
 
@@ -309,10 +314,7 @@ impl ObservabilityCollector {
 
     /// Get uptime in seconds
     pub fn uptime_seconds(&self) -> u64 {
-        self.start_time
-            .elapsed()
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        self.start_time.elapsed().map(|d| d.as_secs()).unwrap_or(0)
     }
 
     /// Build health response
@@ -322,11 +324,11 @@ impl ObservabilityCollector {
         checks: HashMap<String, ComponentHealth>,
     ) -> HealthResponse {
         // Determine overall status from component checks
-        let status = checks
-            .values()
-            .map(|c| c.status)
-            .fold(HealthStatus::Healthy, |acc, s| {
-                match (acc, s) {
+        let status =
+            checks
+                .values()
+                .map(|c| c.status)
+                .fold(HealthStatus::Healthy, |acc, s| match (acc, s) {
                     (HealthStatus::Unhealthy, _) | (_, HealthStatus::Unhealthy) => {
                         HealthStatus::Unhealthy
                     }
@@ -334,8 +336,7 @@ impl ObservabilityCollector {
                         HealthStatus::Degraded
                     }
                     _ => HealthStatus::Healthy,
-                }
-            });
+                });
 
         HealthResponse {
             status,
@@ -356,10 +357,7 @@ impl ObservabilityCollector {
         current_term: u64,
     ) -> ClusterStatusResponse {
         let total_controllers = controllers.len();
-        let healthy_controllers = controllers
-            .iter()
-            .filter(|c| c.health == "healthy")
-            .count();
+        let healthy_controllers = controllers.iter().filter(|c| c.health == "healthy").count();
 
         let quorum = total_controllers / 2 + 1;
         let has_quorum = healthy_controllers >= quorum;
@@ -400,7 +398,11 @@ impl ObservabilityCollector {
                 "Whether this controller is the leader",
             )
             .with_labeled_value(
-                if role == ControllerRole::Leader { 1.0 } else { 0.0 },
+                if role == ControllerRole::Leader {
+                    1.0
+                } else {
+                    0.0
+                },
                 labels.clone(),
             ),
             PrometheusMetric::gauge(
@@ -538,10 +540,8 @@ mod tests {
 
     #[test]
     fn test_health_response() {
-        let collector = ObservabilityCollector::new(
-            ControllerId::new("test-ctrl"),
-            "test-cluster".to_string(),
-        );
+        let collector =
+            ObservabilityCollector::new(ControllerId::new("test-ctrl"), "test-cluster".to_string());
 
         let mut checks = HashMap::new();
         checks.insert("raft".to_string(), ComponentHealth::healthy());
@@ -556,10 +556,8 @@ mod tests {
 
     #[test]
     fn test_degraded_health() {
-        let collector = ObservabilityCollector::new(
-            ControllerId::new("test-ctrl"),
-            "test-cluster".to_string(),
-        );
+        let collector =
+            ObservabilityCollector::new(ControllerId::new("test-ctrl"), "test-cluster".to_string());
 
         let mut checks = HashMap::new();
         checks.insert("raft".to_string(), ComponentHealth::healthy());
@@ -589,8 +587,8 @@ mod tests {
         labels.insert("instance".to_string(), "localhost".to_string());
         labels.insert("job".to_string(), "test".to_string());
 
-        let metric =
-            PrometheusMetric::counter("requests_total", "Total requests").with_labeled_value(100.0, labels);
+        let metric = PrometheusMetric::counter("requests_total", "Total requests")
+            .with_labeled_value(100.0, labels);
 
         let text = metric.to_prometheus_text();
         assert!(text.contains("# TYPE requests_total counter"));
@@ -600,10 +598,8 @@ mod tests {
 
     #[test]
     fn test_cluster_status_quorum() {
-        let collector = ObservabilityCollector::new(
-            ControllerId::new("test-ctrl"),
-            "test-cluster".to_string(),
-        );
+        let collector =
+            ObservabilityCollector::new(ControllerId::new("test-ctrl"), "test-cluster".to_string());
 
         let controllers = vec![
             ControllerStatusInfo {

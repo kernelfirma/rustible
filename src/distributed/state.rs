@@ -129,7 +129,9 @@ pub struct LWWMap<K: std::hash::Hash + Eq, V> {
     node_id: ControllerId,
 }
 
-impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for LWWMap<K, V> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug
+    for LWWMap<K, V>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LWWMap")
             .field("entries", &format!("<{} entries>", self.entries.len()))
@@ -245,9 +247,12 @@ pub struct FactsStore {
 impl FactsStore {
     /// Create a new facts store
     pub fn new(node_id: ControllerId, freshness_ttl: Duration) -> Self {
-        let clock_node_id = node_id.0.as_bytes().iter().take(4).fold(0u32, |acc, &b| {
-            acc.wrapping_shl(8) | b as u32
-        });
+        let clock_node_id = node_id
+            .0
+            .as_bytes()
+            .iter()
+            .take(4)
+            .fold(0u32, |acc, &b| acc.wrapping_shl(8) | b as u32);
 
         Self {
             facts: LWWMap::new(node_id, clock_node_id),
@@ -334,9 +339,12 @@ pub struct DistributedStateStore {
 impl DistributedStateStore {
     /// Create a new distributed state store
     pub fn new(node_id: ControllerId) -> Self {
-        let clock_node_id = node_id.0.as_bytes().iter().take(4).fold(0u32, |acc, &b| {
-            acc.wrapping_shl(8) | b as u32
-        });
+        let clock_node_id = node_id
+            .0
+            .as_bytes()
+            .iter()
+            .take(4)
+            .fold(0u32, |acc, &b| acc.wrapping_shl(8) | b as u32);
 
         Self {
             facts: FactsStore::new(node_id.clone(), Duration::from_secs(300)),

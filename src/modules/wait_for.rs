@@ -370,17 +370,12 @@ impl WaitForModule {
         let port_str = format!(":{}", port);
 
         // Pre-calculate uppercase states to avoid repeated allocations in the loop
-        let active_states_upper: Vec<String> = active_states
-            .iter()
-            .map(|s| s.to_uppercase())
-            .collect();
+        let active_states_upper: Vec<String> =
+            active_states.iter().map(|s| s.to_uppercase()).collect();
 
         for line in stdout.lines() {
             // Skip header lines
-            if line.starts_with("State")
-                || line.starts_with("Proto")
-                || line.starts_with("Netid")
-            {
+            if line.starts_with("State") || line.starts_with("Proto") || line.starts_with("Netid") {
                 continue;
             }
 
@@ -392,9 +387,7 @@ impl WaitForModule {
             // Check if the connection state is active
             // Optimization: Try strict check first (avoid allocation if possible)
             // Most outputs are uppercase, so check original line against upper states first.
-            let mut is_active = active_states_upper
-                .iter()
-                .any(|state| line.contains(state));
+            let mut is_active = active_states_upper.iter().any(|state| line.contains(state));
 
             // Fallback to case-insensitive check if strict match failed
             // This allocates but ensures correctness for mixed-case output
@@ -1055,36 +1048,58 @@ mod tests {
 
     #[test]
     fn test_parse_port_drained_output() {
-        let active_states = vec![
-            "ESTABLISHED".to_string(),
-            "TIME_WAIT".to_string(),
-        ];
+        let active_states = vec!["ESTABLISHED".to_string(), "TIME_WAIT".to_string()];
         let exclude_hosts = vec![];
 
         // Case 1: Active connection (ESTABLISHED) on port 8080 -> Not drained (false)
         let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
                       ESTABLISHED 0      0      127.0.0.1:8080      127.0.0.1:54321";
-        assert!(!WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+        assert!(!WaitForModule::parse_port_drained_output(
+            output,
+            8080,
+            &exclude_hosts,
+            &active_states
+        ));
 
         // Case 2: No connection on port 8080 -> Drained (true)
         let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
                       ESTABLISHED 0      0      127.0.0.1:9090      127.0.0.1:54321";
-        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+        assert!(WaitForModule::parse_port_drained_output(
+            output,
+            8080,
+            &exclude_hosts,
+            &active_states
+        ));
 
         // Case 3: Connection on 8080 but state is LISTEN (not in active_states) -> Drained (true)
         let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
                       LISTEN     0      0      0.0.0.0:8080        0.0.0.0:*";
-        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+        assert!(WaitForModule::parse_port_drained_output(
+            output,
+            8080,
+            &exclude_hosts,
+            &active_states
+        ));
 
         // Case 4: Mixed case output (hypothetical) -> Should handle case insensitivity
         let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
                       established 0      0      127.0.0.1:8080      127.0.0.1:54321";
-        assert!(!WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts, &active_states));
+        assert!(!WaitForModule::parse_port_drained_output(
+            output,
+            8080,
+            &exclude_hosts,
+            &active_states
+        ));
 
         // Case 5: Excluded host
         let exclude_hosts_local = vec!["127.0.0.1".to_string()];
         let output = "State      Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\n\
                       ESTABLISHED 0      0      127.0.0.1:8080      127.0.0.1:54321";
-        assert!(WaitForModule::parse_port_drained_output(output, 8080, &exclude_hosts_local, &active_states));
+        assert!(WaitForModule::parse_port_drained_output(
+            output,
+            8080,
+            &exclude_hosts_local,
+            &active_states
+        ));
     }
 }

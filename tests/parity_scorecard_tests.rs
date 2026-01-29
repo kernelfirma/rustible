@@ -127,17 +127,26 @@ impl ModuleParity {
 
     /// Count of fully implemented features
     fn full_count(&self) -> usize {
-        self.features.iter().filter(|f| f.status == ParityStatus::Full).count()
+        self.features
+            .iter()
+            .filter(|f| f.status == ParityStatus::Full)
+            .count()
     }
 
     /// Count of partially implemented features
     fn partial_count(&self) -> usize {
-        self.features.iter().filter(|f| f.status == ParityStatus::Partial).count()
+        self.features
+            .iter()
+            .filter(|f| f.status == ParityStatus::Partial)
+            .count()
     }
 
     /// Total applicable feature count
     fn total_count(&self) -> usize {
-        self.features.iter().filter(|f| f.status.counts_in_total()).count()
+        self.features
+            .iter()
+            .filter(|f| f.status.counts_in_total())
+            .count()
     }
 }
 
@@ -219,7 +228,10 @@ impl ParityScorecard {
         let mut md = String::new();
 
         md.push_str("# Ansible Parity Scorecard\n\n");
-        md.push_str(&format!("**Overall Score: {:.1}%**\n\n", self.overall_score() * 100.0));
+        md.push_str(&format!(
+            "**Overall Score: {:.1}%**\n\n",
+            self.overall_score() * 100.0
+        ));
         md.push_str(&format!("CI Gate: {:.1}%\n\n", self.minimum_score * 100.0));
 
         md.push_str("## Module Scores\n\n");
@@ -283,77 +295,277 @@ fn build_current_scorecard() -> ParityScorecard {
 
     // File module (very high usage)
     let mut file_module = ModuleParity::new("file", "File and directory management", 0.95);
-    file_module.add_feature(Feature::new("path", "Path management", ParityStatus::Full, 1.0));
-    file_module.add_feature(Feature::new("state", "State management (file/directory/absent/link)", ParityStatus::Full, 1.0));
-    file_module.add_feature(Feature::new("mode", "Permission management", ParityStatus::Full, 0.9));
-    file_module.add_feature(Feature::new("owner", "Owner management", ParityStatus::Full, 0.8));
-    file_module.add_feature(Feature::new("group", "Group management", ParityStatus::Full, 0.8));
-    file_module.add_feature(Feature::new("recurse", "Recursive operations", ParityStatus::Full, 0.6));
-    file_module.add_feature(Feature::new("src", "Source for links", ParityStatus::Full, 0.5));
-    file_module.add_feature(Feature::new("follow", "Follow symlinks", ParityStatus::Partial, 0.4));
-    file_module.add_feature(Feature::new("force", "Force operations", ParityStatus::Full, 0.4));
-    file_module.add_feature(Feature::new("selevel", "SELinux level", ParityStatus::NotApplicable, 0.1));
+    file_module.add_feature(Feature::new(
+        "path",
+        "Path management",
+        ParityStatus::Full,
+        1.0,
+    ));
+    file_module.add_feature(Feature::new(
+        "state",
+        "State management (file/directory/absent/link)",
+        ParityStatus::Full,
+        1.0,
+    ));
+    file_module.add_feature(Feature::new(
+        "mode",
+        "Permission management",
+        ParityStatus::Full,
+        0.9,
+    ));
+    file_module.add_feature(Feature::new(
+        "owner",
+        "Owner management",
+        ParityStatus::Full,
+        0.8,
+    ));
+    file_module.add_feature(Feature::new(
+        "group",
+        "Group management",
+        ParityStatus::Full,
+        0.8,
+    ));
+    file_module.add_feature(Feature::new(
+        "recurse",
+        "Recursive operations",
+        ParityStatus::Full,
+        0.6,
+    ));
+    file_module.add_feature(Feature::new(
+        "src",
+        "Source for links",
+        ParityStatus::Full,
+        0.5,
+    ));
+    file_module.add_feature(Feature::new(
+        "follow",
+        "Follow symlinks",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    file_module.add_feature(Feature::new(
+        "force",
+        "Force operations",
+        ParityStatus::Full,
+        0.4,
+    ));
+    file_module.add_feature(Feature::new(
+        "selevel",
+        "SELinux level",
+        ParityStatus::NotApplicable,
+        0.1,
+    ));
     scorecard.add_module(file_module);
 
     // Copy module (very high usage)
     let mut copy_module = ModuleParity::new("copy", "Copy files to remote", 0.90);
     copy_module.add_feature(Feature::new("src", "Source file", ParityStatus::Full, 1.0));
-    copy_module.add_feature(Feature::new("dest", "Destination path", ParityStatus::Full, 1.0));
-    copy_module.add_feature(Feature::new("content", "Inline content", ParityStatus::Full, 0.9));
-    copy_module.add_feature(Feature::new("backup", "Create backup", ParityStatus::Full, 0.6));
+    copy_module.add_feature(Feature::new(
+        "dest",
+        "Destination path",
+        ParityStatus::Full,
+        1.0,
+    ));
+    copy_module.add_feature(Feature::new(
+        "content",
+        "Inline content",
+        ParityStatus::Full,
+        0.9,
+    ));
+    copy_module.add_feature(Feature::new(
+        "backup",
+        "Create backup",
+        ParityStatus::Full,
+        0.6,
+    ));
     copy_module.add_feature(Feature::new("mode", "File mode", ParityStatus::Full, 0.8));
     copy_module.add_feature(Feature::new("owner", "File owner", ParityStatus::Full, 0.7));
     copy_module.add_feature(Feature::new("group", "File group", ParityStatus::Full, 0.7));
-    copy_module.add_feature(Feature::new("validate", "Validation command", ParityStatus::Partial, 0.4));
-    copy_module.add_feature(Feature::new("remote_src", "Remote source", ParityStatus::Partial, 0.3));
+    copy_module.add_feature(Feature::new(
+        "validate",
+        "Validation command",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    copy_module.add_feature(Feature::new(
+        "remote_src",
+        "Remote source",
+        ParityStatus::Partial,
+        0.3,
+    ));
     scorecard.add_module(copy_module);
 
     // Template module (very high usage)
     let mut template_module = ModuleParity::new("template", "Jinja2 template rendering", 0.90);
-    template_module.add_feature(Feature::new("src", "Template source", ParityStatus::Full, 1.0));
-    template_module.add_feature(Feature::new("dest", "Destination path", ParityStatus::Full, 1.0));
+    template_module.add_feature(Feature::new(
+        "src",
+        "Template source",
+        ParityStatus::Full,
+        1.0,
+    ));
+    template_module.add_feature(Feature::new(
+        "dest",
+        "Destination path",
+        ParityStatus::Full,
+        1.0,
+    ));
     template_module.add_feature(Feature::new("mode", "File mode", ParityStatus::Full, 0.8));
     template_module.add_feature(Feature::new("owner", "File owner", ParityStatus::Full, 0.7));
     template_module.add_feature(Feature::new("group", "File group", ParityStatus::Full, 0.7));
-    template_module.add_feature(Feature::new("backup", "Create backup", ParityStatus::Full, 0.5));
-    template_module.add_feature(Feature::new("validate", "Validation command", ParityStatus::Partial, 0.4));
-    template_module.add_feature(Feature::new("block_start", "Block markers", ParityStatus::Full, 0.2));
+    template_module.add_feature(Feature::new(
+        "backup",
+        "Create backup",
+        ParityStatus::Full,
+        0.5,
+    ));
+    template_module.add_feature(Feature::new(
+        "validate",
+        "Validation command",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    template_module.add_feature(Feature::new(
+        "block_start",
+        "Block markers",
+        ParityStatus::Full,
+        0.2,
+    ));
     scorecard.add_module(template_module);
 
     // Package module (high usage)
     let mut package_module = ModuleParity::new("package", "Generic package management", 0.85);
-    package_module.add_feature(Feature::new("name", "Package name(s)", ParityStatus::Full, 1.0));
-    package_module.add_feature(Feature::new("state", "Package state", ParityStatus::Full, 1.0));
-    package_module.add_feature(Feature::new("version", "Package version", ParityStatus::Full, 0.6));
-    package_module.add_feature(Feature::new("use", "Package manager selection", ParityStatus::Partial, 0.4));
+    package_module.add_feature(Feature::new(
+        "name",
+        "Package name(s)",
+        ParityStatus::Full,
+        1.0,
+    ));
+    package_module.add_feature(Feature::new(
+        "state",
+        "Package state",
+        ParityStatus::Full,
+        1.0,
+    ));
+    package_module.add_feature(Feature::new(
+        "version",
+        "Package version",
+        ParityStatus::Full,
+        0.6,
+    ));
+    package_module.add_feature(Feature::new(
+        "use",
+        "Package manager selection",
+        ParityStatus::Partial,
+        0.4,
+    ));
     scorecard.add_module(package_module);
 
     // Service module (high usage)
     let mut service_module = ModuleParity::new("service", "Service management", 0.85);
-    service_module.add_feature(Feature::new("name", "Service name", ParityStatus::Full, 1.0));
-    service_module.add_feature(Feature::new("state", "Service state", ParityStatus::Full, 1.0));
-    service_module.add_feature(Feature::new("enabled", "Start on boot", ParityStatus::Full, 0.9));
-    service_module.add_feature(Feature::new("pattern", "Process pattern match", ParityStatus::Partial, 0.3));
-    service_module.add_feature(Feature::new("sleep", "Sleep between actions", ParityStatus::Partial, 0.2));
+    service_module.add_feature(Feature::new(
+        "name",
+        "Service name",
+        ParityStatus::Full,
+        1.0,
+    ));
+    service_module.add_feature(Feature::new(
+        "state",
+        "Service state",
+        ParityStatus::Full,
+        1.0,
+    ));
+    service_module.add_feature(Feature::new(
+        "enabled",
+        "Start on boot",
+        ParityStatus::Full,
+        0.9,
+    ));
+    service_module.add_feature(Feature::new(
+        "pattern",
+        "Process pattern match",
+        ParityStatus::Partial,
+        0.3,
+    ));
+    service_module.add_feature(Feature::new(
+        "sleep",
+        "Sleep between actions",
+        ParityStatus::Partial,
+        0.2,
+    ));
     scorecard.add_module(service_module);
 
     // Command module (high usage)
     let mut command_module = ModuleParity::new("command", "Execute commands", 0.80);
-    command_module.add_feature(Feature::new("cmd", "Command string", ParityStatus::Full, 1.0));
-    command_module.add_feature(Feature::new("argv", "Command as list", ParityStatus::Full, 0.7));
-    command_module.add_feature(Feature::new("chdir", "Working directory", ParityStatus::Full, 0.8));
-    command_module.add_feature(Feature::new("creates", "Skip if exists", ParityStatus::Full, 0.7));
-    command_module.add_feature(Feature::new("removes", "Skip if not exists", ParityStatus::Full, 0.6));
-    command_module.add_feature(Feature::new("stdin", "Standard input", ParityStatus::Partial, 0.3));
+    command_module.add_feature(Feature::new(
+        "cmd",
+        "Command string",
+        ParityStatus::Full,
+        1.0,
+    ));
+    command_module.add_feature(Feature::new(
+        "argv",
+        "Command as list",
+        ParityStatus::Full,
+        0.7,
+    ));
+    command_module.add_feature(Feature::new(
+        "chdir",
+        "Working directory",
+        ParityStatus::Full,
+        0.8,
+    ));
+    command_module.add_feature(Feature::new(
+        "creates",
+        "Skip if exists",
+        ParityStatus::Full,
+        0.7,
+    ));
+    command_module.add_feature(Feature::new(
+        "removes",
+        "Skip if not exists",
+        ParityStatus::Full,
+        0.6,
+    ));
+    command_module.add_feature(Feature::new(
+        "stdin",
+        "Standard input",
+        ParityStatus::Partial,
+        0.3,
+    ));
     scorecard.add_module(command_module);
 
     // Shell module (high usage)
     let mut shell_module = ModuleParity::new("shell", "Execute shell commands", 0.75);
-    shell_module.add_feature(Feature::new("cmd", "Shell command", ParityStatus::Full, 1.0));
-    shell_module.add_feature(Feature::new("chdir", "Working directory", ParityStatus::Full, 0.8));
-    shell_module.add_feature(Feature::new("executable", "Shell executable", ParityStatus::Full, 0.5));
-    shell_module.add_feature(Feature::new("creates", "Skip if exists", ParityStatus::Full, 0.6));
-    shell_module.add_feature(Feature::new("removes", "Skip if not exists", ParityStatus::Full, 0.5));
+    shell_module.add_feature(Feature::new(
+        "cmd",
+        "Shell command",
+        ParityStatus::Full,
+        1.0,
+    ));
+    shell_module.add_feature(Feature::new(
+        "chdir",
+        "Working directory",
+        ParityStatus::Full,
+        0.8,
+    ));
+    shell_module.add_feature(Feature::new(
+        "executable",
+        "Shell executable",
+        ParityStatus::Full,
+        0.5,
+    ));
+    shell_module.add_feature(Feature::new(
+        "creates",
+        "Skip if exists",
+        ParityStatus::Full,
+        0.6,
+    ));
+    shell_module.add_feature(Feature::new(
+        "removes",
+        "Skip if not exists",
+        ParityStatus::Full,
+        0.5,
+    ));
     scorecard.add_module(shell_module);
 
     // User module (medium usage)
@@ -362,127 +574,422 @@ fn build_current_scorecard() -> ParityScorecard {
     user_module.add_feature(Feature::new("state", "User state", ParityStatus::Full, 1.0));
     user_module.add_feature(Feature::new("uid", "User ID", ParityStatus::Full, 0.6));
     user_module.add_feature(Feature::new("groups", "Groups", ParityStatus::Full, 0.8));
-    user_module.add_feature(Feature::new("shell", "Login shell", ParityStatus::Full, 0.7));
-    user_module.add_feature(Feature::new("home", "Home directory", ParityStatus::Full, 0.7));
-    user_module.add_feature(Feature::new("password", "Password hash", ParityStatus::Partial, 0.5));
-    user_module.add_feature(Feature::new("ssh_key", "SSH key management", ParityStatus::Partial, 0.4));
+    user_module.add_feature(Feature::new(
+        "shell",
+        "Login shell",
+        ParityStatus::Full,
+        0.7,
+    ));
+    user_module.add_feature(Feature::new(
+        "home",
+        "Home directory",
+        ParityStatus::Full,
+        0.7,
+    ));
+    user_module.add_feature(Feature::new(
+        "password",
+        "Password hash",
+        ParityStatus::Partial,
+        0.5,
+    ));
+    user_module.add_feature(Feature::new(
+        "ssh_key",
+        "SSH key management",
+        ParityStatus::Partial,
+        0.4,
+    ));
     scorecard.add_module(user_module);
 
     // Group module (medium usage)
     let mut group_module = ModuleParity::new("group", "Group management", 0.65);
     group_module.add_feature(Feature::new("name", "Group name", ParityStatus::Full, 1.0));
-    group_module.add_feature(Feature::new("state", "Group state", ParityStatus::Full, 1.0));
+    group_module.add_feature(Feature::new(
+        "state",
+        "Group state",
+        ParityStatus::Full,
+        1.0,
+    ));
     group_module.add_feature(Feature::new("gid", "Group ID", ParityStatus::Full, 0.6));
-    group_module.add_feature(Feature::new("system", "System group", ParityStatus::Full, 0.4));
+    group_module.add_feature(Feature::new(
+        "system",
+        "System group",
+        ParityStatus::Full,
+        0.4,
+    ));
     scorecard.add_module(group_module);
 
     // Lineinfile module (medium usage)
     let mut lineinfile_module = ModuleParity::new("lineinfile", "Line in file management", 0.70);
     lineinfile_module.add_feature(Feature::new("path", "File path", ParityStatus::Full, 1.0));
-    lineinfile_module.add_feature(Feature::new("line", "Line content", ParityStatus::Full, 1.0));
-    lineinfile_module.add_feature(Feature::new("regexp", "Regex match", ParityStatus::Full, 0.9));
+    lineinfile_module.add_feature(Feature::new(
+        "line",
+        "Line content",
+        ParityStatus::Full,
+        1.0,
+    ));
+    lineinfile_module.add_feature(Feature::new(
+        "regexp",
+        "Regex match",
+        ParityStatus::Full,
+        0.9,
+    ));
     lineinfile_module.add_feature(Feature::new("state", "Line state", ParityStatus::Full, 1.0));
-    lineinfile_module.add_feature(Feature::new("insertafter", "Insert after", ParityStatus::Full, 0.7));
-    lineinfile_module.add_feature(Feature::new("insertbefore", "Insert before", ParityStatus::Full, 0.6));
-    lineinfile_module.add_feature(Feature::new("backrefs", "Backreferences", ParityStatus::Partial, 0.4));
-    lineinfile_module.add_feature(Feature::new("firstmatch", "First match only", ParityStatus::Full, 0.3));
+    lineinfile_module.add_feature(Feature::new(
+        "insertafter",
+        "Insert after",
+        ParityStatus::Full,
+        0.7,
+    ));
+    lineinfile_module.add_feature(Feature::new(
+        "insertbefore",
+        "Insert before",
+        ParityStatus::Full,
+        0.6,
+    ));
+    lineinfile_module.add_feature(Feature::new(
+        "backrefs",
+        "Backreferences",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    lineinfile_module.add_feature(Feature::new(
+        "firstmatch",
+        "First match only",
+        ParityStatus::Full,
+        0.3,
+    ));
     scorecard.add_module(lineinfile_module);
 
     // Debug module (high usage)
     let mut debug_module = ModuleParity::new("debug", "Debug output", 0.80);
-    debug_module.add_feature(Feature::new("msg", "Message output", ParityStatus::Full, 1.0));
-    debug_module.add_feature(Feature::new("var", "Variable output", ParityStatus::Full, 0.9));
-    debug_module.add_feature(Feature::new("verbosity", "Verbosity level", ParityStatus::Full, 0.5));
+    debug_module.add_feature(Feature::new(
+        "msg",
+        "Message output",
+        ParityStatus::Full,
+        1.0,
+    ));
+    debug_module.add_feature(Feature::new(
+        "var",
+        "Variable output",
+        ParityStatus::Full,
+        0.9,
+    ));
+    debug_module.add_feature(Feature::new(
+        "verbosity",
+        "Verbosity level",
+        ParityStatus::Full,
+        0.5,
+    ));
     scorecard.add_module(debug_module);
 
     // Stat module (medium usage)
     let mut stat_module = ModuleParity::new("stat", "File statistics", 0.65);
     stat_module.add_feature(Feature::new("path", "File path", ParityStatus::Full, 1.0));
-    stat_module.add_feature(Feature::new("follow", "Follow symlinks", ParityStatus::Full, 0.6));
-    stat_module.add_feature(Feature::new("get_checksum", "Compute checksum", ParityStatus::Full, 0.8));
-    stat_module.add_feature(Feature::new("checksum_algorithm", "Hash algorithm", ParityStatus::Full, 0.5));
-    stat_module.add_feature(Feature::new("get_mime", "MIME type", ParityStatus::Partial, 0.3));
-    stat_module.add_feature(Feature::new("get_attributes", "Extended attributes", ParityStatus::Partial, 0.2));
+    stat_module.add_feature(Feature::new(
+        "follow",
+        "Follow symlinks",
+        ParityStatus::Full,
+        0.6,
+    ));
+    stat_module.add_feature(Feature::new(
+        "get_checksum",
+        "Compute checksum",
+        ParityStatus::Full,
+        0.8,
+    ));
+    stat_module.add_feature(Feature::new(
+        "checksum_algorithm",
+        "Hash algorithm",
+        ParityStatus::Full,
+        0.5,
+    ));
+    stat_module.add_feature(Feature::new(
+        "get_mime",
+        "MIME type",
+        ParityStatus::Partial,
+        0.3,
+    ));
+    stat_module.add_feature(Feature::new(
+        "get_attributes",
+        "Extended attributes",
+        ParityStatus::Partial,
+        0.2,
+    ));
     scorecard.add_module(stat_module);
 
     // Git module (medium usage)
     let mut git_module = ModuleParity::new("git", "Git repository management", 0.60);
-    git_module.add_feature(Feature::new("repo", "Repository URL", ParityStatus::Full, 1.0));
-    git_module.add_feature(Feature::new("dest", "Destination path", ParityStatus::Full, 1.0));
-    git_module.add_feature(Feature::new("version", "Version/branch/tag", ParityStatus::Full, 0.9));
-    git_module.add_feature(Feature::new("force", "Force checkout", ParityStatus::Full, 0.6));
-    git_module.add_feature(Feature::new("update", "Update existing", ParityStatus::Full, 0.7));
-    git_module.add_feature(Feature::new("depth", "Clone depth", ParityStatus::Partial, 0.4));
-    git_module.add_feature(Feature::new("key_file", "SSH key file", ParityStatus::Partial, 0.3));
+    git_module.add_feature(Feature::new(
+        "repo",
+        "Repository URL",
+        ParityStatus::Full,
+        1.0,
+    ));
+    git_module.add_feature(Feature::new(
+        "dest",
+        "Destination path",
+        ParityStatus::Full,
+        1.0,
+    ));
+    git_module.add_feature(Feature::new(
+        "version",
+        "Version/branch/tag",
+        ParityStatus::Full,
+        0.9,
+    ));
+    git_module.add_feature(Feature::new(
+        "force",
+        "Force checkout",
+        ParityStatus::Full,
+        0.6,
+    ));
+    git_module.add_feature(Feature::new(
+        "update",
+        "Update existing",
+        ParityStatus::Full,
+        0.7,
+    ));
+    git_module.add_feature(Feature::new(
+        "depth",
+        "Clone depth",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    git_module.add_feature(Feature::new(
+        "key_file",
+        "SSH key file",
+        ParityStatus::Partial,
+        0.3,
+    ));
     scorecard.add_module(git_module);
 
     // APT module (high usage on Debian/Ubuntu)
     let mut apt_module = ModuleParity::new("apt", "APT package management", 0.75);
-    apt_module.add_feature(Feature::new("name", "Package name(s)", ParityStatus::Full, 1.0));
-    apt_module.add_feature(Feature::new("state", "Package state", ParityStatus::Full, 1.0));
-    apt_module.add_feature(Feature::new("update_cache", "Update cache", ParityStatus::Full, 0.9));
-    apt_module.add_feature(Feature::new("cache_valid_time", "Cache validity", ParityStatus::Full, 0.6));
-    apt_module.add_feature(Feature::new("deb", "Install .deb file", ParityStatus::Partial, 0.4));
-    apt_module.add_feature(Feature::new("dpkg_options", "dpkg options", ParityStatus::Partial, 0.3));
-    apt_module.add_feature(Feature::new("autoremove", "Auto remove", ParityStatus::Full, 0.5));
+    apt_module.add_feature(Feature::new(
+        "name",
+        "Package name(s)",
+        ParityStatus::Full,
+        1.0,
+    ));
+    apt_module.add_feature(Feature::new(
+        "state",
+        "Package state",
+        ParityStatus::Full,
+        1.0,
+    ));
+    apt_module.add_feature(Feature::new(
+        "update_cache",
+        "Update cache",
+        ParityStatus::Full,
+        0.9,
+    ));
+    apt_module.add_feature(Feature::new(
+        "cache_valid_time",
+        "Cache validity",
+        ParityStatus::Full,
+        0.6,
+    ));
+    apt_module.add_feature(Feature::new(
+        "deb",
+        "Install .deb file",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    apt_module.add_feature(Feature::new(
+        "dpkg_options",
+        "dpkg options",
+        ParityStatus::Partial,
+        0.3,
+    ));
+    apt_module.add_feature(Feature::new(
+        "autoremove",
+        "Auto remove",
+        ParityStatus::Full,
+        0.5,
+    ));
     scorecard.add_module(apt_module);
 
     // YUM module (high usage on RHEL/CentOS)
     let mut yum_module = ModuleParity::new("yum", "YUM package management", 0.70);
-    yum_module.add_feature(Feature::new("name", "Package name(s)", ParityStatus::Full, 1.0));
-    yum_module.add_feature(Feature::new("state", "Package state", ParityStatus::Full, 1.0));
-    yum_module.add_feature(Feature::new("enablerepo", "Enable repo", ParityStatus::Partial, 0.5));
-    yum_module.add_feature(Feature::new("disablerepo", "Disable repo", ParityStatus::Partial, 0.4));
-    yum_module.add_feature(Feature::new("update_cache", "Update cache", ParityStatus::Full, 0.6));
+    yum_module.add_feature(Feature::new(
+        "name",
+        "Package name(s)",
+        ParityStatus::Full,
+        1.0,
+    ));
+    yum_module.add_feature(Feature::new(
+        "state",
+        "Package state",
+        ParityStatus::Full,
+        1.0,
+    ));
+    yum_module.add_feature(Feature::new(
+        "enablerepo",
+        "Enable repo",
+        ParityStatus::Partial,
+        0.5,
+    ));
+    yum_module.add_feature(Feature::new(
+        "disablerepo",
+        "Disable repo",
+        ParityStatus::Partial,
+        0.4,
+    ));
+    yum_module.add_feature(Feature::new(
+        "update_cache",
+        "Update cache",
+        ParityStatus::Full,
+        0.6,
+    ));
     scorecard.add_module(yum_module);
 
     // Systemd module (high usage)
     let mut systemd_module = ModuleParity::new("systemd", "Systemd unit management", 0.80);
     systemd_module.add_feature(Feature::new("name", "Unit name", ParityStatus::Full, 1.0));
     systemd_module.add_feature(Feature::new("state", "Unit state", ParityStatus::Full, 1.0));
-    systemd_module.add_feature(Feature::new("enabled", "Enable unit", ParityStatus::Full, 0.9));
-    systemd_module.add_feature(Feature::new("daemon_reload", "Reload daemon", ParityStatus::Full, 0.8));
-    systemd_module.add_feature(Feature::new("masked", "Mask unit", ParityStatus::Partial, 0.3));
+    systemd_module.add_feature(Feature::new(
+        "enabled",
+        "Enable unit",
+        ParityStatus::Full,
+        0.9,
+    ));
+    systemd_module.add_feature(Feature::new(
+        "daemon_reload",
+        "Reload daemon",
+        ParityStatus::Full,
+        0.8,
+    ));
+    systemd_module.add_feature(Feature::new(
+        "masked",
+        "Mask unit",
+        ParityStatus::Partial,
+        0.3,
+    ));
     systemd_module.add_feature(Feature::new("scope", "Scope", ParityStatus::Partial, 0.2));
     scorecard.add_module(systemd_module);
 
     // URI module (medium usage)
     let mut uri_module = ModuleParity::new("uri", "HTTP requests", 0.55);
     uri_module.add_feature(Feature::new("url", "Request URL", ParityStatus::Full, 1.0));
-    uri_module.add_feature(Feature::new("method", "HTTP method", ParityStatus::Full, 0.9));
-    uri_module.add_feature(Feature::new("body", "Request body", ParityStatus::Full, 0.7));
-    uri_module.add_feature(Feature::new("headers", "HTTP headers", ParityStatus::Full, 0.8));
-    uri_module.add_feature(Feature::new("status_code", "Expected status", ParityStatus::Full, 0.7));
-    uri_module.add_feature(Feature::new("return_content", "Return content", ParityStatus::Full, 0.6));
-    uri_module.add_feature(Feature::new("validate_certs", "Cert validation", ParityStatus::Partial, 0.4));
+    uri_module.add_feature(Feature::new(
+        "method",
+        "HTTP method",
+        ParityStatus::Full,
+        0.9,
+    ));
+    uri_module.add_feature(Feature::new(
+        "body",
+        "Request body",
+        ParityStatus::Full,
+        0.7,
+    ));
+    uri_module.add_feature(Feature::new(
+        "headers",
+        "HTTP headers",
+        ParityStatus::Full,
+        0.8,
+    ));
+    uri_module.add_feature(Feature::new(
+        "status_code",
+        "Expected status",
+        ParityStatus::Full,
+        0.7,
+    ));
+    uri_module.add_feature(Feature::new(
+        "return_content",
+        "Return content",
+        ParityStatus::Full,
+        0.6,
+    ));
+    uri_module.add_feature(Feature::new(
+        "validate_certs",
+        "Cert validation",
+        ParityStatus::Partial,
+        0.4,
+    ));
     scorecard.add_module(uri_module);
 
     // Get_url module (medium usage)
     let mut get_url_module = ModuleParity::new("get_url", "Download files", 0.60);
     get_url_module.add_feature(Feature::new("url", "Download URL", ParityStatus::Full, 1.0));
-    get_url_module.add_feature(Feature::new("dest", "Destination path", ParityStatus::Full, 1.0));
-    get_url_module.add_feature(Feature::new("checksum", "Checksum validation", ParityStatus::Full, 0.7));
+    get_url_module.add_feature(Feature::new(
+        "dest",
+        "Destination path",
+        ParityStatus::Full,
+        1.0,
+    ));
+    get_url_module.add_feature(Feature::new(
+        "checksum",
+        "Checksum validation",
+        ParityStatus::Full,
+        0.7,
+    ));
     get_url_module.add_feature(Feature::new("mode", "File mode", ParityStatus::Full, 0.6));
     get_url_module.add_feature(Feature::new("owner", "File owner", ParityStatus::Full, 0.5));
-    get_url_module.add_feature(Feature::new("force", "Force download", ParityStatus::Full, 0.5));
-    get_url_module.add_feature(Feature::new("validate_certs", "Cert validation", ParityStatus::Partial, 0.4));
+    get_url_module.add_feature(Feature::new(
+        "force",
+        "Force download",
+        ParityStatus::Full,
+        0.5,
+    ));
+    get_url_module.add_feature(Feature::new(
+        "validate_certs",
+        "Cert validation",
+        ParityStatus::Partial,
+        0.4,
+    ));
     scorecard.add_module(get_url_module);
 
     // Set_fact module (high usage)
     let mut set_fact_module = ModuleParity::new("set_fact", "Set host facts", 0.80);
-    set_fact_module.add_feature(Feature::new("key_value", "Set facts", ParityStatus::Full, 1.0));
-    set_fact_module.add_feature(Feature::new("cacheable", "Cache facts", ParityStatus::Full, 0.5));
+    set_fact_module.add_feature(Feature::new(
+        "key_value",
+        "Set facts",
+        ParityStatus::Full,
+        1.0,
+    ));
+    set_fact_module.add_feature(Feature::new(
+        "cacheable",
+        "Cache facts",
+        ParityStatus::Full,
+        0.5,
+    ));
     scorecard.add_module(set_fact_module);
 
     // Wait_for module (medium usage)
     let mut wait_for_module = ModuleParity::new("wait_for", "Wait for conditions", 0.55);
-    wait_for_module.add_feature(Feature::new("host", "Host to wait for", ParityStatus::Full, 0.8));
-    wait_for_module.add_feature(Feature::new("port", "Port to wait for", ParityStatus::Full, 1.0));
-    wait_for_module.add_feature(Feature::new("path", "Path to wait for", ParityStatus::Full, 0.8));
+    wait_for_module.add_feature(Feature::new(
+        "host",
+        "Host to wait for",
+        ParityStatus::Full,
+        0.8,
+    ));
+    wait_for_module.add_feature(Feature::new(
+        "port",
+        "Port to wait for",
+        ParityStatus::Full,
+        1.0,
+    ));
+    wait_for_module.add_feature(Feature::new(
+        "path",
+        "Path to wait for",
+        ParityStatus::Full,
+        0.8,
+    ));
     wait_for_module.add_feature(Feature::new("state", "Wait state", ParityStatus::Full, 0.9));
     wait_for_module.add_feature(Feature::new("timeout", "Timeout", ParityStatus::Full, 0.8));
-    wait_for_module.add_feature(Feature::new("delay", "Initial delay", ParityStatus::Full, 0.5));
-    wait_for_module.add_feature(Feature::new("search_regex", "Search pattern", ParityStatus::Partial, 0.4));
+    wait_for_module.add_feature(Feature::new(
+        "delay",
+        "Initial delay",
+        ParityStatus::Full,
+        0.5,
+    ));
+    wait_for_module.add_feature(Feature::new(
+        "search_regex",
+        "Search pattern",
+        ParityStatus::Partial,
+        0.4,
+    ));
     scorecard.add_module(wait_for_module);
 
     scorecard
@@ -508,8 +1015,8 @@ fn write_baseline_snapshot() {
         .join("tests")
         .join("fixtures")
         .join("parity_scorecard_baseline.json");
-    let serialized = serde_json::to_string_pretty(&scorecard)
-        .expect("Should serialize baseline scorecard");
+    let serialized =
+        serde_json::to_string_pretty(&scorecard).expect("Should serialize baseline scorecard");
     fs::create_dir_all(path.parent().expect("baseline directory"))
         .expect("Should create baseline directory");
     fs::write(&path, serialized).expect("Should write baseline file");
@@ -570,7 +1077,12 @@ fn test_module_score_weighted_features() {
 fn test_module_score_excludes_not_applicable() {
     let mut module = ModuleParity::new("test", "Test module", 1.0);
     module.add_feature(Feature::new("f1", "Feature 1", ParityStatus::Full, 1.0));
-    module.add_feature(Feature::new("f2", "Feature 2", ParityStatus::NotApplicable, 1.0));
+    module.add_feature(Feature::new(
+        "f2",
+        "Feature 2",
+        ParityStatus::NotApplicable,
+        1.0,
+    ));
 
     // NotApplicable should not affect score
     assert!((module.score() - 1.0).abs() < 0.001);
@@ -681,7 +1193,9 @@ fn test_detects_overall_regression() {
 
     let regressions = current.has_regressions(&baseline);
     assert!(!regressions.is_empty());
-    assert!(regressions.iter().any(|r| r.contains("Overall score regressed")));
+    assert!(regressions
+        .iter()
+        .any(|r| r.contains("Overall score regressed")));
 }
 
 #[test]
@@ -698,7 +1212,9 @@ fn test_detects_module_regression() {
 
     let regressions = current.has_regressions(&baseline);
     assert!(!regressions.is_empty());
-    assert!(regressions.iter().any(|r| r.contains("file") && r.contains("regressed")));
+    assert!(regressions
+        .iter()
+        .any(|r| r.contains("file") && r.contains("regressed")));
 }
 
 #[test]
@@ -762,10 +1278,26 @@ fn test_scorecard_has_core_modules() {
     let scorecard = build_current_scorecard();
 
     let expected_modules = [
-        "file", "copy", "template", "package", "service",
-        "command", "shell", "user", "group", "lineinfile",
-        "debug", "stat", "git", "apt", "yum", "systemd",
-        "uri", "get_url", "set_fact", "wait_for"
+        "file",
+        "copy",
+        "template",
+        "package",
+        "service",
+        "command",
+        "shell",
+        "user",
+        "group",
+        "lineinfile",
+        "debug",
+        "stat",
+        "git",
+        "apt",
+        "yum",
+        "systemd",
+        "uri",
+        "get_url",
+        "set_fact",
+        "wait_for",
     ];
 
     let module_names: Vec<&str> = scorecard.modules.iter().map(|m| m.name.as_str()).collect();

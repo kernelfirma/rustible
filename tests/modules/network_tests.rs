@@ -128,13 +128,7 @@ fn test_ios_config_validate_with_lines_and_parents() {
 #[test]
 fn test_ios_config_validate_with_backup() {
     let module = IosConfigModule;
-    let params = with_backup(
-        with_lines(
-            create_params(),
-            vec!["hostname Router1"],
-        ),
-        true,
-    );
+    let params = with_backup(with_lines(create_params(), vec!["hostname Router1"]), true);
 
     let result = module.validate_params(&params);
     assert!(result.is_ok(), "Params with backup should be valid");
@@ -231,10 +225,7 @@ fn test_nxos_config_parallelization_hint() {
 #[test]
 fn test_nxos_config_validate_with_lines() {
     let module = NxosConfigModule;
-    let params = with_lines(
-        create_params(),
-        vec!["feature bgp", "feature vrf"],
-    );
+    let params = with_lines(create_params(), vec!["feature bgp", "feature vrf"]);
 
     let result = module.validate_params(&params);
     assert!(result.is_ok(), "Params with lines should be valid");
@@ -302,7 +293,10 @@ fn test_junos_config_validate_with_config() {
     let module = JunosConfigModule;
     // Junos uses 'config' parameter, not 'lines'
     let mut params = create_params();
-    params.insert("config".to_string(), serde_json::json!("set system host-name router1"));
+    params.insert(
+        "config".to_string(),
+        serde_json::json!("set system host-name router1"),
+    );
 
     let result = module.validate_params(&params);
     assert!(result.is_ok(), "Params with config should be valid");
@@ -372,14 +366,15 @@ fn test_eos_config_validate_with_lines() {
     let module = EosConfigModule;
     // EOS default transport is eAPI which requires eapi_host
     // Use SSH transport to avoid that requirement
-    let mut params = with_lines(
-        create_params(),
-        vec!["hostname Switch1"],
-    );
+    let mut params = with_lines(create_params(), vec!["hostname Switch1"]);
     params.insert("transport".to_string(), serde_json::json!("ssh"));
 
     let result = module.validate_params(&params);
-    assert!(result.is_ok(), "Params with lines should be valid: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Params with lines should be valid: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -501,7 +496,10 @@ interface GigabitEthernet0/1
 
     // extract_config_sections takes config and section_type
     let sections = extract_config_sections(config, "interface");
-    assert!(sections.len() >= 2, "Should extract at least 2 interface sections");
+    assert!(
+        sections.len() >= 2,
+        "Should extract at least 2 interface sections"
+    );
 }
 
 #[test]
@@ -548,11 +546,15 @@ interface GigabitEthernet0/0
 
 #[test]
 fn test_network_config_backup_filename_generation() {
-    use rustible::modules::network::{generate_backup_filename, NetworkPlatform, ConfigSource};
+    use rustible::modules::network::{generate_backup_filename, ConfigSource, NetworkPlatform};
 
     // generate_backup_filename takes hostname, platform, and source
-    let filename = generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
-    assert!(filename.contains("router1"), "Backup filename should contain hostname");
+    let filename =
+        generate_backup_filename("router1", NetworkPlatform::CiscoIos, ConfigSource::Running);
+    assert!(
+        filename.contains("router1"),
+        "Backup filename should contain hostname"
+    );
 }
 
 #[test]
@@ -569,7 +571,10 @@ fn test_network_config_checksum_calculation() {
     // Different config should produce different checksum
     let config3 = "hostname Router2\n";
     let checksum3 = calculate_config_checksum(config3);
-    assert_ne!(checksum, checksum3, "Different config should have different checksum");
+    assert_ne!(
+        checksum, checksum3,
+        "Different config should have different checksum"
+    );
 }
 
 #[test]
@@ -593,7 +598,10 @@ fn test_network_platform_display() {
 
     let platform = NetworkPlatform::CiscoIos;
     let display = format!("{}", platform);
-    assert!(!display.is_empty(), "Platform should have display representation");
+    assert!(
+        !display.is_empty(),
+        "Platform should have display representation"
+    );
 }
 
 #[test]
@@ -602,7 +610,10 @@ fn test_network_transport_display() {
 
     let transport = NetworkTransport::Ssh;
     let display = format!("{}", transport);
-    assert!(!display.is_empty(), "Transport should have display representation");
+    assert!(
+        !display.is_empty(),
+        "Transport should have display representation"
+    );
 }
 
 #[test]
@@ -611,5 +622,8 @@ fn test_config_source_display() {
 
     let source = ConfigSource::Running;
     let display = format!("{}", source);
-    assert!(!display.is_empty(), "ConfigSource should have display representation");
+    assert!(
+        !display.is_empty(),
+        "ConfigSource should have display representation"
+    );
 }

@@ -25,7 +25,9 @@ fn test_command_module_with_local_connection() {
     params.insert("cmd".to_string(), json!("echo hello"));
 
     let module = CommandModule;
-    let result = module.execute(&params, &context).expect("command execution");
+    let result = module
+        .execute(&params, &context)
+        .expect("command execution");
 
     assert!(result.changed);
     assert_eq!(result.rc, Some(0));
@@ -45,7 +47,9 @@ fn test_command_module_check_mode_with_connection() {
     params.insert("cmd".to_string(), json!("echo hello"));
 
     let module = CommandModule;
-    let result = module.execute(&params, &context).expect("command execution");
+    let result = module
+        .execute(&params, &context)
+        .expect("command execution");
 
     assert!(result.changed);
     assert_eq!(result.rc, Some(0));

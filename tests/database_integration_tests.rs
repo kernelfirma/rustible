@@ -129,7 +129,10 @@ mod mysql_db_tests {
         let module = MysqlDbModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("myapp_db"));
-        params.insert("login_host".to_string(), serde_json::json!("db.example.com"));
+        params.insert(
+            "login_host".to_string(),
+            serde_json::json!("db.example.com"),
+        );
         params.insert("login_port".to_string(), serde_json::json!(3306));
         params.insert("login_user".to_string(), serde_json::json!("admin"));
         params.insert("login_password".to_string(), serde_json::json!("secret"));
@@ -290,10 +293,7 @@ mod mysql_query_tests {
             "query".to_string(),
             serde_json::json!("SELECT * FROM users WHERE id = ?"),
         );
-        params.insert(
-            "positional_args".to_string(),
-            serde_json::json!([42]),
-        );
+        params.insert("positional_args".to_string(), serde_json::json!([42]));
         assert!(module.validate_params(&params).is_ok());
     }
 
@@ -357,10 +357,7 @@ mod mysql_privs_tests {
         let module = MysqlPrivsModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("user".to_string(), serde_json::json!("old_user"));
-        params.insert(
-            "priv".to_string(),
-            serde_json::json!("mydb.*:ALL"),
-        );
+        params.insert("priv".to_string(), serde_json::json!("mydb.*:ALL"));
         params.insert("state".to_string(), serde_json::json!("absent"));
         assert!(module.validate_params(&params).is_ok());
     }
@@ -370,10 +367,7 @@ mod mysql_privs_tests {
         let module = MysqlPrivsModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("user".to_string(), serde_json::json!("admin_user"));
-        params.insert(
-            "priv".to_string(),
-            serde_json::json!("*.*:ALL"),
-        );
+        params.insert("priv".to_string(), serde_json::json!("*.*:ALL"));
         params.insert("grant_option".to_string(), serde_json::json!(true));
         assert!(module.validate_params(&params).is_ok());
     }
@@ -479,7 +473,10 @@ mod postgresql_db_tests {
         let module = PostgresqlDbModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("myapp_db"));
-        params.insert("login_host".to_string(), serde_json::json!("db.example.com"));
+        params.insert(
+            "login_host".to_string(),
+            serde_json::json!("db.example.com"),
+        );
         params.insert("login_port".to_string(), serde_json::json!(5432));
         params.insert("login_user".to_string(), serde_json::json!("postgres"));
         params.insert("login_password".to_string(), serde_json::json!("secret"));
@@ -529,7 +526,10 @@ mod postgresql_user_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("admin_user"));
         params.insert("password".to_string(), serde_json::json!("admin_password"));
-        params.insert("role_attr_flags".to_string(), serde_json::json!("CREATEDB,CREATEROLE"));
+        params.insert(
+            "role_attr_flags".to_string(),
+            serde_json::json!("CREATEDB,CREATEROLE"),
+        );
         assert!(module.validate_params(&params).is_ok());
     }
 
@@ -539,7 +539,10 @@ mod postgresql_user_tests {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("super_user"));
         params.insert("password".to_string(), serde_json::json!("super_password"));
-        params.insert("role_attr_flags".to_string(), serde_json::json!("SUPERUSER"));
+        params.insert(
+            "role_attr_flags".to_string(),
+            serde_json::json!("SUPERUSER"),
+        );
         assert!(module.validate_params(&params).is_ok());
     }
 
@@ -632,10 +635,7 @@ mod postgresql_query_tests {
             "query".to_string(),
             serde_json::json!("SELECT * FROM users WHERE id = $1"),
         );
-        params.insert(
-            "positional_args".to_string(),
-            serde_json::json!([42]),
-        );
+        params.insert("positional_args".to_string(), serde_json::json!([42]));
         assert!(module.validate_params(&params).is_ok());
     }
 }
@@ -673,7 +673,10 @@ mod postgresql_privs_tests {
         params.insert("database".to_string(), serde_json::json!("mydb"));
         params.insert("role".to_string(), serde_json::json!("app_user"));
         params.insert("objs".to_string(), serde_json::json!("users"));
-        params.insert("privs".to_string(), serde_json::json!("SELECT,INSERT,UPDATE"));
+        params.insert(
+            "privs".to_string(),
+            serde_json::json!("SELECT,INSERT,UPDATE"),
+        );
         params.insert("type".to_string(), serde_json::json!("table"));
         params.insert("state".to_string(), serde_json::json!("present"));
         assert!(module.validate_params(&params).is_ok());
@@ -768,30 +771,19 @@ mod cross_database_tests {
     #[test]
     fn test_connection_param_consistency() {
         // Both MySQL and PostgreSQL modules should accept similar connection params
-        let common_params = vec![
-            "login_host",
-            "login_port",
-            "login_user",
-            "login_password",
-        ];
+        let common_params = vec!["login_host", "login_port", "login_user", "login_password"];
 
         // Create test params
         let mut mysql_params: HashMap<String, serde_json::Value> = HashMap::new();
         mysql_params.insert("name".to_string(), serde_json::json!("test_db"));
         for param in &common_params {
-            mysql_params.insert(
-                param.to_string(),
-                serde_json::json!("test_value"),
-            );
+            mysql_params.insert(param.to_string(), serde_json::json!("test_value"));
         }
 
         let mut pg_params: HashMap<String, serde_json::Value> = HashMap::new();
         pg_params.insert("name".to_string(), serde_json::json!("test_db"));
         for param in &common_params {
-            pg_params.insert(
-                param.to_string(),
-                serde_json::json!("test_value"),
-            );
+            pg_params.insert(param.to_string(), serde_json::json!("test_value"));
         }
 
         // Both should accept the params (login_port needs to be a number)
@@ -842,10 +834,7 @@ mod security_tests {
         let module = MysqlUserModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         // Attempt SQL injection in username
-        params.insert(
-            "name".to_string(),
-            serde_json::json!("admin'--"),
-        );
+        params.insert("name".to_string(), serde_json::json!("admin'--"));
         params.insert("password".to_string(), serde_json::json!("pass"));
         // Should reject due to invalid characters
         assert!(module.validate_params(&params).is_err());

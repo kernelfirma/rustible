@@ -356,10 +356,7 @@ impl ChangeDetector for FileChangeDetector {
             return ChangePrediction::unknown("No path specified");
         };
 
-        let state = args
-            .get("state")
-            .and_then(|v| v.as_str())
-            .unwrap_or("file");
+        let state = args.get("state").and_then(|v| v.as_str()).unwrap_or("file");
 
         let path = Path::new(path_str);
         let exists = path.exists();
@@ -367,7 +364,10 @@ impl ChangeDetector for FileChangeDetector {
         let prediction = match state {
             "absent" => {
                 if exists {
-                    ChangePrediction::new(PredictedChange::WillDelete, "Path exists and will be removed")
+                    ChangePrediction::new(
+                        PredictedChange::WillDelete,
+                        "Path exists and will be removed",
+                    )
                 } else {
                     ChangePrediction::new(PredictedChange::NoChange, "Path does not exist")
                 }
@@ -419,7 +419,9 @@ impl ChangeDetector for FileChangeDetector {
                     }
                 } else {
                     // file state requires the file to already exist
-                    ChangePrediction::unknown("File does not exist (file state requires existing file)")
+                    ChangePrediction::unknown(
+                        "File does not exist (file state requires existing file)",
+                    )
                 }
             }
             "link" | "hard" => {
@@ -430,18 +432,25 @@ impl ChangeDetector for FileChangeDetector {
                 if exists {
                     if path.is_symlink() || state == "hard" {
                         // Would need to check link target
-                        ChangePrediction::new(PredictedChange::Unknown, "Link exists, target check required")
-                            .with_confidence(0.5)
+                        ChangePrediction::new(
+                            PredictedChange::Unknown,
+                            "Link exists, target check required",
+                        )
+                        .with_confidence(0.5)
                     } else {
-                        ChangePrediction::new(PredictedChange::WillModify, "Path exists but is not a link")
+                        ChangePrediction::new(
+                            PredictedChange::WillModify,
+                            "Path exists but is not a link",
+                        )
                     }
                 } else {
                     ChangePrediction::new(PredictedChange::WillCreate, "Link will be created")
                 }
             }
-            "touch" => {
-                ChangePrediction::new(PredictedChange::WillModify, "Touch always updates timestamps")
-            }
+            "touch" => ChangePrediction::new(
+                PredictedChange::WillModify,
+                "Touch always updates timestamps",
+            ),
             _ => ChangePrediction::unknown(format!("Unknown state: {}", state)),
         };
 
@@ -521,15 +530,15 @@ impl ChangeDetector for CopyChangeDetector {
         let path = Path::new(dest_str);
 
         if !path.exists() {
-            return ChangePrediction::new(PredictedChange::WillCreate, "Destination does not exist")
-                .with_resource(dest_str);
+            return ChangePrediction::new(
+                PredictedChange::WillCreate,
+                "Destination does not exist",
+            )
+            .with_resource(dest_str);
         }
 
         // Check if force=no
-        let force = args
-            .get("force")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+        let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(true);
 
         if !force {
             return ChangePrediction::new(
@@ -589,8 +598,11 @@ impl ChangeDetector for TemplateChangeDetector {
         let path = Path::new(dest_str);
 
         if !path.exists() {
-            return ChangePrediction::new(PredictedChange::WillCreate, "Destination does not exist")
-                .with_resource(dest_str);
+            return ChangePrediction::new(
+                PredictedChange::WillCreate,
+                "Destination does not exist",
+            )
+            .with_resource(dest_str);
         }
 
         // Templates always require rendering and comparison
@@ -712,16 +724,16 @@ impl ChangeDetector for ServiceChangeDetector {
         }
 
         if reasons.is_empty() {
-            return ChangePrediction::new(PredictedChange::NoChange, "No state or enabled specified")
-                .with_resource(svc_name);
+            return ChangePrediction::new(
+                PredictedChange::NoChange,
+                "No state or enabled specified",
+            )
+            .with_resource(svc_name);
         }
 
         ChangePrediction::new(
             PredictedChange::Unknown,
-            format!(
-                "Service state check required ({})",
-                reasons.join(", ")
-            ),
+            format!("Service state check required ({})", reasons.join(", ")),
         )
         .with_resource(svc_name)
         .with_confidence(0.3)
@@ -766,7 +778,10 @@ impl ChangeDetector for UserChangeDetector {
         let prediction = match state {
             "absent" => {
                 if user_exists {
-                    ChangePrediction::new(PredictedChange::WillDelete, "User exists and will be removed")
+                    ChangePrediction::new(
+                        PredictedChange::WillDelete,
+                        "User exists and will be removed",
+                    )
                 } else {
                     ChangePrediction::new(PredictedChange::NoChange, "User does not exist")
                 }
@@ -828,7 +843,10 @@ impl ChangeDetector for GroupChangeDetector {
         let prediction = match state {
             "absent" => {
                 if group_exists {
-                    ChangePrediction::new(PredictedChange::WillDelete, "Group exists and will be removed")
+                    ChangePrediction::new(
+                        PredictedChange::WillDelete,
+                        "Group exists and will be removed",
+                    )
                 } else {
                     ChangePrediction::new(PredictedChange::NoChange, "Group does not exist")
                 }
@@ -886,8 +904,11 @@ impl ChangeDetector for LineinfileChangeDetector {
                 .unwrap_or(false);
 
             return if create {
-                ChangePrediction::new(PredictedChange::WillCreate, "File does not exist, will be created")
-                    .with_resource(path_str)
+                ChangePrediction::new(
+                    PredictedChange::WillCreate,
+                    "File does not exist, will be created",
+                )
+                .with_resource(path_str)
             } else {
                 ChangePrediction::unknown("File does not exist and create=false")
                     .with_resource(path_str)
@@ -944,8 +965,11 @@ impl ChangeDetector for BlockinfileChangeDetector {
                 .unwrap_or(false);
 
             return if create {
-                ChangePrediction::new(PredictedChange::WillCreate, "File does not exist, will be created")
-                    .with_resource(path_str)
+                ChangePrediction::new(
+                    PredictedChange::WillCreate,
+                    "File does not exist, will be created",
+                )
+                .with_resource(path_str)
             } else {
                 ChangePrediction::unknown("File does not exist and create=false")
                     .with_resource(path_str)

@@ -31,7 +31,10 @@ fn test_string_filters() {
         (r#""hello world"|capitalize"#, json!("Hello world")),
         (r#""hello world"|title"#, json!("Hello World")),
         (r#""  hello  "|trim"#, json!("hello")),
-        (r#""hello world"|replace("world", "rust")"#, json!("hello rust")),
+        (
+            r#""hello world"|replace("world", "rust")"#,
+            json!("hello rust"),
+        ),
     ];
 
     for (expr, expected) in cases {

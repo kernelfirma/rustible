@@ -87,16 +87,15 @@ fn test_consul_backend_with_custom_address() {
 
 #[test]
 fn test_consul_backend_with_token() {
-    let backend = ConsulBackend::new("terraform/state".to_string())
-        .with_token("my-secret-token");
+    let backend = ConsulBackend::new("terraform/state".to_string()).with_token("my-secret-token");
 
     assert_eq!(backend.name(), "consul");
 }
 
 #[test]
 fn test_consul_backend_with_custom_timeout() {
-    let backend = ConsulBackend::new("terraform/state".to_string())
-        .with_timeout(Duration::from_secs(60));
+    let backend =
+        ConsulBackend::new("terraform/state".to_string()).with_timeout(Duration::from_secs(60));
 
     assert_eq!(backend.name(), "consul");
 }
@@ -504,7 +503,10 @@ async fn test_lock_info_creation() {
 
     let lock_info2 = LockInfo::new("destroy").with_info("Destroying all resources");
     assert_eq!(lock_info2.operation, "destroy");
-    assert_eq!(lock_info2.info, Some("Destroying all resources".to_string()));
+    assert_eq!(
+        lock_info2.info,
+        Some("Destroying all resources".to_string())
+    );
 }
 
 #[tokio::test]
@@ -568,7 +570,11 @@ async fn test_concurrent_lock_attempts() {
 
     // Exactly one should have acquired the lock
     let successful_locks: Vec<_> = results.iter().filter(|(_, success, _)| *success).collect();
-    assert_eq!(successful_locks.len(), 1, "Exactly one worker should acquire the lock");
+    assert_eq!(
+        successful_locks.len(),
+        1,
+        "Exactly one worker should acquire the lock"
+    );
 
     // Release the lock
     let (_, _, lock_id) = &successful_locks[0];
@@ -663,7 +669,9 @@ async fn test_local_backend_sequential_saves() {
 
         // Verify after each save
         let loaded = backend.load().await.unwrap().unwrap();
-        let saved_writer = loaded.resources.values().next().unwrap().attributes["writer"].as_i64().unwrap();
+        let saved_writer = loaded.resources.values().next().unwrap().attributes["writer"]
+            .as_i64()
+            .unwrap();
         assert_eq!(saved_writer, i as i64);
     }
 
@@ -796,10 +804,10 @@ impl RetryTracker {
     }
 
     fn try_operation(&self) -> bool {
-        let attempt =
-            self.attempts
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                + 1;
+        let attempt = self
+            .attempts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1;
         attempt >= self.succeed_on_attempt
     }
 

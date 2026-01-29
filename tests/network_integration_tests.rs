@@ -91,10 +91,7 @@ mod ios_config_tests {
     fn test_ios_config_validate_params_with_src() {
         let module = IosConfigModule;
         let mut params = HashMap::new();
-        params.insert(
-            "src".to_string(),
-            serde_json::json!("templates/router.j2"),
-        );
+        params.insert("src".to_string(), serde_json::json!("templates/router.j2"));
 
         let result = module.validate_params(&params);
         assert!(result.is_ok());
@@ -106,7 +103,9 @@ mod ios_config_tests {
         let mut params = HashMap::new();
         params.insert(
             "config".to_string(),
-            serde_json::json!("hostname router1\ninterface Gi0/0\n ip address 10.0.0.1 255.255.255.0"),
+            serde_json::json!(
+                "hostname router1\ninterface Gi0/0\n ip address 10.0.0.1 255.255.255.0"
+            ),
         );
 
         let result = module.validate_params(&params);
@@ -234,7 +233,10 @@ mod ios_config_tests {
         let mut params = HashMap::new();
         params.insert("lines".to_string(), serde_json::json!(["test"]));
         params.insert("replace".to_string(), serde_json::json!("block"));
-        params.insert("parents".to_string(), serde_json::json!(["interface Gi0/0"]));
+        params.insert(
+            "parents".to_string(),
+            serde_json::json!(["interface Gi0/0"]),
+        );
         assert!(module.validate_params(&params).is_ok());
     }
 
@@ -270,7 +272,10 @@ mod ios_config_tests {
         let mut params = HashMap::new();
         params.insert("lines".to_string(), serde_json::json!(["test"]));
         params.insert("create_checkpoint".to_string(), serde_json::json!(true));
-        params.insert("checkpoint_name".to_string(), serde_json::json!("pre_change"));
+        params.insert(
+            "checkpoint_name".to_string(),
+            serde_json::json!("pre_change"),
+        );
         params.insert("rollback_on_failure".to_string(), serde_json::json!(true));
 
         let result = module.validate_params(&params);
@@ -281,10 +286,19 @@ mod ios_config_tests {
     fn test_ios_config_validate_params_before_after() {
         let module = IosConfigModule;
         let mut params = HashMap::new();
-        params.insert("lines".to_string(), serde_json::json!(["ip address 10.0.0.1 255.255.255.0"]));
-        params.insert("parents".to_string(), serde_json::json!(["interface Gi0/0"]));
+        params.insert(
+            "lines".to_string(),
+            serde_json::json!(["ip address 10.0.0.1 255.255.255.0"]),
+        );
+        params.insert(
+            "parents".to_string(),
+            serde_json::json!(["interface Gi0/0"]),
+        );
         params.insert("before".to_string(), serde_json::json!(["no shutdown"]));
-        params.insert("after".to_string(), serde_json::json!(["description Configured by Rustible"]));
+        params.insert(
+            "after".to_string(),
+            serde_json::json!(["description Configured by Rustible"]),
+        );
 
         let result = module.validate_params(&params);
         assert!(result.is_ok());
@@ -323,7 +337,11 @@ mod nxos_config_tests {
         let module = NxosConfigModule;
         let desc = module.description();
         assert!(!desc.is_empty());
-        assert!(desc.to_lowercase().contains("nxos") || desc.to_lowercase().contains("nx-os") || desc.to_lowercase().contains("nexus"));
+        assert!(
+            desc.to_lowercase().contains("nxos")
+                || desc.to_lowercase().contains("nx-os")
+                || desc.to_lowercase().contains("nexus")
+        );
     }
 
     #[test]
@@ -337,7 +355,9 @@ mod nxos_config_tests {
         let module = NxosConfigModule;
         // NX-OS typically uses rate limiting
         match module.parallelization_hint() {
-            ParallelizationHint::RateLimited { requests_per_second } => {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => {
                 assert!(requests_per_second > 0);
             }
             ParallelizationHint::HostExclusive => {
@@ -609,10 +629,7 @@ mod junos_config_tests {
     fn test_junos_config_validate_params_with_src() {
         let module = JunosConfigModule;
         let mut params = HashMap::new();
-        params.insert(
-            "src".to_string(),
-            serde_json::json!("junos_config.set"),
-        );
+        params.insert("src".to_string(), serde_json::json!("junos_config.set"));
 
         let result = module.validate_params(&params);
         assert!(result.is_ok());
@@ -632,9 +649,15 @@ mod junos_config_tests {
     fn test_junos_config_validate_params_commit_options() {
         let module = JunosConfigModule;
         let mut params = HashMap::new();
-        params.insert("config".to_string(), serde_json::json!("set system host-name test"));
+        params.insert(
+            "config".to_string(),
+            serde_json::json!("set system host-name test"),
+        );
         params.insert("commit".to_string(), serde_json::json!(true));
-        params.insert("comment".to_string(), serde_json::json!("Configured by Rustible"));
+        params.insert(
+            "comment".to_string(),
+            serde_json::json!("Configured by Rustible"),
+        );
 
         let result = module.validate_params(&params);
         assert!(result.is_ok());
@@ -668,11 +691,18 @@ mod junos_config_tests {
         // Junos uses 'load_operation' or 'operation' parameter
         for operation in &["merge", "override", "replace", "update"] {
             let mut params = HashMap::new();
-            params.insert("config".to_string(), serde_json::json!("set system host-name test"));
+            params.insert(
+                "config".to_string(),
+                serde_json::json!("set system host-name test"),
+            );
             params.insert("load_operation".to_string(), serde_json::json!(operation));
 
             let result = module.validate_params(&params);
-            assert!(result.is_ok(), "Load operation '{}' should be valid", operation);
+            assert!(
+                result.is_ok(),
+                "Load operation '{}' should be valid",
+                operation
+            );
         }
     }
 
@@ -774,10 +804,7 @@ mod eos_config_tests {
     fn test_eos_config_validate_params_with_src() {
         let module = EosConfigModule;
         let mut params = HashMap::new();
-        params.insert(
-            "src".to_string(),
-            serde_json::json!("eos_config.cfg"),
-        );
+        params.insert("src".to_string(), serde_json::json!("eos_config.cfg"));
         params.insert("transport".to_string(), serde_json::json!("ssh"));
 
         let result = module.validate_params(&params);
@@ -823,7 +850,10 @@ mod eos_config_tests {
         // block with parents
         let mut params = HashMap::new();
         params.insert("lines".to_string(), serde_json::json!(["description Test"]));
-        params.insert("parents".to_string(), serde_json::json!(["interface Ethernet1"]));
+        params.insert(
+            "parents".to_string(),
+            serde_json::json!(["interface Ethernet1"]),
+        );
         params.insert("replace".to_string(), serde_json::json!("block"));
         params.insert("transport".to_string(), serde_json::json!("ssh"));
         assert!(module.validate_params(&params).is_ok());
@@ -867,11 +897,18 @@ mod eos_config_tests {
             params.insert("transport".to_string(), serde_json::json!("ssh"));
 
             if *diff_against == "intended" {
-                params.insert("intended_config".to_string(), serde_json::json!("vlan 100\nname Production"));
+                params.insert(
+                    "intended_config".to_string(),
+                    serde_json::json!("vlan 100\nname Production"),
+                );
             }
 
             let result = module.validate_params(&params);
-            assert!(result.is_ok(), "diff_against '{}' should be valid", diff_against);
+            assert!(
+                result.is_ok(),
+                "diff_against '{}' should be valid",
+                diff_against
+            );
         }
     }
 
@@ -927,7 +964,8 @@ mod playbook_parsing_tests {
         save_when: modified
 "#;
 
-        let playbook = Playbook::from_yaml(yaml, None).expect("Failed to parse IOS config playbook");
+        let playbook =
+            Playbook::from_yaml(yaml, None).expect("Failed to parse IOS config playbook");
         assert_eq!(playbook.plays.len(), 1);
         assert_eq!(playbook.plays[0].tasks.len(), 1);
 
@@ -1027,7 +1065,8 @@ mod playbook_parsing_tests {
       when: config_failed | default(false)
 "#;
 
-        let playbook = Playbook::from_yaml(yaml, None).expect("Failed to parse checkpoint playbook");
+        let playbook =
+            Playbook::from_yaml(yaml, None).expect("Failed to parse checkpoint playbook");
         assert_eq!(playbook.plays.len(), 1);
         assert_eq!(playbook.plays[0].tasks.len(), 3);
     }
@@ -1217,7 +1256,8 @@ mod playbook_parsing_tests {
       when: ansible_network_os == 'eos'
 "#;
 
-        let playbook = Playbook::from_yaml(yaml, None).expect("Failed to parse multi-vendor playbook");
+        let playbook =
+            Playbook::from_yaml(yaml, None).expect("Failed to parse multi-vendor playbook");
         assert_eq!(playbook.plays.len(), 1);
         assert_eq!(playbook.plays[0].tasks.len(), 4);
     }
@@ -1258,10 +1298,8 @@ mod common_tests {
 
     #[test]
     fn test_network_modules_require_config_source() {
-        let modules: Vec<Box<dyn Module>> = vec![
-            Box::new(IosConfigModule),
-            Box::new(EosConfigModule),
-        ];
+        let modules: Vec<Box<dyn Module>> =
+            vec![Box::new(IosConfigModule), Box::new(EosConfigModule)];
 
         for module in modules {
             let params = HashMap::new();
@@ -1336,7 +1374,10 @@ mod config_diff_tests {
 
         // diff_against: intended (requires intended_config)
         params.insert("diff_against".to_string(), serde_json::json!("intended"));
-        params.insert("intended_config".to_string(), serde_json::json!("test config"));
+        params.insert(
+            "intended_config".to_string(),
+            serde_json::json!("test config"),
+        );
         assert!(module.validate_params(&params).is_ok());
     }
 
@@ -1419,7 +1460,10 @@ mod backup_tests {
         let mut params = HashMap::new();
         params.insert("lines".to_string(), serde_json::json!(["test"]));
         params.insert("backup".to_string(), serde_json::json!(true));
-        params.insert("backup_dir".to_string(), serde_json::json!("/var/backups/network"));
+        params.insert(
+            "backup_dir".to_string(),
+            serde_json::json!("/var/backups/network"),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }
@@ -1445,7 +1489,10 @@ mod backup_tests {
     fn test_nxos_checkpoint_create() {
         let module = NxosConfigModule;
         let mut params = HashMap::new();
-        params.insert("checkpoint".to_string(), serde_json::json!("pre_maintenance"));
+        params.insert(
+            "checkpoint".to_string(),
+            serde_json::json!("pre_maintenance"),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }
@@ -1454,7 +1501,10 @@ mod backup_tests {
     fn test_nxos_checkpoint_rollback() {
         let module = NxosConfigModule;
         let mut params = HashMap::new();
-        params.insert("rollback_to".to_string(), serde_json::json!("pre_maintenance"));
+        params.insert(
+            "rollback_to".to_string(),
+            serde_json::json!("pre_maintenance"),
+        );
 
         assert!(module.validate_params(&params).is_ok());
     }

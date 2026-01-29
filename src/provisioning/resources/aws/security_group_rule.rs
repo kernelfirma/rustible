@@ -118,7 +118,10 @@ impl AwsSecurityGroupRuleResource {
 
         // Build a deterministic ID
         let cidr_part = if !config.cidr_blocks.is_empty() {
-            format!("cidr_{}", config.cidr_blocks.join("_").replace(['/', '.'], "-"))
+            format!(
+                "cidr_{}",
+                config.cidr_blocks.join("_").replace(['/', '.'], "-")
+            )
         } else if !config.ipv6_cidr_blocks.is_empty() {
             format!(
                 "ipv6_{}",
@@ -134,11 +137,7 @@ impl AwsSecurityGroupRuleResource {
 
         format!(
             "sgrule-{}-{}-{}-{}-{}",
-            &config.security_group_id,
-            direction,
-            proto,
-            from_port,
-            to_port
+            &config.security_group_id, direction, proto, from_port, to_port
         )
         .chars()
         .take(64)
@@ -516,7 +515,9 @@ impl Resource for AwsSecurityGroupRuleResource {
     fn schema(&self) -> ResourceSchema {
         ResourceSchema {
             resource_type: "aws_security_group_rule".to_string(),
-            description: "Provides an AWS EC2 security group rule resource for managing individual rules".to_string(),
+            description:
+                "Provides an AWS EC2 security group rule resource for managing individual rules"
+                    .to_string(),
             required_args: vec![
                 SchemaField {
                     name: "type".to_string(),
@@ -757,10 +758,7 @@ impl Resource for AwsSecurityGroupRuleResource {
         };
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
-            ProvisioningError::SerializationError(format!(
-                "Failed to serialize rule state: {}",
-                e
-            ))
+            ProvisioningError::SerializationError(format!("Failed to serialize rule state: {}", e))
         })?;
 
         info!("Created security group rule: {}", rule_id);
@@ -812,10 +810,7 @@ impl Resource for AwsSecurityGroupRuleResource {
         };
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
-            ProvisioningError::SerializationError(format!(
-                "Failed to serialize rule state: {}",
-                e
-            ))
+            ProvisioningError::SerializationError(format!("Failed to serialize rule state: {}", e))
         })?;
 
         Ok(ResourceResult::success(&rule_id, attributes))
@@ -841,7 +836,8 @@ impl Resource for AwsSecurityGroupRuleResource {
             return Err(ProvisioningError::ImportError {
                 resource_type: "aws_security_group_rule".to_string(),
                 resource_id: id.to_string(),
-                message: "Import ID format: sg-xxx_ingress|egress_protocol_from_to_cidr".to_string(),
+                message: "Import ID format: sg-xxx_ingress|egress_protocol_from_to_cidr"
+                    .to_string(),
             });
         }
 
@@ -889,19 +885,17 @@ impl Resource for AwsSecurityGroupRuleResource {
         };
 
         // Verify the rule exists
-        let state = self.find_rule(&config, ctx).await?.ok_or_else(|| {
-            ProvisioningError::ImportError {
-                resource_type: "aws_security_group_rule".to_string(),
-                resource_id: id.to_string(),
-                message: "Rule not found in security group".to_string(),
-            }
-        })?;
+        let state =
+            self.find_rule(&config, ctx)
+                .await?
+                .ok_or_else(|| ProvisioningError::ImportError {
+                    resource_type: "aws_security_group_rule".to_string(),
+                    resource_id: id.to_string(),
+                    message: "Rule not found in security group".to_string(),
+                })?;
 
         let attributes = serde_json::to_value(&state).map_err(|e| {
-            ProvisioningError::SerializationError(format!(
-                "Failed to serialize rule state: {}",
-                e
-            ))
+            ProvisioningError::SerializationError(format!("Failed to serialize rule state: {}", e))
         })?;
 
         Ok(ResourceResult::success(&state.id, attributes))

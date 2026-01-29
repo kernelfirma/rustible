@@ -565,14 +565,8 @@ mod tests {
 
     #[test]
     fn test_unit_file_state_parsing() {
-        assert_eq!(
-            UnitFileState::from_str("enabled"),
-            UnitFileState::Enabled
-        );
-        assert_eq!(
-            UnitFileState::from_str("disabled"),
-            UnitFileState::Disabled
-        );
+        assert_eq!(UnitFileState::from_str("enabled"), UnitFileState::Enabled);
+        assert_eq!(UnitFileState::from_str("disabled"), UnitFileState::Disabled);
         assert_eq!(UnitFileState::from_str("static"), UnitFileState::Static);
     }
 
