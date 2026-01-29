@@ -112,7 +112,7 @@ mod secret_string_tests {
         for s in secrets {
             let secret = SecretString::new(s);
             let debug = format!("{:?}", secret);
-            assert_eq!(debug, "[REDACTED]", "Secret '{}' leaked in debug", s);
+            assert!(debug == "[REDACTED]");
             assert!(!debug.contains(s));
         }
     }
@@ -731,9 +731,8 @@ mod audit_compliance_tests {
             let debug = format!("{:?}", secret);
             assert!(
                 debug.contains("[REDACTED]") || debug == "[REDACTED]",
-                "{} debug output should be redacted: {}",
-                name,
-                debug
+                "{} debug output should be redacted",
+                name
             );
         }
     }
