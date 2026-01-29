@@ -4,6 +4,8 @@
 //! CI fails if docs drift from feature flags/modules.
 
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
 
 // ============================================================================
 // Feature Registry (Source of Truth)
@@ -280,7 +282,7 @@ impl FeatureRegistry {
         self.modules.push(Module::new("service", FeatureStatus::Stable, "0.1.0", "system")
             .with_platforms(&["linux", "macos"])
             .with_params(&["name", "state", "enabled"]));
-        self.modules.push(Module::new("systemd", FeatureStatus::Stable, "0.1.0", "system")
+        self.modules.push(Module::new("systemd_unit", FeatureStatus::Stable, "0.1.0", "system")
             .with_platforms(&["linux"])
             .with_params(&["name", "state", "enabled", "daemon_reload"]));
 
@@ -304,7 +306,7 @@ impl FeatureRegistry {
         self.modules.push(Module::new("uri", FeatureStatus::Stable, "0.1.0", "net_tools")
             .with_platforms(&["linux", "macos", "windows"])
             .with_params(&["url", "method", "body", "headers", "status_code"]));
-        self.modules.push(Module::new("get_url", FeatureStatus::Stable, "0.1.0", "net_tools")
+        self.modules.push(Module::new("get_url", FeatureStatus::Experimental, "0.1.0", "net_tools")
             .with_platforms(&["linux", "macos", "windows"])
             .with_params(&["url", "dest", "checksum", "mode"]));
 
@@ -400,7 +402,358 @@ pub struct DocumentationState {
     pub matrix_entries: HashMap<String, MatrixEntry>,
 }
 
+#[derive(Default)]
+struct ParsedMatrix {
+    feature_statuses: HashMap<String, FeatureStatus>,
+    module_statuses: HashMap<String, FeatureStatus>,
+    matrix_features: HashSet<String>,
+    matrix_modules: HashSet<String>,
+}
+
+fn split_table_row(line: &str) -> Vec<String> {
+    line.trim_matches('|')
+        .split('|')
+        .map(|cell| cell.trim().to_string())
+        .filter(|cell| !cell.is_empty())
+        .collect()
+}
+
+fn extract_backtick_tokens(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_tick = false;
+
+    for ch in text.chars() {
+        if ch == '`' {
+            if in_tick && !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            in_tick = !in_tick;
+            continue;
+        }
+
+        if in_tick {
+            current.push(ch);
+        }
+    }
+
+    tokens
+}
+
+fn status_from_cell(cell: &str) -> FeatureStatus {
+    let lower = cell.to_lowercase();
+    if lower.contains("stable") {
+        FeatureStatus::Stable
+    } else if lower.contains("beta") {
+        FeatureStatus::Beta
+    } else if lower.contains("experimental") {
+        FeatureStatus::Experimental
+    } else if lower.contains("deprecated") {
+        FeatureStatus::Deprecated
+    } else if lower.contains("removed") {
+        FeatureStatus::Removed
+    } else if lower.contains("partial") {
+        FeatureStatus::Beta
+    } else if lower.contains("no")
+        || lower.contains("planned")
+        || lower.contains("stub")
+        || lower.contains("disabled")
+    {
+        FeatureStatus::Experimental
+    } else {
+        FeatureStatus::Stable
+    }
+}
+
+fn module_status_from_cell(cell: &str, subsection: &str) -> FeatureStatus {
+    let mut status = status_from_cell(cell);
+    let subsection_lower = subsection.to_lowercase();
+
+    if subsection_lower.contains("aws cloud modules") && status == FeatureStatus::Stable {
+        status = FeatureStatus::Beta;
+    } else if subsection_lower.contains("experimental") {
+        status = FeatureStatus::Experimental;
+    } else if subsection_lower.contains("disabled") {
+        status = FeatureStatus::Experimental;
+    }
+
+    status
+}
+
+fn resolve_feature_name(cell: &str, registry: &FeatureRegistry) -> Option<String> {
+    for token in extract_backtick_tokens(cell) {
+        if registry.get_feature(&token).is_some() {
+            return Some(token);
+        }
+        let mapped = match token.as_str() {
+            "linear" => Some("linear_strategy"),
+            "free" => Some("free_strategy"),
+            "host_pinned" => Some("host_pinned_strategy"),
+            "serial" => Some("serial_execution"),
+            _ => None,
+        };
+        if let Some(name) = mapped {
+            if registry.get_feature(name).is_some() {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    let normalized = cell.to_lowercase();
+    let mapped = if normalized.starts_with("playbook parsing") {
+        Some("playbook_execution")
+    } else if normalized.starts_with("inventory") {
+        Some("inventory_management")
+    } else if normalized.starts_with("variable precedence") {
+        Some("variable_precedence")
+    } else if normalized.starts_with("jinja2 templates") {
+        Some("template_rendering")
+    } else if normalized.starts_with("handlers") {
+        Some("handler_notification")
+    } else if normalized.starts_with("fact gathering") {
+        Some("fact_gathering")
+    } else if normalized.starts_with("check mode") {
+        Some("check_mode")
+    } else if normalized.starts_with("diff mode") {
+        Some("diff_mode")
+    } else if normalized.starts_with("privilege escalation") {
+        Some("become_escalation")
+    } else if normalized.starts_with("vault encryption") {
+        Some("vault_encryption")
+    } else if normalized == "ssh" {
+        Some("ssh_connection")
+    } else if normalized.starts_with("local") {
+        Some("local_connection")
+    } else if normalized.starts_with("winrm") {
+        Some("winrm_connection")
+    } else if normalized.starts_with("linear") {
+        Some("linear_strategy")
+    } else if normalized.starts_with("free") {
+        Some("free_strategy")
+    } else if normalized.starts_with("host_pinned") {
+        Some("host_pinned_strategy")
+    } else if normalized.starts_with("serial") {
+        Some("serial_execution")
+    } else if normalized.starts_with("async tasks") {
+        Some("async_tasks")
+    } else if normalized.starts_with("delegation") {
+        Some("delegate_to")
+    } else if normalized.starts_with("run once") {
+        Some("run_once")
+    } else if normalized.starts_with("ssh pipelining") {
+        Some("ssh_pipelining")
+    } else if normalized.starts_with("resource graph") {
+        Some("resource_graph")
+    } else if normalized.starts_with("state management") {
+        Some("state_management")
+    } else if normalized.starts_with("drift detection") {
+        Some("drift_detection")
+    } else if normalized.starts_with("agent mode") {
+        Some("agent_mode")
+    } else if normalized.starts_with("native bindings") {
+        Some("native_bindings")
+    } else {
+        None
+    };
+
+    mapped
+        .filter(|name| registry.get_feature(name).is_some())
+        .map(|name| name.to_string())
+}
+
+fn parse_compatibility_matrix(content: &str, registry: &FeatureRegistry) -> ParsedMatrix {
+    let mut parsed = ParsedMatrix::default();
+    let mut section = String::new();
+    let mut subsection = String::new();
+    let mut in_module_section = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            section = trimmed.trim_start_matches("## ").trim().to_string();
+            subsection.clear();
+            in_module_section = section == "Module Compatibility";
+            continue;
+        }
+        if trimmed.starts_with("### ") || trimmed.starts_with("#### ") {
+            subsection = trimmed.trim_start_matches('#').trim().to_string();
+            continue;
+        }
+        if !trimmed.starts_with('|') || trimmed.contains("---") {
+            continue;
+        }
+
+        let cells = split_table_row(trimmed);
+        if cells.is_empty() {
+            continue;
+        }
+
+        let header = cells[0].to_lowercase();
+        if matches!(
+            header.as_str(),
+            "feature" | "strategy" | "connection" | "module" | "plugin" | "category"
+        ) {
+            continue;
+        }
+
+        if in_module_section {
+            if cells.len() < 3 {
+                continue;
+            }
+            let rustible_cell = &cells[2];
+            for token in extract_backtick_tokens(&cells[0]) {
+                if registry.get_module(&token).is_none() {
+                    continue;
+                }
+                let status = module_status_from_cell(rustible_cell, &subsection);
+                parsed.module_statuses.insert(token.clone(), status);
+                parsed.matrix_modules.insert(token);
+            }
+            continue;
+        }
+
+        let is_feature_section = matches!(
+            section.as_str(),
+            "Core Execution Features"
+                | "Execution Strategies"
+                | "Connection Types"
+                | "Provisioning and Agent Features"
+        );
+        if !is_feature_section || cells.len() < 3 {
+            continue;
+        }
+
+        if let Some(feature_name) = resolve_feature_name(&cells[0], registry) {
+            let status = status_from_cell(&cells[2]);
+            parsed.feature_statuses.insert(feature_name.clone(), status);
+            parsed.matrix_features.insert(feature_name);
+        }
+    }
+
+    parsed
+}
+
+fn parse_module_reference_docs(modules_dir: &Path) -> HashMap<String, DocEntry> {
+    let mut docs = HashMap::new();
+    let entries = match fs::read_dir(modules_dir) {
+        Ok(entries) => entries,
+        Err(_) => return docs,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("md") {
+            continue;
+        }
+        if path.file_name().and_then(|s| s.to_str()) == Some("README.md") {
+            continue;
+        }
+        let name = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(name) => name.to_string(),
+            None => continue,
+        };
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+        let lower = content.to_lowercase();
+        let has_description = lower.contains("## synopsis") || lower.contains("## description");
+        let has_parameters = lower.contains("## parameters");
+        let has_examples = lower.contains("## examples");
+
+        docs.insert(
+            name.clone(),
+            DocEntry {
+                name,
+                documented_status: String::new(),
+                documented_version: String::new(),
+                has_description,
+                has_examples,
+                has_parameters,
+            },
+        );
+    }
+
+    docs
+}
+
 impl DocumentationState {
+    /// Build documentation state from actual docs and compatibility matrix
+    fn from_docs(registry: &FeatureRegistry) -> Self {
+        let docs_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs");
+        let compatibility_path = docs_root.join("compatibility").join("ansible.md");
+        let compatibility = fs::read_to_string(compatibility_path).unwrap_or_default();
+        let parsed = parse_compatibility_matrix(&compatibility, registry);
+
+        let mut state = Self {
+            feature_docs: HashMap::new(),
+            module_docs: HashMap::new(),
+            matrix_entries: HashMap::new(),
+        };
+
+        // Feature docs come from the compatibility matrix
+        for feature in &registry.features {
+            if !feature.status.requires_docs() {
+                continue;
+            }
+            if let Some(status) = parsed.feature_statuses.get(&feature.name) {
+                state.feature_docs.insert(feature.name.clone(), DocEntry {
+                    name: feature.name.clone(),
+                    documented_status: format!("{:?}", status),
+                    documented_version: feature.version_added.clone(),
+                    has_description: true,
+                    has_examples: true,
+                    has_parameters: false,
+                });
+            }
+        }
+
+        // Module docs come from reference docs; statuses from matrix
+        let module_docs = parse_module_reference_docs(&docs_root.join("reference").join("modules"));
+        for module in &registry.modules {
+            if let Some(mut doc) = module_docs.get(&module.name).cloned() {
+                let status = parsed.module_statuses.get(&module.name).unwrap_or(&module.status);
+                doc.documented_status = format!("{:?}", status);
+                doc.documented_version = module.version_added.clone();
+                state.module_docs.insert(module.name.clone(), doc);
+            }
+        }
+
+        // Matrix entries are sourced from the compatibility matrix
+        for feature in &registry.features {
+            if !feature.status.should_be_in_matrix() {
+                continue;
+            }
+            if parsed.matrix_features.contains(&feature.name) {
+                let status = parsed.feature_statuses.get(&feature.name).unwrap_or(&feature.status);
+                state.matrix_entries.insert(feature.name.clone(), MatrixEntry {
+                    name: feature.name.clone(),
+                    status: format!("{:?}", status),
+                    platforms: vec!["all".to_string()],
+                    version_added: feature.version_added.clone(),
+                });
+            }
+        }
+
+        for module in &registry.modules {
+            if !module.status.should_be_in_matrix() {
+                continue;
+            }
+            if parsed.matrix_modules.contains(&module.name) {
+                let status = parsed.module_statuses.get(&module.name).unwrap_or(&module.status);
+                state.matrix_entries.insert(module.name.clone(), MatrixEntry {
+                    name: module.name.clone(),
+                    status: format!("{:?}", status),
+                    platforms: module.platforms.clone(),
+                    version_added: module.version_added.clone(),
+                });
+            }
+        }
+
+        state
+    }
+
     /// Build documentation state that matches the feature registry
     fn from_registry(registry: &FeatureRegistry) -> Self {
         let mut state = Self {
@@ -771,7 +1124,7 @@ fn test_module_categories_exist() {
 #[test]
 fn test_docs_match_registry() {
     let registry = FeatureRegistry::new();
-    let docs = DocumentationState::from_registry(&registry);
+    let docs = DocumentationState::from_docs(&registry);
     let checker = SyncChecker::new(&registry, &docs);
 
     let issues = checker.check_all();
@@ -902,7 +1255,7 @@ fn test_detects_stale_docs() {
 #[test]
 fn test_ci_passes_when_in_sync() {
     let registry = FeatureRegistry::new();
-    let docs = DocumentationState::from_registry(&registry);
+    let docs = DocumentationState::from_docs(&registry);
     let checker = SyncChecker::new(&registry, &docs);
 
     assert!(!checker.has_errors(), "CI should pass when docs are in sync");
@@ -1055,7 +1408,7 @@ fn test_ci_guard_all_features_have_versions() {
 #[test]
 fn test_ci_guard_sync_check_works() {
     let registry = FeatureRegistry::new();
-    let docs = DocumentationState::from_registry(&registry);
+    let docs = DocumentationState::from_docs(&registry);
     let checker = SyncChecker::new(&registry, &docs);
 
     // Sync check should not panic and should return empty when in sync
