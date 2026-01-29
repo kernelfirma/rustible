@@ -3,7 +3,7 @@
 //! This module provides comprehensive state management for configuration management,
 //! including state tracking, versioning, and dependency resolution.
 
-use crate::error::{RustibleError, Result};
+use crate::error::{Error, Result};
 use crate::state::storage::{StateBackend, StateFile};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -110,6 +110,13 @@ impl StateTransition {
     }
 }
 
+/// Internal structure for serializing state data
+#[derive(Serialize, Deserialize)]
+struct StateData {
+    resources: HashMap<String, Resource>,
+    history: Vec<StateTransition>,
+}
+
 /// Configuration for the state manager
 #[derive(Debug, Clone)]
 pub struct StateManagerConfig {
@@ -153,12 +160,16 @@ impl StateManager {
     }
 
     pub async fn initialize(&self) -> Result<()> {
-        if let Some(state_file) = self.backend.load_state().await? {
+        // Use "main" as the default state key
+        if let Some(state_file) = self.backend.retrieve_state("main").await.map_err(|e| Error::State(e.to_string()))? {
+            let data: StateData = serde_json::from_value(state_file.data)
+                .map_err(|e| Error::State(format!("Failed to parse state data: {}", e)))?;
+
             let mut resources = self.resources.write().await;
-            *resources = state_file.resources;
+            *resources = data.resources;
 
             let mut history = self.history.write().await;
-            *history = state_file.history;
+            *history = data.history;
 
             let mut version = self.version.write().await;
             *version = state_file.serial;
@@ -238,7 +249,7 @@ impl StateManager {
 
             Ok(())
         } else {
-            Err(RustibleError::State(format!("Resource not found: {}", id)))
+            Err(Error::State(format!("Resource not found: {}", id)))
         }
     }
 
@@ -270,16 +281,19 @@ impl StateManager {
 
         *version += 1;
 
-        let state_file = StateFile {
-            serial: *version,
+        let data = StateData {
             resources: resources.clone(),
             history: history.clone(),
-            checksum: String::new(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
         };
 
-        self.backend.save_state(state_file).await?;
+        let json_data = serde_json::to_value(data)
+            .map_err(|e| Error::State(format!("Failed to serialize state data: {}", e)))?;
+
+        let mut state_file = StateFile::new(json_data);
+        state_file.serial = *version;
+
+        self.backend.store_state("main", &state_file).await
+            .map_err(|e| Error::State(e.to_string()))?;
 
         tracing::info!("State persisted, version {}", version);
 
@@ -336,7 +350,7 @@ impl DependencyGraph {
         }
 
         if result.len() != self.graph.len() {
-            return Err(RustibleError::State(
+            return Err(Error::State(
                 "Cycle detected in dependency graph".to_string(),
             ));
         }
@@ -352,7 +366,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resource_creation() {
-        let backend = Arc::new(LocalBackend::new("/tmp/test_state".to_string()));
+        let backend = Arc::new(LocalBackend::new(std::path::PathBuf::from("/tmp/test_state")));
         let manager = StateManager::new(backend, StateManagerConfig::default());
 
         manager.initialize().await.unwrap();

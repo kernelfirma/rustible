@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Implementation status of a module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModuleStatus {
     /// Module is fully implemented.
     FullyImplemented,
@@ -606,12 +606,12 @@ impl ModuleParityTracker {
         
         for module_name in modules {
             if let Some(info) = self.get_module(module_name).await {
-                match info.status {
+                match info.status.clone() {
                     ModuleStatus::FullyImplemented | ModuleStatus::CompatibilityLayer { .. } => {
                         compatible.push(info);
                     }
-                    ModuleStatus::Partial { ref missing_features, .. } => {
-                        partial.push((info, missing_features.clone()));
+                    ModuleStatus::Partial { missing_features, .. } => {
+                        partial.push((info, missing_features));
                     }
                     ModuleStatus::Planned | ModuleStatus::NotPlanned | ModuleStatus::Deprecated => {
                         missing.push(info);

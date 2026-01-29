@@ -542,7 +542,7 @@ fn filter_md5(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    use md5::{compute, Md5};
+    use md5::compute;
     let hash = compute(s);
     Ok(Value::String(format!("{:x}", hash)))
 }

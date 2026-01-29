@@ -249,8 +249,8 @@ impl LockBackend for InMemoryLockBackend {
             .map(|(id, _)| id.clone())
             .collect();
         
-        for lock_id in expired {
-            locks.remove(&lock_id);
+        for lock_id in &expired {
+            locks.remove(lock_id);
         }
         
         Ok(expired.len())
