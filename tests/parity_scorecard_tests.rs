@@ -4,13 +4,17 @@
 //! CI fails on regressions - scores must not decrease.
 
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Parity Scoring System
 // ============================================================================
 
 /// Feature parity status
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParityStatus {
     /// Feature fully implemented and tested
     Full,
@@ -41,7 +45,7 @@ impl ParityStatus {
 }
 
 /// Feature definition with parity tracking
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feature {
     pub name: String,
     pub description: String,
@@ -72,7 +76,7 @@ impl Feature {
 }
 
 /// Module parity definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleParity {
     pub name: String,
     pub description: String,
@@ -138,7 +142,7 @@ impl ModuleParity {
 }
 
 /// Overall parity scorecard
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ParityScorecard {
     pub modules: Vec<ModuleParity>,
     /// Minimum acceptable overall score (CI gate)
@@ -486,9 +490,29 @@ fn build_current_scorecard() -> ParityScorecard {
 
 /// Build baseline scorecard (previous known-good state)
 fn build_baseline_scorecard() -> ParityScorecard {
-    // Baseline should match current for tests to pass
-    // In production, this would be loaded from a committed file
-    build_current_scorecard()
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("parity_scorecard_baseline.json");
+    let content = fs::read_to_string(&path)
+        .unwrap_or_else(|_| panic!("Missing baseline scorecard file at {}", path.display()));
+    serde_json::from_str(&content)
+        .unwrap_or_else(|err| panic!("Failed to parse baseline scorecard: {err}"))
+}
+
+#[test]
+#[ignore]
+fn write_baseline_snapshot() {
+    let scorecard = build_current_scorecard();
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("parity_scorecard_baseline.json");
+    let serialized = serde_json::to_string_pretty(&scorecard)
+        .expect("Should serialize baseline scorecard");
+    fs::create_dir_all(path.parent().expect("baseline directory"))
+        .expect("Should create baseline directory");
+    fs::write(&path, serialized).expect("Should write baseline file");
 }
 
 // ============================================================================
