@@ -18,40 +18,32 @@ use std::path::Path;
 
 mod feature_flag_tests {
     use super::*;
+    use toml::Value as TomlValue;
 
     /// Extract feature flags from Cargo.toml
     fn extract_cargo_features() -> HashSet<String> {
-        let cargo_toml = fs::read_to_string("Cargo.toml")
-            .expect("Failed to read Cargo.toml");
+        let features = load_cargo_features_table();
+        features.keys().cloned().collect()
+    }
 
-        let mut features = HashSet::new();
-        let mut in_features_section = false;
+    fn load_cargo_features_table() -> toml::value::Table {
+        let cargo_toml =
+            fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
+        let parsed: TomlValue = cargo_toml
+            .parse()
+            .expect("Failed to parse Cargo.toml as TOML");
+        parsed
+            .get("features")
+            .and_then(|value| value.as_table())
+            .cloned()
+            .unwrap_or_default()
+    }
 
-        for line in cargo_toml.lines() {
-            let trimmed = line.trim();
-
-            // Track when we enter/exit [features] section
-            if trimmed == "[features]" {
-                in_features_section = true;
-                continue;
-            }
-            if trimmed.starts_with('[') && trimmed != "[features]" {
-                in_features_section = false;
-                continue;
-            }
-
-            // Extract feature names (lines like: feature_name = ...)
-            if in_features_section && !trimmed.is_empty() && !trimmed.starts_with('#') {
-                if let Some(name) = trimmed.split('=').next() {
-                    let feature_name = name.trim().to_string();
-                    if !feature_name.is_empty() {
-                        features.insert(feature_name);
-                    }
-                }
-            }
+    fn feature_list_contains(feature_value: &TomlValue, name: &str) -> bool {
+        match feature_value {
+            TomlValue::Array(items) => items.iter().any(|item| item.as_str() == Some(name)),
+            _ => false,
         }
-
-        features
     }
 
     /// Extract documented feature flags from compatibility matrix
@@ -179,22 +171,20 @@ mod feature_flag_tests {
     #[test]
     fn test_feature_combinations_documented() {
         // Verify that composite features are consistent
-        let cargo_toml = fs::read_to_string("Cargo.toml")
-            .expect("Failed to read Cargo.toml");
+        let features = load_cargo_features_table();
 
         // Check that 'full' includes expected features
-        if cargo_toml.contains("full = [") {
+        if let Some(full) = features.get("full") {
             assert!(
-                cargo_toml.contains("full") &&
-                (cargo_toml.contains("russh") || cargo_toml.contains("ssh2-backend")),
+                feature_list_contains(full, "russh") || feature_list_contains(full, "ssh2-backend"),
                 "full feature should include SSH backend"
             );
         }
 
         // Check that 'full-cloud' includes cloud providers
-        if cargo_toml.contains("full-cloud = [") {
+        if let Some(full_cloud) = features.get("full-cloud") {
             assert!(
-                cargo_toml.contains("full-cloud") && cargo_toml.contains("aws"),
+                feature_list_contains(full_cloud, "aws"),
                 "full-cloud feature should include aws"
             );
         }
