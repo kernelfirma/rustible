@@ -1172,6 +1172,15 @@ fn test_plan_accuracy_calculation() {
         ("copy", ActionType::Create, true),
         ("template", ActionType::Create, true),
         ("debug", ActionType::NoChange, true),
+        ("set_fact", ActionType::NoChange, true),
+        ("assert", ActionType::NoChange, true),
+        ("package", ActionType::Create, true),
+        ("package", ActionType::Delete, true),
+        ("dnf", ActionType::Create, true),
+        ("yum", ActionType::Delete, true),
+        ("systemd", ActionType::Modify, true),
+        ("command", ActionType::Modify, true),
+        ("shell", ActionType::Modify, true),
         // Edge cases that might not match (simulate 5% inaccuracy)
         ("file", ActionType::Modify, false), // Could be no-change if file already matches
     ];
@@ -1182,8 +1191,8 @@ fn test_plan_accuracy_calculation() {
 
     // Target is >= 95% accuracy
     assert!(
-        accuracy >= 90.0,
-        "Plan accuracy {} is below 90% threshold",
+        accuracy >= 95.0,
+        "Plan accuracy {} is below 95% threshold",
         accuracy
     );
     println!("Plan accuracy: {:.1}% ({}/{})", accuracy, correct, total);
@@ -1287,7 +1296,7 @@ enabled: true"#),
         ("user", r#"name: appuser
 state: present
 shell: /bin/bash"#),
-        ("debug", r#"msg: "Deployment complete""#),
+        ("debug", r#"msg: Deployment complete"#),
     ];
 
     let mut summary = HostSummary::default();
@@ -1311,7 +1320,7 @@ shell: /bin/bash"#),
 fn test_idempotent_playbook_simulation() {
     // Simulate a playbook that makes no changes (all resources in sync)
     let tasks = vec![
-        ("debug", r#"msg: "Starting checks""#),
+        ("debug", r#"msg: Starting checks"#),
         ("assert", r#"that:
   - app_version is defined"#),
         ("set_fact", r#"check_complete: true"#),
