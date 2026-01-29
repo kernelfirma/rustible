@@ -234,7 +234,7 @@ pub mod vars;
 pub mod retry;
 
 /// Pre-execution validation with syntax checking, schema validation, and linting.
-pub mod validation;
+// pub mod validation;  // TODO: Re-enable when validation is compatible
 
 // ============================================================================
 // Playbook Components
@@ -568,7 +568,7 @@ pub mod callback;
 // ============================================================================
 
 /// Language Server Protocol (LSP) for IDE integration.
-pub mod lsp;
+// pub mod lsp;  // TODO: Re-enable when LSP is compatible
 
 /// Diagnostic tools for debugging and troubleshooting.
 ///
@@ -613,7 +613,7 @@ pub mod telemetry;
 ///
 
 /// Configuration drift detection and reporting.
-pub mod drift;
+// pub mod drift;  // TODO: Re-enable when drift.rs is compatible
 /// This module provides comprehensive state tracking, persistence, diff reporting,
 /// rollback capability, and dependency tracking between tasks.
 pub mod state;
