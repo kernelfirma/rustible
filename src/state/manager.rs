@@ -3,7 +3,7 @@
 //! This module provides comprehensive state management for configuration management,
 //! including state tracking, versioning, and dependency resolution.
 
-use crate::error::{RustibleError, Result};
+use crate::error::{Error as RustibleError, Result};
 use crate::state::storage::{StateBackend, StateFile};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -68,6 +68,12 @@ impl Resource {
     pub fn is_terminal(&self) -> bool {
         matches!(self.state, ResourceState::Desired | ResourceState::Failed)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StateData {
+    resources: HashMap<String, Resource>,
+    history: Vec<StateTransition>,
 }
 
 /// Represents a state transition
@@ -153,12 +159,16 @@ impl StateManager {
     }
 
     pub async fn initialize(&self) -> Result<()> {
-        if let Some(state_file) = self.backend.load_state().await? {
+        // Use a fixed key for the state file for now, similar to default behavior
+        if let Some(state_file) = self.backend.retrieve_state("default").await.map_err(|e| RustibleError::Internal(format!("State error: {}", e)))? {
+            let data: StateData = serde_json::from_value(state_file.data)
+                .map_err(|e| RustibleError::Internal(format!("Failed to deserialize state data: {}", e)))?;
+
             let mut resources = self.resources.write().await;
-            *resources = state_file.resources;
+            *resources = data.resources;
 
             let mut history = self.history.write().await;
-            *history = state_file.history;
+            *history = data.history;
 
             let mut version = self.version.write().await;
             *version = state_file.serial;
@@ -238,7 +248,7 @@ impl StateManager {
 
             Ok(())
         } else {
-            Err(RustibleError::State(format!("Resource not found: {}", id)))
+            Err(RustibleError::Internal(format!("Resource not found: {}", id)))
         }
     }
 
@@ -270,16 +280,15 @@ impl StateManager {
 
         *version += 1;
 
-        let state_file = StateFile {
-            serial: *version,
+        let data = StateData {
             resources: resources.clone(),
             history: history.clone(),
-            checksum: String::new(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
         };
 
-        self.backend.save_state(state_file).await?;
+        let mut state_file = StateFile::new(serde_json::to_value(data).unwrap());
+        state_file.serial = *version;
+
+        self.backend.store_state("default", &state_file).await.map_err(|e| RustibleError::Internal(format!("State error: {}", e)))?;
 
         tracing::info!("State persisted, version {}", version);
 
@@ -336,7 +345,7 @@ impl DependencyGraph {
         }
 
         if result.len() != self.graph.len() {
-            return Err(RustibleError::State(
+            return Err(RustibleError::Internal(
                 "Cycle detected in dependency graph".to_string(),
             ));
         }

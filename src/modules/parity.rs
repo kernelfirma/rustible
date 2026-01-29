@@ -4,12 +4,12 @@
 //! and maintain compatibility with existing playbooks.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Implementation status of a module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModuleStatus {
     /// Module is fully implemented.
     FullyImplemented,
@@ -611,7 +611,7 @@ impl ModuleParityTracker {
                         compatible.push(info);
                     }
                     ModuleStatus::Partial { ref missing_features, .. } => {
-                        partial.push((info, missing_features.clone()));
+                        partial.push((info.clone(), missing_features.clone()));
                     }
                     ModuleStatus::Planned | ModuleStatus::NotPlanned | ModuleStatus::Deprecated => {
                         missing.push(info);
