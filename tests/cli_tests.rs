@@ -3830,20 +3830,35 @@ fn test_playbook_with_null_tasks() {
 /// Test that CLI extra-vars override config file vars (highest precedence)
 #[test]
 fn test_extra_vars_precedence_over_config() {
-    let playbook = create_test_playbook();
+    let mut playbook = NamedTempFile::new().unwrap();
+    writeln!(
+        playbook,
+        r#"---
+- name: Extra vars precedence
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show var
+      debug:
+        msg: "{{ my_var }}"
+"#
+    )
+    .unwrap();
     let mut vars_file = NamedTempFile::new().unwrap();
     writeln!(vars_file, "my_var: from_file").unwrap();
 
     // CLI -e should have highest precedence
     rustible_cmd()
         .arg("-e")
-        .arg("my_var=from_cli")
-        .arg("-e")
         .arg(format!("@{}", vars_file.path().display()))
+        .arg("-e")
+        .arg("my_var=from_cli")
         .arg("run")
         .arg(playbook.path())
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("from_cli"))
+        .stdout(predicate::str::contains("from_file").not());
 }
 
 /// Test that later extra-vars override earlier ones (Ansible behavior)
@@ -4231,19 +4246,48 @@ fn test_cli_flag_precedence_over_env() {
 /// Test environment variable takes precedence over config file
 #[test]
 fn test_env_var_precedence_over_config() {
-    let playbook = create_test_playbook();
-    let inventory = create_test_inventory();
-    let config = create_test_config();
+    let mut env_inventory = NamedTempFile::new().unwrap();
+    writeln!(
+        env_inventory,
+        r#"all:
+  hosts:
+    envhost:
+      ansible_connection: local
+"#
+    )
+    .unwrap();
+
+    let mut config_inventory = NamedTempFile::new().unwrap();
+    writeln!(
+        config_inventory,
+        r#"all:
+  hosts:
+    confighost:
+      ansible_connection: local
+"#
+    )
+    .unwrap();
+
+    let mut config = NamedTempFile::new().unwrap();
+    writeln!(
+        config,
+        r#"[defaults]
+inventory = "{}"
+"#,
+        config_inventory.path().display()
+    )
+    .unwrap();
 
     // Env var should override config file settings
     rustible_cmd()
-        .env("RUSTIBLE_INVENTORY", inventory.path())
+        .env("RUSTIBLE_INVENTORY", env_inventory.path())
         .arg("-c")
         .arg(config.path())
-        .arg("run")
-        .arg(playbook.path())
+        .arg("list-hosts")
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("envhost"))
+        .stdout(predicate::str::contains("confighost").not());
 }
 
 /// Test ANSIBLE_* env var compatibility
