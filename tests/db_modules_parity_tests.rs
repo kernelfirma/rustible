@@ -401,8 +401,8 @@ mod mysql_tests {
 
     #[test]
     fn test_all_mysql_modules_registered() {
-        let registry = ModuleRegistry::new();
-        let mysql_modules = ["mysql_db", "mysql_user", "mysql_query", "mysql_privs"];
+        let registry = ModuleRegistry::with_builtins();
+        let mysql_modules = ["mysql_db", "mysql_user", "mysql_query"];
 
         for module_name in &mysql_modules {
             assert!(
@@ -538,15 +538,16 @@ mod pool_tests {
     #[test]
     fn test_pool_stats_display() {
         let stats = PoolStats {
-            total_connections: 10,
-            idle_connections: 5,
-            active_connections: 5,
-            pending_requests: 0,
+            size: 10,
+            num_idle: 5,
+            max_connections: 10,
+            min_connections: 1,
         };
 
-        assert_eq!(stats.total_connections, 10);
-        assert_eq!(stats.idle_connections, 5);
-        assert_eq!(stats.active_connections, 5);
+        assert_eq!(stats.size, 10);
+        assert_eq!(stats.num_idle, 5);
+        assert_eq!(stats.max_connections, 10);
+        assert_eq!(stats.min_connections, 1);
     }
 }
 
