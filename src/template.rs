@@ -577,7 +577,7 @@ fn filter_regex_replace(
     let re = get_regex(pattern).map_err(|e| {
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid regex: {}", e))
     })?;
-    Ok(re.replace_all(value, replacement).to_string())
+    Ok(re.replace_all(value, replacement).into_owned())
 }
 
 /// Search for a pattern in a string.
@@ -779,7 +779,7 @@ fn filter_expanduser(value: &str) -> String {
     }
     if let Some(rest) = value.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
-            return home.join(rest).to_string_lossy().to_string();
+            return home.join(rest).to_string_lossy().into_owned();
         }
     }
     value.to_string()
@@ -790,7 +790,7 @@ fn filter_realpath(value: &str) -> String {
         return value.to_string();
     }
     std::fs::canonicalize(value)
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| value.to_string())
 }
 

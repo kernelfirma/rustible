@@ -4,12 +4,12 @@
 //! and maintain compatibility with existing playbooks.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Implementation status of a module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModuleStatus {
     /// Module is fully implemented.
     FullyImplemented,
@@ -45,12 +45,7 @@ pub enum ModuleStatus {
 impl ModuleStatus {
     /// Check if module is usable.
     pub fn is_usable(&self) -> bool {
-        matches!(
-            self,
-            ModuleStatus::FullyImplemented
-                | ModuleStatus::Partial { .. }
-                | ModuleStatus::CompatibilityLayer { .. }
-        )
+        matches!(self, ModuleStatus::FullyImplemented | ModuleStatus::Partial { .. } | ModuleStatus::CompatibilityLayer { .. })
     }
 
     /// Get the implementation percentage.
@@ -94,7 +89,12 @@ pub struct ModuleInfo {
 
 impl ModuleInfo {
     /// Create new module info.
-    pub fn new(name: String, ansible_module: String, status: ModuleStatus, priority: u8) -> Self {
+    pub fn new(
+        name: String,
+        ansible_module: String,
+        status: ModuleStatus,
+        priority: u8,
+    ) -> Self {
         Self {
             name,
             ansible_module,
@@ -138,10 +138,10 @@ impl ModuleParityTracker {
         let tracker = Self {
             modules: Arc::new(RwLock::new(HashMap::new())),
         };
-
+        
         // Initialize with known modules
         tracker.init_default_modules();
-
+        
         tracker
     }
 
@@ -287,6 +287,7 @@ impl ModuleParityTracker {
                 ModuleStatus::FullyImplemented,
                 4,
             ),
+            
             // Partially implemented modules
             ModuleInfo::new(
                 "docker_container".to_string(),
@@ -297,7 +298,9 @@ impl ModuleParityTracker {
                         "healthcheck".to_string(),
                         "network_mode=container".to_string(),
                     ],
-                    limitations: vec!["Slower than Ansible for container introspection".to_string()],
+                    limitations: vec![
+                        "Slower than Ansible for container introspection".to_string(),
+                    ],
                 },
                 5,
             ),
@@ -306,7 +309,9 @@ impl ModuleParityTracker {
                 "community.docker.docker_image".to_string(),
                 ModuleStatus::Partial {
                     percentage: 90,
-                    missing_features: vec!["source=build".to_string()],
+                    missing_features: vec![
+                        "source=build".to_string(),
+                    ],
                     limitations: vec![],
                 },
                 4,
@@ -320,7 +325,9 @@ impl ModuleParityTracker {
                         "custom resources".to_string(),
                         "server-side apply".to_string(),
                     ],
-                    limitations: vec!["No wait for resource completion".to_string()],
+                    limitations: vec![
+                        "No wait for resource completion".to_string(),
+                    ],
                 },
                 5,
             ),
@@ -329,11 +336,14 @@ impl ModuleParityTracker {
                 "kubernetes.core.helm".to_string(),
                 ModuleStatus::Partial {
                     percentage: 85,
-                    missing_features: vec!["chart testing".to_string()],
+                    missing_features: vec![
+                        "chart testing".to_string(),
+                    ],
                     limitations: vec![],
                 },
                 4,
             ),
+            
             // Planned modules
             ModuleInfo::new(
                 "aws_s3".to_string(),
@@ -449,6 +459,7 @@ impl ModuleParityTracker {
                 ModuleStatus::Planned,
                 3,
             ),
+            
             // Compatibility layer modules
             ModuleInfo::new(
                 "ansible_module".to_string(),
@@ -459,6 +470,7 @@ impl ModuleParityTracker {
                 },
                 5,
             ),
+            
             // Not planned (low priority or use alternatives)
             ModuleInfo::new(
                 "win_copy".to_string(),
@@ -502,8 +514,7 @@ impl ModuleParityTracker {
     /// Get modules by status.
     pub async fn list_by_status(&self, status: ModuleStatus) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-        modules
-            .values()
+        modules.values()
             .filter(|m| m.status == status)
             .cloned()
             .collect()
@@ -512,8 +523,7 @@ impl ModuleParityTracker {
     /// Get usable modules.
     pub async fn list_usable(&self) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-        modules
-            .values()
+        modules.values()
             .filter(|m| m.status.is_usable())
             .cloned()
             .collect()
@@ -522,12 +532,11 @@ impl ModuleParityTracker {
     /// Get planned modules sorted by priority.
     pub async fn list_planned(&self) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-        let mut planned: Vec<_> = modules
-            .values()
+        let mut planned: Vec<_> = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::Planned))
             .cloned()
             .collect();
-
+        
         planned.sort_by(|a, b| b.priority.cmp(&a.priority));
         planned
     }
@@ -535,12 +544,11 @@ impl ModuleParityTracker {
     /// Get partially implemented modules sorted by implementation percentage.
     pub async fn list_partial(&self) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-        let mut partial: Vec<_> = modules
-            .values()
+        let mut partial: Vec<_> = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::Partial { .. }))
             .cloned()
             .collect();
-
+        
         partial.sort_by(|a, b| {
             let a_pct = a.status.percentage();
             let b_pct = b.status.percentage();
@@ -553,25 +561,26 @@ impl ModuleParityTracker {
     pub async fn parity_percentage(&self) -> f64 {
         let modules = self.modules.read().await;
         let total = modules.len();
-
+        
         if total == 0 {
             return 100.0;
         }
-
-        let implemented: f64 = modules.values().map(|m| m.status.percentage() as f64).sum();
-
+        
+        let implemented: f64 = modules.values()
+            .map(|m| m.status.percentage() as f64)
+            .sum();
+        
         (implemented / (total as f64 * 100.0)) * 100.0
     }
 
     /// Get modules by priority.
     pub async fn list_by_priority(&self, min_priority: u8) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-        let mut result: Vec<_> = modules
-            .values()
+        let mut result: Vec<_> = modules.values()
             .filter(|m| m.priority >= min_priority)
             .cloned()
             .collect();
-
+        
         result.sort_by(|a, b| b.priority.cmp(&a.priority));
         result
     }
@@ -579,11 +588,9 @@ impl ModuleParityTracker {
     /// Get module dependencies.
     pub async fn get_dependencies(&self, module_name: &str) -> Vec<ModuleInfo> {
         let modules = self.modules.read().await;
-
+        
         if let Some(module) = modules.get(module_name) {
-            module
-                .dependencies
-                .iter()
+            module.dependencies.iter()
                 .filter_map(|dep| modules.get(dep).cloned())
                 .collect()
         } else {
@@ -596,18 +603,15 @@ impl ModuleParityTracker {
         let mut missing = Vec::new();
         let mut partial = Vec::new();
         let mut compatible = Vec::new();
-
+        
         for module_name in modules {
             if let Some(info) = self.get_module(module_name).await {
                 match info.status {
                     ModuleStatus::FullyImplemented | ModuleStatus::CompatibilityLayer { .. } => {
                         compatible.push(info);
                     }
-                    ModuleStatus::Partial {
-                        ref missing_features,
-                        ..
-                    } => {
-                        partial.push((info, missing_features.clone()));
+                    ModuleStatus::Partial { ref missing_features, .. } => {
+                        partial.push((info.clone(), missing_features.clone()));
                     }
                     ModuleStatus::Planned | ModuleStatus::NotPlanned | ModuleStatus::Deprecated => {
                         missing.push(info);
@@ -623,7 +627,7 @@ impl ModuleParityTracker {
                 ));
             }
         }
-
+        
         CompatibilityReport {
             total_modules: modules.len(),
             compatible,
@@ -635,39 +639,29 @@ impl ModuleParityTracker {
     /// Generate parity report.
     pub async fn generate_report(&self) -> ParityReport {
         let modules = self.modules.read().await;
-
-        let fully_implemented = modules
-            .values()
+        
+        let fully_implemented = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::FullyImplemented))
             .count();
-
-        let partial = modules
-            .values()
+        
+        let partial = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::Partial { .. }))
             .count();
-
-        let planned = modules
-            .values()
+        
+        let planned = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::Planned))
             .count();
-
-        let compatibility = modules
-            .values()
+        
+        let compatibility = modules.values()
             .filter(|m| matches!(m.status, ModuleStatus::CompatibilityLayer { .. }))
             .count();
-
-        let not_planned = modules
-            .values()
-            .filter(|m| {
-                matches!(
-                    m.status,
-                    ModuleStatus::NotPlanned | ModuleStatus::Deprecated
-                )
-            })
+        
+        let not_planned = modules.values()
+            .filter(|m| matches!(m.status, ModuleStatus::NotPlanned | ModuleStatus::Deprecated))
             .count();
-
+        
         let percentage = self.parity_percentage().await;
-
+        
         ParityReport {
             total_modules: modules.len(),
             fully_implemented,
@@ -691,13 +685,13 @@ impl Default for ModuleParityTracker {
 pub struct CompatibilityReport {
     /// Total modules in playbook.
     pub total_modules: usize,
-
+    
     /// Fully compatible modules.
     pub compatible: Vec<ModuleInfo>,
-
+    
     /// Partially compatible modules with missing features.
     pub partial: Vec<(ModuleInfo, Vec<String>)>,
-
+    
     /// Missing or not planned modules.
     pub missing: Vec<ModuleInfo>,
 }
@@ -713,7 +707,7 @@ impl CompatibilityReport {
         if self.total_modules == 0 {
             return 100.0;
         }
-
+        
         let compatible_count = self.compatible.len() + self.partial.len();
         (compatible_count as f64 / self.total_modules as f64) * 100.0
     }
@@ -724,22 +718,22 @@ impl CompatibilityReport {
 pub struct ParityReport {
     /// Total modules tracked.
     pub total_modules: usize,
-
+    
     /// Fully implemented modules.
     pub fully_implemented: usize,
-
+    
     /// Partially implemented modules.
     pub partially_implemented: usize,
-
+    
     /// Planned modules.
     pub planned: usize,
-
+    
     /// Compatibility layer modules.
     pub compatibility_layer: usize,
-
+    
     /// Not planned modules.
     pub not_planned: usize,
-
+    
     /// Overall parity percentage.
     pub parity_percentage: f64,
 }
@@ -752,7 +746,7 @@ mod tests {
     async fn test_module_tracker_creation() {
         let tracker = ModuleParityTracker::new();
         let modules = tracker.list_modules().await;
-
+        
         assert!(!modules.is_empty());
         assert!(modules.iter().any(|m| m.name == "package"));
     }
@@ -761,7 +755,7 @@ mod tests {
     async fn test_get_module() {
         let tracker = ModuleParityTracker::new();
         let module = tracker.get_module("package").await;
-
+        
         assert!(module.is_some());
         assert_eq!(module.unwrap().name, "package");
     }
@@ -769,16 +763,16 @@ mod tests {
     #[tokio::test]
     async fn test_add_module() {
         let tracker = ModuleParityTracker::new();
-
+        
         let new_module = ModuleInfo::new(
             "test_module".to_string(),
             "test.ansible.module".to_string(),
             ModuleStatus::Planned,
             3,
         );
-
+        
         tracker.add_module(new_module.clone()).await;
-
+        
         let retrieved = tracker.get_module("test_module").await;
         assert!(retrieved.is_some());
     }
@@ -787,7 +781,7 @@ mod tests {
     async fn test_parity_percentage() {
         let tracker = ModuleParityTracker::new();
         let percentage = tracker.parity_percentage().await;
-
+        
         assert!(percentage >= 0.0);
         assert!(percentage <= 100.0);
     }
@@ -795,15 +789,15 @@ mod tests {
     #[tokio::test]
     async fn test_playbook_compatibility() {
         let tracker = ModuleParityTracker::new();
-
+        
         let modules = vec![
             "package".to_string(),
             "service".to_string(),
             "file".to_string(),
         ];
-
+        
         let report = tracker.check_playbook_compatibility(&modules).await;
-
+        
         assert_eq!(report.total_modules, 3);
         assert!(report.compatible.len() >= 2);
     }

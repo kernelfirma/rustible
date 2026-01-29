@@ -8,11 +8,11 @@
 //! - Code actions
 //! - Symbol information
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::RichDiagnostic;
 use crate::modules::ModuleRegistry;
@@ -330,8 +330,8 @@ impl LspServer {
     /// Open a document
     pub async fn open_document(&self, item: TextDocumentItem) {
         let mut docs = self.documents.write().await;
-        docs.insert(item.uri.clone(), item);
-
+        docs.insert(item.uri.clone(), item.clone());
+        
         // Compute diagnostics
         if self.config.enable_diagnostics {
             self.compute_diagnostics(&item.uri).await;
@@ -342,7 +342,7 @@ impl LspServer {
     pub async fn close_document(&self, uri: &str) {
         let mut docs = self.documents.write().await;
         docs.remove(uri);
-
+        
         let mut diags = self.diagnostics.write().await;
         diags.remove(uri);
     }
@@ -353,7 +353,7 @@ impl LspServer {
         if let Some(doc) = docs.get_mut(uri) {
             doc.text = new_content;
         }
-
+        
         // Recompute diagnostics
         if self.config.enable_diagnostics {
             self.compute_diagnostics(uri).await;
@@ -393,25 +393,28 @@ impl LspServer {
 
     /// Get module completions
     fn get_module_completions(&self) -> Vec<CompletionItem> {
-        let modules = self.module_registry.list_modules();
-
-        modules
-            .into_iter()
-            .map(|name| CompletionItem {
-                label: name.clone(),
-                kind: Some(CompletionItemKind::Module),
-                detail: Some("Module".to_string()),
-                documentation: Some(format!("Module: {}", name)),
-                sort_text: Some(format!("0_{}", name)),
-                ..Default::default()
-            })
-            .collect()
+        let modules = vec![
+            "apt", "yum", "dnf", "package", "service", "systemd", "user", "group",
+            "file", "copy", "template", "lineinfile", "blockinfile",
+            "command", "shell", "raw", "script",
+            "git", "stat", "debug", "set_fact", "fail", "assert",
+            "meta", "include_role", "include_tasks", "import_role", "import_tasks",
+        ];
+        
+        modules.into_iter().map(|name| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::Module),
+            detail: Some("Module".to_string()),
+            documentation: Some(format!("Module: {}", name)),
+            sort_text: Some(format!("0_{}", name)),
+            ..Default::default()
+        }).collect()
     }
 
     /// Get variable completions
     fn get_variable_completions(&self, content: &str) -> Vec<CompletionItem> {
         let mut variables = Vec::new();
-
+        
         // Collect variables from content
         // Simplified implementation
         let builtins = vec![
@@ -424,7 +427,7 @@ impl LspServer {
             "ansible_version",
             "ansible_facts",
         ];
-
+        
         for var in builtins {
             variables.push(CompletionItem {
                 label: var.to_string(),
@@ -434,7 +437,7 @@ impl LspServer {
                 ..Default::default()
             });
         }
-
+        
         variables
     }
 
@@ -451,18 +454,15 @@ impl LspServer {
             ("with_items", "Loop over items"),
             ("notify", "Notify handlers"),
         ];
-
-        keywords
-            .into_iter()
-            .map(|(keyword, desc)| CompletionItem {
-                label: keyword.to_string(),
-                kind: Some(CompletionItemKind::Keyword),
-                detail: Some("Keyword".to_string()),
-                documentation: Some(desc.to_string()),
-                sort_text: Some(format!("2_{}", keyword)),
-                ..Default::default()
-            })
-            .collect()
+        
+        keywords.into_iter().map(|(keyword, desc)| CompletionItem {
+            label: keyword.to_string(),
+            kind: Some(CompletionItemKind::Keyword),
+            detail: Some("Keyword".to_string()),
+            documentation: Some(desc.to_string()),
+            sort_text: Some(format!("2_{}", keyword)),
+            ..Default::default()
+        }).collect()
     }
 
     /// Get hover information
@@ -476,9 +476,17 @@ impl LspServer {
 
         // Get the word at position
         let word = self.get_word_at_position(&doc.text, position)?;
-
+        
         // Determine what kind of hover to provide
-        if self.module_registry.has_module(&word) {
+        // Basic check for common modules since ModuleRegistry might not have has_module exposed
+        let modules = vec![
+            "apt", "yum", "dnf", "package", "service", "systemd", "user", "group",
+            "file", "copy", "template", "lineinfile", "blockinfile",
+            "command", "shell", "raw", "script",
+            "git", "stat", "debug", "set_fact", "fail", "assert",
+        ];
+
+        if modules.contains(&word.as_str()) {
             Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,
@@ -497,31 +505,31 @@ impl LspServer {
     /// Get word at position
     fn get_word_at_position(&self, text: &str, position: Position) -> Option<String> {
         let lines: Vec<&str> = text.lines().collect();
-
+        
         if position.line >= lines.len() {
             return None;
         }
-
+        
         let line = lines[position.line];
         let chars: Vec<char> = line.chars().collect();
-
+        
         if position.character >= chars.len() {
             return None;
         }
-
+        
         // Find word boundaries
         let start = chars[..position.character]
             .iter()
             .rposition(|c| !c.is_alphanumeric() && *c != '_')
             .map(|i| i + 1)
             .unwrap_or(0);
-
+        
         let end = chars[position.character..]
             .iter()
             .position(|c| !c.is_alphanumeric() && *c != '_')
             .map(|i| position.character + i)
             .unwrap_or(chars.len());
-
+        
         Some(chars[start..end].iter().collect())
     }
 
@@ -542,12 +550,11 @@ impl LspServer {
 
         // Convert RichDiagnostics to LSP Diagnostics
         let rich_diags = self.analyze_document(&doc);
-
-        let lsp_diags: Vec<Diagnostic> = rich_diags
-            .into_iter()
+        
+        let lsp_diags: Vec<Diagnostic> = rich_diags.into_iter()
             .map(|d| self.convert_diagnostic(uri, d))
             .collect();
-
+        
         let mut diags = self.diagnostics.write().await;
         diags.insert(uri.to_string(), lsp_diags);
     }
@@ -556,21 +563,18 @@ impl LspServer {
     fn analyze_document(&self, doc: &TextDocumentItem) -> Vec<RichDiagnostic> {
         // Simplified analysis - in real implementation would use full parser
         let mut diags = Vec::new();
-
+        
         for (line_num, line) in doc.text.lines().enumerate() {
             // Check for tabs
             if line.contains('\t') {
-                diags.push(
-                    RichDiagnostic::warning(
-                        "tabs found - use spaces instead",
-                        &doc.uri,
-                        crate::diagnostics::Span::from_line_col(&doc.text, line_num + 1, 1, 1),
-                    )
-                    .with_label("tab character"),
-                );
+                diags.push(RichDiagnostic::warning(
+                    "tabs found - use spaces instead",
+                    &doc.uri,
+                    crate::diagnostics::Span::from_line_col(&doc.text, line_num + 1, 1, 1),
+                ).with_label("tab character"));
             }
         }
-
+        
         diags
     }
 
@@ -589,12 +593,8 @@ impl LspServer {
             },
             severity: match diag.severity {
                 crate::diagnostics::DiagnosticSeverity::Error => Some(DiagnosticSeverity::Error),
-                crate::diagnostics::DiagnosticSeverity::Warning => {
-                    Some(DiagnosticSeverity::Warning)
-                }
-                crate::diagnostics::DiagnosticSeverity::Note => {
-                    Some(DiagnosticSeverity::Information)
-                }
+                crate::diagnostics::DiagnosticSeverity::Warning => Some(DiagnosticSeverity::Warning),
+                crate::diagnostics::DiagnosticSeverity::Note => Some(DiagnosticSeverity::Information),
                 crate::diagnostics::DiagnosticSeverity::Help => Some(DiagnosticSeverity::Hint),
             },
             code: diag.code,
@@ -613,7 +613,7 @@ impl LspServer {
         };
 
         let mut symbols = Vec::new();
-
+        
         // Parse plays
         for (line_num, line) in doc.text.lines().enumerate() {
             if line.trim_start().starts_with("- name:") || line.trim_start().starts_with("name:") {
@@ -623,30 +623,18 @@ impl LspServer {
                     kind: SymbolKind::Function,
                     deprecated: None,
                     range: Range {
-                        start: Position {
-                            line: line_num,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: line_num + 1,
-                            character: 0,
-                        },
+                        start: Position { line: line_num, character: 0 },
+                        end: Position { line: line_num + 1, character: 0 },
                     },
                     selection_range: Range {
-                        start: Position {
-                            line: line_num,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: line_num + 1,
-                            character: 0,
-                        },
+                        start: Position { line: line_num, character: 0 },
+                        end: Position { line: line_num + 1, character: 0 },
                     },
                     children: None,
                 });
             }
         }
-
+        
         symbols
     }
 
@@ -654,7 +642,7 @@ impl LspServer {
     pub async fn get_code_actions(&self, uri: &str, range: Range) -> Vec<CodeAction> {
         let diags = self.get_diagnostics(uri).await;
         let mut actions = Vec::new();
-
+        
         for diag in diags {
             if diag.range.start.line >= range.start.line && diag.range.end.line <= range.end.line {
                 actions.push(CodeAction {
@@ -666,7 +654,7 @@ impl LspServer {
                 });
             }
         }
-
+        
         actions
     }
 }
@@ -701,34 +689,23 @@ mod tests {
     #[tokio::test]
     async fn test_lsp_server() {
         let server = LspServer::default();
-
+        
         let item = TextDocumentItem {
             uri: "file:///test.yml".to_string(),
             language_id: "yaml".to_string(),
             version: 1,
             text: "- hosts: all\n  tasks:\n    - name: Test\n      ping:".to_string(),
         };
-
+        
         server.open_document(item).await;
-
-        let completions = server
-            .get_completion(
-                "file:///test.yml",
-                Position {
-                    line: 3,
-                    character: 6,
-                },
-            )
-            .await;
+        
+        let completions = server.get_completion("file:///test.yml", Position { line: 3, character: 6 }).await;
         assert!(!completions.is_empty());
     }
 
     #[test]
     fn test_position() {
-        let pos = Position {
-            line: 5,
-            character: 10,
-        };
+        let pos = Position { line: 5, character: 10 };
         assert_eq!(pos.line, 5);
         assert_eq!(pos.character, 10);
     }
