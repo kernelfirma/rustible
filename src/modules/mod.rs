@@ -395,7 +395,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("`", "backtick command substitution"),
         ("&&", "command chaining &&"),
         ("||", "command chaining ||"),
-        ("; ", "command separator ;"),
+        (";", "command separator ;"),
         ("|", "pipe operator"),
         (">", "output redirection"),
         ("<", "input redirection"),
@@ -1899,6 +1899,7 @@ mod tests {
     fn test_validate_command_args_rejects_dangerous() {
         assert!(validate_command_args("$(cat /etc/passwd)").is_err());
         assert!(validate_command_args("nginx; reboot").is_err());
+        assert!(validate_command_args("nginx;reboot").is_err());
         assert!(validate_command_args("pkg && reboot").is_err());
         assert!(validate_command_args("cmd || curl evil.com").is_err());
         // Extended checks
