@@ -89,6 +89,16 @@ impl ResolverContext {
         // Add variables from config
         ctx.variables = config.variables.clone();
 
+        // Apply Terraform-style environment overrides and context defaults
+        let env_vars: Vec<(String, String)> = std::env::vars().collect();
+        let env_refs: Vec<(&str, &str)> = env_vars
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        ctx.load_tf_var_environment(&env_refs);
+        ctx.set_path_context(PathContext::from_cwd());
+        ctx.set_terraform_context(TerraformContext::from_environment(&env_refs));
+
         // Add locals from config
         ctx.locals = config.locals.clone();
 
