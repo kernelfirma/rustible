@@ -113,7 +113,7 @@ mod win_copy_integration {
 
     #[tokio::test]
     async fn test_win_copy_playbook_parsing() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Win Copy Test");
         let mut play = Play::new("Copy files to Windows", "windows_host");
@@ -228,7 +228,7 @@ mod win_service_integration {
 
     #[tokio::test]
     async fn test_win_service_playbook_parsing() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Win Service Test");
         let mut play = Play::new("Manage Windows services", "windows_host");
@@ -351,7 +351,7 @@ mod win_user_integration {
 
     #[tokio::test]
     async fn test_win_user_playbook_parsing() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Win User Test");
         let mut play = Play::new("Manage Windows users", "windows_host");
@@ -502,7 +502,7 @@ mod win_package_integration {
 
     #[tokio::test]
     async fn test_win_package_playbook_parsing() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Win Package Test");
         let mut play = Play::new("Install Windows packages", "windows_host");
@@ -630,7 +630,7 @@ mod win_feature_integration {
 
     #[tokio::test]
     async fn test_win_feature_playbook_parsing() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Win Feature Test");
         let mut play = Play::new("Install Windows features", "windows_host");
@@ -660,7 +660,7 @@ mod cross_module_integration {
 
     #[tokio::test]
     async fn test_windows_server_setup_playbook() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("Windows Server Setup");
         let mut play = Play::new("Configure Windows Server", "windows_host");
@@ -713,7 +713,7 @@ mod cross_module_integration {
 
     #[tokio::test]
     async fn test_windows_app_deployment_playbook() {
-        let executor = create_test_executor();
+        let _executor = create_test_executor();
 
         let mut playbook = Playbook::new("App Deployment");
         let mut play = Play::new("Deploy application", "windows_host");
