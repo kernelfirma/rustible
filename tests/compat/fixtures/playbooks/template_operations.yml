@@ -1,0 +1,59 @@
+# Template Operations Compatibility Test
+# Tests: template module, Jinja2 filters
+---
+- name: Template Operations Compatibility
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    app_name: myapp
+    app_port: 8080
+    app_users:
+      - name: alice
+        role: admin
+      - name: bob
+        role: user
+    config_options:
+      debug: true
+      log_level: info
+
+  tasks:
+    - name: Test variable interpolation
+      debug:
+        msg: "App {{ app_name }} running on port {{ app_port }}"
+
+    - name: Test default filter
+      debug:
+        msg: "Value: {{ undefined_var | default('fallback') }}"
+
+    - name: Test loop in template context
+      debug:
+        msg: "User: {{ item.name }} ({{ item.role }})"
+      loop: "{{ app_users }}"
+
+    - name: Test to_json filter
+      debug:
+        msg: "{{ config_options | to_json }}"
+
+    - name: Test to_yaml filter
+      debug:
+        msg: "{{ config_options | to_yaml }}"
+
+    - name: Test string filters
+      debug:
+        msg: |
+          upper: {{ app_name | upper }}
+          lower: {{ 'HELLO' | lower }}
+          title: {{ 'hello world' | title }}
+          capitalize: {{ 'hello' | capitalize }}
+
+    - name: Test list filters
+      debug:
+        msg: |
+          first: {{ app_users | first | to_json }}
+          last: {{ app_users | last | to_json }}
+          length: {{ app_users | length }}
+
+    - name: Test ternary/conditional
+      debug:
+        msg: "Debug is {{ 'enabled' if config_options.debug else 'disabled' }}"

@@ -220,10 +220,22 @@ impl OutputFormatter {
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
+                print!(
+                    "{}{:width$}: [{}]",
+                    status_str,
+                    "",
+                    host_str,
+                    width = padding_len
+                );
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!("{}{:width$}: [{}]", status_str, "", host_str, width = padding_len);
+                print!(
+                    "{}{:width$}: [{}]",
+                    status_str,
+                    "",
+                    host_str,
+                    width = padding_len
+                );
             }
         }
 
@@ -285,7 +297,12 @@ impl OutputFormatter {
     /// Print a recap summary
     pub fn recap(&self, stats: &RecapStats) {
         if self.json_mode {
-            println!("{}", serde_json::to_string_pretty(stats).unwrap());
+            let duration = self.start_time.elapsed();
+            let result = serde_json::json!({
+                "hosts": &stats.hosts,
+                "duration_ms": duration.as_millis(),
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
             return;
         }
 
@@ -393,8 +410,8 @@ impl OutputFormatter {
             println!("{}", line);
 
             println!(
-                "  {:<12} : {}",
-                "Duration".bright_white(),
+                "  {} : {}",
+                format!("{:<15}", "⏱️  Duration").bright_white(),
                 duration_str.cyan()
             );
 
@@ -402,8 +419,8 @@ impl OutputFormatter {
                 let failures = stats.total_failed();
                 let status_msg = format!("✖ FAILED ({} errors)", failures);
                 println!(
-                    "  {:<12} : {}",
-                    "Status".bright_white(),
+                    "  {} : {}",
+                    format!("{:<14}", "🏁 Status").bright_white(),
                     status_msg.red().bold()
                 );
             } else {
@@ -417,8 +434,8 @@ impl OutputFormatter {
                     ("✔ SUCCESS (no changes)".to_string(), colored::Color::Green)
                 };
                 println!(
-                    "  {:<12} : {}",
-                    "Status".bright_white(),
+                    "  {} : {}",
+                    format!("{:<14}", "🏁 Status").bright_white(),
                     status_msg.color(status_color).bold()
                 );
             }
@@ -426,25 +443,25 @@ impl OutputFormatter {
             println!();
             if stats.has_failures() {
                 let failures = stats.total_failed();
-                let message = format!("FAILED ({} errors)", failures);
+                let message = format!("✖ FAILED ({} errors)", failures);
                 let width: usize = 60;
                 let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "=".repeat(padding);
-                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                let left_pad = "━".repeat(padding);
+                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("{} {} {}", left_pad, message, right_pad);
                 println!("{}", banner.red().bold());
             } else {
                 let changes = stats.total_changed();
                 let message = if changes > 0 {
-                    format!("SUCCESS ({} changed)", changes)
+                    format!("✔ SUCCESS ({} changed)", changes)
                 } else {
-                    "SUCCESS (no changes)".to_string()
+                    "✔ SUCCESS (no changes)".to_string()
                 };
                 let width: usize = 60;
                 let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "=".repeat(padding);
-                let right_pad = "=".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("[{} {} {}]", left_pad, message, right_pad);
+                let left_pad = "━".repeat(padding);
+                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
+                let banner = format!("{} {} {}", left_pad, message, right_pad);
                 println!("{}", banner.green().bold());
             }
 
@@ -486,7 +503,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            println!("{} {}", "SUCCESS:".green().bold(), message);
+            println!("{} {}", "✔ SUCCESS:".green().bold(), message);
         } else {
             println!("SUCCESS: {}", message);
         }
@@ -504,7 +521,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "ERROR:".red().bold(), message);
+            eprintln!("{} {}", "✖ ERROR:".red().bold(), message);
         } else {
             eprintln!("ERROR: {}", message);
         }
@@ -536,7 +553,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "WARNING:".yellow().bold(), message);
+            eprintln!("{} {}", "⚠ WARNING:".yellow().bold(), message);
         } else {
             eprintln!("WARNING: {}", message);
         }
@@ -554,7 +571,7 @@ impl OutputFormatter {
         }
 
         if self.use_color {
-            eprintln!("{} {}", "HINT:".cyan().bold(), message);
+            eprintln!("{} {}", "💡 HINT:".cyan().bold(), message);
         } else {
             eprintln!("HINT: {}", message);
         }
@@ -579,6 +596,42 @@ impl OutputFormatter {
             println!("{} {}", "INFO:".blue(), message);
         } else {
             println!("INFO: {}", message);
+        }
+    }
+
+    /// Print a created status
+    pub fn created(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "created",
+                "message": message
+            });
+            println!("{}", serde_json::to_string(&success).unwrap());
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "✔ Created".green().bold(), message);
+        } else {
+            println!("Created {}", message);
+        }
+    }
+
+    /// Print a skipped status
+    pub fn skipped(&self, message: &str) {
+        if self.json_mode {
+            let success = serde_json::json!({
+                "type": "skipped",
+                "message": message
+            });
+            println!("{}", serde_json::to_string(&success).unwrap());
+            return;
+        }
+
+        if self.use_color {
+            println!("{} {}", "↷ Skipped".cyan(), message);
+        } else {
+            println!("Skipped {}", message);
         }
     }
 
@@ -898,9 +951,17 @@ fn format_duration(duration: Duration) -> String {
             format!("{}m {}s", mins, secs)
         }
     } else if total_secs > 0 {
-        format!("{}.{:03}s", total_secs, millis)
-    } else {
+        let s = format!("{}.{:03}", total_secs, millis);
+        format!("{}s", s.trim_end_matches('0').trim_end_matches('.'))
+    } else if millis > 0 {
         format!("{}ms", millis)
+    } else {
+        let micros = duration.subsec_micros();
+        if micros > 0 {
+            format!("{}µs", micros)
+        } else {
+            "0ms".to_string()
+        }
     }
 }
 
@@ -959,7 +1020,13 @@ mod tests {
     #[test]
     fn test_format_duration() {
         assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
-        assert_eq!(format_duration(Duration::from_secs(5)), "5.000s");
+        assert_eq!(format_duration(Duration::from_micros(500)), "500µs");
+        assert_eq!(format_duration(Duration::from_micros(5)), "5µs");
+        assert_eq!(format_duration(Duration::ZERO), "0ms");
+        assert_eq!(format_duration(Duration::from_secs(5)), "5s");
+        assert_eq!(format_duration(Duration::from_millis(5500)), "5.5s");
+        assert_eq!(format_duration(Duration::from_millis(5050)), "5.05s");
+        assert_eq!(format_duration(Duration::from_millis(5005)), "5.005s");
         assert_eq!(format_duration(Duration::from_secs(60)), "1m");
         assert_eq!(format_duration(Duration::from_secs(65)), "1m 5s");
         assert_eq!(format_duration(Duration::from_secs(3600)), "1h");

@@ -541,20 +541,24 @@ fn filter_capitalize(value: &str) -> String {
 }
 
 fn filter_title(value: &str) -> String {
-    value
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c
-                    .to_uppercase()
-                    .chain(chars.map(|c| c.to_lowercase().next().unwrap_or(c)))
-                    .collect(),
+    let mut result = String::with_capacity(value.len());
+    for (i, word) in value.split_whitespace().enumerate() {
+        if i > 0 {
+            result.push(' ');
+        }
+        let mut chars = word.chars();
+        if let Some(c) = chars.next() {
+            for uc in c.to_uppercase() {
+                result.push(uc);
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+            for rc in chars {
+                for lc in rc.to_lowercase() {
+                    result.push(lc);
+                }
+            }
+        }
+    }
+    result
 }
 
 fn filter_trim(value: &str) -> String {
@@ -573,7 +577,7 @@ fn filter_regex_replace(
     let re = get_regex(pattern).map_err(|e| {
         minijinja::Error::new(ErrorKind::InvalidOperation, format!("Invalid regex: {}", e))
     })?;
-    Ok(re.replace_all(value, replacement).to_string())
+    Ok(re.replace_all(value, replacement).into_owned())
 }
 
 /// Search for a pattern in a string.
@@ -608,11 +612,15 @@ fn filter_split(value: &str, sep: Option<&str>) -> Vec<String> {
 
 fn filter_join(value: Vec<MiniJinjaValue>, sep: Option<&str>) -> String {
     let sep = sep.unwrap_or("");
-    value
-        .iter()
-        .map(|v| v.to_string())
-        .collect::<Vec<_>>()
-        .join(sep)
+    let mut result = String::with_capacity(value.len() * 16);
+    use std::fmt::Write;
+    for (i, v) in value.iter().enumerate() {
+        if i > 0 {
+            result.push_str(sep);
+        }
+        let _ = write!(result, "{}", v);
+    }
+    result
 }
 
 fn filter_int(value: MiniJinjaValue) -> i64 {
@@ -771,7 +779,7 @@ fn filter_expanduser(value: &str) -> String {
     }
     if let Some(rest) = value.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
-            return home.join(rest).to_string_lossy().to_string();
+            return home.join(rest).to_string_lossy().into_owned();
         }
     }
     value.to_string()
@@ -782,7 +790,7 @@ fn filter_realpath(value: &str) -> String {
         return value.to_string();
     }
     std::fs::canonicalize(value)
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| value.to_string())
 }
 
@@ -1511,5 +1519,39 @@ mod tests {
             .render("{{ ('a: 1' | from_yaml).a }}", &vars)
             .unwrap();
         assert_eq!(result.trim(), "1");
+    }
+
+    #[test]
+    fn test_filter_join() {
+        // Test basic join
+        let items = vec![
+            MiniJinjaValue::from("a"),
+            MiniJinjaValue::from("b"),
+            MiniJinjaValue::from("c"),
+        ];
+        assert_eq!(filter_join(items.clone(), Some(",")), "a,b,c");
+
+        // Test join with default separator
+        assert_eq!(filter_join(items.clone(), None), "abc");
+
+        // Test empty join
+        assert_eq!(filter_join(vec![], Some(",")), "");
+
+        // Test join with mixed types
+        let mixed = vec![
+            MiniJinjaValue::from("a"),
+            MiniJinjaValue::from(1),
+            MiniJinjaValue::from(true),
+        ];
+        assert_eq!(filter_join(mixed, Some("-")), "a-1-true");
+    }
+
+    #[test]
+    fn test_filter_title() {
+        assert_eq!(filter_title("hello world"), "Hello World");
+        assert_eq!(filter_title("HELLO WORLD"), "Hello World");
+        assert_eq!(filter_title("hello   world"), "Hello World");
+        assert_eq!(filter_title(""), "");
+        assert_eq!(filter_title("a"), "A");
     }
 }

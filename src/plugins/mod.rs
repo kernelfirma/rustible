@@ -97,4 +97,10 @@ pub mod provider;
 pub mod prelude {
     pub use super::filter::FilterRegistry;
     pub use super::lookup::prelude::*;
+    pub use super::provider::{
+        ModuleContext, ModuleDescriptor, ModuleOutput, ModuleParams, OutputDescriptor,
+        ParameterDescriptor, Provider, ProviderCapability, ProviderDependency, ProviderError,
+        ProviderIndex, ProviderIndexEntry, ProviderMetadata, ProviderRegistry,
+        ProviderRegistryIndex,
+    };
 }

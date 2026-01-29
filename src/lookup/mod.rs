@@ -40,12 +40,16 @@ pub mod file;
 pub mod password;
 pub mod pipe;
 pub mod url;
+#[cfg(feature = "experimental")]
+pub mod vault;
 
 pub use env::EnvLookup;
 pub use file::FileLookup;
 pub use password::PasswordLookup;
 pub use pipe::PipeLookup;
 pub use url::UrlLookup;
+#[cfg(feature = "experimental")]
+pub use vault::VaultLookup;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -242,6 +246,10 @@ impl LookupRegistry {
         registry.register(Arc::new(PipeLookup::new()));
         registry.register(Arc::new(UrlLookup::new()));
 
+        // Register Vault lookup when experimental feature is enabled
+        #[cfg(feature = "experimental")]
+        registry.register(Arc::new(VaultLookup::new()));
+
         registry
     }
 
@@ -335,6 +343,8 @@ pub mod prelude {
     pub use super::PasswordLookup;
     pub use super::PipeLookup;
     pub use super::UrlLookup;
+    #[cfg(feature = "experimental")]
+    pub use super::VaultLookup;
 }
 
 #[cfg(test)]

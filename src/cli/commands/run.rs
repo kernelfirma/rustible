@@ -6,6 +6,7 @@ use super::{CommandContext, Runnable};
 use crate::cli::output::RecapStats;
 use anyhow::Result;
 use clap::Parser;
+use dialoguer::theme::ColorfulTheme;
 use indexmap::IndexMap;
 use regex::Regex;
 use rustible::diagnostics::yaml_syntax_error;
@@ -78,6 +79,14 @@ pub struct RunArgs {
     /// Plan mode - show what would be executed without running
     #[arg(long)]
     pub plan: bool,
+
+    /// Agent mode - use persistent agent on targets for faster execution
+    #[arg(long)]
+    pub agent_mode: bool,
+
+    /// Agent socket path on remote hosts
+    #[arg(long, default_value = "/var/run/rustible-agent.sock")]
+    pub agent_socket: String,
 }
 
 impl RunArgs {
@@ -277,7 +286,7 @@ impl RunArgs {
             .any(|host| runtime.get_var("ansible_ssh_pass", Some(host)).is_some());
         let ssh_password = if !has_extra_ssh_pass && !has_inventory_ssh_pass {
             if self.ask_pass {
-                Some(Self::prompt_ssh_password(ctx)?)
+                Some(Self::prompt_ssh_password(ctx, self.user.as_deref())?)
             } else {
                 crate::cli::env::ssh_password()
             }
@@ -293,7 +302,7 @@ impl RunArgs {
             ctx.config.privilege_escalation.become_ask_pass,
         );
         let become_password = if ask_become_pass {
-            Some(Self::prompt_become_password(ctx)?)
+            Some(Self::prompt_become_password(ctx, &self.become_user)?)
         } else {
             None
         };
@@ -361,13 +370,6 @@ impl RunArgs {
 
         // Print recap
         ctx.output.recap(&stats);
-
-        // Print timing
-        let duration = start_time.elapsed();
-        ctx.output.info(&format!(
-            "Playbook finished in {:.2}s",
-            duration.as_secs_f64()
-        ));
 
         // Return exit code
         if has_failures {
@@ -990,18 +992,26 @@ impl RunArgs {
         ask_become_pass || config_ask_pass
     }
 
-    fn prompt_ssh_password(ctx: &CommandContext) -> Result<String> {
+    fn prompt_ssh_password(ctx: &CommandContext, user: Option<&str>) -> Result<String> {
         ctx.output.flush();
-        let password = dialoguer::Password::new()
-            .with_prompt("SSH password")
+        let prompt = if let Some(u) = user {
+            format!("🔑 SSH Password for '{}'", u)
+        } else {
+            "🔑 SSH Password".to_string()
+        };
+
+        let password = dialoguer::Password::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
             .interact()?;
         Ok(password)
     }
 
-    fn prompt_become_password(ctx: &CommandContext) -> Result<String> {
+    fn prompt_become_password(ctx: &CommandContext, user: &str) -> Result<String> {
         ctx.output.flush();
-        let password = dialoguer::Password::new()
-            .with_prompt("Become password")
+        let prompt = format!("⚡ Privilege Escalation Password for '{}'", user);
+
+        let password = dialoguer::Password::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
             .interact()?;
         Ok(password)
     }

@@ -21,8 +21,14 @@ docs/
 ├── guides/        # User tutorials
 ├── reference/     # API and module docs
 ├── architecture/  # Design decisions
+├── compatibility/ # Ansible/Terraform parity matrices
 └── development/   # Contributor docs
 ```
+
+## Compatibility
+
+- [Ansible Compatibility Matrix](compatibility/ansible.md) - Feature and module parity
+- [Terraform Integration](compatibility/terraform.md) - Provisioning capabilities
 
 ## Guides
 

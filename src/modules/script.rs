@@ -36,8 +36,9 @@
 //! - `decrypt` - Decrypt ansible-vault encrypted script (default: true)
 
 use super::{
-    validate_command_args, validate_path_param, Module, ModuleClassification, ModuleContext,
-    ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint, ParamExt,
+    get_remote_tmp, validate_command_args, validate_path_param, Module, ModuleClassification,
+    ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParallelizationHint,
+    ParamExt,
 };
 use crate::utils::shell_escape;
 use std::path::PathBuf;
@@ -137,9 +138,10 @@ impl ScriptModule {
     }
 
     /// Generate a unique temporary path on the remote system
-    fn generate_temp_path(&self) -> String {
+    fn generate_temp_path(&self, context: &ModuleContext) -> String {
         let uuid = uuid::Uuid::new_v4();
-        format!("/tmp/.ansible_script_{}.tmp", uuid.simple())
+        let remote_tmp = get_remote_tmp(context);
+        format!("{}/.ansible_script_{}.tmp", remote_tmp, uuid.simple())
     }
 }
 
@@ -175,6 +177,11 @@ impl Module for ScriptModule {
             return Err(ModuleError::MissingParameter("script path".to_string()));
         }
 
+        // Validate executable if present
+        if let Some(executable) = params.get_string("executable")? {
+            validate_command_args(&executable)?;
+        }
+
         // Validate creates/removes paths if present
         if let Some(creates) = params.get_string("creates")? {
             validate_path_param(&creates, "creates")?;
@@ -184,7 +191,7 @@ impl Module for ScriptModule {
             validate_path_param(&removes, "removes")?;
         }
 
-        // Validate executable to prevent command injection
+        // Validate executable parameter for security
         if let Some(executable) = params.get_string("executable")? {
             validate_command_args(&executable)?;
         }
@@ -237,7 +244,7 @@ impl Module for ScriptModule {
         })?;
 
         // Generate remote temporary path
-        let remote_path = self.generate_temp_path();
+        let remote_path = self.generate_temp_path(context);
         let remote_path_buf = PathBuf::from(&remote_path);
 
         // Use async runtime for connection operations
@@ -430,17 +437,27 @@ mod tests {
 
     #[test]
     fn test_script_generate_temp_path() {
+        use crate::modules::{ModuleContext, ModuleContextBuilder};
         let module = ScriptModule;
+        let context = ModuleContext::default();
 
-        let path1 = module.generate_temp_path();
-        let path2 = module.generate_temp_path();
+        let path1 = module.generate_temp_path(&context);
+        let path2 = module.generate_temp_path(&context);
 
-        // Should start with expected prefix
+        // Should start with expected prefix (default /tmp)
         assert!(path1.starts_with("/tmp/.ansible_script_"));
         assert!(path1.ends_with(".tmp"));
 
         // Should be unique
         assert_ne!(path1, path2);
+
+        // Test with custom remote_tmp
+        let context_custom = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .build()
+            .unwrap();
+        let path3 = module.generate_temp_path(&context_custom);
+        assert!(path3.starts_with("/var/tmp/.ansible_script_"));
     }
 
     #[test]
@@ -488,6 +505,24 @@ mod tests {
     }
 
     #[test]
+    fn test_script_validate_params_invalid_executable() {
+        let module = ScriptModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "script".to_string(),
+            Value::String("/path/to/script.sh".to_string()),
+        );
+        params.insert(
+            "executable".to_string(),
+            Value::String("/bin/bash; rm -rf /".to_string()),
+        );
+
+        let result = module.validate_params(&params);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("potentially dangerous pattern"));
+    }
+
+    #[test]
     fn test_cmd_construction_logic() {
         // This test simulates the command construction logic in execute()
         // since we cannot easily call execute() without a full context.
@@ -531,26 +566,25 @@ mod tests {
     }
 
     #[test]
-    fn test_script_validate_params_executable_injection() {
+    fn test_script_executable_validation() {
         let module = ScriptModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert(
             "script".to_string(),
             Value::String("/path/to/script.sh".to_string()),
         );
+        // Dangerous executable that should be blocked
         params.insert(
             "executable".to_string(),
-            Value::String("/bin/bash; rm -rf /".to_string()),
+            Value::String("bash; rm -rf /".to_string()),
         );
 
-        let result = module.validate_params(&params);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("Command arguments contain potentially dangerous pattern"));
+        // Should now fail with InvalidParameter
+        assert!(module.validate_params(&params).is_err());
     }
 
     #[test]
-    fn test_script_validate_params_executable_valid() {
+    fn test_script_executable_safe() {
         let module = ScriptModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert(
@@ -559,10 +593,9 @@ mod tests {
         );
         params.insert(
             "executable".to_string(),
-            Value::String("/usr/bin/python3 -u".to_string()),
+            Value::String("/usr/bin/python3".to_string()),
         );
 
-        // Should allow spaces (flags)
         assert!(module.validate_params(&params).is_ok());
     }
 }

@@ -3,12 +3,14 @@
 //! This module provides the command-line interface for Rustible,
 //! including argument parsing, configuration loading, and subcommand handling.
 
+pub mod change_detection;
 pub mod commands;
 pub mod completions;
 pub mod diff;
 pub mod interactive;
 pub mod json_output;
 pub mod output;
+pub mod plan;
 pub mod progress;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -128,9 +130,101 @@ pub enum Commands {
     #[command(name = "lock")]
     Lock(commands::lock::LockArgs),
 
+    /// Terraform provisioner mode for local-exec integration
+    #[command(name = "provisioner")]
+    Provisioner(commands::provisioner::ProvisionerArgs),
+
+    /// Manage providers (install, update, verify)
+    #[command(name = "provider")]
+    Provider(commands::provider::ProviderArgs),
+
     /// Explain an error code (like `rustc --explain`)
     #[command(name = "explain")]
     Explain(ExplainArgs),
+
+    /// Agent operations (build, deploy, status)
+    #[command(name = "agent")]
+    Agent(AgentArgs),
+}
+
+/// Arguments for agent command
+#[derive(Parser, Debug, Clone)]
+pub struct AgentArgs {
+    /// Agent subcommand
+    #[command(subcommand)]
+    pub command: AgentCommand,
+}
+
+/// Agent subcommands
+#[derive(Subcommand, Debug, Clone)]
+pub enum AgentCommand {
+    /// Build agent binary for target architecture
+    Build(AgentBuildArgs),
+
+    /// Deploy agent to target hosts
+    Deploy(AgentDeployArgs),
+
+    /// Check agent status on hosts
+    Status(AgentStatusArgs),
+
+    /// Stop agent on hosts
+    Stop(AgentStopArgs),
+}
+
+/// Arguments for agent build
+#[derive(Parser, Debug, Clone)]
+pub struct AgentBuildArgs {
+    /// Target triple (e.g., x86_64-unknown-linux-gnu)
+    #[arg(long, short = 't')]
+    pub target: Option<String>,
+
+    /// Build in debug mode (default: release)
+    #[arg(long)]
+    pub debug: bool,
+
+    /// Output directory for agent binary
+    #[arg(long, short = 'o', default_value = "target/agent")]
+    pub output: PathBuf,
+
+    /// Strip binary symbols for smaller size
+    #[arg(long, default_value = "true")]
+    pub strip: bool,
+}
+
+/// Arguments for agent deploy
+#[derive(Parser, Debug, Clone)]
+pub struct AgentDeployArgs {
+    /// Path to agent binary (or use --build to build first)
+    #[arg(long)]
+    pub binary: Option<PathBuf>,
+
+    /// Build agent before deploying
+    #[arg(long)]
+    pub build: bool,
+
+    /// Target triple for build
+    #[arg(long)]
+    pub target: Option<String>,
+
+    /// Remote path to install agent
+    #[arg(long, default_value = "/usr/local/bin/rustible-agent")]
+    pub remote_path: String,
+}
+
+/// Arguments for agent status
+#[derive(Parser, Debug, Clone)]
+pub struct AgentStatusArgs {
+    /// Show detailed status
+    #[arg(long, short = 'd')]
+    pub detailed: bool,
+}
+
+/// Arguments for agent stop
+#[derive(Parser, Debug, Clone)]
+pub struct AgentStopArgs {
+    /// Force stop without graceful shutdown
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// Arguments for explain command

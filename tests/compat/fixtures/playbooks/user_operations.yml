@@ -1,0 +1,61 @@
+# User Operations Compatibility Test
+# Tests: user, group modules
+---
+- name: User Operations Compatibility
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_group: rustible_test_group
+    test_user: rustible_test_user
+
+  tasks:
+    - name: Check group creation
+      group:
+        name: "{{ test_group }}"
+        state: present
+        gid: 9999
+      check_mode: true
+
+    - name: Check user creation
+      user:
+        name: "{{ test_user }}"
+        state: present
+        uid: 9999
+        group: "{{ test_group }}"
+        shell: /bin/bash
+        home: "/home/{{ test_user }}"
+        comment: "Rustible Test User"
+        create_home: true
+      check_mode: true
+
+    - name: Check user with multiple groups
+      user:
+        name: "{{ test_user }}"
+        groups:
+          - users
+          - wheel
+        append: true
+      check_mode: true
+      ignore_errors: true
+
+    - name: Check user password setting
+      user:
+        name: "{{ test_user }}"
+        password: "{{ 'password123' | password_hash('sha512') }}"
+        update_password: on_create
+      check_mode: true
+      ignore_errors: true
+
+    - name: Check user removal
+      user:
+        name: "{{ test_user }}"
+        state: absent
+        remove: true
+      check_mode: true
+
+    - name: Check group removal
+      group:
+        name: "{{ test_group }}"
+        state: absent
+      check_mode: true

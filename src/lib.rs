@@ -233,6 +233,9 @@ pub mod vars;
 /// Retry utilities with backoff and jitter strategies.
 pub mod retry;
 
+/// Pre-execution validation with syntax checking, schema validation, and linting.
+pub mod validation;
+
 // ============================================================================
 // Playbook Components
 // ============================================================================
@@ -411,6 +414,9 @@ pub mod strategy;
 /// let status = cache.status();
 /// println!("Cache hit rate: {:.2}%", status.facts_hit_rate * 100.0);
 /// # Ok(())
+
+/// Performance benchmarking and comparison against Ansible.
+pub mod benchmarks;
 /// # }
 /// ```
 pub mod cache;
@@ -469,6 +475,8 @@ pub mod modules;
 /// a syntax compatible with Ansible's Jinja2 templates. Supports filters,
 /// tests, and custom extensions.
 pub mod template;
+/// Jinja2-compatible template filters and extensions.
+pub mod templating;
 
 // ============================================================================
 // Plugins and Lookups
@@ -559,6 +567,9 @@ pub mod callback;
 // Diagnostics and Debugging
 // ============================================================================
 
+/// Language Server Protocol (LSP) for IDE integration.
+pub mod lsp;
+
 /// Diagnostic tools for debugging and troubleshooting.
 ///
 /// Provides debugging capabilities: Debug Mode, Variable Inspection,
@@ -600,12 +611,57 @@ pub mod telemetry;
 
 /// State management system for tracking execution state, diffs, and rollback.
 ///
+
+/// Configuration drift detection and reporting.
+pub mod drift;
 /// This module provides comprehensive state tracking, persistence, diff reporting,
 /// rollback capability, and dependency tracking between tasks.
 pub mod state;
 
 /// Recovery system for handling failures, checkpoints, and transactions.
 pub mod recovery;
+
+// ============================================================================
+// Distributed Execution
+// ============================================================================
+
+/// Distributed execution support for scaling across multiple controllers.
+///
+/// This module provides distributed execution capabilities, allowing Rustible
+/// to scale across multiple controller nodes for improved performance and
+/// fault tolerance.
+///
+/// # Architecture
+///
+/// The distributed execution system uses a leader-follower architecture:
+/// - **Leader**: Coordinates work distribution and maintains cluster state
+/// - **Followers**: Execute assigned work units and report results
+/// - **Candidates**: Nodes participating in leader election
+///
+/// Leader election is handled via the Raft consensus protocol.
+///
+/// # Example
+///
+/// ```rust,ignore,no_run
+/// use rustible::distributed::{Controller, ClusterConfig, ControllerId};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = ClusterConfig {
+///         cluster_id: "my-cluster".to_string(),
+///         controller_id: ControllerId::new("ctrl-1"),
+///         bind_address: "127.0.0.1:9000".parse()?,
+///         peers: vec!["127.0.0.1:9001".parse()?],
+///         ..Default::default()
+///     };
+///
+///     let controller = Controller::new(config).await?;
+///     controller.start().await?;
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "distributed")]
+pub mod distributed;
 
 // ============================================================================
 // Infrastructure Provisioning (Terraform-like)
@@ -776,6 +832,67 @@ pub mod galaxy;
 /// # }
 /// ```
 pub mod lockfile;
+
+// ============================================================================
+// Native System Bindings
+// ============================================================================
+
+/// Native bindings for system operations with reduced shell overhead.
+///
+/// This module provides direct system API access for common operations,
+/// improving performance by avoiding shell command invocation where possible.
+///
+/// # Features
+///
+/// - **APT**: Native dpkg status parsing for package queries
+/// - **Systemd**: Unit status and configuration via systemctl/D-Bus
+/// - **Users**: libc-based user/group lookups
+///
+/// # Example
+///
+/// ```rust,ignore,no_run
+/// use rustible::native::{apt, systemd, users};
+///
+/// // Native package lookup
+/// let mut apt = apt::AptNative::new()?;
+/// if let Some(pkg) = apt.get_package("nginx")? {
+///     println!("Version: {}", pkg.version);
+/// }
+///
+/// // Native user lookup
+/// if let Some(user) = users::get_user_by_name("www-data")? {
+///     println!("UID: {}", user.uid);
+/// }
+/// ```
+#[cfg(unix)]
+pub mod native;
+
+// ============================================================================
+// Agent Mode
+// ============================================================================
+
+/// Agent mode for persistent target execution.
+///
+/// This module provides an agent that can be deployed to target hosts for
+/// persistent, low-latency command execution without SSH connection overhead.
+///
+/// # Features
+///
+/// - **Agent Binary**: Deployable Rust binary for target hosts
+/// - **Persistent Connection**: Long-running process for rapid task execution
+/// - **Local Socket**: Unix socket or TCP for communication
+/// - **Checksum Verification**: Ensure binary integrity
+///
+/// # Example
+///
+/// ```bash
+/// # Build agent binary
+/// rustible agent-build --target x86_64-unknown-linux-gnu
+///
+/// # Run playbook in agent mode
+/// rustible run playbook.yml --agent-mode
+/// ```
+pub mod agent;
 
 // ============================================================================
 // Version Information

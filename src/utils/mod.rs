@@ -3,6 +3,9 @@
 pub mod regex_cache;
 pub use regex_cache::get_regex;
 
+pub mod fs;
+pub use fs::secure_write_file;
+
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
@@ -230,13 +233,13 @@ mod tests {
     fn test_shell_escape_cow() {
         // Verify we are actually avoiding allocation
         match shell_escape("simple") {
-            Cow::Borrowed(_) => {},
+            Cow::Borrowed(_) => {}
             Cow::Owned(_) => panic!("Should be borrowed"),
         }
 
         match shell_escape("with space") {
             Cow::Borrowed(_) => panic!("Should be owned"),
-            Cow::Owned(_) => {},
+            Cow::Owned(_) => {}
         }
     }
 

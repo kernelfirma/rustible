@@ -717,16 +717,28 @@ rustible run playbook.yml -f 10
 - Vault encryption (different format, see below)
 - Privilege escalation (`become`)
 
-### Q: What features are NOT supported?
+### Q: What features are available with feature flags?
 
-**A:**
-- **Cloud provider modules** (aws_*, azure_*, gcp_*)
-- **Network modules** (ios_*, nxos_*, junos_*)
-- **Database modules** (mysql_*, postgresql_*)
-- **Windows modules** (win_*)
-- **Some advanced Jinja2 filters**
+**A:** Many additional modules are available via feature flags:
 
-**Workaround:** Use `command` or `shell` modules for unsupported functionality.
+| Feature Flag | Modules | Status |
+|--------------|---------|--------|
+| `docker` | docker_container, docker_image, docker_network, docker_volume, docker_compose | Stable |
+| `kubernetes` | k8s_deployment, k8s_service, k8s_configmap, k8s_secret, k8s_namespace | Stable |
+| `aws` | aws_ec2, aws_s3, aws_iam_role, aws_iam_policy | Stable |
+| `azure` | azure_vm | Experimental |
+| `gcp` | gcp_compute | Experimental |
+| `winrm` | win_copy, win_feature, win_service, win_package, win_user | Experimental |
+| `database` | postgresql_*, mysql_* | Disabled (pending sqlx) |
+
+**Network device modules** (ios_config, eos_config, junos_config, nxos_config) are always available.
+
+Build with features:
+```bash
+cargo build --release --features "docker,kubernetes,aws"
+```
+
+See the [Compatibility Matrix](compatibility/ansible.md) for full details.
 
 ### Q: How do I migrate my Ansible playbooks?
 

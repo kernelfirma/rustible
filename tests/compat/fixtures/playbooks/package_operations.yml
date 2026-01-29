@@ -1,0 +1,43 @@
+# Package Operations Compatibility Test
+# Tests: package, apt, yum module parameters
+---
+- name: Package Operations Compatibility
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    test_packages:
+      - name: curl
+        state: present
+      - name: wget
+        state: present
+
+  tasks:
+    - name: Check package state (apt)
+      when: ansible_os_family == "Debian"
+      apt:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+      loop: "{{ test_packages }}"
+      check_mode: true
+
+    - name: Check package state (yum/dnf)
+      when: ansible_os_family == "RedHat"
+      yum:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+      loop: "{{ test_packages }}"
+      check_mode: true
+
+    - name: Use generic package module
+      package:
+        name: curl
+        state: present
+      check_mode: true
+
+    - name: Test package with version constraint
+      package:
+        name: "curl>=7.0"
+        state: present
+      check_mode: true
+      ignore_errors: true

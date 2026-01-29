@@ -144,7 +144,10 @@ pub use error::{ProvisioningError, ProvisioningResult};
 pub use executor::ProvisioningExecutor;
 pub use plan::{ExecutionPlan, PlannedAction, ResourceChange};
 pub use registry::{parse_resource_type, ProviderRegistry, ResourceRegistry};
-pub use resolver::{ResolvedConfig, ResolverContext, TemplateResolver};
+pub use resolver::{
+    PathContext, ProvisionerContext, ResolvedConfig, ResolverContext, TemplateResolver,
+    TerraformContext,
+};
 pub use state::{
     DiffSummary, MigrationRegistry, MigrationV1ToV2, OutputValue, ProvisioningState,
     ProvisioningStateDiff, ResourceId, ResourceIndex, ResourceState, StateChange, StateChangeType,

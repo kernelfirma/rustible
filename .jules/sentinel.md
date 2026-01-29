@@ -43,7 +43,21 @@
 **Learning:** Functions that handle external content (like downloads) must never assume the content fits in memory. Always assume inputs can be arbitrarily large.
 **Prevention:** Use streaming I/O (`std::io::copy` with `response` as a reader) to stream data directly to disk. Always configure timeouts for network operations to prevent indefinite hanging.
 
-## 2024-05-30 - Command Injection in Script Module
-**Vulnerability:** The `script` module allowed command injection via the `executable` parameter. This parameter was injected directly into the shell command string without validation or escaping, allowing an attacker to execute arbitrary commands if they could control the `executable` input.
-**Learning:** Even parameters that seem like they should be simple commands (like an interpreter path) can be vectors for injection if not validated. Relying on "it should just be a path" is not enough.
-**Prevention:** Validate all inputs that go into shell commands. Use strict validation (allowlists) where possible. For command arguments, ensure dangerous shell characters (`;`, `|`, `&`, etc.) are rejected unless strictly necessary and safe.
+## 2024-05-30 - Insecure Temporary File Location
+**Vulnerability:** The `user` and `script` modules were using hardcoded `/tmp` paths for temporary files. This ignores system configuration (`TMPDIR`) and can cause failures on systems where `/tmp` is mounted with `noexec` or is otherwise restricted.
+**Learning:** Hardcoding `/tmp` is brittle and potentially insecure in multi-tenant environments. Applications should respect environment variables or configuration for temporary directories.
+**Prevention:** Use a helper function to resolve the temporary directory from configuration (e.g., `ansible_remote_tmp`) or environment variables, falling back to `/tmp` only if necessary.
+
+## 2026-01-26 - Unauthenticated WebSocket Access
+**Vulnerability:** The `job_ws_handler` allowed unauthenticated connections to stream job output, relying only on knowledge of the Job UUID.
+**Learning:** WebSocket handlers often bypass standard HTTP middleware stacks used for REST endpoints. Authentication must be explicitly implemented in the upgrade handler. Since browsers cannot easily set custom headers for WebSocket handshakes, tokens are often passed via query parameters.
+**Prevention:** Enforce authentication in WebSocket handlers before upgrading the connection. Use a strictly typed query parameter struct (e.g., `WsParams { token: String }`) to extract and validate credentials.
+## 2025-05-31 - Insecure File Creation (TOCTOU) in Lineinfile/Blockinfile
+**Vulnerability:** The `lineinfile` and `blockinfile` modules were using `fs::write` followed by `fs::set_permissions`, creating a race condition where the file existed with default permissions (potentially world-readable) before being restricted.
+**Learning:** Convenience functions like `fs::write` are not secure when specific permissions are required for sensitive files. Atomicity is key.
+**Prevention:** Use `std::fs::OpenOptions` with platform-specific extensions (like `OpenOptionsExt` on Unix) to set permissions *at creation time* (e.g., `options.mode(0o600)`).
+
+## 2025-05-31 - Command Injection in Script and Service Modules
+**Vulnerability:** The `ScriptModule` injected the `executable` parameter directly into a shell command, and `ServiceModule` did the same for `arguments`. The `validate_command_args` helper was insufficient, allowing command separators like `;` and background operators `&` to bypass validation.
+**Learning:** Partial validation of shell arguments is often insufficient. If a parameter is injected raw into a shell string, it must not contain ANY shell metacharacters unless the context is fully understood.
+**Prevention:** Strengthen `validate_command_args` to strictly block `;` and `&`. Always apply validation to parameters like `executable` that are injected into shell commands. Ideally, avoid shell string construction entirely.

@@ -3,8 +3,8 @@
 //! This module manages user accounts on the system.
 
 use super::{
-    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt,
+    get_remote_tmp, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput,
+    ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions, TransferOptions};
 use crate::utils::shell_escape;
@@ -218,7 +218,7 @@ impl UserModule {
 
         if let Some(comment) = comment {
             cmd_parts.push("-c".to_string());
-            cmd_parts.push(format!("'{}'", comment.replace('\'', "'\\''")));
+            cmd_parts.push(shell_escape(comment).into_owned());
         }
 
         if create_home {
@@ -323,7 +323,7 @@ impl UserModule {
         if let Some(comment) = comment {
             if current.comment != comment {
                 cmd_parts.push("-c".to_string());
-                cmd_parts.push(format!("'{}'", comment.replace('\'', "'\\''")));
+                cmd_parts.push(shell_escape(comment).into_owned());
                 needs_change = true;
             }
         }
@@ -391,7 +391,9 @@ impl UserModule {
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         // Use a temporary file to avoid exposing password in process list via echo
-        let temp_path = format!("/tmp/.ansible_passwd_{}", Uuid::new_v4());
+        // Respects ansible_remote_tmp if set
+        let remote_tmp = get_remote_tmp(context);
+        let temp_path = format!("{}/.ansible_passwd_{}", remote_tmp, Uuid::new_v4());
         let passwd_entry = format!("{}:{}", name, password);
 
         // Upload content to temp file with 600 permissions
@@ -526,16 +528,16 @@ impl UserModule {
         // Generate SSH key
         let passphrase = ssh_key_passphrase.unwrap_or("");
         let comment_arg = ssh_key_comment
-            .map(|c| format!("-C '{}'", c.replace('\'', "'\\''")))
+            .map(|c| format!("-C {}", shell_escape(c)))
             .unwrap_or_default();
 
         let keygen_cmd = format!(
-            "ssh-keygen -t {} -b {} -f {} {} -N '{}'",
+            "ssh-keygen -t {} -b {} -f {} {} -N {}",
             ssh_key_type,
             ssh_key_bits,
             shell_escape(&key_file),
             comment_arg,
-            passphrase.replace('\'', "'\\''")
+            shell_escape(passphrase)
         );
 
         let (success, _, stderr) = Self::execute_command(connection, &keygen_cmd, context)?;
@@ -830,5 +832,25 @@ mod tests {
     fn test_user_module_required_params() {
         let module = UserModule;
         assert_eq!(module.required_params(), &["name"]);
+    }
+
+    #[test]
+    fn test_shell_escape_for_user_inputs() {
+        use crate::utils::shell_escape;
+        // Verify shell_escape behavior for tricky strings seen in user module
+        let comment = "User's Comment";
+        // Old: format!("'{}'", comment.replace('\'', "'\\''")) -> 'User'\''s Comment'
+        // New: shell_escape(comment) -> 'User'\''s Comment'
+        assert_eq!(shell_escape(comment), "'User'\\''s Comment'");
+
+        let passphrase = "pass ' phrase";
+        assert_eq!(shell_escape(passphrase), "'pass '\\'' phrase'");
+
+        let safe = "simple";
+        // shell_escape returns borrowed for safe strings if possible, but here we check the string value
+        assert_eq!(shell_escape(safe), "simple");
+
+        // Verify empty string handling (critical for -N '' in ssh-keygen)
+        assert_eq!(shell_escape(""), "''");
     }
 }

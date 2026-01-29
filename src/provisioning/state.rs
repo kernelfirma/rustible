@@ -2092,6 +2092,809 @@ output "vpc_id" {
         assert_eq!(original.outputs.len(), imported.outputs.len());
     }
 
+    // ========================================================================
+    // Comprehensive Terraform State Roundtrip Tests (Issue #249)
+    // ========================================================================
+
+    #[test]
+    fn test_roundtrip_preserves_lineage_and_serial() {
+        let mut original = ProvisioningState::new();
+        original.lineage = "test-lineage-abc123".to_string();
+        original.serial = 42;
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        assert_eq!(imported.lineage, "test-lineage-abc123");
+        assert_eq!(imported.serial, 42);
+    }
+
+    #[test]
+    fn test_roundtrip_multiple_resources() {
+        let mut original = ProvisioningState::new();
+
+        // Add VPC
+        let vpc = ResourceState::new(
+            ResourceId::new("aws_vpc", "main"),
+            "vpc-123",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "vpc-123",
+                "cidr_block": "10.0.0.0/16",
+                "enable_dns_support": true,
+                "tags": {"Name": "production-vpc"}
+            }),
+        );
+        original.add_resource(vpc);
+
+        // Add subnet
+        let subnet = ResourceState::new(
+            ResourceId::new("aws_subnet", "public"),
+            "subnet-456",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "subnet-456",
+                "vpc_id": "vpc-123",
+                "cidr_block": "10.0.1.0/24",
+                "availability_zone": "us-east-1a"
+            }),
+        );
+        original.add_resource(subnet);
+
+        // Add security group
+        let sg = ResourceState::new(
+            ResourceId::new("aws_security_group", "web"),
+            "sg-789",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "sg-789",
+                "vpc_id": "vpc-123",
+                "name": "web-sg",
+                "ingress": [{"from_port": 80, "to_port": 80, "protocol": "tcp"}]
+            }),
+        );
+        original.add_resource(sg);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        assert_eq!(imported.resource_count(), 3);
+        assert!(imported.has_resource(&ResourceId::new("aws_vpc", "main")));
+        assert!(imported.has_resource(&ResourceId::new("aws_subnet", "public")));
+        assert!(imported.has_resource(&ResourceId::new("aws_security_group", "web")));
+
+        // Verify attributes preserved
+        let imported_vpc = imported
+            .get_resource(&ResourceId::new("aws_vpc", "main"))
+            .unwrap();
+        assert_eq!(
+            imported_vpc.attributes.get("cidr_block"),
+            Some(&serde_json::json!("10.0.0.0/16"))
+        );
+        assert_eq!(
+            imported_vpc.attributes.get("enable_dns_support"),
+            Some(&serde_json::json!(true))
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_resource_dependencies() {
+        let mut original = ProvisioningState::new();
+
+        let vpc = ResourceState::new(
+            ResourceId::new("aws_vpc", "main"),
+            "vpc-123",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "vpc-123"}),
+        );
+        original.add_resource(vpc);
+
+        let mut subnet = ResourceState::new(
+            ResourceId::new("aws_subnet", "public"),
+            "subnet-456",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "subnet-456", "vpc_id": "vpc-123"}),
+        );
+        subnet.dependencies = vec![ResourceId::new("aws_vpc", "main")];
+        original.add_resource(subnet);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let imported_subnet = imported
+            .get_resource(&ResourceId::new("aws_subnet", "public"))
+            .unwrap();
+        assert_eq!(imported_subnet.dependencies.len(), 1);
+        assert_eq!(
+            imported_subnet.dependencies[0],
+            ResourceId::new("aws_vpc", "main")
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_count_resources_numeric_index() {
+        // Create Terraform state with count-based resources
+        // Note: Current implementation imports all instances under the same key,
+        // so only the last instance is kept. This tests that the index_key is
+        // properly captured when present.
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "count-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_instance",
+                    "name": "web",
+                    "provider": "provider[\"aws\"]",
+                    "instances": [
+                        {
+                            "index_key": 0,
+                            "schema_version": 0,
+                            "attributes": {"id": "i-001", "instance_type": "t2.micro"}
+                        },
+                        {
+                            "index_key": 1,
+                            "schema_version": 0,
+                            "attributes": {"id": "i-002", "instance_type": "t2.micro"}
+                        },
+                        {
+                            "index_key": 2,
+                            "schema_version": 0,
+                            "attributes": {"id": "i-003", "instance_type": "t2.micro"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        // Current impl keeps only one resource per type.name (last instance wins)
+        assert_eq!(imported.resource_count(), 1);
+
+        // Verify index was captured (last instance has index 2)
+        let resource = imported
+            .get_resource(&ResourceId::new("aws_instance", "web"))
+            .unwrap();
+        assert!(matches!(resource.index, Some(ResourceIndex::Number(2))));
+        assert_eq!(resource.cloud_id, "i-003");
+    }
+
+    #[test]
+    fn test_roundtrip_count_single_instance_index() {
+        // Test single instance with numeric index
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "single-count-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_instance",
+                    "name": "single",
+                    "provider": "provider[\"aws\"]",
+                    "instances": [
+                        {
+                            "index_key": 0,
+                            "schema_version": 0,
+                            "attributes": {"id": "i-single", "instance_type": "t2.micro"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let resource = imported
+            .get_resource(&ResourceId::new("aws_instance", "single"))
+            .unwrap();
+        assert!(matches!(resource.index, Some(ResourceIndex::Number(0))));
+        assert_eq!(resource.cloud_id, "i-single");
+    }
+
+    #[test]
+    fn test_roundtrip_for_each_resources_string_key() {
+        // Create Terraform state with for_each-based resources
+        // Note: Current implementation imports all instances under the same key,
+        // so only the last instance is kept. This tests that the string index_key is
+        // properly captured when present.
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "foreach-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_iam_user",
+                    "name": "users",
+                    "provider": "provider[\"aws\"]",
+                    "instances": [
+                        {
+                            "index_key": "alice",
+                            "schema_version": 0,
+                            "attributes": {"id": "alice", "name": "alice"}
+                        },
+                        {
+                            "index_key": "bob",
+                            "schema_version": 0,
+                            "attributes": {"id": "bob", "name": "bob"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        // Current impl keeps only last instance (bob overwrites alice)
+        assert_eq!(imported.resource_count(), 1);
+
+        // Verify string key index was captured (last instance is "bob")
+        let resource = imported
+            .get_resource(&ResourceId::new("aws_iam_user", "users"))
+            .unwrap();
+        assert!(matches!(resource.index, Some(ResourceIndex::Key(ref k)) if k == "bob"));
+        assert_eq!(resource.cloud_id, "bob");
+    }
+
+    #[test]
+    fn test_roundtrip_for_each_single_instance_string_key() {
+        // Test single instance with string key
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "single-foreach-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_iam_user",
+                    "name": "admin",
+                    "provider": "provider[\"aws\"]",
+                    "instances": [
+                        {
+                            "index_key": "superadmin",
+                            "schema_version": 0,
+                            "attributes": {"id": "admin-user", "name": "superadmin"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let resource = imported
+            .get_resource(&ResourceId::new("aws_iam_user", "admin"))
+            .unwrap();
+        assert!(matches!(resource.index, Some(ResourceIndex::Key(ref k)) if k == "superadmin"));
+        assert_eq!(resource.cloud_id, "admin-user");
+    }
+
+    #[test]
+    fn test_roundtrip_sensitive_outputs() {
+        let mut original = ProvisioningState::new();
+
+        original.set_output(
+            "db_password",
+            OutputValue {
+                value: serde_json::json!("super-secret-password"),
+                description: Some("Database password".to_string()),
+                sensitive: true,
+            },
+        );
+
+        original.set_output(
+            "public_endpoint",
+            OutputValue {
+                value: serde_json::json!("https://api.example.com"),
+                description: Some("Public API endpoint".to_string()),
+                sensitive: false,
+            },
+        );
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let db_pass = imported.get_output("db_password").unwrap();
+        assert!(db_pass.sensitive);
+        assert_eq!(db_pass.value, serde_json::json!("super-secret-password"));
+
+        let endpoint = imported.get_output("public_endpoint").unwrap();
+        assert!(!endpoint.sensitive);
+        assert_eq!(endpoint.value, serde_json::json!("https://api.example.com"));
+    }
+
+    #[test]
+    fn test_roundtrip_complex_output_types() {
+        let mut original = ProvisioningState::new();
+
+        // String output
+        original.set_output(
+            "string_output",
+            OutputValue {
+                value: serde_json::json!("simple string"),
+                description: None,
+                sensitive: false,
+            },
+        );
+
+        // Number output
+        original.set_output(
+            "number_output",
+            OutputValue {
+                value: serde_json::json!(42),
+                description: None,
+                sensitive: false,
+            },
+        );
+
+        // Boolean output
+        original.set_output(
+            "bool_output",
+            OutputValue {
+                value: serde_json::json!(true),
+                description: None,
+                sensitive: false,
+            },
+        );
+
+        // List output
+        original.set_output(
+            "list_output",
+            OutputValue {
+                value: serde_json::json!(["a", "b", "c"]),
+                description: None,
+                sensitive: false,
+            },
+        );
+
+        // Map output
+        original.set_output(
+            "map_output",
+            OutputValue {
+                value: serde_json::json!({"key1": "value1", "key2": 123}),
+                description: None,
+                sensitive: false,
+            },
+        );
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        assert_eq!(imported.outputs.len(), 5);
+
+        assert_eq!(
+            imported.get_output("string_output").unwrap().value,
+            serde_json::json!("simple string")
+        );
+        assert_eq!(
+            imported.get_output("number_output").unwrap().value,
+            serde_json::json!(42)
+        );
+        assert_eq!(
+            imported.get_output("bool_output").unwrap().value,
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            imported.get_output("list_output").unwrap().value,
+            serde_json::json!(["a", "b", "c"])
+        );
+        assert_eq!(
+            imported.get_output("map_output").unwrap().value,
+            serde_json::json!({"key1": "value1", "key2": 123})
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_empty_state() {
+        let original = ProvisioningState::new();
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        assert_eq!(imported.resource_count(), 0);
+        assert_eq!(imported.outputs.len(), 0);
+    }
+
+    #[test]
+    fn test_roundtrip_special_characters_in_values() {
+        let mut original = ProvisioningState::new();
+
+        let resource = ResourceState::new(
+            ResourceId::new("aws_ssm_parameter", "special"),
+            "/my/param/path",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "/my/param/path",
+                "name": "/my/param/path",
+                "value": "line1\nline2\ttab\"quote'apostrophe\\backslash",
+                "description": "Parameter with special chars: <>&"
+            }),
+        );
+        original.add_resource(resource);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let imported_resource = imported
+            .get_resource(&ResourceId::new("aws_ssm_parameter", "special"))
+            .unwrap();
+        assert_eq!(
+            imported_resource.attributes.get("value"),
+            Some(&serde_json::json!(
+                "line1\nline2\ttab\"quote'apostrophe\\backslash"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_nested_attributes() {
+        let mut original = ProvisioningState::new();
+
+        let resource = ResourceState::new(
+            ResourceId::new("aws_lambda_function", "handler"),
+            "handler-func",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "handler-func",
+                "function_name": "my-handler",
+                "environment": {
+                    "variables": {
+                        "DB_HOST": "localhost",
+                        "DB_PORT": 5432,
+                        "ENABLED": true
+                    }
+                },
+                "vpc_config": {
+                    "subnet_ids": ["subnet-1", "subnet-2"],
+                    "security_group_ids": ["sg-1"]
+                },
+                "tags": {
+                    "Environment": "production",
+                    "Team": "platform"
+                }
+            }),
+        );
+        original.add_resource(resource);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let imported_resource = imported
+            .get_resource(&ResourceId::new("aws_lambda_function", "handler"))
+            .unwrap();
+
+        // Verify nested structure preserved
+        let env = imported_resource.attributes.get("environment").unwrap();
+        let vars = env.get("variables").unwrap();
+        assert_eq!(vars.get("DB_HOST"), Some(&serde_json::json!("localhost")));
+        assert_eq!(vars.get("DB_PORT"), Some(&serde_json::json!(5432)));
+        assert_eq!(vars.get("ENABLED"), Some(&serde_json::json!(true)));
+
+        let vpc_config = imported_resource.attributes.get("vpc_config").unwrap();
+        assert_eq!(
+            vpc_config.get("subnet_ids"),
+            Some(&serde_json::json!(["subnet-1", "subnet-2"]))
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_provider_inference() {
+        let mut original = ProvisioningState::new();
+
+        // AWS resource
+        let aws_resource = ResourceState::new(
+            ResourceId::new("aws_vpc", "main"),
+            "vpc-123",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "vpc-123"}),
+        );
+        original.add_resource(aws_resource);
+
+        // GCP resource
+        let gcp_resource = ResourceState::new(
+            ResourceId::new("google_compute_network", "main"),
+            "network-456",
+            "google",
+            serde_json::json!({}),
+            serde_json::json!({"id": "network-456"}),
+        );
+        original.add_resource(gcp_resource);
+
+        // Azure resource
+        let azure_resource = ResourceState::new(
+            ResourceId::new("azurerm_virtual_network", "main"),
+            "vnet-789",
+            "azurerm",
+            serde_json::json!({}),
+            serde_json::json!({"id": "vnet-789"}),
+        );
+        original.add_resource(azure_resource);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let aws = imported
+            .get_resource(&ResourceId::new("aws_vpc", "main"))
+            .unwrap();
+        assert_eq!(aws.provider, "aws");
+
+        let gcp = imported
+            .get_resource(&ResourceId::new("google_compute_network", "main"))
+            .unwrap();
+        assert_eq!(gcp.provider, "google");
+
+        let azure = imported
+            .get_resource(&ResourceId::new("azurerm_virtual_network", "main"))
+            .unwrap();
+        assert_eq!(azure.provider, "azurerm");
+    }
+
+    #[test]
+    fn test_roundtrip_multiple_dependencies() {
+        let mut original = ProvisioningState::new();
+
+        let vpc = ResourceState::new(
+            ResourceId::new("aws_vpc", "main"),
+            "vpc-123",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "vpc-123"}),
+        );
+        original.add_resource(vpc);
+
+        let igw = ResourceState::new(
+            ResourceId::new("aws_internet_gateway", "main"),
+            "igw-456",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "igw-456"}),
+        );
+        original.add_resource(igw);
+
+        // Route table depends on both VPC and IGW
+        let mut rt = ResourceState::new(
+            ResourceId::new("aws_route_table", "public"),
+            "rtb-789",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({"id": "rtb-789"}),
+        );
+        rt.dependencies = vec![
+            ResourceId::new("aws_vpc", "main"),
+            ResourceId::new("aws_internet_gateway", "main"),
+        ];
+        original.add_resource(rt);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let imported_rt = imported
+            .get_resource(&ResourceId::new("aws_route_table", "public"))
+            .unwrap();
+        assert_eq!(imported_rt.dependencies.len(), 2);
+        assert!(imported_rt
+            .dependencies
+            .contains(&ResourceId::new("aws_vpc", "main")));
+        assert!(imported_rt
+            .dependencies
+            .contains(&ResourceId::new("aws_internet_gateway", "main")));
+    }
+
+    #[test]
+    fn test_roundtrip_null_values() {
+        let mut original = ProvisioningState::new();
+
+        let resource = ResourceState::new(
+            ResourceId::new("aws_instance", "optional"),
+            "i-123",
+            "aws",
+            serde_json::json!({}),
+            serde_json::json!({
+                "id": "i-123",
+                "instance_type": "t2.micro",
+                "key_name": null,
+                "subnet_id": null,
+                "private_ip": "10.0.1.5"
+            }),
+        );
+        original.add_resource(resource);
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let imported_resource = imported
+            .get_resource(&ResourceId::new("aws_instance", "optional"))
+            .unwrap();
+        assert_eq!(
+            imported_resource.attributes.get("key_name"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            imported_resource.attributes.get("subnet_id"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            imported_resource.attributes.get("private_ip"),
+            Some(&serde_json::json!("10.0.1.5"))
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_large_state() {
+        let mut original = ProvisioningState::new();
+
+        // Create 100 resources to test larger state files
+        for i in 0..100 {
+            let resource = ResourceState::new(
+                ResourceId::new("aws_instance", &format!("server-{}", i)),
+                format!("i-{:05}", i),
+                "aws",
+                serde_json::json!({}),
+                serde_json::json!({
+                    "id": format!("i-{:05}", i),
+                    "instance_type": "t2.micro",
+                    "private_ip": format!("10.0.0.{}", i % 256),
+                    "tags": {
+                        "Name": format!("server-{}", i),
+                        "Index": i
+                    }
+                }),
+            );
+            original.add_resource(resource);
+        }
+
+        // Add 50 outputs
+        for i in 0..50 {
+            original.set_output(
+                format!("instance_{}_id", i),
+                OutputValue {
+                    value: serde_json::json!(format!("i-{:05}", i)),
+                    description: Some(format!("Instance {} ID", i)),
+                    sensitive: i % 5 == 0, // Every 5th output is sensitive
+                },
+            );
+        }
+
+        let tf_state = original.export_terraform_format().unwrap();
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        assert_eq!(imported.resource_count(), 100);
+        assert_eq!(imported.outputs.len(), 50);
+
+        // Spot check a few resources
+        let server_0 = imported
+            .get_resource(&ResourceId::new("aws_instance", "server-0"))
+            .unwrap();
+        assert_eq!(server_0.cloud_id, "i-00000");
+
+        let server_99 = imported
+            .get_resource(&ResourceId::new("aws_instance", "server-99"))
+            .unwrap();
+        assert_eq!(server_99.cloud_id, "i-00099");
+
+        // Check sensitive outputs
+        assert!(imported.get_output("instance_0_id").unwrap().sensitive);
+        assert!(!imported.get_output("instance_1_id").unwrap().sensitive);
+        assert!(imported.get_output("instance_5_id").unwrap().sensitive);
+    }
+
+    #[test]
+    fn test_terraform_type_inference() {
+        // Test the type inference helper
+        assert_eq!(
+            ProvisioningState::infer_terraform_type(&serde_json::json!("string")),
+            serde_json::json!("string")
+        );
+        assert_eq!(
+            ProvisioningState::infer_terraform_type(&serde_json::json!(42)),
+            serde_json::json!("number")
+        );
+        assert_eq!(
+            ProvisioningState::infer_terraform_type(&serde_json::json!(true)),
+            serde_json::json!("bool")
+        );
+        assert_eq!(
+            ProvisioningState::infer_terraform_type(&serde_json::json!(null)),
+            serde_json::json!("string")
+        );
+
+        let list_type =
+            ProvisioningState::infer_terraform_type(&serde_json::json!(["a", "b", "c"]));
+        assert!(list_type.is_array());
+
+        let empty_list_type = ProvisioningState::infer_terraform_type(&serde_json::json!([]));
+        assert!(empty_list_type.is_array());
+
+        let object_type =
+            ProvisioningState::infer_terraform_type(&serde_json::json!({"key": "value"}));
+        assert!(object_type.is_array());
+    }
+
+    #[test]
+    fn test_import_terraform_without_provider_string() {
+        // Test import when provider field uses simple format or is missing
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "no-provider-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_vpc",
+                    "name": "inferred",
+                    "instances": [
+                        {
+                            "schema_version": 0,
+                            "attributes": {"id": "vpc-inferred"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        let resource = imported
+            .get_resource(&ResourceId::new("aws_vpc", "inferred"))
+            .unwrap();
+        // Provider should be inferred from resource type prefix
+        assert_eq!(resource.provider, "aws");
+    }
+
+    #[test]
+    fn test_export_import_records_history() {
+        let tf_state = serde_json::json!({
+            "version": 4,
+            "terraform_version": "1.0.0",
+            "serial": 1,
+            "lineage": "history-test",
+            "resources": [
+                {
+                    "mode": "managed",
+                    "type": "aws_vpc",
+                    "name": "main",
+                    "provider": "provider[\"aws\"]",
+                    "instances": [
+                        {
+                            "schema_version": 0,
+                            "attributes": {"id": "vpc-123"}
+                        }
+                    ]
+                }
+            ],
+            "outputs": {}
+        });
+
+        let imported = ProvisioningState::import_from_terraform(&tf_state).unwrap();
+
+        // Should have recorded the import in history
+        assert!(!imported.history.is_empty());
+        let last_change = imported.last_change().unwrap();
+        assert_eq!(last_change.change_type, StateChangeType::StateImported);
+        assert!(last_change.description.contains("1 resources"));
+    }
+
     #[test]
     fn test_hcl_value_parsing() {
         // Test various HCL value types

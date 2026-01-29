@@ -323,6 +323,199 @@ impl std::fmt::Debug for ProviderRegistry {
     }
 }
 
+// ============================================================================
+// Registry Index Types
+// ============================================================================
+
+/// A dependency declared by a provider
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDependency {
+    /// Name of the required provider
+    pub name: String,
+    /// Version requirement (e.g., ">=1.0", "^2.0")
+    pub req: String,
+    /// Whether this is an optional dependency
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// An entry in the provider registry index for a single version
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderIndexEntry {
+    /// Provider name
+    pub name: String,
+    /// Version string
+    pub vers: String,
+    /// Dependencies
+    #[serde(default)]
+    pub deps: Vec<ProviderDependency>,
+    /// BLAKE3 checksum of the artifact
+    pub cksum: String,
+    /// Optional features this version provides
+    #[serde(default)]
+    pub features: HashMap<String, Vec<String>>,
+    /// Whether this version has been yanked
+    #[serde(default)]
+    pub yanked: bool,
+    /// Minimum Rustible version required
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rustible_version: Option<String>,
+    /// API version compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_version: Option<String>,
+    /// Supported target platforms
+    #[serde(default)]
+    pub targets: Vec<String>,
+    /// Capabilities provided
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+impl ProviderIndexEntry {
+    /// Create a new index entry from provider metadata
+    pub fn from_metadata(metadata: &ProviderMetadata, checksum: &str) -> Self {
+        Self {
+            name: metadata.name.clone(),
+            vers: metadata.version.to_string(),
+            deps: Vec::new(),
+            cksum: checksum.to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: Some(metadata.api_version.to_string()),
+            targets: metadata.supported_targets.clone(),
+            capabilities: metadata
+                .capabilities
+                .iter()
+                .map(|c| format!("{:?}", c).to_lowercase())
+                .collect(),
+        }
+    }
+
+    /// Parse a version string into a semver::Version
+    pub fn version(&self) -> Result<semver::Version, semver::Error> {
+        semver::Version::parse(&self.vers)
+    }
+
+    /// Check if this entry matches a version requirement
+    pub fn matches_requirement(&self, req: &semver::VersionReq) -> bool {
+        self.version().map(|v| req.matches(&v)).unwrap_or(false)
+    }
+}
+
+/// Registry index for a single provider (all versions)
+#[derive(Debug, Clone, Default)]
+pub struct ProviderIndex {
+    /// Provider name
+    pub name: String,
+    /// All version entries, newest first
+    pub versions: Vec<ProviderIndexEntry>,
+}
+
+impl ProviderIndex {
+    /// Create a new empty provider index
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            versions: Vec::new(),
+        }
+    }
+
+    /// Add a version entry
+    pub fn add_version(&mut self, entry: ProviderIndexEntry) {
+        self.versions.push(entry);
+        // Sort by version descending (newest first)
+        self.versions.sort_by(|a, b| {
+            let va = a.version().unwrap_or(semver::Version::new(0, 0, 0));
+            let vb = b.version().unwrap_or(semver::Version::new(0, 0, 0));
+            vb.cmp(&va)
+        });
+    }
+
+    /// Get the latest non-yanked version
+    pub fn latest(&self) -> Option<&ProviderIndexEntry> {
+        self.versions.iter().find(|v| !v.yanked)
+    }
+
+    /// Get a specific version
+    pub fn get_version(&self, version: &str) -> Option<&ProviderIndexEntry> {
+        self.versions.iter().find(|v| v.vers == version)
+    }
+
+    /// Find versions matching a requirement
+    pub fn find_matching(&self, req: &semver::VersionReq) -> Vec<&ProviderIndexEntry> {
+        self.versions
+            .iter()
+            .filter(|v| !v.yanked && v.matches_requirement(req))
+            .collect()
+    }
+
+    /// Serialize to registry index format (one JSON object per line)
+    pub fn to_index_format(&self) -> String {
+        self.versions
+            .iter()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Parse from registry index format
+    pub fn from_index_format(name: &str, content: &str) -> Result<Self, serde_json::Error> {
+        let mut index = Self::new(name);
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let entry: ProviderIndexEntry = serde_json::from_str(line)?;
+            index.versions.push(entry);
+        }
+        Ok(index)
+    }
+}
+
+/// The complete registry index containing all providers
+#[derive(Debug, Clone, Default)]
+pub struct ProviderRegistryIndex {
+    /// Provider indices by name
+    pub providers: HashMap<String, ProviderIndex>,
+    /// Registry URL
+    pub registry_url: Option<String>,
+    /// Last update timestamp
+    pub last_updated: Option<String>,
+}
+
+impl ProviderRegistryIndex {
+    /// Create a new empty registry index
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add or update a provider index
+    pub fn add_provider(&mut self, index: ProviderIndex) {
+        self.providers.insert(index.name.clone(), index);
+    }
+
+    /// Get a provider index by name
+    pub fn get_provider(&self, name: &str) -> Option<&ProviderIndex> {
+        self.providers.get(name)
+    }
+
+    /// List all provider names
+    pub fn list_providers(&self) -> Vec<&str> {
+        self.providers.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Search for providers matching a query
+    pub fn search(&self, query: &str) -> Vec<&ProviderIndex> {
+        let query_lower = query.to_lowercase();
+        self.providers
+            .values()
+            .filter(|p| p.name.to_lowercase().contains(&query_lower))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,5 +674,187 @@ mod tests {
             )
             .await;
         assert!(matches!(result, Err(ProviderError::Other(_))));
+    }
+
+    // Registry Index Tests
+
+    #[test]
+    fn test_provider_index_entry_from_metadata() {
+        let metadata = ProviderMetadata {
+            name: "aws".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            api_version: semver::Version::new(1, 0, 0),
+            supported_targets: vec!["aws".to_string()],
+            capabilities: vec![ProviderCapability::Read, ProviderCapability::Create],
+        };
+
+        let entry = ProviderIndexEntry::from_metadata(&metadata, "blake3:abc123");
+
+        assert_eq!(entry.name, "aws");
+        assert_eq!(entry.vers, "1.0.0");
+        assert_eq!(entry.cksum, "blake3:abc123");
+        assert!(!entry.yanked);
+        assert!(entry.targets.contains(&"aws".to_string()));
+    }
+
+    #[test]
+    fn test_provider_index_entry_version_matching() {
+        let entry = ProviderIndexEntry {
+            name: "test".to_string(),
+            vers: "1.2.3".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:test".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        };
+
+        let req = semver::VersionReq::parse(">=1.0.0").unwrap();
+        assert!(entry.matches_requirement(&req));
+
+        let req = semver::VersionReq::parse(">=2.0.0").unwrap();
+        assert!(!entry.matches_requirement(&req));
+    }
+
+    #[test]
+    fn test_provider_index_add_version() {
+        let mut index = ProviderIndex::new("aws");
+
+        index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "1.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v1".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "2.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v2".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        assert_eq!(index.versions.len(), 2);
+        // Newest first
+        assert_eq!(index.versions[0].vers, "2.0.0");
+        assert_eq!(index.versions[1].vers, "1.0.0");
+    }
+
+    #[test]
+    fn test_provider_index_latest() {
+        let mut index = ProviderIndex::new("aws");
+
+        index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "1.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v1".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "2.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v2".to_string(),
+            features: HashMap::new(),
+            yanked: true, // yanked
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        let latest = index.latest().unwrap();
+        assert_eq!(latest.vers, "1.0.0"); // 2.0.0 is yanked
+    }
+
+    #[test]
+    fn test_provider_index_format() {
+        let mut index = ProviderIndex::new("aws");
+
+        index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "1.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v1".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        let serialized = index.to_index_format();
+        assert!(serialized.contains("aws"));
+        assert!(serialized.contains("1.0.0"));
+
+        let parsed = ProviderIndex::from_index_format("aws", &serialized).unwrap();
+        assert_eq!(parsed.versions.len(), 1);
+        assert_eq!(parsed.versions[0].vers, "1.0.0");
+    }
+
+    #[test]
+    fn test_provider_registry_index() {
+        let mut registry_index = ProviderRegistryIndex::new();
+
+        let mut aws_index = ProviderIndex::new("aws");
+        aws_index.add_version(ProviderIndexEntry {
+            name: "aws".to_string(),
+            vers: "1.0.0".to_string(),
+            deps: Vec::new(),
+            cksum: "blake3:v1".to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: None,
+            targets: Vec::new(),
+            capabilities: Vec::new(),
+        });
+
+        registry_index.add_provider(aws_index);
+
+        assert!(registry_index.get_provider("aws").is_some());
+        assert!(registry_index.get_provider("azure").is_none());
+        assert_eq!(registry_index.list_providers().len(), 1);
+    }
+
+    #[test]
+    fn test_provider_registry_index_search() {
+        let mut registry_index = ProviderRegistryIndex::new();
+
+        registry_index.add_provider(ProviderIndex::new("aws-core"));
+        registry_index.add_provider(ProviderIndex::new("aws-ec2"));
+        registry_index.add_provider(ProviderIndex::new("azure-vm"));
+
+        let results = registry_index.search("aws");
+        assert_eq!(results.len(), 2);
+
+        let results = registry_index.search("azure");
+        assert_eq!(results.len(), 1);
+
+        let results = registry_index.search("gcp");
+        assert_eq!(results.len(), 0);
     }
 }
