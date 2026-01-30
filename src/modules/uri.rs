@@ -58,6 +58,9 @@ const DEFAULT_RETRY_DELAY_SECS: u64 = 1;
 /// Maximum retry delay in seconds (for exponential backoff)
 const MAX_RETRY_DELAY_SECS: u64 = 60;
 
+/// Default maximum content length (10MB) to prevent DoS
+const DEFAULT_MAX_CONTENT_LENGTH: u64 = 10 * 1024 * 1024;
+
 /// Supported authentication types
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum AuthType {
@@ -335,9 +338,10 @@ impl UriModule {
 
     /// Process the response and build UriResponse
     async fn process_response(
-        response: Response,
+        mut response: Response,
         original_url: &str,
         return_content: bool,
+        max_content_length: u64,
     ) -> ModuleResult<UriResponse> {
         let status_code = response.status().as_u16();
         let status_reason = response
@@ -361,9 +365,34 @@ impl UriModule {
 
         // Get response body if requested
         let (content, json) = if return_content {
-            let body_text = response.text().await.map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to read response body: {}", e))
-            })?;
+            // Check content length header if available
+            if let Some(len) = content_length {
+                if len > max_content_length {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "Response content length {} exceeds limit of {}",
+                        len, max_content_length
+                    )));
+                }
+            }
+
+            // Stream the body with a limit
+            let mut body_bytes = Vec::new();
+
+            while let Some(chunk) = response.chunk().await.map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to read response chunk: {}", e))
+            })? {
+                if (body_bytes.len() as u64 + chunk.len() as u64) > max_content_length {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "Response content length exceeds limit of {}",
+                        max_content_length
+                    )));
+                }
+
+                body_bytes.extend_from_slice(&chunk);
+            }
+
+            // Convert to string (lossy to handle non-UTF8 safely)
+            let body_text = String::from_utf8_lossy(&body_bytes).to_string();
 
             // Try to parse as JSON
             let json_value = serde_json::from_str::<Value>(&body_text).ok();
@@ -418,6 +447,7 @@ impl UriModule {
         follow_redirects: bool,
         max_redirects: usize,
         return_content: bool,
+        max_content_length: u64,
         status_code_list: Vec<u16>,
         retries: u32,
         retry_delay_secs: u64,
@@ -508,7 +538,8 @@ impl UriModule {
         .await?;
 
         // Process response
-        let uri_response = Self::process_response(response, &url, return_content).await?;
+        let uri_response =
+            Self::process_response(response, &url, return_content, max_content_length).await?;
 
         // Validate status code
         let status_valid = Self::validate_status(uri_response.status_code, &status_code_list);
@@ -665,6 +696,15 @@ impl Module for UriModule {
             }
         }
 
+        // Validate max_content_length
+        if let Some(len) = params.get_i64("max_content_length")? {
+            if len <= 0 {
+                return Err(ModuleError::InvalidParameter(
+                    "max_content_length must be a positive integer".to_string(),
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -740,6 +780,12 @@ impl Module for UriModule {
             .unwrap_or(10);
         let return_content = params.get_bool_or("return_content", true);
 
+        // Max content length
+        let max_content_length = params
+            .get_i64("max_content_length")?
+            .map(|l| l as u64)
+            .unwrap_or(DEFAULT_MAX_CONTENT_LENGTH);
+
         // Status code validation
         let status_code_list: Vec<u16> = params
             .get("status_code")
@@ -793,6 +839,7 @@ impl Module for UriModule {
             follow_redirects,
             max_redirects,
             return_content,
+            max_content_length,
             status_code_list,
             retries,
             retry_delay_secs,
