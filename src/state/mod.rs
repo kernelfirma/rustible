@@ -112,7 +112,6 @@ pub use manifest::{
     DriftDetails, DriftState, DriftSummary, FieldDiff, HostManifest, ManifestStore, ResourceState,
 };
 pub use persistence::{JsonPersistence, PersistenceBackend, SqlitePersistence, StatePersistence};
-pub mod rollback;
 pub use rollback::{RollbackAction, RollbackExecutor, RollbackPlan, RollbackStatus};
 
 /// Errors that can occur during state management operations

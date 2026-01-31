@@ -61,3 +61,8 @@
 **Vulnerability:** The `ScriptModule` injected the `executable` parameter directly into a shell command, and `ServiceModule` did the same for `arguments`. The `validate_command_args` helper was insufficient, allowing command separators like `;` and background operators `&` to bypass validation.
 **Learning:** Partial validation of shell arguments is often insufficient. If a parameter is injected raw into a shell string, it must not contain ANY shell metacharacters unless the context is fully understood.
 **Prevention:** Strengthen `validate_command_args` to strictly block `;` and `&`. Always apply validation to parameters like `executable` that are injected into shell commands. Ideally, avoid shell string construction entirely.
+
+## 2025-05-31 - Insufficient Command Injection Validation (Update)
+**Vulnerability:** The `validate_command_args` function used a blacklist approach that missed several dangerous shell metacharacters (`*`, `?`, `{`, `}`, `(`, `)`, `[`, `]`, `\`, `!`). This could allow attackers to bypass validation and inject commands or arguments (e.g., via brace expansion `{echo,pwn}` or globbing) in modules like `script` and `service`.
+**Learning:** Blacklists are inherently fragile for security validation because it is difficult to anticipate all possible dangerous inputs. Shell expansion rules are complex and vary by shell.
+**Prevention:** The blacklist in `validate_command_args` was strengthened to include these missing characters. Where possible, avoid constructing shell commands from untrusted strings; prefer passing arguments arrays to `std::process::Command` directly.
