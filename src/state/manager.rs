@@ -361,7 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resource_creation() {
-        let backend = Arc::new(LocalBackend::new("/tmp/test_state".to_string()));
+        let backend = Arc::new(LocalBackend::new("/tmp/test_state".into()));
         let manager = StateManager::new(backend, StateManagerConfig::default());
 
         manager.initialize().await.unwrap();
