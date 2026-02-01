@@ -8,13 +8,6 @@
 //! Facts can be gathered remotely via SSH or other connections using the async
 //! `gather_facts_via_connection` function. This executes commands on the remote
 //! host instead of locally.
-//!
-//! ## Python Setup Module Fallback
-//!
-//! When native remote fact gathering fails or produces insufficient results,
-//! the module can fall back to executing Ansible's Python `setup` module via
-//! AnsiballZ bundling. This provides full Ansible-compatible fact gathering
-//! including `ansible_*` prefixed facts.
 
 use super::{Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult, ParamExt};
 use crate::connection::Connection;
@@ -22,7 +15,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::process::Command;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Module for gathering system facts
 pub struct FactsModule;
@@ -507,135 +500,7 @@ pub async fn gather_facts_via_connection(
         }
     }
 
-    // Check if we got sufficient facts from native gathering
-    // If not, try Python setup module fallback
-    if all_facts.len() < 5 {
-        debug!(
-            "Native fact gathering produced only {} facts, attempting Python setup fallback",
-            all_facts.len()
-        );
-
-        if let Some(python_facts) = gather_facts_via_python_setup(connection, gather_subset).await {
-            // Merge Python facts with native facts (Python takes precedence for ansible_* keys)
-            for (k, v) in python_facts {
-                all_facts.insert(k, v);
-            }
-        }
-    }
-
     all_facts
-}
-
-/// Gather facts using Ansible's Python setup module via AnsiballZ bundling.
-///
-/// This is used as a fallback when native fact gathering fails or produces
-/// insufficient results. It provides full Ansible-compatible fact gathering
-/// including all `ansible_*` prefixed facts.
-///
-/// # Arguments
-///
-/// * `connection` - The connection to use for remote execution
-/// * `gather_subset` - Optional list of fact categories to gather
-///
-/// # Returns
-///
-/// Returns `Some(facts)` if the Python setup module executed successfully,
-/// `None` if Ansible is not available or execution failed.
-pub async fn gather_facts_via_python_setup(
-    connection: &Arc<dyn Connection + Send + Sync>,
-    gather_subset: Option<&[String]>,
-) -> Option<HashMap<String, serde_json::Value>> {
-    use super::python::PythonModuleExecutor;
-
-    // Create the Python module executor
-    let mut executor = PythonModuleExecutor::new();
-
-    // Build arguments for the setup module
-    let mut args: HashMap<String, serde_json::Value> = HashMap::new();
-
-    if let Some(subset) = gather_subset {
-        args.insert("gather_subset".to_string(), serde_json::json!(subset));
-    }
-
-    // Try to find and execute the setup module
-    // Try multiple Python interpreters
-    let interpreters = ["python3", "python", "/usr/bin/python3", "/usr/bin/python"];
-
-    for interpreter in &interpreters {
-        // First check if the interpreter exists on the remote
-        if let Some(python_path) =
-            execute_and_get_output(connection, &format!("which {}", interpreter)).await
-        {
-            debug!("Found Python interpreter: {}", python_path);
-
-            // Execute the setup module
-            match executor
-                .execute(
-                    connection.as_ref(),
-                    "ansible.builtin.setup",
-                    &args,
-                    interpreter,
-                )
-                .await
-            {
-                Ok(output) => {
-                    debug!("Python setup module executed successfully");
-
-                    // Extract ansible_facts from the output
-                    let mut facts = HashMap::new();
-
-                    // The setup module returns facts under the "ansible_facts" key
-                    if let Some(ansible_facts) = output.data.get("ansible_facts") {
-                        if let Some(obj) = ansible_facts.as_object() {
-                            for (key, value) in obj {
-                                facts.insert(key.clone(), value.clone());
-                            }
-                        }
-                    }
-
-                    // Also check for facts directly in the output data
-                    for (key, value) in &output.data {
-                        if key.starts_with("ansible_") || !facts.contains_key(key) {
-                            facts.insert(key.clone(), value.clone());
-                        }
-                    }
-
-                    if !facts.is_empty() {
-                        return Some(facts);
-                    }
-                }
-                Err(e) => {
-                    debug!("Python setup module failed with {}: {}", interpreter, e);
-                    continue;
-                }
-            }
-        }
-    }
-
-    warn!("Python setup module fallback failed - no suitable Python interpreter found or Ansible not installed");
-    None
-}
-
-/// Check if Ansible's setup module is available on the remote host.
-///
-/// This can be used to determine if the Python fallback will work before
-/// attempting to use it.
-pub async fn is_python_setup_available(connection: &Arc<dyn Connection + Send + Sync>) -> bool {
-    // Check for Python first
-    let has_python = execute_and_get_output(connection, "which python3 || which python")
-        .await
-        .is_some();
-
-    if !has_python {
-        return false;
-    }
-
-    // Check if ansible module can be imported
-    let check_cmd =
-        "python3 -c 'import ansible' 2>/dev/null || python -c 'import ansible' 2>/dev/null";
-    execute_and_get_output(connection, check_cmd)
-        .await
-        .is_some()
 }
 
 /// Helper to execute a command and get stdout if successful
@@ -927,8 +792,7 @@ async fn gather_network_facts_remote(
     facts.insert("interfaces".to_string(), serde_json::json!(interfaces));
 
     // Get default IPv4 address
-    if let Some(stdout) =
-        execute_and_get_output(connection, "ip route get 1.1.1.1 2>/dev/null").await
+    if let Some(stdout) = execute_and_get_output(connection, "ip route get 1.1.1.1 2>/dev/null").await
     {
         if let Some(ip) = stdout.split("src ").nth(1) {
             if let Some(ip) = ip.split_whitespace().next() {
@@ -952,7 +816,8 @@ async fn gather_date_facts_remote(
     let mut facts = HashMap::new();
 
     // Get current date/time info
-    if let Some(datetime) = execute_and_get_output(connection, "date '+%Y-%m-%d %H:%M:%S %Z'").await
+    if let Some(datetime) =
+        execute_and_get_output(connection, "date '+%Y-%m-%d %H:%M:%S %Z'").await
     {
         facts.insert("date_time".to_string(), serde_json::json!(datetime));
     }
@@ -1087,6 +952,11 @@ impl Module for FactsModule {
 
         Ok(ModuleOutput::ok("Facts gathered successfully")
             .with_data("ansible_facts", serde_json::Value::Object(facts_json)))
+    }
+
+    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
+        // Fact gathering is read-only, so check mode behaves the same
+        self.execute(params, context)
     }
 }
 
@@ -1281,80 +1151,5 @@ mod tests {
 
         // Should have env fact
         assert!(facts.contains_key("env"), "Expected env fact");
-    }
-
-    // ========================================================================
-    // Python Setup Module Fallback Tests
-    // ========================================================================
-
-    #[tokio::test]
-    async fn test_is_python_setup_available() {
-        use crate::connection::local::LocalConnection;
-
-        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
-        let available = is_python_setup_available(&conn).await;
-
-        // This test just verifies the function runs without error
-        // The result depends on whether Ansible is installed locally
-        debug!("Python setup available: {}", available);
-    }
-
-    #[tokio::test]
-    #[cfg_attr(not(feature = "ansible-tests"), ignore)]
-    async fn test_gather_facts_via_python_setup() {
-        use crate::connection::local::LocalConnection;
-
-        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
-
-        // Try to gather facts via Python setup module
-        let facts = gather_facts_via_python_setup(&conn, None).await;
-
-        // Only assert if Ansible is available
-        if let Some(facts) = facts {
-            // Should have ansible_* prefixed facts
-            let has_ansible_facts = facts.keys().any(|k| k.starts_with("ansible_"));
-            assert!(
-                has_ansible_facts || !facts.is_empty(),
-                "Expected ansible_* facts from Python setup module"
-            );
-        }
-    }
-
-    #[tokio::test]
-    #[cfg_attr(not(feature = "ansible-tests"), ignore)]
-    async fn test_gather_facts_via_python_setup_with_subset() {
-        use crate::connection::local::LocalConnection;
-
-        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
-
-        // Try with minimal subset
-        let subset = vec!["min".to_string()];
-        let facts = gather_facts_via_python_setup(&conn, Some(&subset)).await;
-
-        // Only assert if Ansible is available
-        if let Some(facts) = facts {
-            debug!(
-                "Got {} facts from Python setup with 'min' subset",
-                facts.len()
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn test_native_facts_fallback_trigger() {
-        use crate::connection::local::LocalConnection;
-
-        // This test verifies that native fact gathering works and
-        // produces enough facts that the fallback isn't triggered unnecessarily
-        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
-        let facts = gather_facts_via_connection(&conn, None).await;
-
-        // Native gathering should produce at least 5 facts
-        // (the threshold for triggering Python fallback)
-        assert!(
-            facts.len() >= 5,
-            "Native fact gathering should produce at least 5 facts, got {}",
-            facts.len()
-        );
     }
 }
