@@ -7,7 +7,7 @@ use crate::cli::output::{RecapStats, TaskStatus};
 use anyhow::Result;
 use clap::Parser;
 use indexmap::IndexMap;
-use regex::Regex;
+use rustible::template::get_engine;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -1494,25 +1494,10 @@ impl RunArgs {
 
     /// Template a string by replacing {{ variable }} patterns with values
     fn template_string(template: &str, vars: &IndexMap<String, serde_yaml::Value>) -> String {
-        // Simple Jinja2-like templating for {{ variable }} syntax
-        let re = Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").unwrap();
-        let mut result = template.to_string();
-
-        for cap in re.captures_iter(template) {
-            let full_match = cap.get(0).unwrap().as_str();
-            let expr = cap.get(1).unwrap().as_str().trim();
-
-            // Handle simple variable lookup (no filters for now)
-            let var_name = expr.split('|').next().unwrap_or(expr).trim();
-
-            if let Some(value) = vars.get(var_name) {
-                let replacement = Self::yaml_value_to_string(value);
-                result = result.replace(full_match, &replacement);
-            }
-            // If variable not found, leave the original template expression
-        }
-
-        result
+        // Use the unified template engine for consistent Jinja2-compatible templating
+        get_engine()
+            .render_with_yaml(template, vars)
+            .unwrap_or_else(|_| template.to_string())
     }
 
     /// Convert a YAML value to a display string

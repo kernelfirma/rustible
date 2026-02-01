@@ -178,6 +178,16 @@ pub enum ExecutorError {
     /// Other miscellaneous errors.
     #[error("{0}")]
     Other(String),
+
+    /// Template rendering error.
+    #[error("Template error: {0}")]
+    Template(String),
+}
+
+impl From<crate::template::TemplateError> for ExecutorError {
+    fn from(e: crate::template::TemplateError) -> Self {
+        ExecutorError::Template(e.to_string())
+    }
 }
 
 /// Result type for executor operations.

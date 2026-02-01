@@ -41,6 +41,7 @@ use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
 use crate::modules::ModuleRegistry;
+use crate::template::get_engine;
 
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1068,8 +1069,9 @@ impl Task {
         let vars = rt.get_merged_vars(&ctx.host);
         let mut result = IndexMap::new();
 
+        let engine = get_engine();
         for (key, value) in &self.args {
-            let templated = template_value(value, &vars)?;
+            let templated = engine.render_value(value, &vars)?;
             result.insert(key.clone(), templated);
         }
 
@@ -1086,7 +1088,9 @@ impl Task {
         let rt = runtime.read().await;
         let vars = rt.get_merged_vars(&ctx.host);
 
-        evaluate_expression(condition, &vars)
+        get_engine()
+            .evaluate_condition(condition, &vars)
+            .map_err(ExecutorError::from)
     }
 
     /// Apply changed_when override
