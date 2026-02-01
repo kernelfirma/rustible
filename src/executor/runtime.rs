@@ -546,6 +546,28 @@ impl RuntimeContext {
             .insert("inventory_dir".to_string(), JsonValue::Null);
     }
 
+    /// Set the playbook directory
+    ///
+    /// This should be called when loading a playbook to set the base path
+    /// for resolving relative includes and imports.
+    pub fn set_playbook_dir(&mut self, path: &std::path::Path) {
+        let path_str = path.to_string_lossy().to_string();
+        trace!("Setting playbook_dir: {}", path_str);
+        self.magic_vars
+            .insert("playbook_dir".to_string(), JsonValue::String(path_str));
+    }
+
+    /// Get the playbook directory
+    ///
+    /// Returns the directory containing the playbook, used as base path
+    /// for resolving relative includes and imports.
+    pub fn get_playbook_dir(&self) -> Option<std::path::PathBuf> {
+        self.magic_vars
+            .get("playbook_dir")
+            .and_then(|v| v.as_str())
+            .map(std::path::PathBuf::from)
+    }
+
     /// Set a global variable
     pub fn set_global_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting global var: {} = {:?}", name, value);
@@ -1826,6 +1848,33 @@ mod tests {
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("role_param"))
+        );
+    }
+
+    #[test]
+    fn test_playbook_dir() {
+        use std::path::Path;
+
+        let mut ctx = RuntimeContext::new();
+
+        // Initially playbook_dir should be None (stored as Null in magic_vars)
+        assert!(ctx.get_playbook_dir().is_none());
+
+        // Set playbook directory
+        let playbook_path = Path::new("/home/user/playbooks/site");
+        ctx.set_playbook_dir(playbook_path);
+
+        // Should now return the path
+        assert_eq!(
+            ctx.get_playbook_dir(),
+            Some(std::path::PathBuf::from("/home/user/playbooks/site"))
+        );
+
+        // Should also be available as a variable
+        let merged = ctx.get_merged_vars("localhost");
+        assert_eq!(
+            merged.get("playbook_dir"),
+            Some(&serde_json::json!("/home/user/playbooks/site"))
         );
     }
 }
