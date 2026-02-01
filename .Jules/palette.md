@@ -29,3 +29,7 @@
 ## 2024-05-28 - [Unicode vs Emoji Usage]
 **Learning:** The codebase avoids emojis in banners (e.g., `[==== SUCCESS ====]`) but uses them in interactive menus. For CLI output like task status, text-like Unicode symbols (e.g. `✎` instead of `📝`) are preferred to maintain alignment and professional appearance.
 **Action:** Use Unicode symbols that are 1-cell wide for tabular output; reserve colorful emojis for interactive prompts.
+
+## 2026-03-05 - [Consistent Interactive Prompts]
+**Learning:** Inconsistent usage of UI themes (like `dialoguer`'s `ColorfulTheme`) and missing semantic icons in password prompts breaks the visual consistency of the CLI. Using standard themes and icons (e.g., 🔐 for secrets) makes the tool feel more polished and trustworthy.
+**Action:** Always use `ColorfulTheme::default()` for `dialoguer` prompts and include appropriate semantic emojis in prompt text to match the rest of the application.

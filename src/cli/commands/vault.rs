@@ -12,6 +12,7 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use clap::{Parser, Subcommand};
+use dialoguer::theme::ColorfulTheme;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fs;
@@ -318,11 +319,9 @@ fn get_password(password_file: Option<&PathBuf>, ctx: &CommandContext) -> Result
 
     // Prompt for password
     ctx.output.flush();
-    print!("Vault password: ");
-    io::stdout().flush()?;
 
-    let password = dialoguer::Password::new()
-        .with_prompt("Vault password")
+    let password = dialoguer::Password::with_theme(&ColorfulTheme::default())
+        .with_prompt("🔐 Vault password")
         .interact()?;
 
     Ok(password)
@@ -339,9 +338,9 @@ fn get_password_with_confirm(
 
     ctx.output.flush();
 
-    let password = dialoguer::Password::new()
-        .with_prompt("New Vault password")
-        .with_confirmation("Confirm Vault password", "Passwords do not match")
+    let password = dialoguer::Password::with_theme(&ColorfulTheme::default())
+        .with_prompt("🔐 New Vault password")
+        .with_confirmation("🔐 Confirm Vault password", "Passwords do not match")
         .interact()?;
 
     Ok(password)
