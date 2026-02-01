@@ -218,7 +218,7 @@ async fn test_connection_cleanup() {
     factory.close_all().await.unwrap();
 
     // Pool should be empty
-    let stats = factory.pool_stats().await;
+    let stats = factory.pool_stats();
     assert_eq!(stats.active_connections, 0);
 }
 
@@ -330,9 +330,7 @@ async fn test_concurrent_runtime_access() {
             tokio::spawn(async move {
                 for j in 0..10 {
                     let mut ctx = rt.write().await;
-                    let host = format!("host_{}", i % 100);
                     ctx.set_task_var(
-                        &host,
                         format!("task_var_{}_{}", i, j),
                         serde_json::json!(format!("value_{}_{}", i, j)),
                     );
@@ -583,7 +581,7 @@ fn test_executor_creation_performance() {
             task_timeout: 300,
             gather_facts: false,
             extra_vars: HashMap::new(),
-            ..Default::default()
+        ..Default::default()
         };
         let _ = Executor::new(config);
     }

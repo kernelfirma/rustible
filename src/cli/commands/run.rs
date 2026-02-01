@@ -3,14 +3,15 @@
 //! This module implements the `run` subcommand for executing Ansible-like playbooks.
 
 use super::{CommandContext, Runnable};
-use crate::cli::output::RecapStats;
+use crate::cli::output::{RecapStats, TaskStatus};
 use anyhow::Result;
 use clap::Parser;
 use indexmap::IndexMap;
 use regex::Regex;
-use rustible::diagnostics::yaml_syntax_error;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::Mutex;
 
 /// Arguments for the run command
 #[derive(Parser, Debug, Clone)]
@@ -42,10 +43,6 @@ pub struct RunArgs {
     /// Vault password file
     #[arg(long)]
     pub vault_password_file: Option<PathBuf>,
-
-    /// Ask for SSH password
-    #[arg(short = 'k', long = "ask-pass")]
-    pub ask_pass: bool,
 
     /// Become (sudo/su)
     #[arg(short = 'b', long)]
@@ -83,8 +80,8 @@ pub struct RunArgs {
 impl RunArgs {
     /// Execute the run command using the executor as the single runtime
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy, Playbook};
         use rustible::executor::runtime::RuntimeContext;
-        use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig, Playbook};
         use rustible::inventory::Inventory;
 
         let start_time = Instant::now();
@@ -111,69 +108,14 @@ impl RunArgs {
         ));
 
         // Load playbook using executor's Playbook parser
-        let spinner = ctx.output.create_spinner("Loading playbook...");
+        ctx.output.info("Loading playbook...");
         let playbook = match Playbook::load(&self.playbook) {
-            Ok(pb) => {
-                if let Some(sp) = spinner {
-                    sp.finish_and_clear();
-                }
-                pb
-            }
+            Ok(pb) => pb,
             Err(e) => {
-                if let Some(sp) = spinner {
-                    sp.finish_and_clear();
-                }
-                if let Some(rendered) = e.render_diagnostic() {
-                    ctx.output.diagnostic(&rendered);
-                } else {
-                    ctx.output
-                        .error(&format!("Failed to parse playbook: {}", e));
-                }
+                ctx.output.error(&format!("Failed to parse playbook: {}", e));
                 return Ok(1);
             }
         };
-
-        // Setup event callback for real-time output
-        let output = ctx.output.clone();
-        let current_task_start = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let task_start_clone = current_task_start.clone();
-
-        let callback = std::sync::Arc::new(move |event: rustible::executor::ExecutionEvent| {
-            use rustible::executor::ExecutionEvent;
-            use rustible::executor::task::TaskStatus as ExecutorTaskStatus;
-            use crate::cli::output::TaskStatus as CliTaskStatus;
-
-            match event {
-                ExecutionEvent::PlayStart(name) => {
-                    let play_name = if name.is_empty() { "Unnamed play" } else { &name };
-                    output.play_header(play_name);
-                }
-                ExecutionEvent::TaskStart(name) => {
-                    output.task_header(&name);
-                    if let Ok(mut start) = task_start_clone.lock() {
-                        *start = Some(std::time::Instant::now());
-                    }
-                }
-                ExecutionEvent::HostTaskComplete(host, _, result) => {
-                    let status = match result.status {
-                        ExecutorTaskStatus::Ok => CliTaskStatus::Ok,
-                        ExecutorTaskStatus::Changed => CliTaskStatus::Changed,
-                        ExecutorTaskStatus::Failed => CliTaskStatus::Failed,
-                        ExecutorTaskStatus::Skipped => CliTaskStatus::Skipped,
-                        ExecutorTaskStatus::Unreachable => CliTaskStatus::Unreachable,
-                    };
-
-                    let duration = if let Ok(start) = task_start_clone.lock() {
-                        start.map(|s| s.elapsed())
-                    } else {
-                        None
-                    };
-
-                    output.task_result(&host, status, result.msg.as_deref(), duration);
-                }
-                _ => {}
-            }
-        });
 
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
@@ -181,26 +123,21 @@ impl RunArgs {
             if inv_path.exists() {
                 match Inventory::load(inv_path) {
                     Ok(inventory) => {
-                        ctx.output
-                            .debug(&format!("Loaded inventory from: {}", inv_path.display()));
+                        ctx.output.debug(&format!("Loaded inventory from: {}", inv_path.display()));
                         RuntimeContext::from_inventory(&inventory)
                     }
                     Err(e) => {
-                        ctx.output
-                            .warning(&format!("Failed to load inventory: {}", e));
+                        ctx.output.warning(&format!("Failed to load inventory: {}", e));
                         RuntimeContext::new()
                     }
                 }
             } else {
-                ctx.output
-                    .warning(&format!("Inventory file not found: {}", inv_path.display()));
+                ctx.output.warning(&format!("Inventory file not found: {}", inv_path.display()));
                 RuntimeContext::new()
             }
         } else {
-            ctx.output
-                .warning("No inventory specified, using localhost");
-            ctx.output
-                .hint("Use -i <inventory_file> to specify an inventory");
+            ctx.output.warning("No inventory specified, using localhost");
+            ctx.output.hint("Use -i <inventory_file> to specify an inventory");
             // Create runtime with localhost only
             let mut runtime = RuntimeContext::new();
             runtime.add_host("localhost".to_string(), Some("all"));
@@ -228,71 +165,23 @@ impl RunArgs {
         // Plan mode - use legacy show_plan for now as per issue #48:
         // "Plan mode is implemented on top of executor or clearly separated as non-executing"
         if self.plan {
-            ctx.output
-                .plan("WARNING: Running in PLAN MODE - showing execution plan only");
+            ctx.output.plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
-            let playbook_yaml: serde_yaml::Value = match serde_yaml::from_str(&playbook_content) {
-                Ok(value) => value,
-                Err(e) => {
-                    let (line, col) =
-                        e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
-                    let diagnostic = yaml_syntax_error(
-                        &self.playbook,
-                        &playbook_content,
-                        line,
-                        col,
-                        &e.to_string(),
-                    );
-                    ctx.output
-                        .diagnostic(&diagnostic.render_with_source(Some(&playbook_content)));
-                    return Ok(1);
-                }
-            };
+            let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
             if let Some(plays) = playbook_yaml.as_sequence() {
                 let extra_vars_for_plan: std::collections::HashMap<String, serde_yaml::Value> =
                     ctx.parse_extra_vars()?;
                 self.show_plan(ctx, plays, &extra_vars_for_plan).await?;
             }
             let duration = start_time.elapsed();
-            ctx.output
-                .info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
+            ctx.output.info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
             return Ok(0);
         }
 
         // Check mode notice
         if ctx.check_mode {
-            ctx.output
-                .warning("Running in CHECK MODE - no changes will be made");
+            ctx.output.warning("Running in CHECK MODE - no changes will be made");
         }
-
-        let has_extra_ssh_pass = extra_vars.contains_key("ansible_ssh_pass");
-        let has_inventory_ssh_pass = runtime.hosts().iter().any(|host| {
-            runtime
-                .get_var("ansible_ssh_pass", Some(host))
-                .is_some()
-        });
-        let ssh_password = if !has_extra_ssh_pass && !has_inventory_ssh_pass {
-            if self.ask_pass {
-                Some(Self::prompt_ssh_password(ctx)?)
-            } else {
-                crate::cli::env::ssh_password()
-            }
-        } else {
-            None
-        };
-        if let Some(password) = ssh_password {
-            extra_vars.insert("ansible_ssh_pass".to_string(), serde_json::json!(password));
-        }
-
-        let ask_become_pass = Self::should_prompt_become_password(
-            self.ask_become_pass,
-            ctx.config.privilege_escalation.become_ask_pass,
-        );
-        let become_password = if ask_become_pass {
-            Some(Self::prompt_become_password(ctx)?)
-        } else {
-            None
-        };
 
         // Build executor configuration from CLI args
         let executor_config = ExecutorConfig {
@@ -307,25 +196,18 @@ impl RunArgs {
             r#become: self.r#become,
             become_method: self.become_method.clone(),
             become_user: self.become_user.clone(),
-            become_password,
+            become_password: None, // TODO: Implement --ask-become-pass
         };
 
-        // Create executor with runtime context and event callback
-        let executor = Executor::with_runtime(executor_config, runtime)
-            .with_event_callback(callback);
+        // Create executor with runtime context
+        let executor = Executor::with_runtime(executor_config, runtime);
 
         // Run playbook using executor
-        ctx.output
-            .info(&format!("Running playbook: {}", playbook.name));
+        ctx.output.info(&format!("Running playbook: {}", playbook.name));
         let results = match executor.run_playbook(&playbook).await {
             Ok(results) => results,
             Err(e) => {
-                if let Some(rendered) = e.render_diagnostic() {
-                    ctx.output.diagnostic(&rendered);
-                } else {
-                    ctx.output
-                        .error(&format!("Playbook execution failed: {}", e));
-                }
+                ctx.output.error(&format!("Playbook execution failed: {}", e));
                 return Ok(2);
             }
         };
@@ -367,9 +249,6 @@ impl RunArgs {
 
         // Return exit code
         if has_failures {
-            if ctx.verbosity == 0 {
-                ctx.output.hint("Run with -v for more details on failures");
-            }
             Ok(2)
         } else {
             Ok(0)
@@ -411,7 +290,7 @@ impl RunArgs {
                 if play_idx > 0 { "\n" } else { "" },
                 play_idx + 1,
                 plays.len(),
-                "*",
+                "*".to_string(),
                 play_name
             ));
             ctx.output.plan(&format!(
@@ -527,7 +406,10 @@ impl RunArgs {
 
                 ctx.output.plan(&format!(
                     "\n  {} Task {}/{}: {}",
-                    ">", task_num, total, task_name
+                    ">".to_string(),
+                    task_num,
+                    total,
+                    task_name
                 ));
                 ctx.output.plan(&format!("    Module: {}", module));
 
@@ -882,6 +764,242 @@ impl RunArgs {
         }
     }
 
+    /// Execute a single play
+    async fn execute_play(
+        &self,
+        ctx: &mut CommandContext,
+        play: &serde_yaml::Value,
+        stats: &Arc<Mutex<RecapStats>>,
+    ) -> Result<()> {
+        // Get play name
+        let play_name = play
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("Unnamed play");
+
+        ctx.output.play_header(play_name);
+
+        // Get hosts pattern
+        let hosts_pattern = play
+            .get("hosts")
+            .and_then(|h| h.as_str())
+            .unwrap_or("localhost");
+
+        ctx.output.info(&format!("Target hosts: {}", hosts_pattern));
+
+        // Get hosts from inventory (simplified for now)
+        let hosts = self.resolve_hosts(ctx, hosts_pattern)?;
+
+        if hosts.is_empty() {
+            ctx.output
+                .warning(&format!("No hosts matched pattern: {}", hosts_pattern));
+            return Ok(());
+        }
+
+        // Extract play-level variables
+        let mut vars: IndexMap<String, serde_yaml::Value> = IndexMap::new();
+
+        // Add extra vars first (lowest precedence in this context)
+        if let Ok(extra_vars) = ctx.parse_extra_vars() {
+            for (k, v) in extra_vars {
+                if let Ok(yaml_val) = serde_yaml::to_value(&v) {
+                    vars.insert(k, yaml_val);
+                }
+            }
+        }
+
+        // Add play vars (higher precedence)
+        if let Some(play_vars) = play.get("vars") {
+            if let Some(mapping) = play_vars.as_mapping() {
+                for (k, v) in mapping {
+                    if let Some(key) = k.as_str() {
+                        vars.insert(key.to_string(), v.clone());
+                    }
+                }
+            }
+        }
+
+        // Get pre_tasks, tasks, post_tasks
+        let pre_tasks = play
+            .get("pre_tasks")
+            .and_then(|t| t.as_sequence())
+            .cloned()
+            .unwrap_or_default();
+
+        let tasks = play
+            .get("tasks")
+            .and_then(|t| t.as_sequence())
+            .cloned()
+            .unwrap_or_default();
+
+        let post_tasks = play
+            .get("post_tasks")
+            .and_then(|t| t.as_sequence())
+            .cloned()
+            .unwrap_or_default();
+
+        // Get roles
+        let roles = play
+            .get("roles")
+            .and_then(|r| r.as_sequence())
+            .cloned()
+            .unwrap_or_default();
+
+        // Check if gather_facts is enabled (defaults to true)
+        let gather_facts = play
+            .get("gather_facts")
+            .and_then(|g| g.as_bool())
+            .unwrap_or(true);
+
+        // Ansible execution order: gather_facts -> pre_tasks -> roles -> tasks -> post_tasks
+
+        // 0. Gather facts if enabled
+        if gather_facts {
+            ctx.output.task_header("Gathering Facts");
+
+            // Execute the facts module using rustible's native implementation
+            use rustible::modules::{facts::FactsModule, Module, ModuleContext};
+            let facts_module = FactsModule;
+            let params = std::collections::HashMap::new();
+            let module_ctx = ModuleContext::default().with_verbosity(ctx.verbosity);
+
+            match facts_module.execute(&params, &module_ctx) {
+                Ok(output) => {
+                    // Extract ansible_facts and add them to vars with ansible_ prefix
+                    if let Some(facts) = output.data.get("ansible_facts") {
+                        if let Some(facts_obj) = facts.as_object() {
+                            for (key, value) in facts_obj {
+                                // Convert JSON value to YAML value
+                                if let Ok(yaml_val) = serde_yaml::to_value(value) {
+                                    vars.insert(format!("ansible_{}", key), yaml_val);
+                                }
+                            }
+                        }
+                    }
+                    for host in &hosts {
+                        ctx.output.task_result(host, TaskStatus::Ok, None);
+                        stats.lock().await.record(host, TaskStatus::Ok);
+                    }
+                }
+                Err(e) => {
+                    for host in &hosts {
+                        ctx.output
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                        stats.lock().await.record(host, TaskStatus::Failed);
+                    }
+                    return Err(anyhow::anyhow!("Failed to gather facts: {}", e));
+                }
+            }
+        }
+
+        // 1. Execute pre_tasks
+        for task in &pre_tasks {
+            self.execute_task(ctx, task, &hosts, stats, &vars).await?;
+        }
+
+        // 2. Execute role tasks
+        for role in &roles {
+            let role_name = if let Some(name) = role.as_str() {
+                name.to_string()
+            } else if let Some(name) = role.get("role").and_then(|r| r.as_str()) {
+                name.to_string()
+            } else if let Some(name) = role.get("name").and_then(|r| r.as_str()) {
+                name.to_string()
+            } else {
+                continue;
+            };
+
+            // Load role tasks from roles/<role_name>/tasks/main.yml
+            let playbook_dir = self.playbook.parent().unwrap_or(std::path::Path::new("."));
+            let role_tasks_path = playbook_dir
+                .join("roles")
+                .join(&role_name)
+                .join("tasks")
+                .join("main.yml");
+
+            if role_tasks_path.exists() {
+                if let Ok(role_content) = std::fs::read_to_string(&role_tasks_path) {
+                    if let Ok(role_tasks) =
+                        serde_yaml::from_str::<Vec<serde_yaml::Value>>(&role_content)
+                    {
+                        // Merge role vars if present
+                        let mut role_vars = vars.clone();
+
+                        // Load role defaults
+                        let defaults_path = playbook_dir
+                            .join("roles")
+                            .join(&role_name)
+                            .join("defaults")
+                            .join("main.yml");
+                        if defaults_path.exists() {
+                            if let Ok(defaults_content) = std::fs::read_to_string(&defaults_path) {
+                                if let Ok(defaults) =
+                                    serde_yaml::from_str::<serde_yaml::Value>(&defaults_content)
+                                {
+                                    if let Some(mapping) = defaults.as_mapping() {
+                                        for (k, v) in mapping {
+                                            if let Some(key) = k.as_str() {
+                                                role_vars
+                                                    .entry(key.to_string())
+                                                    .or_insert(v.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Load role vars (higher precedence than defaults)
+                        let vars_path = playbook_dir
+                            .join("roles")
+                            .join(&role_name)
+                            .join("vars")
+                            .join("main.yml");
+                        if vars_path.exists() {
+                            if let Ok(vars_content) = std::fs::read_to_string(&vars_path) {
+                                if let Ok(role_vars_file) =
+                                    serde_yaml::from_str::<serde_yaml::Value>(&vars_content)
+                                {
+                                    if let Some(mapping) = role_vars_file.as_mapping() {
+                                        for (k, v) in mapping {
+                                            if let Some(key) = k.as_str() {
+                                                role_vars.insert(key.to_string(), v.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Execute role tasks
+                        for task in &role_tasks {
+                            self.execute_task(ctx, task, &hosts, stats, &role_vars)
+                                .await?;
+                        }
+                    }
+                }
+            } else {
+                ctx.output.warning(&format!(
+                    "Role '{}' not found at {}",
+                    role_name,
+                    role_tasks_path.display()
+                ));
+            }
+        }
+
+        // 3. Execute tasks
+        for task in &tasks {
+            self.execute_task(ctx, task, &hosts, stats, &vars).await?;
+        }
+
+        // 4. Execute post_tasks
+        for task in &post_tasks {
+            self.execute_task(ctx, task, &hosts, stats, &vars).await?;
+        }
+
+        Ok(())
+    }
+
     /// Resolve hosts from pattern
     fn resolve_hosts(&self, ctx: &CommandContext, pattern: &str) -> Result<Vec<String>> {
         // Simplified host resolution
@@ -928,13 +1046,116 @@ impl RunArgs {
         Ok(vec![pattern.to_string()])
     }
 
+    /// Execute a single task
+    async fn execute_task(
+        &self,
+        ctx: &mut CommandContext,
+        task: &serde_yaml::Value,
+        hosts: &[String],
+        stats: &Arc<Mutex<RecapStats>>,
+        vars: &IndexMap<String, serde_yaml::Value>,
+    ) -> Result<()> {
+        // Get task name
+        let task_name = task
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("Unnamed task");
+
+        // Check tags
+        if !self.should_run_task(task) {
+            let mut stats_guard = stats.lock().await;
+            for host in hosts {
+                stats_guard.record(host, TaskStatus::Skipped);
+            }
+            return Ok(());
+        }
+
+        ctx.output.task_header(task_name);
+
+        // Check conditions (when)
+        let when_condition = task.get("when");
+
+        // Execute on each host
+        for host in hosts {
+            // Check when condition (simplified)
+            if let Some(when) = when_condition {
+                let condition = when.as_str().unwrap_or("true");
+                if condition == "false" {
+                    ctx.output.task_result(
+                        host,
+                        TaskStatus::Skipped,
+                        Some("conditional check failed"),
+                    );
+                    stats.lock().await.record(host, TaskStatus::Skipped);
+                    continue;
+                }
+            }
+
+            // Determine the module being used
+            let (module, _args) = self.detect_module(task);
+
+            // In check mode, don't actually execute
+            if ctx.check_mode {
+                ctx.output.task_result(
+                    host,
+                    TaskStatus::Changed,
+                    Some(&format!("[check mode] would run: {}", module)),
+                );
+                stats.lock().await.record(host, TaskStatus::Changed);
+                continue;
+            }
+
+            // Execute the task (simplified)
+            let spinner = ctx
+                .output
+                .create_spinner(&format!("Executing on {}...", host));
+
+            let result = self.execute_module(ctx, host, task, vars).await;
+
+            if let Some(sp) = spinner {
+                sp.finish_and_clear();
+            }
+
+            match result {
+                Ok((changed, message)) => {
+                    let status = if changed {
+                        TaskStatus::Changed
+                    } else {
+                        TaskStatus::Ok
+                    };
+                    ctx.output.task_result(host, status, message.as_deref());
+                    stats.lock().await.record(host, status);
+                }
+                Err(e) => {
+                    // Check for ignore_errors
+                    let ignore_errors = task
+                        .get("ignore_errors")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+
+                    if ignore_errors {
+                        ctx.output.task_result(
+                            host,
+                            TaskStatus::Ignored,
+                            Some(&format!("ignored error: {}", e)),
+                        );
+                        stats.lock().await.record(host, TaskStatus::Ignored);
+                    } else {
+                        ctx.output
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                        stats.lock().await.record(host, TaskStatus::Failed);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Check if a task should run based on tags
     fn should_run_task(&self, task: &serde_yaml::Value) -> bool {
-        let tags = Self::normalize_tags(&self.tags);
-        let skip_tags = Self::normalize_tags(&self.skip_tags);
-
         // If no tags specified, run everything
-        if tags.is_empty() && skip_tags.is_empty() {
+        if self.tags.is_empty() && self.skip_tags.is_empty() {
             return true;
         }
 
@@ -943,26 +1164,28 @@ impl RunArgs {
             .and_then(|t| {
                 if let Some(s) = t.as_str() {
                     Some(vec![s.to_string()])
-                } else {
-                    t.as_sequence().map(|seq| {
+                } else if let Some(seq) = t.as_sequence() {
+                    Some(
                         seq.iter()
                             .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
+                            .collect(),
+                    )
+                } else {
+                    None
                 }
             })
             .unwrap_or_default();
 
         // Check skip_tags first
-        for skip_tag in &skip_tags {
+        for skip_tag in &self.skip_tags {
             if task_tags.contains(skip_tag) {
                 return false;
             }
         }
 
         // Check tags
-        if !tags.is_empty() {
-            for tag in &tags {
+        if !self.tags.is_empty() {
+            for tag in &self.tags {
                 if task_tags.contains(tag) || tag == "all" {
                     return true;
                 }
@@ -971,35 +1194,6 @@ impl RunArgs {
         }
 
         true
-    }
-
-    fn normalize_tags(tags: &[String]) -> Vec<String> {
-        tags.iter()
-            .flat_map(|tag| tag.split(','))
-            .map(|tag| tag.trim())
-            .filter(|tag| !tag.is_empty())
-            .map(|tag| tag.to_string())
-            .collect()
-    }
-
-    fn should_prompt_become_password(ask_become_pass: bool, config_ask_pass: bool) -> bool {
-        ask_become_pass || config_ask_pass
-    }
-
-    fn prompt_ssh_password(ctx: &CommandContext) -> Result<String> {
-        ctx.output.flush();
-        let password = dialoguer::Password::new()
-            .with_prompt("SSH password")
-            .interact()?;
-        Ok(password)
-    }
-
-    fn prompt_become_password(ctx: &CommandContext) -> Result<String> {
-        ctx.output.flush();
-        let password = dialoguer::Password::new()
-            .with_prompt("Become password")
-            .interact()?;
-        Ok(password)
     }
 
     /// Detect which module a task is using
@@ -1038,6 +1232,231 @@ impl RunArgs {
         }
 
         ("unknown", None)
+    }
+
+    /// Execute a module (simplified implementation)
+    async fn execute_module(
+        &self,
+        ctx: &CommandContext,
+        host: &str,
+        task: &serde_yaml::Value,
+        vars: &IndexMap<String, serde_yaml::Value>,
+    ) -> Result<(bool, Option<String>)> {
+        let (module, args) = self.detect_module(task);
+
+        ctx.output
+            .debug(&format!("Executing module '{}' on host '{}'", module, host));
+
+        // Handle debug module locally
+        if module == "debug" {
+            let mut message = String::new();
+            if let Some(args) = args {
+                if let Some(msg) = args.get("msg").and_then(|m| m.as_str()) {
+                    let templated_msg = Self::template_string(msg, vars);
+                    message = templated_msg;
+                } else if let Some(var) = args.get("var").and_then(|v| v.as_str()) {
+                    // Look up the variable value
+                    let var_name = Self::template_string(var, vars);
+                    if let Some(value) = vars.get(&var_name) {
+                        message = format!("{} = {:?}", var_name, value);
+                    } else {
+                        message = format!("{} = <undefined>", var_name);
+                    }
+                }
+            }
+            return Ok((
+                false,
+                if message.is_empty() {
+                    None
+                } else {
+                    Some(message)
+                },
+            ));
+        }
+
+        // Handle set_fact locally (no remote execution needed)
+        if module == "set_fact" {
+            return Ok((true, None));
+        }
+
+        // For command/shell modules, execute remotely if not localhost
+        if module == "command" || module == "shell" {
+            let cmd = if let Some(args) = args {
+                args.as_str()
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        args.get("cmd")
+                            .and_then(|c| c.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+
+            if cmd.is_empty() {
+                return Err(anyhow::anyhow!("No command specified"));
+            }
+
+            if host == "localhost" || host == "127.0.0.1" {
+                // Local execution
+                ctx.output.debug(&format!("Local execution: {}", cmd));
+                let parts: Vec<&str> = cmd.split_whitespace().collect();
+                if parts.is_empty() {
+                    return Err(anyhow::anyhow!("Empty command"));
+                }
+
+                let output =
+                    std::process::Command::new(if module == "shell" { "sh" } else { parts[0] })
+                        .args(if module == "shell" {
+                            vec!["-c", &cmd]
+                        } else {
+                            parts[1..].to_vec()
+                        })
+                        .output()
+                        .map_err(|e| anyhow::anyhow!("Failed to execute command: {}", e))?;
+
+                if output.status.success() {
+                    return Ok((true, None));
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(anyhow::anyhow!("Command failed: {}", stderr));
+                }
+            } else {
+                // Remote execution via SSH
+                let success = self.execute_remote_command(ctx, host, &cmd).await?;
+                return Ok((success, None));
+            }
+        }
+
+        // For other modules, simulate execution for now
+        Ok((true, None))
+    }
+
+    /// Execute a command on a remote host via SSH
+    /// Uses connection pooling to reuse connections across multiple commands
+    async fn execute_remote_command(
+        &self,
+        ctx: &CommandContext,
+        host: &str,
+        cmd: &str,
+    ) -> Result<bool> {
+        // Get host connection details from inventory
+        let (ansible_host, ansible_user, ansible_port, ansible_key) =
+            self.get_host_connection_info(ctx, host)?;
+
+        // Get or create a pooled connection
+        let conn = ctx
+            .get_connection(
+                host,
+                &ansible_host,
+                &ansible_user,
+                ansible_port,
+                ansible_key.as_deref(),
+            )
+            .await?;
+
+        // Build execution options with become settings
+        let options = if self.r#become {
+            Some(rustible::connection::ExecuteOptions::new()
+                .with_escalation(Some(self.become_user.clone()))
+                .with_escalate_method(self.become_method.clone()))
+        } else {
+            None
+        };
+
+        // Execute command on the pooled connection
+        let result = conn
+            .execute(cmd, options)
+            .await
+            .map_err(|e| anyhow::anyhow!("Command execution failed: {}", e))?;
+
+        if result.success {
+            Ok(true)
+        } else {
+            Err(anyhow::anyhow!(
+                "Command failed with exit code {}: {}",
+                result.exit_code,
+                if result.stderr.is_empty() {
+                    result.stdout
+                } else {
+                    result.stderr
+                }
+            ))
+        }
+    }
+
+    /// Get connection info for a host from inventory
+    fn get_host_connection_info(
+        &self,
+        ctx: &CommandContext,
+        host: &str,
+    ) -> Result<(String, String, u16, Option<String>)> {
+        // Try to load from inventory
+        if let Some(inv_path) = ctx.inventory() {
+            if inv_path.exists() {
+                let content = std::fs::read_to_string(inv_path)?;
+                let inventory: serde_yaml::Value = serde_yaml::from_str(&content)?;
+
+                // Look for host-specific vars
+                if let Some(all) = inventory.get("all") {
+                    // Get global vars
+                    let global_user = all
+                        .get("vars")
+                        .and_then(|v| v.get("ansible_user"))
+                        .and_then(|u| u.as_str())
+                        .map(|s| s.to_string());
+                    let global_key = all
+                        .get("vars")
+                        .and_then(|v| v.get("ansible_ssh_private_key_file"))
+                        .and_then(|k| k.as_str())
+                        .map(|s| s.to_string());
+
+                    // Get host-specific vars
+                    if let Some(hosts) = all.get("hosts") {
+                        if let Some(host_config) = hosts.get(host) {
+                            let ansible_host = host_config
+                                .get("ansible_host")
+                                .and_then(|h| h.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| host.to_string());
+                            let ansible_user = host_config
+                                .get("ansible_user")
+                                .and_then(|u| u.as_str())
+                                .map(|s| s.to_string())
+                                .or(global_user)
+                                .unwrap_or_else(|| {
+                                    std::env::var("USER").unwrap_or_else(|_| "root".to_string())
+                                });
+                            let ansible_port = host_config
+                                .get("ansible_port")
+                                .and_then(|p| p.as_u64())
+                                .unwrap_or(22)
+                                as u16;
+                            let ansible_key = host_config
+                                .get("ansible_ssh_private_key_file")
+                                .and_then(|k| k.as_str())
+                                .map(|s| s.to_string())
+                                .or(global_key);
+
+                            return Ok((ansible_host, ansible_user, ansible_port, ansible_key));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Default: use host as-is with current user
+        let user = self
+            .user
+            .clone()
+            .unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "root".to_string()));
+        let key = self
+            .private_key
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string());
+
+        Ok((host.to_string(), user, 22, key))
     }
 
     /// Validate a limit pattern
@@ -1157,28 +1576,6 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_tags_with_commas() {
-        let args = RunArgs::try_parse_from([
-            "run",
-            "playbook.yml",
-            "--tags",
-            "install, configure",
-            "--skip-tags",
-            "slow, noisy",
-        ])
-        .unwrap();
-
-        assert_eq!(
-            RunArgs::normalize_tags(&args.tags),
-            vec!["install", "configure"]
-        );
-        assert_eq!(
-            RunArgs::normalize_tags(&args.skip_tags),
-            vec!["slow", "noisy"]
-        );
-    }
-
-    #[test]
     fn test_run_args_become() {
         let args =
             RunArgs::try_parse_from(["run", "playbook.yml", "--become", "--become-user", "admin"])
@@ -1188,26 +1585,9 @@ mod tests {
     }
 
     #[test]
-    fn test_run_args_ask_become_pass_parsing() {
-        let args =
-            RunArgs::try_parse_from(["run", "playbook.yml", "--ask-become-pass"]).unwrap();
-        assert!(args.ask_become_pass);
-
-        let args = RunArgs::try_parse_from(["run", "playbook.yml", "-K"]).unwrap();
-        assert!(args.ask_become_pass);
-    }
-
-    #[test]
     fn test_run_args_plan_flag() {
         let args = RunArgs::try_parse_from(["run", "playbook.yml", "--plan"]).unwrap();
         assert!(args.plan);
-    }
-
-    #[test]
-    fn test_should_prompt_become_password_gating() {
-        assert!(RunArgs::should_prompt_become_password(true, false));
-        assert!(RunArgs::should_prompt_become_password(false, true));
-        assert!(!RunArgs::should_prompt_become_password(false, false));
     }
 
     #[test]
