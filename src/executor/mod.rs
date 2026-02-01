@@ -118,11 +118,10 @@ use thiserror::Error;
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::connection::ConnectionFactory;
 use crate::executor::parallelization::ParallelizationManager;
-// Play and Playbook are pub use'd above
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
 use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
-use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 /// Errors that can occur during playbook and task execution.
@@ -178,16 +177,6 @@ pub enum ExecutorError {
     /// Other miscellaneous errors.
     #[error("{0}")]
     Other(String),
-
-    /// Template rendering error.
-    #[error("Template error: {0}")]
-    Template(String),
-}
-
-impl From<crate::template::TemplateError> for ExecutorError {
-    fn from(e: crate::template::TemplateError) -> Self {
-        ExecutorError::Template(e.to_string())
-    }
 }
 
 /// Result type for executor operations.
@@ -260,28 +249,6 @@ pub struct ExecutorConfig {
     /// These have the highest precedence and override all other variables.
     /// Similar to Ansible's `--extra-vars` or `-e` option.
     pub extra_vars: HashMap<String, serde_json::Value>,
-
-    /// Whether to run with privilege escalation (default: false).
-    ///
-    /// When enabled, commands are executed with elevated privileges.
-    /// Similar to Ansible's `--become` or `-b` option.
-    pub r#become: bool,
-
-    /// Method for privilege escalation (default: "sudo").
-    ///
-    /// Common methods: "sudo", "su", "pbrun", "pfexec", "doas", "dzdo".
-    /// Similar to Ansible's `--become-method` option.
-    pub become_method: String,
-
-    /// User to become when escalating privileges (default: "root").
-    ///
-    /// Similar to Ansible's `--become-user` option.
-    pub become_user: String,
-
-    /// Password for privilege escalation (default: None).
-    ///
-    /// Similar to providing password via `--ask-become-pass`.
-    pub become_password: Option<String>,
 }
 
 impl Default for ExecutorConfig {
@@ -295,10 +262,6 @@ impl Default for ExecutorConfig {
             task_timeout: 300,
             gather_facts: true,
             extra_vars: HashMap::new(),
-            r#become: false,
-            become_method: "sudo".to_string(),
-            become_user: "root".to_string(),
-            become_password: None,
         }
     }
 }
@@ -419,8 +382,8 @@ pub struct Executor {
     semaphore: Arc<Semaphore>,
     parallelization_manager: Arc<ParallelizationManager>,
     recovery_manager: Option<Arc<RecoveryManager>>,
-    /// Shared module registry - created once per executor to avoid hot path overhead
-    module_registry: Arc<ModuleRegistry>,
+    /// Connection factory for remote execution
+    connection_factory: Option<Arc<ConnectionFactory>>,
 }
 
 impl Executor {
@@ -435,7 +398,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
-            module_registry: Arc::new(ModuleRegistry::with_builtins()),
+            connection_factory: None,
         }
     }
 
@@ -450,7 +413,7 @@ impl Executor {
             semaphore: Arc::new(Semaphore::new(forks)),
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
-            module_registry: Arc::new(ModuleRegistry::with_builtins()),
+            connection_factory: None,
         }
     }
 
@@ -458,6 +421,30 @@ impl Executor {
     pub fn with_recovery_manager(mut self, recovery_manager: Arc<RecoveryManager>) -> Self {
         self.recovery_manager = Some(recovery_manager);
         self
+    }
+
+    /// Set the connection factory for remote execution
+    pub fn with_connection_factory(mut self, factory: ConnectionFactory) -> Self {
+        self.connection_factory = Some(Arc::new(factory));
+        self
+    }
+
+    /// Get a connection for a host from the connection factory
+    async fn get_connection_for_host(
+        &self,
+        host: &str,
+    ) -> Option<Arc<dyn crate::connection::Connection + Send + Sync>> {
+        if let Some(factory) = &self.connection_factory {
+            match factory.get_connection(host).await {
+                Ok(conn) => Some(conn),
+                Err(e) => {
+                    warn!("Failed to get connection for host {}: {}", host, e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
     }
 
     /// Run a complete playbook
@@ -489,7 +476,7 @@ impl Executor {
                 }
                 // Add extra vars (highest precedence)
                 for (key, value) in &self.config.extra_vars {
-                    runtime.set_global_var(key.clone(), value.clone());
+                    runtime.set_extra_var(key.clone(), value.clone());
                 }
             }
 
@@ -911,24 +898,23 @@ impl Executor {
                 unreachable: false,
             };
 
+            // Get connection for host once before running tasks
+            let host_connection = self.get_connection_for_host(&host).await;
+
             for task in tasks {
                 if host_result.failed || host_result.unreachable {
                     break;
                 }
 
-                // Apply become precedence: task > config (play-level handled separately)
-                let effective_become = task.r#become || self.config.r#become;
-                let effective_become_user = task.become_user.clone()
-                    .unwrap_or_else(|| self.config.r#become_user.clone());
-
-                let ctx = ExecutionContext::new(host.clone())
+                let mut ctx = ExecutionContext::new(host.clone())
                     .with_check_mode(self.config.check_mode)
                     .with_diff_mode(self.config.diff_mode)
-                    .with_verbosity(self.config.verbosity)
-                    .with_become(effective_become)
-                    .with_become_method(self.config.r#become_method.clone())
-                    .with_become_user(effective_become_user)
-                    .with_become_password(self.config.r#become_password.clone());
+                    .with_verbosity(self.config.verbosity);
+
+                // Set connection if available
+                if let Some(ref conn) = host_connection {
+                    ctx = ctx.with_connection(conn.clone());
+                }
 
                 let task_result = task
                     .execute(
@@ -937,7 +923,6 @@ impl Executor {
                         &self.handlers,
                         &self.notified_handlers,
                         &self.parallelization_manager,
-                        &self.module_registry,
                     )
                     .await;
 
@@ -1003,10 +988,6 @@ impl Executor {
         let check_mode = self.config.check_mode;
         let diff_mode = self.config.diff_mode;
         let verbosity = self.config.verbosity;
-        let config_become = self.config.r#become;
-        let config_become_method = self.config.r#become_method.clone();
-        let config_become_user = self.config.r#become_user.clone();
-        let config_become_password = self.config.r#become_password.clone();
 
         // Avoid cloning entire task list - use Arc slice instead
         let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
@@ -1023,13 +1004,9 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
-                let module_registry = Arc::clone(&self.module_registry);
                 let recovery_manager = self.recovery_manager.clone();
+                let connection_factory = self.connection_factory.clone();
                 let tx_id = tx_id.clone();
-                let config_become = config_become;
-                let config_become_method = config_become_method.clone();
-                let config_become_user = config_become_user.clone();
-                let config_become_password = config_become_password.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1041,27 +1018,36 @@ impl Executor {
                         unreachable: false,
                     };
 
+                    // Get connection for host
+                    let host_connection = if let Some(ref factory) = connection_factory {
+                        match factory.get_connection(&host).await {
+                            Ok(conn) => Some(conn),
+                            Err(e) => {
+                                warn!("Failed to get connection for host {}: {}", host, e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
                     for task in tasks.iter() {
                         if host_result.failed || host_result.unreachable {
                             break;
                         }
 
-                        // Apply become precedence: task > config
-                        let effective_become = task.r#become || config_become;
-                        let effective_become_user = task.become_user.clone()
-                            .unwrap_or_else(|| config_become_user.clone());
-
-                        let ctx = ExecutionContext::new(host.clone())
+                        let mut ctx = ExecutionContext::new(host.clone())
                             .with_check_mode(check_mode)
                             .with_diff_mode(diff_mode)
-                            .with_verbosity(verbosity)
-                            .with_become(effective_become)
-                            .with_become_method(config_become_method.clone())
-                            .with_become_user(effective_become_user)
-                            .with_become_password(config_become_password.clone());
+                            .with_verbosity(verbosity);
+
+                        // Set connection if available
+                        if let Some(ref conn) = host_connection {
+                            ctx = ctx.with_connection(conn.clone());
+                        }
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry)
+                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1270,19 +1256,18 @@ impl Executor {
             let host = &hosts[0];
             let _permit = self.semaphore.acquire().await.unwrap();
 
-            // Apply become precedence: task > config
-            let effective_become = task.r#become || self.config.r#become;
-            let effective_become_user = task.become_user.clone()
-                .unwrap_or_else(|| self.config.r#become_user.clone());
+            // Get connection for host
+            let host_connection = self.get_connection_for_host(host).await;
 
-            let ctx = ExecutionContext::new(host.clone())
+            let mut ctx = ExecutionContext::new(host.clone())
                 .with_check_mode(self.config.check_mode)
                 .with_diff_mode(self.config.diff_mode)
-                .with_verbosity(self.config.verbosity)
-                .with_become(effective_become)
-                .with_become_method(self.config.r#become_method.clone())
-                .with_become_user(effective_become_user)
-                .with_become_password(self.config.r#become_password.clone());
+                .with_verbosity(self.config.verbosity);
+
+            // Set connection if available
+            if let Some(conn) = host_connection {
+                ctx = ctx.with_connection(conn);
+            }
 
             let result = task
                 .execute(
@@ -1291,7 +1276,6 @@ impl Executor {
                     &self.handlers,
                     &self.notified_handlers,
                     &self.parallelization_manager,
-                    &self.module_registry,
                 )
                 .await;
 
@@ -1351,15 +1335,6 @@ impl Executor {
         let check_mode = self.config.check_mode;
         let diff_mode = self.config.diff_mode;
         let verbosity = self.config.verbosity;
-        let config_become = self.config.r#become;
-        let config_become_method = self.config.r#become_method.clone();
-        let config_become_user = self.config.r#become_user.clone();
-        let config_become_password = self.config.r#become_password.clone();
-
-        // Apply become precedence: task > config
-        let effective_become = task.r#become || config_become;
-        let effective_become_user = task.become_user.clone()
-            .unwrap_or_else(|| config_become_user.clone());
 
         // OPTIMIZATION: For small host counts, share task via Arc instead of cloning per host
         let task_arc = Arc::new(task.clone());
@@ -1376,26 +1351,36 @@ impl Executor {
                 let handlers = Arc::clone(&self.handlers);
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization = Arc::clone(&self.parallelization_manager);
-                let module_registry = Arc::clone(&self.module_registry);
-                let effective_become = effective_become;
-                let config_become_method = config_become_method.clone();
-                let effective_become_user = effective_become_user.clone();
-                let config_become_password = config_become_password.clone();
+                let connection_factory = self.connection_factory.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
 
-                    let ctx = ExecutionContext::new(host.clone())
+                    // Get connection for host
+                    let host_connection = if let Some(ref factory) = connection_factory {
+                        match factory.get_connection(&host).await {
+                            Ok(conn) => Some(conn),
+                            Err(e) => {
+                                warn!("Failed to get connection for host {}: {}", host, e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let mut ctx = ExecutionContext::new(host.clone())
                         .with_check_mode(check_mode)
                         .with_diff_mode(diff_mode)
-                        .with_verbosity(verbosity)
-                        .with_become(effective_become)
-                        .with_become_method(config_become_method)
-                        .with_become_user(effective_become_user)
-                        .with_become_password(config_become_password);
+                        .with_verbosity(verbosity);
+
+                    // Set connection if available
+                    if let Some(conn) = host_connection {
+                        ctx = ctx.with_connection(conn);
+                    }
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
                         .await;
 
                     match result {

@@ -6,7 +6,6 @@ use super::{CommandContext, Runnable};
 use crate::cli::output::{RecapStats, TaskStatus};
 use anyhow::Result;
 use clap::Parser;
-use futures::future::join_all;
 use indexmap::IndexMap;
 use regex::Regex;
 use std::path::PathBuf;
@@ -81,8 +80,8 @@ pub struct RunArgs {
 impl RunArgs {
     /// Execute the run command using the executor as the single runtime
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy, Playbook};
         use rustible::executor::runtime::RuntimeContext;
-        use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig, Playbook};
         use rustible::inventory::Inventory;
 
         let start_time = Instant::now();
@@ -113,37 +112,10 @@ impl RunArgs {
         let playbook = match Playbook::load(&self.playbook) {
             Ok(pb) => pb,
             Err(e) => {
-                ctx.output
-                    .error(&format!("Failed to parse playbook: {}", e));
+                ctx.output.error(&format!("Failed to parse playbook: {}", e));
                 return Ok(1);
             }
         };
-
-        // Best-effort progress output: show plays and tasks (no-op in JSON mode).
-        // NOTE: The executor currently doesn't stream per-task events to the CLI, so this
-        // provides minimal Ansible-like headers without needing deep wiring.
-        for play in &playbook.plays {
-            let play_name = if play.name.is_empty() {
-                "Unnamed play"
-            } else {
-                play.name.as_str()
-            };
-            ctx.output.play_header(play_name);
-
-            for task in play
-                .pre_tasks
-                .iter()
-                .chain(play.tasks.iter())
-                .chain(play.post_tasks.iter())
-            {
-                let task_name = if task.name.is_empty() {
-                    task.module.as_str()
-                } else {
-                    task.name.as_str()
-                };
-                ctx.output.task_header(task_name);
-            }
-        }
 
         // Get inventory path and load inventory
         let inventory_path = ctx.inventory().cloned();
@@ -151,26 +123,21 @@ impl RunArgs {
             if inv_path.exists() {
                 match Inventory::load(inv_path) {
                     Ok(inventory) => {
-                        ctx.output
-                            .debug(&format!("Loaded inventory from: {}", inv_path.display()));
+                        ctx.output.debug(&format!("Loaded inventory from: {}", inv_path.display()));
                         RuntimeContext::from_inventory(&inventory)
                     }
                     Err(e) => {
-                        ctx.output
-                            .warning(&format!("Failed to load inventory: {}", e));
+                        ctx.output.warning(&format!("Failed to load inventory: {}", e));
                         RuntimeContext::new()
                     }
                 }
             } else {
-                ctx.output
-                    .warning(&format!("Inventory file not found: {}", inv_path.display()));
+                ctx.output.warning(&format!("Inventory file not found: {}", inv_path.display()));
                 RuntimeContext::new()
             }
         } else {
-            ctx.output
-                .warning("No inventory specified, using localhost");
-            ctx.output
-                .hint("Use -i <inventory_file> to specify an inventory");
+            ctx.output.warning("No inventory specified, using localhost");
+            ctx.output.hint("Use -i <inventory_file> to specify an inventory");
             // Create runtime with localhost only
             let mut runtime = RuntimeContext::new();
             runtime.add_host("localhost".to_string(), Some("all"));
@@ -198,8 +165,7 @@ impl RunArgs {
         // Plan mode - use legacy show_plan for now as per issue #48:
         // "Plan mode is implemented on top of executor or clearly separated as non-executing"
         if self.plan {
-            ctx.output
-                .plan("WARNING: Running in PLAN MODE - showing execution plan only");
+            ctx.output.plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
             let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
             if let Some(plays) = playbook_yaml.as_sequence() {
@@ -208,15 +174,13 @@ impl RunArgs {
                 self.show_plan(ctx, plays, &extra_vars_for_plan).await?;
             }
             let duration = start_time.elapsed();
-            ctx.output
-                .info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
+            ctx.output.info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
             return Ok(0);
         }
 
         // Check mode notice
         if ctx.check_mode {
-            ctx.output
-                .warning("Running in CHECK MODE - no changes will be made");
+            ctx.output.warning("Running in CHECK MODE - no changes will be made");
         }
 
         // Build executor configuration from CLI args
@@ -229,23 +193,17 @@ impl RunArgs {
             task_timeout: 300,
             gather_facts: true,
             extra_vars,
-            r#become: self.r#become,
-            become_method: self.become_method.clone(),
-            become_user: self.become_user.clone(),
-            become_password: None, // TODO: Implement --ask-become-pass
         };
 
         // Create executor with runtime context
         let executor = Executor::with_runtime(executor_config, runtime);
 
         // Run playbook using executor
-        ctx.output
-            .info(&format!("Running playbook: {}", playbook.name));
+        ctx.output.info(&format!("Running playbook: {}", playbook.name));
         let results = match executor.run_playbook(&playbook).await {
             Ok(results) => results,
             Err(e) => {
-                ctx.output
-                    .error(&format!("Playbook execution failed: {}", e));
+                ctx.output.error(&format!("Playbook execution failed: {}", e));
                 return Ok(2);
             }
         };
@@ -287,10 +245,6 @@ impl RunArgs {
 
         // Return exit code
         if has_failures {
-            if ctx.verbosity == 0 {
-                ctx.output
-                    .hint("Run with -v for more details on failures");
-            }
             Ok(2)
         } else {
             Ok(0)
@@ -332,7 +286,7 @@ impl RunArgs {
                 if play_idx > 0 { "\n" } else { "" },
                 play_idx + 1,
                 plays.len(),
-                "*",
+                "*".to_string(),
                 play_name
             ));
             ctx.output.plan(&format!(
@@ -448,7 +402,10 @@ impl RunArgs {
 
                 ctx.output.plan(&format!(
                     "\n  {} Task {}/{}: {}",
-                    ">", task_num, total, task_name
+                    ">".to_string(),
+                    task_num,
+                    total,
+                    task_name
                 ));
                 ctx.output.plan(&format!("    Module: {}", module));
 
@@ -916,18 +873,14 @@ impl RunArgs {
                         }
                     }
                     for host in &hosts {
-                        ctx.output.task_result(host, TaskStatus::Ok, None, None);
+                        ctx.output.task_result(host, TaskStatus::Ok, None);
                         stats.lock().await.record(host, TaskStatus::Ok);
                     }
                 }
                 Err(e) => {
                     for host in &hosts {
-                        ctx.output.task_result(
-                            host,
-                            TaskStatus::Failed,
-                            Some(&e.to_string()),
-                            None,
-                        );
+                        ctx.output
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                     return Err(anyhow::anyhow!("Failed to gather facts: {}", e));
@@ -1089,11 +1042,7 @@ impl RunArgs {
         Ok(vec![pattern.to_string()])
     }
 
-    /// Execute a single task across all hosts concurrently (respecting forks limit)
-    ///
-    /// Uses batch-based concurrency where hosts are processed in parallel batches
-    /// of size `forks`. Each batch completes before the next batch starts.
-    /// Results are buffered and printed in host order for deterministic output.
+    /// Execute a single task
     async fn execute_task(
         &self,
         ctx: &mut CommandContext,
@@ -1119,139 +1068,81 @@ impl RunArgs {
 
         ctx.output.task_header(task_name);
 
-        // Check conditions (when) - extract condition once
+        // Check conditions (when)
         let when_condition = task.get("when");
-        let when_is_false = when_condition
-            .and_then(|w| w.as_str())
-            .map(|s| s == "false")
-            .unwrap_or(false);
 
-        // Determine the module being used (for check mode message)
-        let (module, _args) = self.detect_module(task);
+        // Execute on each host
+        for host in hosts {
+            // Check when condition (simplified)
+            if let Some(when) = when_condition {
+                let condition = when.as_str().unwrap_or("true");
+                if condition == "false" {
+                    ctx.output.task_result(
+                        host,
+                        TaskStatus::Skipped,
+                        Some("conditional check failed"),
+                    );
+                    stats.lock().await.record(host, TaskStatus::Skipped);
+                    continue;
+                }
+            }
 
-        // Check for ignore_errors flag
-        let ignore_errors = task
-            .get("ignore_errors")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            // Determine the module being used
+            let (module, _args) = self.detect_module(task);
 
-        // Get forks limit from context
-        let forks = ctx.forks;
-        let check_mode = ctx.check_mode;
+            // In check mode, don't actually execute
+            if ctx.check_mode {
+                ctx.output.task_result(
+                    host,
+                    TaskStatus::Changed,
+                    Some(&format!("[check mode] would run: {}", module)),
+                );
+                stats.lock().await.record(host, TaskStatus::Changed);
+                continue;
+            }
 
-        // Result struct to hold host execution results
-        struct HostResult {
-            host: String,
-            status: TaskStatus,
-            message: Option<String>,
-            duration: Option<std::time::Duration>,
-        }
+            // Execute the task (simplified)
+            let spinner = ctx
+                .output
+                .create_spinner(&format!("Executing on {}...", host));
 
-        let mut all_results: Vec<HostResult> = Vec::with_capacity(hosts.len());
+            let result = self.execute_module(ctx, host, task, vars).await;
 
-        // Process hosts in batches of `forks` for concurrent execution
-        for batch in hosts.chunks(forks) {
-            // Create a spinner for this batch
-            let spinner = if batch.len() > 1 {
-                ctx.output.create_spinner(&format!(
-                    "Executing on {} hosts (batch of {})...",
-                    batch.len(),
-                    forks
-                ))
-            } else {
-                ctx.output
-                    .create_spinner(&format!("Executing on {}...", batch[0]))
-            };
-
-            // Execute all hosts in this batch concurrently
-            let batch_futures: Vec<_> = batch
-                .iter()
-                .map(|host| {
-                    let host = host.clone();
-                    async {
-                        // Check when condition
-                        if when_is_false {
-                            return HostResult {
-                                host,
-                                status: TaskStatus::Skipped,
-                                message: Some("conditional check failed".to_string()),
-                                duration: None,
-                            };
-                        }
-
-                        // In check mode, don't actually execute
-                        if check_mode {
-                            return HostResult {
-                                host,
-                                status: TaskStatus::Changed,
-                                message: Some(format!("[check mode] would run: {}", module)),
-                                duration: None,
-                            };
-                        }
-
-                        let start = Instant::now();
-                        // Execute the task
-                        let exec_result = self.execute_module(ctx, &host, task, vars).await;
-                        let duration = start.elapsed();
-
-                        match exec_result {
-                            Ok((changed, message)) => {
-                                let status = if changed {
-                                    TaskStatus::Changed
-                                } else {
-                                    TaskStatus::Ok
-                                };
-                                HostResult {
-                                    host,
-                                    status,
-                                    message,
-                                    duration: Some(duration),
-                                }
-                            }
-                            Err(e) => {
-                                if ignore_errors {
-                                    HostResult {
-                                        host,
-                                        status: TaskStatus::Ignored,
-                                        message: Some(format!("ignored error: {}", e)),
-                                        duration: Some(duration),
-                                    }
-                                } else {
-                                    HostResult {
-                                        host,
-                                        status: TaskStatus::Failed,
-                                        message: Some(e.to_string()),
-                                        duration: Some(duration),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                })
-                .collect();
-
-            // Wait for all hosts in this batch to complete
-            let batch_results = join_all(batch_futures).await;
-            all_results.extend(batch_results);
-
-            // Clear spinner after batch completes
             if let Some(sp) = spinner {
                 sp.finish_and_clear();
             }
-        }
 
-        // Results are already in host order since we process batches in order
-        // and join_all preserves order within each batch
+            match result {
+                Ok((changed, message)) => {
+                    let status = if changed {
+                        TaskStatus::Changed
+                    } else {
+                        TaskStatus::Ok
+                    };
+                    ctx.output.task_result(host, status, message.as_deref());
+                    stats.lock().await.record(host, status);
+                }
+                Err(e) => {
+                    // Check for ignore_errors
+                    let ignore_errors = task
+                        .get("ignore_errors")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
 
-        // Print results and update stats in host order
-        for result in all_results {
-            ctx.output.task_result(
-                &result.host,
-                result.status,
-                result.message.as_deref(),
-                result.duration,
-            );
-            stats.lock().await.record(&result.host, result.status);
+                    if ignore_errors {
+                        ctx.output.task_result(
+                            host,
+                            TaskStatus::Ignored,
+                            Some(&format!("ignored error: {}", e)),
+                        );
+                        stats.lock().await.record(host, TaskStatus::Ignored);
+                    } else {
+                        ctx.output
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                        stats.lock().await.record(host, TaskStatus::Failed);
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -1259,11 +1150,8 @@ impl RunArgs {
 
     /// Check if a task should run based on tags
     fn should_run_task(&self, task: &serde_yaml::Value) -> bool {
-        let tags = Self::normalize_tags(&self.tags);
-        let skip_tags = Self::normalize_tags(&self.skip_tags);
-
         // If no tags specified, run everything
-        if tags.is_empty() && skip_tags.is_empty() {
+        if self.tags.is_empty() && self.skip_tags.is_empty() {
             return true;
         }
 
@@ -1272,26 +1160,28 @@ impl RunArgs {
             .and_then(|t| {
                 if let Some(s) = t.as_str() {
                     Some(vec![s.to_string()])
-                } else {
-                    t.as_sequence().map(|seq| {
+                } else if let Some(seq) = t.as_sequence() {
+                    Some(
                         seq.iter()
                             .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
+                            .collect(),
+                    )
+                } else {
+                    None
                 }
             })
             .unwrap_or_default();
 
         // Check skip_tags first
-        for skip_tag in &skip_tags {
+        for skip_tag in &self.skip_tags {
             if task_tags.contains(skip_tag) {
                 return false;
             }
         }
 
         // Check tags
-        if !tags.is_empty() {
-            for tag in &tags {
+        if !self.tags.is_empty() {
+            for tag in &self.tags {
                 if task_tags.contains(tag) || tag == "all" {
                     return true;
                 }
@@ -1300,15 +1190,6 @@ impl RunArgs {
         }
 
         true
-    }
-
-    fn normalize_tags(tags: &[String]) -> Vec<String> {
-        tags.iter()
-            .flat_map(|tag| tag.split(','))
-            .map(|tag| tag.trim())
-            .filter(|tag| !tag.is_empty())
-            .map(|tag| tag.to_string())
-            .collect()
     }
 
     /// Detect which module a task is using
@@ -1471,20 +1352,9 @@ impl RunArgs {
             )
             .await?;
 
-        // Build execution options with become settings
-        let options = if self.r#become {
-            Some(
-                rustible::connection::ExecuteOptions::new()
-                    .with_escalation(Some(self.become_user.clone()))
-                    .with_escalate_method(self.become_method.clone()),
-            )
-        } else {
-            None
-        };
-
         // Execute command on the pooled connection
         let result = conn
-            .execute(cmd, options)
+            .execute(cmd, None)
             .await
             .map_err(|e| anyhow::anyhow!("Command execution failed: {}", e))?;
 
@@ -1690,28 +1560,6 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(args.tags, vec!["install", "configure"]);
-    }
-
-    #[test]
-    fn test_normalize_tags_with_commas() {
-        let args = RunArgs::try_parse_from([
-            "run",
-            "playbook.yml",
-            "--tags",
-            "install, configure",
-            "--skip-tags",
-            "slow, noisy",
-        ])
-        .unwrap();
-
-        assert_eq!(
-            RunArgs::normalize_tags(&args.tags),
-            vec!["install", "configure"]
-        );
-        assert_eq!(
-            RunArgs::normalize_tags(&args.skip_tags),
-            vec!["slow", "noisy"]
-        );
     }
 
     #[test]

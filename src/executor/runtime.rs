@@ -5,8 +5,7 @@
 //! - Fact storage
 //! - Register system for task results
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -216,14 +215,6 @@ pub struct ExecutionContext {
     pub connection: Option<Arc<dyn Connection + Send + Sync>>,
     /// Python interpreter path on remote host
     pub python_interpreter: String,
-    /// Whether to run with privilege escalation
-    pub r#become: bool,
-    /// Method for privilege escalation (sudo, su, etc.)
-    pub become_method: String,
-    /// User to become when escalating privileges
-    pub become_user: String,
-    /// Password for privilege escalation
-    pub become_password: Option<String>,
 }
 
 impl std::fmt::Debug for ExecutionContext {
@@ -238,10 +229,6 @@ impl std::fmt::Debug for ExecutionContext {
                 &self.connection.as_ref().map(|c| c.identifier()),
             )
             .field("python_interpreter", &self.python_interpreter)
-            .field("become", &self.r#become)
-            .field("become_method", &self.become_method)
-            .field("become_user", &self.become_user)
-            .field("become_password", &"<hidden>")
             .finish()
     }
 }
@@ -255,10 +242,6 @@ impl ExecutionContext {
             verbosity: 0,
             connection: None,
             python_interpreter: "/usr/bin/python3".to_string(),
-            r#become: false,
-            become_method: "sudo".to_string(),
-            become_user: "root".to_string(),
-            become_password: None,
         }
     }
 
@@ -288,34 +271,10 @@ impl ExecutionContext {
         self.python_interpreter = path.into();
         self
     }
-
-    /// Enable privilege escalation
-    pub fn with_become(mut self, value: bool) -> Self {
-        self.r#become = value;
-        self
-    }
-
-    /// Set the privilege escalation method
-    pub fn with_become_method(mut self, method: impl Into<String>) -> Self {
-        self.become_method = method.into();
-        self
-    }
-
-    /// Set the user to become
-    pub fn with_become_user(mut self, user: impl Into<String>) -> Self {
-        self.become_user = user.into();
-        self
-    }
-
-    /// Set the privilege escalation password
-    pub fn with_become_password(mut self, password: Option<String>) -> Self {
-        self.become_password = password;
-        self
-    }
 }
 
 /// The main runtime context holding all state during execution
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RuntimeContext {
     /// Global variables (from inventory, playbook vars_files, etc.)
     global_vars: IndexMap<String, JsonValue>,
@@ -323,8 +282,8 @@ pub struct RuntimeContext {
     /// Play-level variables
     play_vars: IndexMap<String, JsonValue>,
 
-    /// Task-level variables (per host)
-    task_vars: IndexMap<String, IndexMap<String, JsonValue>>,
+    /// Task-level variables
+    task_vars: IndexMap<String, JsonValue>,
 
     /// Extra variables (highest precedence)
     extra_vars: IndexMap<String, JsonValue>,
@@ -344,8 +303,8 @@ pub struct RuntimeContext {
     /// Role defaults (lowest precedence)
     role_defaults: IndexMap<String, JsonValue>,
 
-    /// Block-level variables (per host)
-    block_vars: IndexMap<String, IndexMap<String, JsonValue>>,
+    /// Block-level variables
+    block_vars: IndexMap<String, JsonValue>,
 
     /// Include vars (from include_vars module)
     include_vars: IndexMap<String, JsonValue>,
@@ -355,40 +314,6 @@ pub struct RuntimeContext {
 
     /// Include params
     include_params: IndexMap<String, JsonValue>,
-
-    /// Cached merged vars per host
-    merged_cache: Mutex<IndexMap<String, CachedMergedVars>>,
-
-    /// Version counter for invalidating merged cache
-    vars_version: AtomicU64,
-}
-
-#[derive(Debug, Clone)]
-struct CachedMergedVars {
-    version: u64,
-    vars: Arc<IndexMap<String, JsonValue>>,
-}
-
-impl Default for RuntimeContext {
-    fn default() -> Self {
-        Self {
-            global_vars: IndexMap::new(),
-            play_vars: IndexMap::new(),
-            task_vars: IndexMap::new(),
-            extra_vars: IndexMap::new(),
-            host_data: IndexMap::new(),
-            groups: IndexMap::new(),
-            all_hosts: Vec::new(),
-            magic_vars: IndexMap::new(),
-            role_defaults: IndexMap::new(),
-            block_vars: IndexMap::new(),
-            include_vars: IndexMap::new(),
-            role_params: IndexMap::new(),
-            include_params: IndexMap::new(),
-            merged_cache: Mutex::new(IndexMap::new()),
-            vars_version: AtomicU64::new(0),
-        }
-    }
 }
 
 impl RuntimeContext {
@@ -397,10 +322,6 @@ impl RuntimeContext {
         let mut ctx = Self::default();
         ctx.init_magic_vars();
         ctx
-    }
-
-    fn bump_vars_version(&self) {
-        self.vars_version.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Create a runtime context from an inventory
@@ -489,32 +410,6 @@ impl RuntimeContext {
                     serde_json::json!(key_file),
                 );
             }
-            if let Some(password) = &host.connection.ssh.password {
-                ctx.set_host_var(
-                    &host_name,
-                    "ansible_ssh_pass".to_string(),
-                    serde_json::json!(password),
-                );
-            }
-            if host.connection.ssh.timeout > 0 {
-                ctx.set_host_var(
-                    &host_name,
-                    "ansible_ssh_timeout".to_string(),
-                    serde_json::json!(host.connection.ssh.timeout),
-                );
-            }
-            ctx.set_host_var(
-                &host_name,
-                "ansible_connection".to_string(),
-                serde_json::json!(host.connection.connection.to_string()),
-            );
-            if let Some(python) = &host.connection.python_interpreter {
-                ctx.set_host_var(
-                    &host_name,
-                    "ansible_python_interpreter".to_string(),
-                    serde_json::json!(python),
-                );
-            }
         }
 
         ctx
@@ -546,93 +441,47 @@ impl RuntimeContext {
             .insert("inventory_dir".to_string(), JsonValue::Null);
     }
 
-    /// Set the playbook directory
-    ///
-    /// This should be called when loading a playbook to set the base path
-    /// for resolving relative includes and imports.
-    pub fn set_playbook_dir(&mut self, path: &std::path::Path) {
-        let path_str = path.to_string_lossy().to_string();
-        trace!("Setting playbook_dir: {}", path_str);
-        self.magic_vars
-            .insert("playbook_dir".to_string(), JsonValue::String(path_str));
-    }
-
-    /// Get the playbook directory
-    ///
-    /// Returns the directory containing the playbook, used as base path
-    /// for resolving relative includes and imports.
-    pub fn get_playbook_dir(&self) -> Option<std::path::PathBuf> {
-        self.magic_vars
-            .get("playbook_dir")
-            .and_then(|v| v.as_str())
-            .map(std::path::PathBuf::from)
-    }
-
     /// Set a global variable
     pub fn set_global_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting global var: {} = {:?}", name, value);
         self.global_vars.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Set a play-level variable
     pub fn set_play_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting play var: {} = {:?}", name, value);
         self.play_vars.insert(name, value);
-        self.bump_vars_version();
     }
 
-    /// Set a task-level variable for a host
-    pub fn set_task_var(&mut self, host: &str, name: String, value: JsonValue) {
-        trace!("Setting task var: {} = {:?} (host: {})", name, value, host);
-        let vars = self.task_vars.entry(host.to_string()).or_default();
-        vars.insert(name, value);
-        self.bump_vars_version();
+    /// Set a task-level variable
+    pub fn set_task_var(&mut self, name: String, value: JsonValue) {
+        trace!("Setting task var: {} = {:?}", name, value);
+        self.task_vars.insert(name, value);
     }
 
     /// Set an extra variable (highest precedence)
     pub fn set_extra_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting extra var: {} = {:?}", name, value);
         self.extra_vars.insert(name, value);
-        self.bump_vars_version();
     }
 
-    /// Replace task-level variables for a host
-    pub fn set_task_vars(&mut self, host: &str, vars: IndexMap<String, JsonValue>) {
-        if vars.is_empty() {
-            self.task_vars.shift_remove(host);
-        } else {
-            self.task_vars.insert(host.to_string(), vars);
-        }
-        self.bump_vars_version();
-    }
-
-    /// Clear task-level variables for a host (called between tasks)
-    pub fn clear_task_vars(&mut self, host: &str) {
-        self.task_vars.shift_remove(host);
-        self.bump_vars_version();
+    /// Clear task-level variables (called between tasks)
+    pub fn clear_task_vars(&mut self) {
+        self.task_vars.clear();
     }
 
     /// Remove specific task-level variables by name
     /// Used for cleaning up loop variables without clearing all task vars
-    pub fn remove_task_vars(&mut self, host: &str, names: &[&str]) {
-        if let Some(vars) = self.task_vars.get_mut(host) {
-            for name in names {
-                vars.swap_remove(*name);
-            }
-            if vars.is_empty() {
-                self.task_vars.shift_remove(host);
-            }
+    pub fn remove_task_vars(&mut self, names: &[&str]) {
+        for name in names {
+            self.task_vars.swap_remove(*name);
         }
-        self.bump_vars_version();
     }
 
     /// Clear play-level variables (called between plays)
     pub fn clear_play_vars(&mut self) {
         self.play_vars.clear();
         self.task_vars.clear();
-        self.block_vars.clear();
-        self.bump_vars_version();
     }
 
     /// Get a variable by name, respecting precedence
@@ -658,21 +507,8 @@ impl RuntimeContext {
         }
 
         // Task variables
-        if let Some(host_name) = host {
-            if let Some(vars) = self.task_vars.get(host_name) {
-                if let Some(v) = vars.get(name) {
-                    return Some(v.clone());
-                }
-            }
-        }
-
-        // Block variables
-        if let Some(host_name) = host {
-            if let Some(vars) = self.block_vars.get(host_name) {
-                if let Some(v) = vars.get(name) {
-                    return Some(v.clone());
-                }
-            }
+        if let Some(v) = self.task_vars.get(name) {
+            return Some(v.clone());
         }
 
         // Play variables
@@ -711,54 +547,16 @@ impl RuntimeContext {
     /// - Inline hint for better optimization
     #[inline]
     pub fn get_merged_vars(&self, host: &str) -> IndexMap<String, JsonValue> {
-        self.get_merged_vars_ref(host).as_ref().clone()
-    }
-
-    /// Get all variables merged for a specific host without cloning the map
-    ///
-    /// This returns an Arc to a cached merged map for hot paths.
-    pub fn get_merged_vars_ref(&self, host: &str) -> Arc<IndexMap<String, JsonValue>> {
-        let current_version = self.vars_version.load(Ordering::Relaxed);
-        if let Ok(cache) = self.merged_cache.lock() {
-            if let Some(entry) = cache.get(host) {
-                if entry.version == current_version {
-                    return Arc::clone(&entry.vars);
-                }
-            }
-        }
-
-        let merged = self.build_merged_vars(host);
-        let merged = Arc::new(merged);
-        if let Ok(mut cache) = self.merged_cache.lock() {
-            cache.insert(
-                host.to_string(),
-                CachedMergedVars {
-                    version: current_version,
-                    vars: Arc::clone(&merged),
-                },
-            );
-        }
-        merged
-    }
-
-    fn build_merged_vars(&self, host: &str) -> IndexMap<String, JsonValue> {
         // OPTIMIZATION: Pre-allocate with estimated capacity to reduce reallocations
         let host_facts_count = self
             .host_data
             .get(host)
             .map(|hd| hd.facts.len())
             .unwrap_or(0);
-        let task_vars_count = self.task_vars.get(host).map(|vars| vars.len()).unwrap_or(0);
-        let block_vars_count = self
-            .block_vars
-            .get(host)
-            .map(|vars| vars.len())
-            .unwrap_or(0);
         let estimated_size = self.magic_vars.len()
             + self.global_vars.len()
             + self.play_vars.len()
-            + block_vars_count
-            + task_vars_count
+            + self.task_vars.len()
             + self.extra_vars.len()
             + host_facts_count // For top-level ansible_* fact variables
             + 10; // Buffer for special vars
@@ -798,23 +596,12 @@ impl RuntimeContext {
             merged.insert(k.clone(), v.clone());
         }
 
-        // Block vars
-        if let Some(block_vars) = self.block_vars.get(host) {
-            for (k, v) in block_vars {
-                merged.insert(k.clone(), v.clone());
-            }
-        }
-
         // Task vars
-        if let Some(task_vars) = self.task_vars.get(host) {
-            for (k, v) in task_vars {
-                merged.insert(k.clone(), v.clone());
-            }
+        for (k, v) in &self.task_vars {
+            merged.insert(k.clone(), v.clone());
         }
 
-        // Host facts (under 'ansible_facts' namespace and as top-level variables)
-        // Facts set via set_fact should be accessible directly (e.g., {{ my_fact }})
-        // as well as under ansible_facts namespace for compatibility
+        // Host facts (under 'ansible_facts' namespace and as top-level ansible_* variables)
         if let Some(host_data) = self.host_data.get(host) {
             if !host_data.facts.is_empty() {
                 // Store facts under ansible_facts for backwards compatibility
@@ -823,18 +610,15 @@ impl RuntimeContext {
                     serde_json::to_value(host_data.get_all_facts()).unwrap_or(JsonValue::Null),
                 );
 
-                // Expose each fact directly and with ansible_* prefix
-                // This allows set_fact variables to be accessed as {{ my_var }}
-                // and gathered facts as {{ ansible_hostname }}
+                // Also expose each fact as a top-level ansible_* variable
+                // Facts like {"hostname": "server1"} become {"ansible_hostname": "server1"}
                 for (fact_name, fact_value) in host_data.get_all_facts() {
-                    // Always add the fact directly (for set_fact compatibility)
-                    merged.insert(fact_name.clone(), fact_value.clone());
-
-                    // Also add with ansible_ prefix if not already prefixed
-                    // This maintains backward compatibility for gathered facts
-                    if !fact_name.starts_with("ansible_") {
-                        merged.insert(format!("ansible_{}", fact_name), fact_value.clone());
-                    }
+                    let prefixed_name = if fact_name.starts_with("ansible_") {
+                        fact_name.clone()
+                    } else {
+                        format!("ansible_{}", fact_name)
+                    };
+                    merged.insert(prefixed_name, fact_value.clone());
                 }
             }
 
@@ -882,24 +666,26 @@ impl RuntimeContext {
             self.all_hosts.push(host.clone());
         }
 
-        self.host_data.entry(host.clone()).or_default();
+        self.host_data
+            .entry(host.clone())
+            .or_insert_with(HostVars::new);
 
         if let Some(group_name) = group {
-            let group = self.groups.entry(group_name.to_string()).or_default();
+            let group = self
+                .groups
+                .entry(group_name.to_string())
+                .or_insert_with(InventoryGroup::default);
 
             if !group.hosts.contains(&host) {
                 group.hosts.push(host);
             }
         }
-
-        self.bump_vars_version();
     }
 
     /// Add a group to the inventory
     pub fn add_group(&mut self, name: String, group: InventoryGroup) {
         debug!("Adding group: {}", name);
         self.groups.insert(name, group);
-        self.bump_vars_version();
     }
 
     /// Get all hosts (returns a reference to avoid cloning)
@@ -937,9 +723,11 @@ impl RuntimeContext {
 
     /// Set a fact for a host
     pub fn set_host_fact(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self.host_data.entry(host.to_string()).or_default();
+        let host_data = self
+            .host_data
+            .entry(host.to_string())
+            .or_insert_with(HostVars::new);
         host_data.set_fact(name, value);
-        self.bump_vars_version();
     }
 
     /// Get a fact for a host
@@ -951,19 +739,23 @@ impl RuntimeContext {
 
     /// Set all facts for a host
     pub fn set_host_facts(&mut self, host: &str, facts: IndexMap<String, JsonValue>) {
-        let host_data = self.host_data.entry(host.to_string()).or_default();
+        let host_data = self
+            .host_data
+            .entry(host.to_string())
+            .or_insert_with(HostVars::new);
         for (k, v) in facts {
             host_data.set_fact(k, v);
         }
-        self.bump_vars_version();
     }
 
     /// Register a task result for a host
     pub fn register_result(&mut self, host: &str, name: String, result: RegisteredResult) {
         debug!("Registering result '{}' for host '{}'", name, host);
-        let host_data = self.host_data.entry(host.to_string()).or_default();
+        let host_data = self
+            .host_data
+            .entry(host.to_string())
+            .or_insert_with(HostVars::new);
         host_data.register(name, result);
-        self.bump_vars_version();
     }
 
     /// Get a registered result for a host
@@ -975,9 +767,11 @@ impl RuntimeContext {
 
     /// Set a host variable
     pub fn set_host_var(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self.host_data.entry(host.to_string()).or_default();
+        let host_data = self
+            .host_data
+            .entry(host.to_string())
+            .or_insert_with(HostVars::new);
         host_data.set_var(name, value);
-        self.bump_vars_version();
     }
 
     /// Get a host variable
@@ -990,7 +784,6 @@ impl RuntimeContext {
     /// Set a magic variable
     pub fn set_magic_var(&mut self, name: String, value: JsonValue) {
         self.magic_vars.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Check if a host exists in the inventory
@@ -1016,64 +809,45 @@ impl RuntimeContext {
     pub fn set_role_default(&mut self, name: String, value: JsonValue) {
         trace!("Setting role default: {} = {:?}", name, value);
         self.role_defaults.insert(name, value);
-        self.bump_vars_version();
     }
 
-    /// Set a block-level variable for a host
-    pub fn set_block_var(&mut self, host: &str, name: String, value: JsonValue) {
-        trace!("Setting block var: {} = {:?} (host: {})", name, value, host);
-        let vars = self.block_vars.entry(host.to_string()).or_default();
-        vars.insert(name, value);
-        self.bump_vars_version();
+    /// Set a block-level variable
+    pub fn set_block_var(&mut self, name: String, value: JsonValue) {
+        trace!("Setting block var: {} = {:?}", name, value);
+        self.block_vars.insert(name, value);
     }
 
-    /// Replace block-level variables for a host
-    pub fn set_block_vars(&mut self, host: &str, vars: IndexMap<String, JsonValue>) {
-        if vars.is_empty() {
-            self.block_vars.shift_remove(host);
-        } else {
-            self.block_vars.insert(host.to_string(), vars);
-        }
-        self.bump_vars_version();
-    }
-
-    /// Clear block-level variables for a host (called when exiting a block)
-    pub fn clear_block_vars(&mut self, host: &str) {
-        self.block_vars.shift_remove(host);
-        self.bump_vars_version();
+    /// Clear block-level variables (called when exiting a block)
+    pub fn clear_block_vars(&mut self) {
+        self.block_vars.clear();
     }
 
     /// Set an include_vars variable
     pub fn set_include_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting include var: {} = {:?}", name, value);
         self.include_vars.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Set role params (when using include_role with parameters)
     pub fn set_role_param(&mut self, name: String, value: JsonValue) {
         trace!("Setting role param: {} = {:?}", name, value);
         self.role_params.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Clear role params (after role execution)
     pub fn clear_role_params(&mut self) {
         self.role_params.clear();
-        self.bump_vars_version();
     }
 
     /// Set include params
     pub fn set_include_param(&mut self, name: String, value: JsonValue) {
         trace!("Setting include param: {} = {:?}", name, value);
         self.include_params.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Clear include params
     pub fn clear_include_params(&mut self) {
         self.include_params.clear();
-        self.bump_vars_version();
     }
 
     // =========================================================================
@@ -1161,9 +935,11 @@ impl RuntimeContext {
 
     /// Set a group variable
     pub fn set_group_var(&mut self, group: &str, name: String, value: JsonValue) {
-        let group_data = self.groups.entry(group.to_string()).or_default();
+        let group_data = self
+            .groups
+            .entry(group.to_string())
+            .or_insert_with(InventoryGroup::default);
         group_data.vars.insert(name, value);
-        self.bump_vars_version();
     }
 
     /// Get a group variable
@@ -1231,21 +1007,13 @@ impl RuntimeContext {
         }
 
         // 7. Task variables
-        if let Some(host_name) = host {
-            if let Some(vars) = self.task_vars.get(host_name) {
-                if let Some(v) = vars.get(name) {
-                    return Some(v.clone());
-                }
-            }
+        if let Some(v) = self.task_vars.get(name) {
+            return Some(v.clone());
         }
 
         // 6. Block vars
-        if let Some(host_name) = host {
-            if let Some(vars) = self.block_vars.get(host_name) {
-                if let Some(v) = vars.get(name) {
-                    return Some(v.clone());
-                }
-            }
+        if let Some(v) = self.block_vars.get(name) {
+            return Some(v.clone());
         }
 
         // 5. Play variables
@@ -1392,32 +1160,21 @@ mod tests {
     #[test]
     fn test_var_precedence() {
         let mut ctx = RuntimeContext::new();
-        let host = "server1";
-        ctx.add_host(host.to_string(), None);
 
         // Set variables at different levels
         ctx.set_global_var("var1".to_string(), serde_json::json!("global"));
         ctx.set_play_var("var1".to_string(), serde_json::json!("play"));
 
         // Play should override global
-        assert_eq!(
-            ctx.get_var("var1", Some(host)),
-            Some(serde_json::json!("play"))
-        );
+        assert_eq!(ctx.get_var("var1", None), Some(serde_json::json!("play")));
 
         // Task should override play
-        ctx.set_task_var(host, "var1".to_string(), serde_json::json!("task"));
-        assert_eq!(
-            ctx.get_var("var1", Some(host)),
-            Some(serde_json::json!("task"))
-        );
+        ctx.set_task_var("var1".to_string(), serde_json::json!("task"));
+        assert_eq!(ctx.get_var("var1", None), Some(serde_json::json!("task")));
 
         // Extra should override all
         ctx.set_extra_var("var1".to_string(), serde_json::json!("extra"));
-        assert_eq!(
-            ctx.get_var("var1", Some(host)),
-            Some(serde_json::json!("extra"))
-        );
+        assert_eq!(ctx.get_var("var1", None), Some(serde_json::json!("extra")));
     }
 
     #[test]
@@ -1636,39 +1393,28 @@ mod tests {
     #[test]
     fn test_block_vars_scope() {
         let mut ctx = RuntimeContext::new();
-        let host = "server1";
-        ctx.add_host(host.to_string(), None);
 
-        ctx.set_block_var(
-            host,
-            "block_var".to_string(),
-            serde_json::json!("block_value"),
-        );
+        ctx.set_block_var("block_var".to_string(), serde_json::json!("block_value"));
         assert_eq!(
-            ctx.get_var_with_full_precedence("block_var", Some(host)),
+            ctx.get_var_with_full_precedence("block_var", None),
             Some(serde_json::json!("block_value"))
         );
 
         // Clear block vars (simulating exiting a block)
-        ctx.clear_block_vars(host);
-        assert_eq!(
-            ctx.get_var_with_full_precedence("block_var", Some(host)),
-            None
-        );
+        ctx.clear_block_vars();
+        assert_eq!(ctx.get_var_with_full_precedence("block_var", None), None);
     }
 
     #[test]
     fn test_include_vars_precedence() {
         let mut ctx = RuntimeContext::new();
-        let host = "server1";
-        ctx.add_host(host.to_string(), None);
 
-        ctx.set_task_var(host, "my_var".to_string(), serde_json::json!("task_value"));
+        ctx.set_task_var("my_var".to_string(), serde_json::json!("task_value"));
         ctx.set_include_var("my_var".to_string(), serde_json::json!("include_value"));
 
         // Include vars should override task vars
         assert_eq!(
-            ctx.get_var_with_full_precedence("my_var", Some(host)),
+            ctx.get_var_with_full_precedence("my_var", None),
             Some(serde_json::json!("include_value"))
         );
     }
@@ -1815,16 +1561,8 @@ mod tests {
         );
         ctx.set_global_var("test_var".to_string(), serde_json::json!("global_var"));
         ctx.set_play_var("test_var".to_string(), serde_json::json!("play_var"));
-        ctx.set_block_var(
-            "server1",
-            "test_var".to_string(),
-            serde_json::json!("block_var"),
-        );
-        ctx.set_task_var(
-            "server1",
-            "test_var".to_string(),
-            serde_json::json!("task_var"),
-        );
+        ctx.set_block_var("test_var".to_string(), serde_json::json!("block_var"));
+        ctx.set_task_var("test_var".to_string(), serde_json::json!("task_var"));
         ctx.set_include_var("test_var".to_string(), serde_json::json!("include_var"));
         ctx.set_role_param("test_var".to_string(), serde_json::json!("role_param"));
         ctx.set_include_param("test_var".to_string(), serde_json::json!("include_param"));
@@ -1837,44 +1575,17 @@ mod tests {
         );
 
         // Remove extra_var, include_param should win
-        ctx.extra_vars.shift_remove("test_var");
+        ctx.extra_vars.remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("include_param"))
         );
 
         // Remove include_param, role_param should win
-        ctx.include_params.shift_remove("test_var");
+        ctx.include_params.remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("role_param"))
-        );
-    }
-
-    #[test]
-    fn test_playbook_dir() {
-        use std::path::Path;
-
-        let mut ctx = RuntimeContext::new();
-
-        // Initially playbook_dir should be None (stored as Null in magic_vars)
-        assert!(ctx.get_playbook_dir().is_none());
-
-        // Set playbook directory
-        let playbook_path = Path::new("/home/user/playbooks/site");
-        ctx.set_playbook_dir(playbook_path);
-
-        // Should now return the path
-        assert_eq!(
-            ctx.get_playbook_dir(),
-            Some(std::path::PathBuf::from("/home/user/playbooks/site"))
-        );
-
-        // Should also be available as a variable
-        let merged = ctx.get_merged_vars("localhost");
-        assert_eq!(
-            merged.get("playbook_dir"),
-            Some(&serde_json::json!("/home/user/playbooks/site"))
         );
     }
 }
