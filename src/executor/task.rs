@@ -40,10 +40,7 @@ static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
-use crate::diagnostics::template_syntax_error;
-use crate::error::Error;
 use crate::modules::ModuleRegistry;
-use crate::template::TEMPLATE_ENGINE;
 
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1836,16 +1833,8 @@ impl Task {
             ));
         }
 
-        // Determine base path from playbook_dir magic variable (set from playbook path)
-        // Falls back to current directory if playbook_dir is not set
-        let base_path = {
-            let rt = runtime.read().await;
-            rt.get_var("playbook_dir", Some(&ctx.host))
-                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
-                .unwrap_or_else(|| {
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                })
-        };
+        // Determine base path for path validation
+        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         let mut all_vars: IndexMap<String, JsonValue> = IndexMap::new();
         let source: String;
@@ -2041,18 +2030,8 @@ impl Task {
 
         info!("Including tasks from: {}", file);
 
-        // Determine base path from playbook_dir magic variable (set from playbook path)
-        // Falls back to current directory if playbook_dir is not set
-        let base_path = {
-            let rt = runtime.read().await;
-            rt.get_var("playbook_dir", Some(&ctx.host))
-                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
-                .unwrap_or_else(|| {
-                    warn!("playbook_dir not set, falling back to current directory for include path resolution");
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                })
-        };
-        debug!("Using base path for include: {}", base_path.display());
+        // Determine base path from the runtime context or use current directory
+        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let handler = crate::executor::include_handler::IncludeTasksHandler::new(base_path);
 
         // Build the include spec with any variables passed
@@ -2163,68 +2142,107 @@ fn template_value(
     value: &JsonValue,
     vars: &IndexMap<String, JsonValue>,
 ) -> ExecutorResult<JsonValue> {
-    // Use the unified template engine for all value rendering
-    TEMPLATE_ENGINE
-        .render_value(value, vars)
-        .map_err(|e| template_error_from_value(value, e))
+    match value {
+        // OPTIMIZATION: Non-templatable primitives - fast path with clone
+        JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) => Ok(value.clone()),
+        JsonValue::String(s) => {
+            // OPTIMIZATION: Fast path if no template syntax
+            if !s.contains("{{") {
+                return Ok(value.clone());
+            }
+            let templated = template_string(s, vars)?;
+            // Try to parse as JSON if it looks like a value
+            if let Ok(parsed) = serde_json::from_str::<JsonValue>(&templated) {
+                if !matches!(parsed, JsonValue::Object(_)) {
+                    return Ok(parsed);
+                }
+            }
+            Ok(JsonValue::String(templated))
+        }
+        JsonValue::Array(arr) => {
+            let templated: Result<Vec<_>, _> =
+                arr.iter().map(|v| template_value(v, vars)).collect();
+            Ok(JsonValue::Array(templated?))
+        }
+        JsonValue::Object(obj) => {
+            let mut result = serde_json::Map::new();
+            for (k, v) in obj {
+                let templated_key = template_string(k, vars)?;
+                let templated_value = template_value(v, vars)?;
+                result.insert(templated_key, templated_value);
+            }
+            Ok(JsonValue::Object(result))
+        }
+    }
 }
 
 /// Template a string using variables
 ///
 /// # Performance
-/// The unified TemplateEngine includes a fast-path check: if a string contains
-/// no template syntax (`{{` or `{%`), rendering is bypassed entirely.
+/// Uses cached regex pattern (TEMPLATE_VAR_REGEX) to avoid recompilation.
+/// For strings without template syntax, returns early to avoid regex overhead.
 #[inline]
 fn template_string(template: &str, vars: &IndexMap<String, JsonValue>) -> ExecutorResult<String> {
-    // Use the unified template engine for all string rendering
-    TEMPLATE_ENGINE
-        .render_with_indexmap(template, vars)
-        .map_err(|e| template_error_to_executor(template, e))
-}
-
-fn template_error_from_value(value: &JsonValue, error: Error) -> ExecutorError {
-    let source = template_source_for_value(value);
-    template_error_to_executor(&source, error)
-}
-
-fn template_source_for_value(value: &JsonValue) -> String {
-    match value {
-        JsonValue::String(s) => s.clone(),
-        _ => serde_yaml::to_string(value).unwrap_or_else(|_| value.to_string()),
+    // OPTIMIZATION: Fast path - if no template syntax, return early
+    if !template.contains("{{") {
+        return Ok(template.to_string());
     }
+
+    // Simple Jinja2-like templating
+    // Handle {{ variable }} syntax
+    let mut result = template.to_string();
+
+    // OPTIMIZATION: Use cached regex pattern instead of recompiling
+    for cap in TEMPLATE_VAR_REGEX.captures_iter(template) {
+        let full_match = cap.get(0).unwrap().as_str();
+        let expr = cap.get(1).unwrap().as_str().trim();
+
+        let value = evaluate_variable_expression(expr, vars)?;
+        let replacement = json_to_string(&value);
+        result = result.replace(full_match, &replacement);
+    }
+
+    Ok(result)
 }
 
-fn template_error_to_executor(template_source: &str, error: Error) -> ExecutorError {
-    match error {
-        Error::Template(mini_err) => {
-            let message = mini_err
-                .detail()
-                .map(str::to_string)
-                .unwrap_or_else(|| mini_err.to_string());
-            let line = mini_err.line().unwrap_or(1);
-            let col = 1;
-            let name = mini_err.name().unwrap_or("<template>");
-            let file = if name.starts_with("__rustible_template_") {
-                "<template>"
-            } else {
-                name
-            };
-            let diagnostic =
-                template_syntax_error(file, template_source, line, col, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        Error::TemplateRender { message, .. } => {
-            let diagnostic =
-                template_syntax_error("<template>", template_source, 1, 1, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        Error::TemplateSyntax { message, .. } => {
-            let diagnostic =
-                template_syntax_error("<template>", template_source, 1, 1, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        other => ExecutorError::RuntimeError(format!("Template error: {}", other)),
+/// Evaluate a variable expression (e.g., "foo.bar" or "foo['bar']")
+///
+/// # Performance
+/// This is a hot path function - called for every template variable.
+/// Uses inline hint and avoids unnecessary allocations.
+#[inline]
+fn evaluate_variable_expression(
+    expr: &str,
+    vars: &IndexMap<String, JsonValue>,
+) -> ExecutorResult<JsonValue> {
+    // Handle simple variable lookup
+    let parts: Vec<&str> = expr.split('.').collect();
+
+    if parts.is_empty() {
+        return Ok(JsonValue::Null);
     }
+
+    // Get root variable
+    let root = parts[0].trim();
+    let mut value = vars.get(root).cloned().unwrap_or(JsonValue::Null);
+
+    // Navigate nested properties
+    for part in &parts[1..] {
+        let key = part.trim();
+        value = match &value {
+            JsonValue::Object(obj) => obj.get(key).cloned().unwrap_or(JsonValue::Null),
+            JsonValue::Array(arr) => {
+                if let Ok(idx) = key.parse::<usize>() {
+                    arr.get(idx).cloned().unwrap_or(JsonValue::Null)
+                } else {
+                    JsonValue::Null
+                }
+            }
+            _ => JsonValue::Null,
+        };
+    }
+
+    Ok(value)
 }
 
 /// Convert JSON value to string for templating
@@ -2550,12 +2568,236 @@ fn evaluate_jinja_test(
     }
 }
 
-/// Evaluate a conditional expression using the unified template engine
+/// Evaluate a conditional expression
 fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> ExecutorResult<bool> {
-    // Use the unified template engine for all condition evaluation
-    TEMPLATE_ENGINE
-        .evaluate_condition(expr, vars)
-        .map_err(|e| template_error_to_executor(expr, e))
+    let expr = expr.trim();
+
+    // Handle empty expression
+    if expr.is_empty() {
+        return Ok(true);
+    }
+
+    // Handle simple boolean expressions
+    if expr == "true" || expr == "True" {
+        return Ok(true);
+    }
+    if expr == "false" || expr == "False" {
+        return Ok(false);
+    }
+
+    // Handle parenthesized expressions first
+    if expr.starts_with('(') {
+        if let Some(close_pos) = find_matching_paren(expr, 0) {
+            if close_pos == expr.len() - 1 {
+                return evaluate_expression(&expr[1..close_pos], vars);
+            }
+        }
+    }
+
+    // Handle 'or' expressions (lowest precedence, check first for left-to-right)
+    if let Some(pos) = find_operator_outside_parens(expr, " or ") {
+        let left = &expr[..pos];
+        let right = &expr[pos + 4..];
+        return Ok(
+            evaluate_expression(left.trim(), vars)? || evaluate_expression(right.trim(), vars)?
+        );
+    }
+
+    // Handle 'and' expressions
+    if let Some(pos) = find_operator_outside_parens(expr, " and ") {
+        let left = &expr[..pos];
+        let right = &expr[pos + 5..];
+        return Ok(
+            evaluate_expression(left.trim(), vars)? && evaluate_expression(right.trim(), vars)?
+        );
+    }
+
+    // Handle 'not' expressions (must be at the start)
+    if let Some(inner) = expr.strip_prefix("not ") {
+        return Ok(!evaluate_expression(inner.trim(), vars)?);
+    }
+
+    // Handle 'not in' expressions (must check before 'in')
+    if let Some(pos) = find_operator_outside_parens(expr, " not in ") {
+        let left_str = expr[..pos].trim();
+        let right_str = expr[pos + 8..].trim();
+        let left = evaluate_variable_expression(left_str, vars)?;
+        let right = parse_value(right_str, vars)?;
+
+        let result = match right {
+            JsonValue::Array(arr) => arr.contains(&left),
+            JsonValue::String(s) => {
+                if let JsonValue::String(l) = &left {
+                    s.contains(l.as_str())
+                } else {
+                    false
+                }
+            }
+            JsonValue::Object(obj) => {
+                if let JsonValue::String(k) = &left {
+                    obj.contains_key(k)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        };
+        return Ok(!result);
+    }
+
+    // Handle comparison operators (check >= and <= before > and <)
+    if let Some(pos) = find_operator_outside_parens(expr, " >= ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 4..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(compare_values(&left, &right)
+            .map(|c| c != std::cmp::Ordering::Less)
+            .unwrap_or(false));
+    }
+
+    if let Some(pos) = find_operator_outside_parens(expr, " <= ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 4..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(compare_values(&left, &right)
+            .map(|c| c != std::cmp::Ordering::Greater)
+            .unwrap_or(false));
+    }
+
+    if let Some(pos) = find_operator_outside_parens(expr, " > ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 3..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(compare_values(&left, &right)
+            .map(|c| c == std::cmp::Ordering::Greater)
+            .unwrap_or(false));
+    }
+
+    if let Some(pos) = find_operator_outside_parens(expr, " < ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 3..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(compare_values(&left, &right)
+            .map(|c| c == std::cmp::Ordering::Less)
+            .unwrap_or(false));
+    }
+
+    // Handle equality operators
+    if let Some(pos) = find_operator_outside_parens(expr, " == ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 4..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(left == right);
+    }
+
+    if let Some(pos) = find_operator_outside_parens(expr, " != ") {
+        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let right_str = expr[pos + 4..].trim();
+        let right = parse_value(right_str, vars)?;
+        return Ok(left != right);
+    }
+
+    // Handle 'is not' tests (must check before 'is')
+    if let Some(pos) = find_operator_outside_parens(expr, " is not ") {
+        let var_name = expr[..pos].trim();
+        let test_expr = expr[pos + 8..].trim();
+        let value = evaluate_variable_expression(var_name, vars)?;
+
+        let (test_name, test_arg) = if let Some(paren_pos) = test_expr.find('(') {
+            let name = test_expr[..paren_pos].trim();
+            let arg_end = test_expr.rfind(')').unwrap_or(test_expr.len());
+            let arg = &test_expr[paren_pos + 1..arg_end];
+            (name, Some(arg))
+        } else {
+            (test_expr, None)
+        };
+
+        return Ok(!evaluate_jinja_test(&value, test_name, test_arg, vars));
+    }
+
+    // Handle 'is' tests
+    if let Some(pos) = find_operator_outside_parens(expr, " is ") {
+        let var_name = expr[..pos].trim();
+        let test_expr = expr[pos + 4..].trim();
+        let value = evaluate_variable_expression(var_name, vars)?;
+
+        let (test_name, test_arg) = if let Some(paren_pos) = test_expr.find('(') {
+            let name = test_expr[..paren_pos].trim();
+            let arg_end = test_expr.rfind(')').unwrap_or(test_expr.len());
+            let arg = &test_expr[paren_pos + 1..arg_end];
+            (name, Some(arg))
+        } else {
+            (test_expr, None)
+        };
+
+        return Ok(evaluate_jinja_test(&value, test_name, test_arg, vars));
+    }
+
+    // Handle 'in' expressions
+    if let Some(pos) = find_operator_outside_parens(expr, " in ") {
+        let left_str = expr[..pos].trim();
+        let right_str = expr[pos + 4..].trim();
+        let left = evaluate_variable_expression(left_str, vars)?;
+        let right = parse_value(right_str, vars)?;
+
+        return match right {
+            JsonValue::Array(arr) => Ok(arr.contains(&left)),
+            JsonValue::String(s) => {
+                if let JsonValue::String(l) = left {
+                    Ok(s.contains(&l))
+                } else {
+                    Ok(false)
+                }
+            }
+            JsonValue::Object(obj) => {
+                if let JsonValue::String(k) = left {
+                    Ok(obj.contains_key(&k))
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => Ok(false),
+        };
+    }
+
+    // Handle variable truthiness
+    let value = evaluate_variable_expression(expr, vars)?;
+    Ok(is_truthy(&value))
+}
+
+/// Parse a value from string (could be literal or variable)
+///
+/// # Performance
+/// Hot path for expression evaluation - inline for better optimization.
+#[inline]
+fn parse_value(s: &str, vars: &IndexMap<String, JsonValue>) -> ExecutorResult<JsonValue> {
+    let s = s.trim();
+
+    // String literal
+    if (s.starts_with('\'') && s.ends_with('\'')) || (s.starts_with('"') && s.ends_with('"')) {
+        return Ok(JsonValue::String(s[1..s.len() - 1].to_string()));
+    }
+
+    // Boolean
+    if s == "true" || s == "True" {
+        return Ok(JsonValue::Bool(true));
+    }
+    if s == "false" || s == "False" {
+        return Ok(JsonValue::Bool(false));
+    }
+
+    // Number
+    if let Ok(n) = s.parse::<i64>() {
+        return Ok(JsonValue::Number(n.into()));
+    }
+    if let Ok(n) = s.parse::<f64>() {
+        if let Some(num) = serde_json::Number::from_f64(n) {
+            return Ok(JsonValue::Number(num));
+        }
+    }
+
+    // Variable reference
+    evaluate_variable_expression(s, vars)
 }
 
 /// Check if a JSON value is "truthy"
@@ -2633,15 +2875,6 @@ mod tests {
 
         let result = template_string("Count: {{ count }}", &vars).unwrap();
         assert_eq!(result, "Count: 42");
-    }
-
-    #[test]
-    fn test_template_string_diagnostic() {
-        let vars = IndexMap::new();
-        let err = template_string("Hello {{", &vars).unwrap_err();
-        let rendered = err.render_diagnostic().expect("expected diagnostic");
-        assert!(rendered.contains("E0020"));
-        assert!(rendered.contains("template error"));
     }
 
     #[test]
