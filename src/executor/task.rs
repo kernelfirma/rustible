@@ -2859,7 +2859,22 @@ fn is_truthy(value: &JsonValue) -> bool {
         JsonValue::Null => false,
         JsonValue::Bool(b) => *b,
         JsonValue::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(false),
-        JsonValue::String(s) => !s.is_empty() && s != "false" && s != "False" && s != "no",
+        JsonValue::String(s) => {
+            let value = s.trim();
+            if value.is_empty() {
+                return false;
+            }
+            if value.eq_ignore_ascii_case("false")
+                || value.eq_ignore_ascii_case("no")
+                || value.eq_ignore_ascii_case("off")
+                || value.eq_ignore_ascii_case("n")
+                || value.eq_ignore_ascii_case("f")
+                || value == "0"
+            {
+                return false;
+            }
+            true
+        }
         JsonValue::Array(arr) => !arr.is_empty(),
         JsonValue::Object(obj) => !obj.is_empty(),
     }
@@ -2989,6 +3004,12 @@ mod tests {
         assert!(!is_truthy(&JsonValue::Bool(false)));
         assert!(is_truthy(&JsonValue::Bool(true)));
         assert!(!is_truthy(&JsonValue::String("".to_string())));
+        assert!(!is_truthy(&JsonValue::String("0".to_string())));
+        assert!(!is_truthy(&JsonValue::String("false".to_string())));
+        assert!(!is_truthy(&JsonValue::String("no".to_string())));
+        assert!(!is_truthy(&JsonValue::String("off".to_string())));
+        assert!(!is_truthy(&JsonValue::String("n".to_string())));
+        assert!(!is_truthy(&JsonValue::String("f".to_string())));
         assert!(is_truthy(&JsonValue::String("hello".to_string())));
         assert!(!is_truthy(&JsonValue::Array(vec![])));
         assert!(is_truthy(&JsonValue::Array(vec![JsonValue::Null])));

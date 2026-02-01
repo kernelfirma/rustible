@@ -4,13 +4,10 @@
 
 pub mod check;
 pub mod drift;
-pub mod explain;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
-pub mod provider;
 pub mod provision;
-pub mod provisioner;
 pub mod run;
 pub mod vault;
 
@@ -108,12 +105,10 @@ impl CommandContext {
         ));
 
         // Build host config for SSH connection
-        let mut host_config = rustible::connection::HostConfig {
-            hostname: Some(ansible_host.to_string()),
-            port: Some(ansible_port),
-            user: Some(ansible_user.to_string()),
-            ..Default::default()
-        };
+        let mut host_config = rustible::connection::HostConfig::default();
+        host_config.hostname = Some(ansible_host.to_string());
+        host_config.port = Some(ansible_port);
+        host_config.user = Some(ansible_user.to_string());
         if let Some(key_path) = ansible_key {
             // Expand ~ to home directory
             let expanded_path = if let Some(stripped) = key_path.strip_prefix("~/") {
@@ -298,14 +293,12 @@ mod tests {
 
     #[test]
     fn test_parse_extra_vars_value_with_spaces() {
-        let cli = Cli::try_parse_from(["rustible", "-e", "message=hello world", "run", "play.yml"])
-            .unwrap();
+        let cli =
+            Cli::try_parse_from(["rustible", "-e", "message=hello world", "run", "play.yml"])
+                .unwrap();
         let ctx = CommandContext::new(&cli, Config::default());
         let vars = ctx.parse_extra_vars().unwrap();
 
-        assert_eq!(
-            vars.get("message").and_then(|v| v.as_str()),
-            Some("hello world")
-        );
+        assert_eq!(vars.get("message").and_then(|v| v.as_str()), Some("hello world"));
     }
 }

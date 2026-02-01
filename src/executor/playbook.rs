@@ -110,7 +110,6 @@ where
     }
 }
 
-use crate::diagnostics::yaml_syntax_error;
 use crate::executor::task::{Handler, Task};
 use crate::executor::{ExecutorError, ExecutorResult};
 
@@ -141,7 +140,7 @@ impl Playbook {
     /// Load a playbook from a YAML file
     pub fn load<P: AsRef<Path>>(path: P) -> ExecutorResult<Self> {
         let path = path.as_ref();
-        let content = std::fs::read_to_string(path).map_err(ExecutorError::IoError)?;
+        let content = std::fs::read_to_string(path).map_err(|e| ExecutorError::IoError(e))?;
 
         Self::parse(&content, Some(path.to_path_buf()))
     }
@@ -149,15 +148,8 @@ impl Playbook {
     /// Parse a playbook from YAML content
     pub fn parse(content: &str, path: Option<PathBuf>) -> ExecutorResult<Self> {
         // Ansible playbooks are arrays of plays at the top level
-        let plays: Vec<PlayDefinition> = serde_yaml::from_str(content).map_err(|e| {
-            let (line, col) = e.location().map_or((1, 1), |loc| (loc.line(), loc.column()));
-            let path_buf = path
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("<string>"));
-            let diagnostic =
-                yaml_syntax_error(path_buf, content, line, col, &e.to_string());
-            ExecutorError::diagnostic(diagnostic, Some(content.to_string()))
-        })?;
+        let plays: Vec<PlayDefinition> = serde_yaml::from_str(content)
+            .map_err(|e| ExecutorError::ParseError(format!("YAML parse error: {}", e)))?;
 
         if plays.is_empty() {
             return Err(ExecutorError::ParseError(
@@ -165,10 +157,8 @@ impl Playbook {
             ));
         }
 
-        let mut playbook = Playbook {
-            path: path.clone(),
-            ..Default::default()
-        };
+        let mut playbook = Playbook::default();
+        playbook.path = path.clone();
 
         if let Some(ref p) = path {
             playbook.name = p
@@ -311,36 +301,32 @@ pub enum RoleDefinition {
     /// Simple role name
     Name(String),
     /// Role with parameters
-    Full(Box<RoleDefinitionFull>),
-}
-
-/// Role definition with parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoleDefinitionFull {
-    /// Role name or path
-    #[serde(alias = "name")]
-    role: String,
-    /// When condition
-    #[serde(default)]
-    when: Option<String>,
-    /// Tags
-    #[serde(default)]
-    tags: Vec<String>,
-    /// Role variables
-    #[serde(default)]
-    vars: IndexMap<String, JsonValue>,
-    /// Become override
-    #[serde(default)]
-    r#become: Option<bool>,
-    /// Task include options
-    #[serde(default)]
-    tasks_from: Option<String>,
-    #[serde(default)]
-    vars_from: Option<String>,
-    #[serde(default)]
-    defaults_from: Option<String>,
-    #[serde(default)]
-    handlers_from: Option<String>,
+    Full {
+        /// Role name or path
+        #[serde(alias = "name")]
+        role: String,
+        /// When condition
+        #[serde(default)]
+        when: Option<String>,
+        /// Tags
+        #[serde(default)]
+        tags: Vec<String>,
+        /// Role variables
+        #[serde(default)]
+        vars: IndexMap<String, JsonValue>,
+        /// Become override
+        #[serde(default)]
+        r#become: Option<bool>,
+        /// Task include options
+        #[serde(default)]
+        tasks_from: Option<String>,
+        #[serde(default)]
+        vars_from: Option<String>,
+        #[serde(default)]
+        defaults_from: Option<String>,
+        #[serde(default)]
+        handlers_from: Option<String>,
+    },
 }
 
 impl RoleDefinition {
@@ -348,7 +334,7 @@ impl RoleDefinition {
     pub fn name(&self) -> &str {
         match self {
             RoleDefinition::Name(name) => name,
-            RoleDefinition::Full(full) => &full.role,
+            RoleDefinition::Full { role, .. } => role,
         }
     }
 
@@ -356,7 +342,7 @@ impl RoleDefinition {
     pub fn vars(&self) -> IndexMap<String, JsonValue> {
         match self {
             RoleDefinition::Name(_) => IndexMap::new(),
-            RoleDefinition::Full(full) => full.vars.clone(),
+            RoleDefinition::Full { vars, .. } => vars.clone(),
         }
     }
 
@@ -364,7 +350,7 @@ impl RoleDefinition {
     pub fn when(&self) -> Option<&str> {
         match self {
             RoleDefinition::Name(_) => None,
-            RoleDefinition::Full(full) => full.when.as_deref(),
+            RoleDefinition::Full { when, .. } => when.as_deref(),
         }
     }
 }
@@ -783,13 +769,22 @@ impl Role {
         role.when = def.when().map(String::from);
 
         // Extract all options from Full variant
-        if let RoleDefinition::Full(full) = &def {
-            role.tags = full.tags.clone();
-            role.r#become = full.r#become;
-            role.tasks_from = full.tasks_from.clone();
-            role.vars_from = full.vars_from.clone();
-            role.defaults_from = full.defaults_from.clone();
-            role.handlers_from = full.handlers_from.clone();
+        if let RoleDefinition::Full {
+            tags,
+            r#become: become_opt,
+            tasks_from,
+            vars_from,
+            defaults_from,
+            handlers_from,
+            ..
+        } = &def
+        {
+            role.tags = tags.clone();
+            role.r#become = *become_opt;
+            role.tasks_from = tasks_from.clone();
+            role.vars_from = vars_from.clone();
+            role.defaults_from = defaults_from.clone();
+            role.handlers_from = handlers_from.clone();
         }
 
         // Load the role from disk
@@ -1028,77 +1023,44 @@ fn parse_task_definition(
     def: TaskDefinition,
     playbook_path: Option<&PathBuf>,
 ) -> ExecutorResult<Vec<Task>> {
-    parse_task_definition_with_stack(def, playbook_path, &[])
-}
-
-fn task_definition_vars(def: &TaskDefinition) -> IndexMap<String, JsonValue> {
-    def.module
-        .get("vars")
-        .and_then(|value| value.as_object())
-        .map(|vars| vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default()
-}
-
-fn parse_task_definition_with_stack(
-    def: TaskDefinition,
-    _playbook_path: Option<&PathBuf>,
-    parent_stack: &[crate::executor::task::BlockContext],
-) -> ExecutorResult<Vec<Task>> {
     let mut tasks = Vec::new();
-    let def_vars = task_definition_vars(&def);
 
     // Handle block/rescue/always
     if let Some(block_tasks) = def.block {
-        use crate::executor::task::{BlockContext, BlockRole};
+        use crate::executor::task::BlockRole;
         use uuid::Uuid;
 
         // Generate a unique block ID
         let block_id = Uuid::new_v4().to_string();
-        let block_vars = def_vars.clone();
 
-        let mut normal_stack = parent_stack.to_vec();
-        normal_stack.push(BlockContext {
-            id: block_id.clone(),
-            role: BlockRole::Normal,
-            vars: block_vars.clone(),
-        });
-
+        let mut block_parsed = Vec::new();
         for task_def in block_tasks {
-            let mut block_parsed =
-                parse_task_definition_with_stack(task_def, _playbook_path, &normal_stack)?;
-            for task in &mut block_parsed {
-                if def.r#become {
-                    task.r#become = true;
-                }
-                if let Some(ref when) = def.when {
-                    if task.when.is_none() {
-                        task.when = Some(when.to_condition());
-                    }
+            block_parsed.extend(parse_task_definition(task_def, playbook_path)?);
+        }
+
+        // Apply block-level properties to all tasks and mark as block tasks
+        for mut task in block_parsed {
+            task.block_id = Some(block_id.clone());
+            task.block_role = BlockRole::Normal;
+            if def.r#become {
+                task.r#become = true;
+            }
+            if let Some(ref when) = def.when {
+                if task.when.is_none() {
+                    task.when = Some(when.to_condition());
                 }
             }
-            tasks.extend(block_parsed);
+            tasks.push(task);
         }
 
         // Handle rescue tasks
         if let Some(rescue_tasks) = def.rescue {
-            let mut rescue_stack = parent_stack.to_vec();
-            rescue_stack.push(BlockContext {
-                id: block_id.clone(),
-                role: BlockRole::Rescue,
-                vars: block_vars.clone(),
-            });
             for task_def in rescue_tasks {
-                let mut rescue_parsed =
-                    parse_task_definition_with_stack(task_def, _playbook_path, &rescue_stack)?;
+                let mut rescue_parsed = parse_task_definition(task_def, playbook_path)?;
+                // Mark these as rescue tasks
                 for task in &mut rescue_parsed {
-                    if def.r#become {
-                        task.r#become = true;
-                    }
-                    if let Some(ref when) = def.when {
-                        if task.when.is_none() {
-                            task.when = Some(when.to_condition());
-                        }
-                    }
+                    task.block_id = Some(block_id.clone());
+                    task.block_role = BlockRole::Rescue;
                 }
                 tasks.extend(rescue_parsed);
             }
@@ -1106,24 +1068,12 @@ fn parse_task_definition_with_stack(
 
         // Handle always tasks
         if let Some(always_tasks) = def.always {
-            let mut always_stack = parent_stack.to_vec();
-            always_stack.push(BlockContext {
-                id: block_id.clone(),
-                role: BlockRole::Always,
-                vars: block_vars,
-            });
             for task_def in always_tasks {
-                let mut always_parsed =
-                    parse_task_definition_with_stack(task_def, _playbook_path, &always_stack)?;
+                let mut always_parsed = parse_task_definition(task_def, playbook_path)?;
+                // Mark these as always tasks
                 for task in &mut always_parsed {
-                    if def.r#become {
-                        task.r#become = true;
-                    }
-                    if let Some(ref when) = def.when {
-                        if task.when.is_none() {
-                            task.when = Some(when.to_condition());
-                        }
-                    }
+                    task.block_id = Some(block_id.clone());
+                    task.block_role = BlockRole::Always;
                 }
                 tasks.extend(always_parsed);
             }
@@ -1136,7 +1086,7 @@ fn parse_task_definition_with_stack(
     if let Some(ref include_file) = def.include_tasks {
         debug!("Would include tasks from: {}", include_file);
         // In a full implementation, load and parse the included file
-        let mut task = Task {
+        let task = Task {
             name: def.name.clone(),
             module: "include_tasks".to_string(),
             args: {
@@ -1145,14 +1095,8 @@ fn parse_task_definition_with_stack(
                 args
             },
             when: def.when.as_ref().map(|w| w.to_condition()),
-            vars: def_vars.clone(),
             ..Default::default()
         };
-        task.block_stack = parent_stack.to_vec();
-        if let Some(last) = task.block_stack.last() {
-            task.block_id = Some(last.id.clone());
-            task.block_role = last.role;
-        }
         return Ok(vec![task]);
     }
 
@@ -1160,7 +1104,7 @@ fn parse_task_definition_with_stack(
     if let Some(ref import_file) = def.import_tasks {
         debug!("Would import tasks from: {}", import_file);
         // In a full implementation, load and parse the imported file at parse time
-        let mut task = Task {
+        let task = Task {
             name: def.name.clone(),
             module: "import_tasks".to_string(),
             args: {
@@ -1169,20 +1113,14 @@ fn parse_task_definition_with_stack(
                 args
             },
             when: def.when.as_ref().map(|w| w.to_condition()),
-            vars: def_vars.clone(),
             ..Default::default()
         };
-        task.block_stack = parent_stack.to_vec();
-        if let Some(last) = task.block_stack.last() {
-            task.block_id = Some(last.id.clone());
-            task.block_role = last.role;
-        }
         return Ok(vec![task]);
     }
 
     // Handle include_role
     if let Some(ref include_role) = def.include_role {
-        let mut task = Task {
+        let task = Task {
             name: if def.name.is_empty() {
                 format!("Include role: {}", include_role.name)
             } else {
@@ -1204,20 +1142,14 @@ fn parse_task_definition_with_stack(
                 args
             },
             when: def.when.as_ref().map(|w| w.to_condition()),
-            vars: def_vars.clone(),
             ..Default::default()
         };
-        task.block_stack = parent_stack.to_vec();
-        if let Some(last) = task.block_stack.last() {
-            task.block_id = Some(last.id.clone());
-            task.block_role = last.role;
-        }
         return Ok(vec![task]);
     }
 
     // Handle import_role
     if let Some(ref import_role) = def.import_role {
-        let mut task = Task {
+        let task = Task {
             name: if def.name.is_empty() {
                 format!("Import role: {}", import_role.name)
             } else {
@@ -1233,14 +1165,8 @@ fn parse_task_definition_with_stack(
                 args
             },
             when: def.when.as_ref().map(|w| w.to_condition()),
-            vars: def_vars.clone(),
             ..Default::default()
         };
-        task.block_stack = parent_stack.to_vec();
-        if let Some(last) = task.block_stack.last() {
-            task.block_id = Some(last.id.clone());
-            task.block_role = last.role;
-        }
         return Ok(vec![task]);
     }
 
@@ -1248,7 +1174,7 @@ fn parse_task_definition_with_stack(
     let (module_name, module_args) = find_module_in_definition(&def)?;
 
     // Build the task
-    let mut task = Task {
+    let task = Task {
         name: def.name,
         module: module_name,
         args: module_args,
@@ -1283,21 +1209,14 @@ fn parse_task_definition_with_stack(
         delegate_facts: None, // Not in old TaskDefinition, would need to add to parser
         run_once: def.run_once,
         tags: def.tags,
-        vars: def_vars.clone(),
         r#become: def.r#become,
         become_user: def.become_user,
         block_id: None,
         block_role: crate::executor::task::BlockRole::Normal,
-        block_stack: parent_stack.to_vec(),
         retries: None,
         delay: None,
         until: None,
     };
-
-    if let Some(last) = task.block_stack.last() {
-        task.block_id = Some(last.id.clone());
-        task.block_role = last.role;
-    }
 
     tasks.push(task);
     Ok(tasks)
@@ -1517,22 +1436,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_invalid_yaml_diagnostic() {
-        let yaml = r#"
-- name: Bad Play
-  hosts all
-  tasks:
-    - debug:
-        msg: "oops"
-"#;
-
-        let err = Playbook::parse(yaml, None).unwrap_err();
-        let rendered = err.render_diagnostic().expect("expected diagnostic");
-        assert!(rendered.contains("E0010"));
-        assert!(rendered.contains("syntax error"));
-    }
-
-    #[test]
     fn test_parse_flexible_booleans_and_fqcn() {
         let yaml = r#"
 - name: Test Play
@@ -1586,7 +1489,7 @@ mod tests {
         let simple = RoleDefinition::Name("nginx".to_string());
         assert_eq!(simple.name(), "nginx");
 
-        let full = RoleDefinition::Full(Box::new(RoleDefinitionFull {
+        let full = RoleDefinition::Full {
             role: "nginx".to_string(),
             when: Some("ansible_os_family == 'Debian'".to_string()),
             tags: vec!["web".to_string()],
@@ -1596,7 +1499,7 @@ mod tests {
             vars_from: None,
             defaults_from: None,
             handlers_from: None,
-        }));
+        };
         assert_eq!(full.name(), "nginx");
     }
 
