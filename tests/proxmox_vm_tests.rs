@@ -52,7 +52,9 @@ impl ProxmoxTestConfig {
         let token_id = require_env("RUSTIBLE_PVE_TOKEN_ID")?;
         let token_secret = require_env("RUSTIBLE_PVE_TOKEN_SECRET")?;
         let node = require_env("RUSTIBLE_PVE_NODE")?;
-        let vmid = require_env("RUSTIBLE_PVE_VMID")?.parse::<u64>().ok()?;
+        let vmid = require_env("RUSTIBLE_PVE_VMID")?
+            .parse::<u64>()
+            .ok()?;
 
         let validate_certs = optional_bool_env("RUSTIBLE_PVE_VALIDATE_CERTS");
         let timeout_secs = optional_u64_env("RUSTIBLE_PVE_TIMEOUT");
@@ -135,19 +137,17 @@ fn optional_bool_env(name: &str) -> Option<bool> {
 
 fn optional_json_env(name: &str) -> Option<serde_json::Value> {
     match env::var(name) {
-        Ok(value) if !value.trim().is_empty() => {
-            match serde_json::from_str::<serde_json::Value>(&value) {
-                Ok(json) if json.is_object() => Some(json),
-                Ok(_) => {
-                    eprintln!("{} must be a JSON object", name);
-                    None
-                }
-                Err(err) => {
-                    eprintln!("Invalid JSON for {}: {}", name, err);
-                    None
-                }
+        Ok(value) if !value.trim().is_empty() => match serde_json::from_str::<serde_json::Value>(&value) {
+            Ok(json) if json.is_object() => Some(json),
+            Ok(_) => {
+                eprintln!("{} must be a JSON object", name);
+                None
             }
-        }
+            Err(err) => {
+                eprintln!("Invalid JSON for {}: {}", name, err);
+                None
+            }
+        },
         _ => None,
     }
 }
@@ -183,13 +183,19 @@ fn build_params_with_vmid(
         params.insert("timeout".to_string(), serde_json::json!(timeout));
     }
     if let Some(stop_method) = config.stop_method.as_ref() {
-        params.insert("stop_method".to_string(), serde_json::json!(stop_method));
+        params.insert(
+            "stop_method".to_string(),
+            serde_json::json!(stop_method),
+        );
     }
     if let Some(name) = config.name.as_ref() {
         params.insert("name".to_string(), serde_json::json!(name));
     }
     if let Some(description) = config.description.as_ref() {
-        params.insert("description".to_string(), serde_json::json!(description));
+        params.insert(
+            "description".to_string(),
+            serde_json::json!(description),
+        );
     }
     if let Some(tags) = config.tags.as_ref() {
         params.insert("tags".to_string(), serde_json::json!(tags));
@@ -207,13 +213,19 @@ fn build_params_with_vmid(
         );
     }
     if let Some(storage) = config.clone_storage.as_ref() {
-        params.insert("clone_storage".to_string(), serde_json::json!(storage));
+        params.insert(
+            "clone_storage".to_string(),
+            serde_json::json!(storage),
+        );
     }
     if let Some(pool) = config.clone_pool.as_ref() {
         params.insert("clone_pool".to_string(), serde_json::json!(pool));
     }
     if let Some(snapname) = config.clone_snapname.as_ref() {
-        params.insert("clone_snapname".to_string(), serde_json::json!(snapname));
+        params.insert(
+            "clone_snapname".to_string(),
+            serde_json::json!(snapname),
+        );
     }
 
     params
