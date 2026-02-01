@@ -1834,8 +1834,16 @@ impl Task {
             ));
         }
 
-        // Determine base path for path validation
-        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        // Determine base path from playbook_dir magic variable (set from playbook path)
+        // Falls back to current directory if playbook_dir is not set
+        let base_path = {
+            let rt = runtime.read().await;
+            rt.get_var("playbook_dir", Some(&ctx.host))
+                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
+                .unwrap_or_else(|| {
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                })
+        };
 
         let mut all_vars: IndexMap<String, JsonValue> = IndexMap::new();
         let source: String;
@@ -2031,8 +2039,18 @@ impl Task {
 
         info!("Including tasks from: {}", file);
 
-        // Determine base path from the runtime context or use current directory
-        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        // Determine base path from playbook_dir magic variable (set from playbook path)
+        // Falls back to current directory if playbook_dir is not set
+        let base_path = {
+            let rt = runtime.read().await;
+            rt.get_var("playbook_dir", Some(&ctx.host))
+                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
+                .unwrap_or_else(|| {
+                    warn!("playbook_dir not set, falling back to current directory for include path resolution");
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                })
+        };
+        debug!("Using base path for include: {}", base_path.display());
         let handler = crate::executor::include_handler::IncludeTasksHandler::new(base_path);
 
         // Build the include spec with any variables passed
