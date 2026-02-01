@@ -22,21 +22,18 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore,no_run
-//! # #[tokio::main]
-//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-//! use rustible::prelude::*;
-//! use rustible::secrets::vault::{VaultAuthMethod, VaultConfig, VaultProvider};
+//! ```rust,ignore
+//! use rustible::secrets::vault::{VaultProvider, VaultConfig, VaultAuthMethod};
 //!
-//! let config = VaultConfig::new("https://vault.example.com:8200")
-//!     .with_auth_method(VaultAuthMethod::Token)
-//!     .with_namespace("my-namespace")
-//!     .with_token_env("VAULT_TOKEN");
+//! let config = VaultConfig {
+//!     address: "https://vault.example.com:8200".to_string(),
+//!     auth_method: VaultAuthMethod::Token,
+//!     namespace: Some("my-namespace".to_string()),
+//!     token_env: Some("VAULT_TOKEN".to_string()),
+//! };
 //!
 //! let provider = VaultProvider::new(config).await?;
 //! let secret = provider.get_secret("secret/data/myapp").await?;
-//! # Ok(())
-//! # }
 //! ```
 
 use async_trait::async_trait;
@@ -423,16 +420,13 @@ impl<C: VaultClient> VaultProvider<C> {
         if let Some(key) = key {
             // Return only the specified key
             let value = data.get(key).ok_or_else(|| {
-                SecretError::NotFound(format!(
-                    "Key '{}' not found in secret '{}'",
-                    key, secret_path
-                ))
+                SecretError::NotFound(format!("Key '{}' not found in secret '{}'", key, secret_path))
             })?;
             let mut filtered = HashMap::new();
             filtered.insert(key.to_string(), value.clone());
-            Ok(Secret::from_string_map(secret_path, filtered))
+            Ok(Secret::from_string_map(filtered))
         } else {
-            Ok(Secret::from_string_map(secret_path, data))
+            Ok(Secret::from_string_map(data))
         }
     }
 
