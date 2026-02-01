@@ -209,7 +209,14 @@ impl OutputFormatter {
         let padding_len = 11usize.saturating_sub(status.as_str().len());
 
         let host_str = if self.use_color {
-            host.bright_white().bold().to_string()
+            match status {
+                TaskStatus::Ok => host.green().to_string(),
+                TaskStatus::Changed => host.yellow().to_string(),
+                TaskStatus::Skipped => host.cyan().to_string(),
+                TaskStatus::Failed | TaskStatus::Unreachable => host.red().bold().to_string(),
+                TaskStatus::Rescued => host.magenta().to_string(),
+                TaskStatus::Ignored => host.blue().to_string(),
+            }
         } else {
             host.to_string()
         };

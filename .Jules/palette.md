@@ -29,3 +29,7 @@
 ## 2024-05-28 - [Unicode vs Emoji Usage]
 **Learning:** The codebase avoids emojis in banners (e.g., `[==== SUCCESS ====]`) but uses them in interactive menus. For CLI output like task status, text-like Unicode symbols (e.g. `✎` instead of `📝`) are preferred to maintain alignment and professional appearance.
 **Action:** Use Unicode symbols that are 1-cell wide for tabular output; reserve colorful emojis for interactive prompts.
+
+## 2024-05-24 - Task Output Coloring
+**Learning:** Coloring host names in task output to match the status color (e.g. green for OK, red for Failed) significantly improves scannability and visual consistency with the `recap` summary.
+**Action:** Apply consistent color coding for entity names (hosts, tasks) across all output modes to reinforce status at a glance.
