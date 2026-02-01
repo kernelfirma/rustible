@@ -122,8 +122,9 @@ pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
 pub use resource_graph::{
-    AttributeChange, GraphNode, Resource, ResourceAction, ResourceGraph, ResourceGraphError,
-    ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput, ResourcePlan,
+    AttributeChange, ComparisonSummary, GraphNode, Resource, ResourceAction, ResourceGraph,
+    ResourceGraphError, ResourceGraphFile, ResourceGraphResult, ResourceLifecycle, ResourceOutput,
+    ResourcePlan, StateComparison,
 };
 
 pub use core::{EventCallback, ExecutionEvent, Executor, ExecutorConfig};
