@@ -70,13 +70,13 @@ impl InteractiveSession {
         let items = vec![
             "🚀 Run a playbook",
             "🔍 Check playbook (dry-run)",
-            "🖥️  List hosts",
-            "📋 List tasks",
+            "📋 List hosts",
+            "📝 List tasks",
             "🔐 Vault operations",
             "✨ Initialize project",
             "✅ Validate playbook",
-            "⚙️  Settings",
-            "❌ Exit",
+            "⚙️ Settings",
+            "🚪 Exit",
         ];
 
         let selection = Select::with_theme(&self.theme)
@@ -100,51 +100,42 @@ impl InteractiveSession {
 
     /// Prompt for playbook selection
     pub fn select_playbook(&self, playbooks: &[PathBuf]) -> Result<Option<PathBuf>> {
-        let mut items: Vec<String> = playbooks
-            .iter()
-            .map(|p| format!("📖 {}", p.display()))
-            .collect();
-
-        items.push("📝 Enter path manually...".to_string());
-        items.push("❌ Cancel".to_string());
-
-        let prompt_msg = if playbooks.is_empty() {
-            "No playbooks found. Select action:"
-        } else {
-            "Select a playbook"
-        };
-
-        let selection = Select::with_theme(&self.theme)
-            .with_prompt(prompt_msg)
-            .items(&items)
-            .default(0)
-            .interact_on(&self.term)?;
-
-        // Check if "Cancel" was selected (last item)
-        if selection == items.len() - 1 {
+        if playbooks.is_empty() {
+            println!("{}", "No playbooks found in current directory.".yellow());
             return Ok(None);
         }
 
-        // Check if "Enter path manually" was selected (second to last)
-        if selection == items.len() - 2 {
-            let path: String = Input::with_theme(&self.theme)
-                .with_prompt("Enter playbook path")
-                .interact_on(&self.term)?;
-            return Ok(Some(PathBuf::from(path)));
-        }
+        let items: Vec<String> = playbooks.iter().map(|p| p.display().to_string()).collect();
+
+        let selection = Select::with_theme(&self.theme)
+            .with_prompt("Select a playbook")
+            .items(&items)
+            .default(0)
+            .interact_on(&self.term)?;
 
         Ok(Some(playbooks[selection].clone()))
     }
 
     /// Prompt for inventory selection
     pub fn select_inventory(&self, inventories: &[PathBuf]) -> Result<Option<PathBuf>> {
+        if inventories.is_empty() {
+            let custom: String = Input::with_theme(&self.theme)
+                .with_prompt("Enter inventory path (or 'localhost' for local)")
+                .default("localhost".to_string())
+                .interact_on(&self.term)?;
+
+            if custom == "localhost" {
+                return Ok(None);
+            }
+            return Ok(Some(PathBuf::from(custom)));
+        }
+
         let mut items: Vec<String> = inventories
             .iter()
-            .map(|p| format!("📄 {}", p.display()))
+            .map(|p| p.display().to_string())
             .collect();
-        // Add default options (always available)
-        items.push("💻 Use localhost (no inventory)".to_string());
-        items.push("📝 Enter custom path...".to_string());
+        items.push("✏️ Enter custom path...".to_string());
+        items.push("🏠 Use localhost (no inventory)".to_string());
 
         let selection = Select::with_theme(&self.theme)
             .with_prompt("Select inventory")
@@ -152,20 +143,14 @@ impl InteractiveSession {
             .default(0)
             .interact_on(&self.term)?;
 
-        // Check if "Localhost" was selected (always second to last)
-        if selection == items.len() - 2 {
-            return Ok(None);
+        if selection == items.len() - 1 {
+            return Ok(None); // localhost
         }
 
-        // Check if "Custom path" was selected (always last)
-        if selection == items.len() - 1 {
+        if selection == items.len() - 2 {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("Enter inventory path")
                 .interact_on(&self.term)?;
-
-            if custom == "localhost" {
-                return Ok(None);
-            }
             return Ok(Some(PathBuf::from(custom)));
         }
 
@@ -187,14 +172,9 @@ impl InteractiveSession {
             return Ok(vec![]);
         }
 
-        let items: Vec<String> = available_tags
-            .iter()
-            .map(|t| format!("🏷️  {}", t))
-            .collect();
-
         let selections = MultiSelect::with_theme(&self.theme)
             .with_prompt("Select tags to run (space to select, enter to confirm)")
-            .items(&items)
+            .items(available_tags)
             .interact_on(&self.term)?;
 
         Ok(selections
@@ -249,9 +229,9 @@ impl InteractiveSession {
             .interact_on(&self.term)?;
 
         let verbosity_items = vec![
-            "📢 Normal (no extra verbosity)",
-            "ℹ️  Verbose (-v)",
-            "🔍 More verbose (-vv)",
+            "🔉 Normal (no extra verbosity)",
+            "🔊 Verbose (-v)",
+            "📢 More verbose (-vv)",
             "🐛 Debug (-vvv)",
             "🔌 Connection debug (-vvvv)",
         ];
@@ -280,12 +260,12 @@ impl InteractiveSession {
         let items = vec![
             "🔒 Encrypt a file",
             "🔓 Decrypt a file",
-            "👁️  View encrypted file",
-            "✏️  Edit encrypted file",
-            "🆕 Create new encrypted file",
+            "👁️ View encrypted file",
+            "✏️ Edit encrypted file",
+            "✨ Create new encrypted file",
             "🔑 Rekey (change password)",
             "🔏 Encrypt a string",
-            "⬅️  Back to main menu",
+            "🔙 Back to main menu",
         ];
 
         let selection = Select::with_theme(&self.theme)
