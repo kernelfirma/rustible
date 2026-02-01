@@ -402,7 +402,17 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("\n", "newline (multi-line command)"),
         ("\r", "carriage return"),
         ("&", "background execution &"),
-        (";", "command separator ;"),
+        ("{", "brace expansion {"),
+        ("}", "brace expansion }"),
+        ("(", "subshell ("),
+        (")", "subshell )"),
+        ("[", "globbing ["),
+        ("]", "globbing ]"),
+        ("*", "globbing *"),
+        ("?", "globbing ?"),
+        ("!", "history expansion !"),
+        ("\\", "shell escaping \\"),
+        ("$", "variable expansion $"),
     ];
 
     for (pattern, description) in dangerous_patterns {
