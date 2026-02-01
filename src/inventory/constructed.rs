@@ -73,6 +73,7 @@
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -621,26 +622,26 @@ impl ExpressionEvaluator {
 
     // Parser helper functions
     fn parse_is_defined(expr: &str) -> Option<&str> {
-        // Pattern: "var is defined" or "var is not undefined"
-        let re = Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+defined$").ok()?;
-        re.captures(expr).map(|c| c.get(1).unwrap().as_str())
+        // Pattern: "var is defined"
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+defined$").expect("Invalid regex"));
+        RE.captures(expr).map(|c| c.get(1).unwrap().as_str())
     }
 
     fn parse_is_not_defined(expr: &str) -> Option<&str> {
         // Pattern: "var is not defined" or "var is undefined"
-        let re = Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+not\s+defined$").ok()?;
-        if let Some(caps) = re.captures(expr) {
+        static RE_NOT_DEFINED: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+not\s+defined$").expect("Invalid regex"));
+        if let Some(caps) = RE_NOT_DEFINED.captures(expr) {
             return Some(caps.get(1).unwrap().as_str());
         }
 
-        let re2 = Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+undefined$").ok()?;
-        re2.captures(expr).map(|c| c.get(1).unwrap().as_str())
+        static RE_UNDEFINED: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+undefined$").expect("Invalid regex"));
+        RE_UNDEFINED.captures(expr).map(|c| c.get(1).unwrap().as_str())
     }
 
     fn parse_in_operator(expr: &str) -> Option<(&str, &str)> {
         // Pattern: "'item' in collection" or "item in collection"
-        let re = Regex::new(r"^(.+?)\s+in\s+(.+)$").ok()?;
-        re.captures(expr).map(|c| {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+?)\s+in\s+(.+)$").expect("Invalid regex"));
+        RE.captures(expr).map(|c| {
             (
                 c.get(1).unwrap().as_str().trim(),
                 c.get(2).unwrap().as_str().trim(),
@@ -650,8 +651,8 @@ impl ExpressionEvaluator {
 
     fn parse_comparison(expr: &str) -> Option<(&str, &str, &str)> {
         // Pattern: "left op right" where op is ==, !=, <, >, <=, >=
-        let re = Regex::new(r"^(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+)$").ok()?;
-        re.captures(expr).map(|c| {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+)$").expect("Invalid regex"));
+        RE.captures(expr).map(|c| {
             (
                 c.get(1).unwrap().as_str().trim(),
                 c.get(2).unwrap().as_str(),
@@ -718,8 +719,8 @@ impl ExpressionEvaluator {
 
     fn parse_default_filter(expr: &str) -> Option<(&str, &str)> {
         // Pattern: "var | default(value)" or "var | d(value)"
-        let re = Regex::new(r"^(.+?)\s*\|\s*(?:default|d)\s*\(\s*(.+?)\s*\)$").ok()?;
-        re.captures(expr).map(|c| {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+?)\s*\|\s*(?:default|d)\s*\(\s*(.+?)\s*\)$").expect("Invalid regex"));
+        RE.captures(expr).map(|c| {
             (
                 c.get(1).unwrap().as_str().trim(),
                 c.get(2).unwrap().as_str().trim(),
@@ -729,8 +730,8 @@ impl ExpressionEvaluator {
 
     fn parse_filter(expr: &str) -> Option<(&str, &str)> {
         // Pattern: "value | filter"
-        let re = Regex::new(r"^(.+?)\s*\|\s*(\w+)$").ok()?;
-        re.captures(expr).map(|c| {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+?)\s*\|\s*(\w+)$").expect("Invalid regex"));
+        RE.captures(expr).map(|c| {
             (
                 c.get(1).unwrap().as_str().trim(),
                 c.get(2).unwrap().as_str().trim(),
