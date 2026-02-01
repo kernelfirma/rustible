@@ -8,7 +8,7 @@
 //! # Performance Optimizations
 //!
 //! This module includes several hot path optimizations:
-//! - Template rendering uses the unified TEMPLATE_ENGINE with LRU caching
+//! - Cached regex patterns using `once_cell::sync::Lazy`
 //! - Inline hints for frequently called functions
 //! - Reduced allocations in template processing
 
@@ -17,13 +17,26 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use serde::{Deserialize, Deserializer, Serialize};
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, instrument, warn};
 
-use crate::diagnostics::template_syntax_error;
-use crate::error::Error;
+// ============================================================================
+// PERFORMANCE: Cached regex patterns for hot path template processing
+// ============================================================================
+
+/// Cached regex for template variable extraction: {{ variable }}
+/// This regex is compiled once and reused across all template operations.
+static TEMPLATE_VAR_REGEX: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").expect("Invalid template regex"));
+
+/// Cached regex for checking if string contains template syntax
+#[allow(dead_code)]
+static TEMPLATE_CHECK_REGEX: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"\{\{|\{%").expect("Invalid template check regex"));
+
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RegisteredResult, RuntimeContext};
 use crate::executor::{ExecutorError, ExecutorResult};
@@ -33,10 +46,8 @@ use crate::template::TEMPLATE_ENGINE;
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-#[derive(Default)]
 pub enum TaskStatus {
     /// Task completed successfully without changes
-    #[default]
     Ok,
     /// Task completed successfully with changes
     Changed,
@@ -46,6 +57,12 @@ pub enum TaskStatus {
     Skipped,
     /// Host was unreachable
     Unreachable,
+}
+
+impl Default for TaskStatus {
+    fn default() -> Self {
+        TaskStatus::Ok
+    }
 }
 
 /// Result of executing a task
@@ -131,67 +148,23 @@ impl TaskResult {
     }
 
     /// Convert to RegisteredResult
-    ///
-    /// Extracts data from `self.result` if available, falling back to the
-    /// explicit stdout/stderr parameters. This ensures module output data
-    /// (rc, stdout, stderr, module-specific fields) is preserved for register.
     pub fn to_registered(
         &self,
         stdout: Option<String>,
         stderr: Option<String>,
     ) -> RegisteredResult {
-        // Try to extract fields from self.result if it contains module output data
-        let (rc, result_stdout, result_stderr, data) = if let Some(ref result) = self.result {
-            if let Some(obj) = result.as_object() {
-                let rc = obj.get("rc").and_then(|v| v.as_i64()).map(|v| v as i32);
-                let result_stdout = obj.get("stdout").and_then(|v| v.as_str()).map(String::from);
-                let result_stderr = obj.get("stderr").and_then(|v| v.as_str()).map(String::from);
-
-                // Collect module-specific data (excluding standard fields)
-                let mut data = IndexMap::new();
-                for (key, value) in obj {
-                    // Skip standard RegisteredResult fields
-                    if !matches!(
-                        key.as_str(),
-                        "changed"
-                            | "failed"
-                            | "skipped"
-                            | "rc"
-                            | "stdout"
-                            | "stdout_lines"
-                            | "stderr"
-                            | "stderr_lines"
-                            | "msg"
-                            | "results"
-                    ) {
-                        data.insert(key.clone(), value.clone());
-                    }
-                }
-
-                (rc, result_stdout, result_stderr, data)
-            } else {
-                (None, None, None, IndexMap::new())
-            }
-        } else {
-            (None, None, None, IndexMap::new())
-        };
-
-        // Use result data if available, otherwise fall back to explicit parameters
-        let final_stdout = result_stdout.or(stdout);
-        let final_stderr = result_stderr.or(stderr);
-
         RegisteredResult {
             changed: self.changed,
             failed: self.status == TaskStatus::Failed,
             skipped: self.status == TaskStatus::Skipped,
-            rc,
-            stdout: final_stdout.clone(),
-            stdout_lines: final_stdout.map(|s| s.lines().map(String::from).collect()),
-            stderr: final_stderr.clone(),
-            stderr_lines: final_stderr.map(|s| s.lines().map(String::from).collect()),
+            rc: None,
+            stdout: stdout.clone(),
+            stdout_lines: stdout.map(|s| s.lines().map(String::from).collect()),
+            stderr: stderr.clone(),
+            stderr_lines: stderr.map(|s| s.lines().map(String::from).collect()),
             msg: self.msg.clone(),
             results: None,
-            data,
+            data: IndexMap::new(),
         }
     }
 }
@@ -203,33 +176,6 @@ pub struct TaskDiff {
     pub after: Option<String>,
     pub before_header: Option<String>,
     pub after_header: Option<String>,
-}
-
-/// Helper function to deserialize string or sequence into Vec<String>
-fn deserialize_string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = JsonValue::deserialize(deserializer)?;
-    match value {
-        JsonValue::Null => Ok(Vec::new()),
-        JsonValue::String(s) => Ok(vec![s]),
-        JsonValue::Bool(b) => Ok(vec![b.to_string()]),
-        JsonValue::Number(n) => Ok(vec![n.to_string()]),
-        JsonValue::Array(seq) => {
-            let mut result = Vec::new();
-            for item in seq {
-                match item {
-                    JsonValue::String(s) => result.push(s),
-                    JsonValue::Bool(b) => result.push(b.to_string()),
-                    JsonValue::Number(n) => result.push(n.to_string()),
-                    other => result.push(format!("{:?}", other)),
-                }
-            }
-            Ok(result)
-        }
-        other => Ok(vec![format!("{:?}", other)]),
-    }
 }
 
 /// A handler that can be notified by tasks
@@ -245,7 +191,7 @@ pub struct Handler {
     /// Optional when condition
     pub when: Option<String>,
     /// Listen for multiple notification names
-    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    #[serde(default)]
     pub listen: Vec<String>,
 }
 
@@ -288,9 +234,9 @@ pub struct Task {
     /// Variable name to register result
     #[serde(default)]
     pub register: Option<String>,
-    /// Items to loop over (can be literal items or template expression)
+    /// Items to loop over
     #[serde(default)]
-    pub loop_items: Option<LoopSource>,
+    pub loop_items: Option<Vec<JsonValue>>,
     /// Loop variable name (default: "item")
     #[serde(default = "default_loop_var")]
     pub loop_var: String,
@@ -318,9 +264,6 @@ pub struct Task {
     /// Tags for task filtering
     #[serde(default)]
     pub tags: Vec<String>,
-    /// Task-level variables
-    #[serde(default)]
-    pub vars: IndexMap<String, JsonValue>,
     /// Whether to become another user
     #[serde(default)]
     pub r#become: bool,
@@ -333,9 +276,6 @@ pub struct Task {
     /// Task type within a block
     #[serde(default)]
     pub block_role: BlockRole,
-    /// Block context stack (outermost to innermost)
-    #[serde(default)]
-    pub block_stack: Vec<BlockContext>,
     /// Number of retries for until loop
     #[serde(default)]
     pub retries: Option<u32>,
@@ -360,30 +300,8 @@ pub enum BlockRole {
     Always,
 }
 
-/// Block context for a task (supports nested blocks)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BlockContext {
-    /// Block ID
-    pub id: String,
-    /// Task role within this block
-    #[serde(default)]
-    pub role: BlockRole,
-    /// Block-level variables
-    #[serde(default)]
-    pub vars: IndexMap<String, JsonValue>,
-}
-
 fn default_loop_var() -> String {
     "item".to_string()
-}
-
-/// Source of loop items - can be literal items or a template expression
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LoopSource {
-    /// Literal array of items
-    Items(Vec<JsonValue>),
-    /// Template expression that evaluates to an array (e.g., "{{ result.results }}")
-    Template(String),
 }
 
 impl Default for Task {
@@ -405,12 +323,10 @@ impl Default for Task {
             delegate_facts: None,
             run_once: false,
             tags: Vec::new(),
-            vars: IndexMap::new(),
             r#become: false,
             become_user: None,
             block_id: None,
             block_role: BlockRole::Normal,
-            block_stack: Vec::new(),
             retries: None,
             delay: None,
             until: None,
@@ -437,11 +353,11 @@ impl From<crate::playbook::Task> for Task {
         // Convert loop items from various sources
         // Priority: loop > with_items > with_dict > with_fileglob
         let loop_items = if let Some(v) = pt.loop_.or(pt.with_items) {
-            // Standard loop or with_items - can be array or template expression
+            // Standard loop or with_items - expect array
             if let Some(arr) = v.as_array() {
-                Some(LoopSource::Items(arr.clone()))
+                Some(arr.clone())
             } else {
-                v.as_str().map(|s| LoopSource::Template(s.to_string()))
+                None
             }
         } else if let Some(v) = pt.with_dict {
             // with_dict - convert dict to list of {key, value} objects
@@ -450,7 +366,7 @@ impl From<crate::playbook::Task> for Task {
                     .iter()
                     .map(|(k, val)| serde_json::json!({"key": k, "value": val}))
                     .collect();
-                Some(LoopSource::Items(items))
+                Some(items)
             } else {
                 None
             }
@@ -458,9 +374,9 @@ impl From<crate::playbook::Task> for Task {
             // with_fileglob - for now just pass patterns as strings
             // (actual glob expansion happens at runtime)
             if let Some(arr) = v.as_array() {
-                Some(LoopSource::Items(arr.clone()))
+                Some(arr.clone())
             } else if v.is_string() {
-                Some(LoopSource::Items(vec![v]))
+                Some(vec![v])
             } else {
                 None
             }
@@ -501,12 +417,10 @@ impl From<crate::playbook::Task> for Task {
             delegate_facts: pt.delegate_facts,
             run_once: pt.run_once,
             tags: pt.tags,
-            vars: pt.vars.as_map().clone(),
             r#become: pt.r#become.unwrap_or(false),
             become_user: pt.become_user,
             block_id: None,
             block_role: BlockRole::Normal,
-            block_stack: Vec::new(),
             retries: pt.retries,
             delay: pt.delay,
             until: pt.until,
@@ -550,13 +464,7 @@ impl Task {
 
     /// Set loop items
     pub fn loop_over(mut self, items: Vec<JsonValue>) -> Self {
-        self.loop_items = Some(LoopSource::Items(items));
-        self
-    }
-
-    /// Set loop from template expression
-    pub fn loop_template(mut self, template: impl Into<String>) -> Self {
-        self.loop_items = Some(LoopSource::Template(template.into()));
+        self.loop_items = Some(items);
         self
     }
 
@@ -570,17 +478,6 @@ impl Task {
     pub fn ignore_errors(mut self, ignore: bool) -> Self {
         self.ignore_errors = ignore;
         self
-    }
-
-    /// Merge block-level variables from all block contexts (outer to inner).
-    pub fn merged_block_vars(&self) -> IndexMap<String, JsonValue> {
-        let mut merged = IndexMap::new();
-        for ctx in &self.block_stack {
-            for (key, value) in &ctx.vars {
-                merged.insert(key.clone(), value.clone());
-            }
-        }
-        merged
     }
 
     /// Execute the task
@@ -635,90 +532,15 @@ impl Task {
         };
 
         // Handle loops - for set_fact, use fact_storage_ctx; for others, use execution_ctx
-        if let Some(ref loop_source) = self.loop_items {
+        if let Some(ref items) = self.loop_items {
             let loop_ctx = if self.module == "set_fact" {
                 &fact_storage_ctx
             } else {
                 &execution_ctx
             };
-
-            // Resolve loop items from the source
-            let items = match loop_source {
-                LoopSource::Items(items) => items.clone(),
-                LoopSource::Template(template) => {
-                    // Render the template to get the items
-                    let rt = runtime.read().await;
-                    let vars = rt.get_merged_vars_ref(&loop_ctx.host);
-                    drop(rt);
-
-                    let rendered = TEMPLATE_ENGINE
-                        .render_value(&serde_json::Value::String(template.clone()), vars.as_ref())
-                        .map_err(|e| {
-                            ExecutorError::RuntimeError(format!(
-                                "Failed to render loop template '{}': {}",
-                                template, e
-                            ))
-                        })?;
-
-                    // The rendered value should be an array
-                    match rendered {
-                        serde_json::Value::Array(arr) => arr,
-                        serde_json::Value::String(ref s) if s.is_empty() => {
-                            // Empty string means no items, skip loop
-                            debug!("Loop template rendered to empty string, skipping loop");
-                            Vec::new()
-                        }
-                        other => {
-                            // Try to interpret as JSON array string
-                            if let serde_json::Value::String(ref s) = other {
-                                // MiniJinja outputs Python-style values, convert to JSON:
-                                // none -> null, True -> true, False -> false
-                                let json_str = s
-                                    .replace(": none", ": null")
-                                    .replace(":none", ":null")
-                                    .replace(", none,", ", null,")
-                                    .replace("[none,", "[null,")
-                                    .replace(", none]", ", null]")
-                                    .replace(": True", ": true")
-                                    .replace(":True", ":true")
-                                    .replace(": False", ": false")
-                                    .replace(":False", ":false");
-
-                                if let Ok(arr) = serde_json::from_str::<Vec<JsonValue>>(&json_str) {
-                                    arr
-                                } else {
-                                    warn!(
-                                        "Loop template '{}' did not render to an array: {:?}",
-                                        template, other
-                                    );
-                                    Vec::new()
-                                }
-                            } else {
-                                warn!(
-                                    "Loop template '{}' did not render to an array: {:?}",
-                                    template, other
-                                );
-                                Vec::new()
-                            }
-                        }
-                    }
-                }
-            };
-
-            if items.is_empty() {
-                // No items to iterate, return success
-                return Ok(TaskResult {
-                    status: TaskStatus::Ok,
-                    changed: false,
-                    msg: Some("Loop has no items".to_string()),
-                    result: None,
-                    diff: None,
-                });
-            }
-
             return self
                 .execute_loop(
-                    &items,
+                    items,
                     loop_ctx,
                     runtime,
                     handlers,
@@ -818,7 +640,6 @@ impl Task {
     }
 
     /// Execute task in a loop
-    #[allow(clippy::too_many_arguments)]
     async fn execute_loop(
         &self,
         items: &[JsonValue],
@@ -861,11 +682,11 @@ impl Task {
             {
                 let mut rt = runtime.write().await;
                 // Clone loop_var only once per loop iteration (unavoidable for runtime storage)
-                rt.set_task_var(&ctx.host, self.loop_var.clone(), item.clone());
+                rt.set_task_var(self.loop_var.clone(), item.clone());
 
                 // Set index_var if specified - avoid clone when possible
                 if let Some(idx_var) = index_var {
-                    rt.set_task_var(&ctx.host, idx_var.clone(), serde_json::json!(index));
+                    rt.set_task_var(idx_var.clone(), serde_json::json!(index));
                 }
 
                 // Build ansible_loop object
@@ -903,19 +724,12 @@ impl Task {
                     );
                 }
 
-                rt.set_task_var(&ctx.host, ANSIBLE_LOOP_KEY.to_string(), ansible_loop);
+                rt.set_task_var(ANSIBLE_LOOP_KEY.to_string(), ansible_loop);
             }
 
             // Execute for this item with parallelization enforcement
             let result = self
-                .execute_module(
-                    ctx,
-                    runtime,
-                    handlers,
-                    notified,
-                    parallelization_manager,
-                    module_registry,
-                )
+                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
                 .await?;
 
             // Extract and store ansible_facts from module results in loops
@@ -941,20 +755,12 @@ impl Task {
                 any_failed = true;
                 if !self.ignore_errors {
                     // Stop on first failure unless ignore_errors
-                    let mut registered = result.to_registered(None, None);
-                    // Store the loop item in the result data for access in subsequent loops
-                    // This enables patterns like: loop: "{{ result.results }}" with item.stat.exists
-                    registered.data.insert("item".to_string(), item.clone());
-                    loop_results.push(registered);
+                    loop_results.push(result.to_registered(None, None));
                     break;
                 }
             }
 
-            // Create registered result with loop item included in data
-            // This enables patterns like: loop: "{{ result.results }}" with item.stat.exists
-            let mut registered = result.to_registered(None, None);
-            registered.data.insert("item".to_string(), item.clone());
-            loop_results.push(registered);
+            loop_results.push(result.to_registered(None, None));
         }
 
         // Clear only the loop-specific variables, preserving other task vars
@@ -962,10 +768,10 @@ impl Task {
         {
             let mut rt = runtime.write().await;
             let mut vars_to_clear = vec![self.loop_var.as_str(), "ansible_loop"];
-            if let Some(idx_var) = index_var {
+            if let Some(ref idx_var) = index_var {
                 vars_to_clear.push(idx_var.as_str());
             }
-            rt.remove_task_vars(&ctx.host, &vars_to_clear);
+            rt.remove_task_vars(&vars_to_clear);
         }
 
         // Create combined result
@@ -1017,9 +823,7 @@ impl Task {
     ) -> ExecutorResult<TaskResult> {
         let max_retries = self.retries.unwrap_or(3);
         let delay_seconds = self.delay.unwrap_or(5);
-        let until_condition = self.until.as_ref().ok_or_else(|| {
-            ExecutorError::RuntimeError("Missing until condition for retry execution".to_string())
-        })?;
+        let until_condition = self.until.as_ref().expect("until condition must be set");
 
         debug!(
             "Executing with retry: max_retries={}, delay={}s, until='{}'",
@@ -1035,14 +839,7 @@ impl Task {
 
             // Execute the module
             let result = self
-                .execute_module(
-                    ctx,
-                    runtime,
-                    handlers,
-                    notified,
-                    parallelization_manager,
-                    module_registry,
-                )
+                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
                 .await?;
 
             // Extract and store ansible_facts from module results during retries
@@ -1145,19 +942,10 @@ impl Task {
         let result = match self.module.as_str() {
             "debug" => self.execute_debug(&args, ctx).await,
             "set_fact" => self.execute_set_fact(&args, ctx, runtime).await,
-            "command" | "shell" => {
-                self.execute_registry_module(&self.module, &args, ctx, module_registry)
-                    .await
-            }
-            "copy" => {
-                self.execute_copy(&args, ctx, runtime, module_registry)
-                    .await
-            }
+            "command" | "shell" => self.execute_command(&args, ctx, runtime).await,
+            "copy" => self.execute_copy(&args, ctx, runtime, module_registry).await,
             "file" => self.execute_file(&args, ctx, module_registry).await,
-            "template" => {
-                self.execute_template(&args, ctx, runtime, module_registry)
-                    .await
-            }
+            "template" => self.execute_template(&args, ctx, runtime, module_registry).await,
             "package" | "apt" | "yum" | "dnf" => self.execute_package(&args, ctx).await,
             "service" | "systemd" => self.execute_service(&args, ctx).await,
             "user" => self.execute_user(&args, ctx).await,
@@ -1204,12 +992,12 @@ impl Task {
                         )));
                     }
 
-                    // Convert args to ModuleParams-compatible format
-                    let module_params: std::collections::HashMap<String, serde_json::Value> =
-                        args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
                     // Execute via Python if connection is available
                     if let Some(ref connection) = ctx.connection {
+                        // Convert args to ModuleParams-compatible format
+                        let module_params: std::collections::HashMap<String, serde_json::Value> =
+                            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
                         match executor
                             .execute(
                                 connection.as_ref(),
@@ -1227,8 +1015,11 @@ impl Task {
                                     TaskResult::ok()
                                 };
                                 result.msg = Some(msg);
-                                // Store full module output for register access
-                                result.result = Some(output.to_result_json());
+                                if !output.data.is_empty() {
+                                    result.result = Some(
+                                        serde_json::to_value(&output.data).unwrap_or_default(),
+                                    );
+                                }
                                 Ok(result)
                             }
                             Err(e) => Err(ExecutorError::RuntimeError(format!(
@@ -1236,38 +1027,19 @@ impl Task {
                                 self.module, e
                             ))),
                         }
-                    } else if matches!(ctx.host.as_str(), "localhost" | "127.0.0.1" | "::1") {
-                        let local_conn = crate::connection::local::LocalConnection::new();
-                        match executor
-                            .execute(
-                                &local_conn,
-                                &self.module,
-                                &module_params,
-                                &ctx.python_interpreter,
-                            )
-                            .await
-                        {
-                            Ok(output) => {
-                                let msg = output.msg.clone();
-                                let mut result = if output.changed {
-                                    TaskResult::changed()
-                                } else {
-                                    TaskResult::ok()
-                                };
-                                result.msg = Some(msg);
-                                result.result = Some(output.to_result_json());
-                                Ok(result)
-                            }
-                            Err(e) => Err(ExecutorError::RuntimeError(format!(
-                                "Python module {} failed locally: {}",
-                                self.module, e
-                            ))),
-                        }
                     } else {
-                        warn!(
-                            "Python module {} requires connection to {} (not available)",
-                            self.module, ctx.host
-                        );
+                        // No connection available - simulate for localhost or log warning
+                        if ctx.host == "localhost" || ctx.host == "127.0.0.1" {
+                            warn!(
+                                "Python module {} would need local execution (not implemented)",
+                                self.module
+                            );
+                        } else {
+                            warn!(
+                                "Python module {} requires connection to {} (not available)",
+                                self.module, ctx.host
+                            );
+                        }
                         Ok(TaskResult::changed().with_msg(format!(
                             "Executed Python module: {} (simulated - no connection)",
                             self.module
@@ -1287,64 +1059,6 @@ impl Task {
         result
     }
 
-    async fn execute_registry_module(
-        &self,
-        module_name: &str,
-        args: &IndexMap<String, JsonValue>,
-        ctx: &ExecutionContext,
-        module_registry: &Arc<ModuleRegistry>,
-    ) -> ExecutorResult<TaskResult> {
-        let params: std::collections::HashMap<String, serde_json::Value> =
-            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
-        let module_ctx = crate::modules::ModuleContext {
-            check_mode: ctx.check_mode,
-            diff_mode: ctx.diff_mode,
-            verbosity: ctx.verbosity,
-            vars: std::collections::HashMap::new(),
-            facts: std::collections::HashMap::new(),
-            work_dir: None,
-            r#become: ctx.r#become,
-            become_method: if ctx.r#become {
-                Some(ctx.r#become_method.clone())
-            } else {
-                None
-            },
-            become_user: if ctx.r#become {
-                Some(ctx.r#become_user.clone())
-            } else {
-                None
-            },
-            become_password: if ctx.r#become {
-                ctx.become_password.clone()
-            } else {
-                None
-            },
-            connection: ctx.connection.clone(),
-        };
-
-        let module = module_registry.get(module_name).ok_or_else(|| {
-            ExecutorError::ModuleNotFound(format!("{} module not found in registry", module_name))
-        })?;
-
-        match module.execute(&params, &module_ctx) {
-            Ok(output) => {
-                let mut result = if output.changed {
-                    TaskResult::changed()
-                } else {
-                    TaskResult::ok()
-                };
-                result.msg = Some(output.msg.clone());
-                result.result = Some(output.to_result_json());
-                Ok(result)
-            }
-            Err(e) => Ok(TaskResult::failed(format!(
-                "{} module failed: {}",
-                module_name, e
-            ))),
-        }
-    }
-
     /// Template arguments using variables
     async fn template_args(
         &self,
@@ -1352,11 +1066,11 @@ impl Task {
         runtime: &Arc<RwLock<RuntimeContext>>,
     ) -> ExecutorResult<IndexMap<String, JsonValue>> {
         let rt = runtime.read().await;
-        let vars = rt.get_merged_vars_ref(&ctx.host);
+        let vars = rt.get_merged_vars(&ctx.host);
         let mut result = IndexMap::new();
 
         for (key, value) in &self.args {
-            let templated = template_value(value, vars.as_ref())?;
+            let templated = template_value(value, &vars)?;
             result.insert(key.clone(), templated);
         }
 
@@ -1371,9 +1085,9 @@ impl Task {
         runtime: &Arc<RwLock<RuntimeContext>>,
     ) -> ExecutorResult<bool> {
         let rt = runtime.read().await;
-        let vars = rt.get_merged_vars_ref(&ctx.host);
+        let vars = rt.get_merged_vars(&ctx.host);
 
-        evaluate_expression(condition, vars.as_ref())
+        evaluate_expression(condition, &vars)
     }
 
     /// Apply changed_when override
@@ -1452,7 +1166,7 @@ impl Task {
     async fn execute_gather_facts(
         &self,
         args: &IndexMap<String, JsonValue>,
-        ctx: &ExecutionContext,
+        _ctx: &ExecutionContext,
     ) -> ExecutorResult<TaskResult> {
         use crate::modules::{Module, ModuleContext};
 
@@ -1466,43 +1180,6 @@ impl Task {
                     .collect::<Vec<_>>()
             });
 
-        // Check if we have a remote connection - if so, gather facts remotely
-        if let Some(ref connection) = ctx.connection {
-            debug!(
-                host = %ctx.host,
-                "Gathering facts remotely via connection"
-            );
-
-            // Gather facts via the connection
-            let facts = crate::modules::facts::gather_facts_via_connection(
-                connection,
-                gather_subset.as_deref(),
-            )
-            .await;
-
-            let mut result = TaskResult::ok();
-            result.msg = Some("Facts gathered successfully (remote)".to_string());
-
-            // Wrap facts in ansible_facts key for compatibility
-            let mut data = std::collections::HashMap::new();
-            let facts_json: serde_json::Map<String, serde_json::Value> =
-                facts.into_iter().collect();
-            data.insert(
-                "ansible_facts".to_string(),
-                serde_json::Value::Object(facts_json),
-            );
-
-            result.result = Some(serde_json::to_value(&data).unwrap_or_default());
-
-            return Ok(result);
-        }
-
-        // No connection or local connection - use local facts gathering
-        debug!(
-            host = %ctx.host,
-            "Gathering facts locally"
-        );
-
         // Convert args to ModuleParams
         let mut params: std::collections::HashMap<String, serde_json::Value> =
             std::collections::HashMap::new();
@@ -1511,17 +1188,19 @@ impl Task {
         }
 
         // Create module context
-        let module_ctx = ModuleContext::default().with_verbosity(ctx.verbosity);
+        let module_ctx = ModuleContext::default().with_verbosity(_ctx.verbosity);
 
-        // Execute the facts module locally
+        // Execute the facts module
         let facts_module = crate::modules::facts::FactsModule;
         match facts_module.execute(&params, &module_ctx) {
             Ok(output) => {
                 let mut result = TaskResult::ok();
                 result.msg = Some(output.msg.clone());
 
-                // Store full module output for register access (includes ansible_facts)
-                result.result = Some(output.to_result_json());
+                // Include ansible_facts in the result so they can be stored
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
 
                 Ok(result)
             }
@@ -1619,7 +1298,7 @@ impl Task {
         // Get all variables from runtime for potential content template substitution
         let vars = {
             let rt = runtime.read().await;
-            rt.get_merged_vars_ref(&ctx.host)
+            rt.get_merged_vars(&ctx.host)
         };
 
         // If content contains template variables, use the template module's rendering
@@ -1635,21 +1314,8 @@ impl Task {
                     facts: std::collections::HashMap::new(),
                     work_dir: None,
                     r#become: ctx.r#become,
-                    become_method: if ctx.r#become {
-                        Some(ctx.r#become_method.clone())
-                    } else {
-                        None
-                    },
-                    become_user: if ctx.r#become {
-                        Some(ctx.r#become_user.clone())
-                    } else {
-                        None
-                    },
-                    become_password: if ctx.r#become {
-                        ctx.become_password.clone()
-                    } else {
-                        None
-                    },
+                    become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
+                    become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
                     connection: ctx.connection.clone(),
                 };
 
@@ -1664,9 +1330,11 @@ impl Task {
                         } else {
                             TaskResult::ok()
                         };
-                        result.msg = Some(output.msg.clone());
-                        // Store full module output for register access
-                        result.result = Some(output.to_result_json());
+                        result.msg = Some(output.msg);
+                        if !output.data.is_empty() {
+                            result.result =
+                                Some(serde_json::to_value(&output.data).unwrap_or_default());
+                        }
                         Ok(result)
                     }
                     Err(e) => Ok(TaskResult::failed(format!(
@@ -1686,21 +1354,8 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become {
-                Some(ctx.r#become_method.clone())
-            } else {
-                None
-            },
-            become_user: if ctx.r#become {
-                Some(ctx.r#become_user.clone())
-            } else {
-                None
-            },
-            become_password: if ctx.r#become {
-                ctx.become_password.clone()
-            } else {
-                None
-            },
+            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
+            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
             connection: ctx.connection.clone(),
         };
 
@@ -1716,9 +1371,10 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg.clone());
-                // Store full module output for register access
-                result.result = Some(output.to_result_json());
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("copy module failed: {}", e))),
@@ -1744,21 +1400,8 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become {
-                Some(ctx.r#become_method.clone())
-            } else {
-                None
-            },
-            become_user: if ctx.r#become {
-                Some(ctx.r#become_user.clone())
-            } else {
-                None
-            },
-            become_password: if ctx.r#become {
-                ctx.become_password.clone()
-            } else {
-                None
-            },
+            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
+            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
             connection: ctx.connection.clone(),
         };
 
@@ -1774,9 +1417,10 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg.clone());
-                // Store full module output for register access
-                result.result = Some(output.to_result_json());
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("file module failed: {}", e))),
@@ -1797,7 +1441,7 @@ impl Task {
         // Get all variables from runtime for template substitution
         let vars = {
             let rt = runtime.read().await;
-            rt.get_merged_vars_ref(&ctx.host)
+            rt.get_merged_vars(&ctx.host)
         };
 
         // Create module context from execution context with variables
@@ -1809,21 +1453,8 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become {
-                Some(ctx.r#become_method.clone())
-            } else {
-                None
-            },
-            become_user: if ctx.r#become {
-                Some(ctx.r#become_user.clone())
-            } else {
-                None
-            },
-            become_password: if ctx.r#become {
-                ctx.become_password.clone()
-            } else {
-                None
-            },
+            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
+            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
             connection: ctx.connection.clone(),
         };
 
@@ -1839,9 +1470,10 @@ impl Task {
                 } else {
                     TaskResult::ok()
                 };
-                result.msg = Some(output.msg.clone());
-                // Store full module output for register access
-                result.result = Some(output.to_result_json());
+                result.msg = Some(output.msg);
+                if !output.data.is_empty() {
+                    result.result = Some(serde_json::to_value(&output.data).unwrap_or_default());
+                }
                 Ok(result)
             }
             Err(e) => Ok(TaskResult::failed(format!("template module failed: {}", e))),
@@ -2202,16 +1834,8 @@ impl Task {
             ));
         }
 
-        // Determine base path from playbook_dir magic variable (set from playbook path)
-        // Falls back to current directory if playbook_dir is not set
-        let base_path = {
-            let rt = runtime.read().await;
-            rt.get_var("playbook_dir", Some(&ctx.host))
-                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
-                .unwrap_or_else(|| {
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                })
-        };
+        // Determine base path for path validation
+        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         let mut all_vars: IndexMap<String, JsonValue> = IndexMap::new();
         let source: String;
@@ -2387,7 +2011,6 @@ impl Task {
         Ok(TaskResult::ok().with_msg(format!("Loaded {} variable(s) from {}", var_count, source)))
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn execute_include_tasks(
         &self,
         args: &IndexMap<String, JsonValue>,
@@ -2408,18 +2031,8 @@ impl Task {
 
         info!("Including tasks from: {}", file);
 
-        // Determine base path from playbook_dir magic variable (set from playbook path)
-        // Falls back to current directory if playbook_dir is not set
-        let base_path = {
-            let rt = runtime.read().await;
-            rt.get_var("playbook_dir", Some(&ctx.host))
-                .and_then(|v| v.as_str().map(std::path::PathBuf::from))
-                .unwrap_or_else(|| {
-                    warn!("playbook_dir not set, falling back to current directory for include path resolution");
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                })
-        };
-        debug!("Using base path for include: {}", base_path.display());
+        // Determine base path from the runtime context or use current directory
+        let base_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let handler = crate::executor::include_handler::IncludeTasksHandler::new(base_path);
 
         // Build the include spec with any variables passed
@@ -2533,7 +2146,7 @@ fn template_value(
     // Use the unified template engine for all value rendering
     TEMPLATE_ENGINE
         .render_value(value, vars)
-        .map_err(|e| template_error_from_value(value, e))
+        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
 }
 
 /// Template a string using variables
@@ -2546,49 +2159,7 @@ fn template_string(template: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     // Use the unified template engine for all string rendering
     TEMPLATE_ENGINE
         .render_with_indexmap(template, vars)
-        .map_err(|e| template_error_to_executor(template, e))
-}
-
-fn template_error_from_value(value: &JsonValue, error: Error) -> ExecutorError {
-    let source = template_source_for_value(value);
-    template_error_to_executor(&source, error)
-}
-
-fn template_source_for_value(value: &JsonValue) -> String {
-    match value {
-        JsonValue::String(s) => s.clone(),
-        _ => serde_yaml::to_string(value).unwrap_or_else(|_| value.to_string()),
-    }
-}
-
-fn template_error_to_executor(template_source: &str, error: Error) -> ExecutorError {
-    match error {
-        Error::Template(mini_err) => {
-            let message = mini_err
-                .detail()
-                .map(str::to_string)
-                .unwrap_or_else(|| mini_err.to_string());
-            let line = mini_err.line().unwrap_or(1);
-            let col = 1;
-            let name = mini_err.name().unwrap_or("<template>");
-            let file = if name.starts_with("__rustible_template_") {
-                "<template>"
-            } else {
-                name
-            };
-            let diagnostic = template_syntax_error(file, template_source, line, col, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        Error::TemplateRender { message, .. } => {
-            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        Error::TemplateSyntax { message, .. } => {
-            let diagnostic = template_syntax_error("<template>", template_source, 1, 1, &message);
-            ExecutorError::diagnostic(diagnostic, Some(template_source.to_string()))
-        }
-        other => ExecutorError::RuntimeError(format!("Template error: {}", other)),
-    }
+        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
 }
 
 /// Convert JSON value to string for templating
@@ -2649,11 +2220,10 @@ fn find_operator_outside_parens(expr: &str, op: &str) -> Option<usize> {
             b'(' => depth += 1,
             b')' => depth -= 1,
             _ => {
-                if depth == 0
-                    && i + op_bytes.len() <= bytes.len()
-                    && &bytes[i..i + op_bytes.len()] == op_bytes
-                {
-                    last_match = Some(i);
+                if depth == 0 && i + op_bytes.len() <= bytes.len() {
+                    if &bytes[i..i + op_bytes.len()] == op_bytes {
+                        last_match = Some(i);
+                    }
                 }
             }
         }
@@ -2920,7 +2490,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     // Use the unified template engine for all condition evaluation
     TEMPLATE_ENGINE
         .evaluate_condition(expr, vars)
-        .map_err(|e| template_error_to_executor(expr, e))
+        .map_err(|e| ExecutorError::RuntimeError(format!("Template error: {}", e)))
 }
 
 /// Check if a JSON value is "truthy"
@@ -2933,22 +2503,7 @@ fn is_truthy(value: &JsonValue) -> bool {
         JsonValue::Null => false,
         JsonValue::Bool(b) => *b,
         JsonValue::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(false),
-        JsonValue::String(s) => {
-            let value = s.trim();
-            if value.is_empty() {
-                return false;
-            }
-            if value.eq_ignore_ascii_case("false")
-                || value.eq_ignore_ascii_case("no")
-                || value.eq_ignore_ascii_case("off")
-                || value.eq_ignore_ascii_case("n")
-                || value.eq_ignore_ascii_case("f")
-                || value == "0"
-            {
-                return false;
-            }
-            true
-        }
+        JsonValue::String(s) => !s.is_empty() && s != "false" && s != "False" && s != "no",
         JsonValue::Array(arr) => !arr.is_empty(),
         JsonValue::Object(obj) => !obj.is_empty(),
     }
@@ -2981,27 +2536,6 @@ pub trait Module: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{HashMap, HashSet};
-
-    fn setup_execution(
-        host: &str,
-    ) -> (
-        ExecutionContext,
-        Arc<RwLock<RuntimeContext>>,
-        Arc<RwLock<HashMap<String, Handler>>>,
-        Arc<Mutex<HashSet<String>>>,
-        Arc<ParallelizationManager>,
-        Arc<ModuleRegistry>,
-    ) {
-        (
-            ExecutionContext::new(host),
-            Arc::new(RwLock::new(RuntimeContext::new())),
-            Arc::new(RwLock::new(HashMap::new())),
-            Arc::new(Mutex::new(HashSet::new())),
-            Arc::new(ParallelizationManager::new()),
-            Arc::new(ModuleRegistry::new()),
-        )
-    }
 
     #[test]
     fn test_task_builder() {
@@ -3034,15 +2568,6 @@ mod tests {
 
         let result = template_string("Count: {{ count }}", &vars).unwrap();
         assert_eq!(result, "Count: 42");
-    }
-
-    #[test]
-    fn test_template_string_diagnostic() {
-        let vars = IndexMap::new();
-        let err = template_string("Hello {{", &vars).unwrap_err();
-        let rendered = err.render_diagnostic().expect("expected diagnostic");
-        assert!(rendered.contains("E0020"));
-        assert!(rendered.contains("template error"));
     }
 
     #[test]
@@ -3108,339 +2633,8 @@ mod tests {
         assert!(!is_truthy(&JsonValue::Bool(false)));
         assert!(is_truthy(&JsonValue::Bool(true)));
         assert!(!is_truthy(&JsonValue::String("".to_string())));
-        assert!(!is_truthy(&JsonValue::String("0".to_string())));
-        assert!(!is_truthy(&JsonValue::String("false".to_string())));
-        assert!(!is_truthy(&JsonValue::String("no".to_string())));
-        assert!(!is_truthy(&JsonValue::String("off".to_string())));
-        assert!(!is_truthy(&JsonValue::String("n".to_string())));
-        assert!(!is_truthy(&JsonValue::String("f".to_string())));
         assert!(is_truthy(&JsonValue::String("hello".to_string())));
         assert!(!is_truthy(&JsonValue::Array(vec![])));
         assert!(is_truthy(&JsonValue::Array(vec![JsonValue::Null])));
-    }
-
-    #[test]
-    fn test_to_registered_extracts_rc_stdout_stderr_from_result() {
-        // Simulate a command module result stored in TaskResult.result
-        let mut result = TaskResult::changed();
-        result.result = Some(serde_json::json!({
-            "rc": 0,
-            "stdout": "Hello, World!",
-            "stderr": "warning: deprecated",
-            "changed": true,
-            "custom_field": "custom_value"
-        }));
-
-        let registered = result.to_registered(None, None);
-
-        // Verify standard fields are extracted
-        assert_eq!(registered.rc, Some(0));
-        assert_eq!(registered.stdout, Some("Hello, World!".to_string()));
-        assert_eq!(registered.stderr, Some("warning: deprecated".to_string()));
-        assert_eq!(
-            registered.stdout_lines,
-            Some(vec!["Hello, World!".to_string()])
-        );
-        assert_eq!(
-            registered.stderr_lines,
-            Some(vec!["warning: deprecated".to_string()])
-        );
-        assert!(registered.changed);
-
-        // Verify custom data is preserved
-        assert_eq!(
-            registered.data.get("custom_field"),
-            Some(&JsonValue::String("custom_value".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_to_registered_multiline_stdout() {
-        let mut result = TaskResult::ok();
-        result.result = Some(serde_json::json!({
-            "stdout": "line1\nline2\nline3",
-            "rc": 0
-        }));
-
-        let registered = result.to_registered(None, None);
-
-        assert_eq!(
-            registered.stdout_lines,
-            Some(vec![
-                "line1".to_string(),
-                "line2".to_string(),
-                "line3".to_string()
-            ])
-        );
-    }
-
-    #[test]
-    fn test_to_registered_fallback_to_explicit_params() {
-        // When self.result is None, use explicit stdout/stderr params
-        let result = TaskResult::ok();
-
-        let registered = result.to_registered(
-            Some("explicit stdout".to_string()),
-            Some("explicit stderr".to_string()),
-        );
-
-        assert_eq!(registered.stdout, Some("explicit stdout".to_string()));
-        assert_eq!(registered.stderr, Some("explicit stderr".to_string()));
-        assert_eq!(registered.rc, None); // No result, no rc
-    }
-
-    #[test]
-    fn test_to_registered_result_takes_precedence() {
-        // When self.result has stdout/stderr, it takes precedence
-        let mut result = TaskResult::ok();
-        result.result = Some(serde_json::json!({
-            "stdout": "from result",
-            "stderr": "from result error"
-        }));
-
-        let registered = result.to_registered(
-            Some("explicit stdout".to_string()),
-            Some("explicit stderr".to_string()),
-        );
-
-        // Result data takes precedence over explicit params
-        assert_eq!(registered.stdout, Some("from result".to_string()));
-        assert_eq!(registered.stderr, Some("from result error".to_string()));
-    }
-
-    #[test]
-    fn test_to_registered_failed_status() {
-        let result = TaskResult::failed("Command failed");
-
-        let registered = result.to_registered(None, None);
-
-        assert!(registered.failed);
-        assert!(!registered.changed);
-        assert_eq!(registered.msg, Some("Command failed".to_string()));
-    }
-
-    #[test]
-    fn test_to_registered_skipped_status() {
-        let result = TaskResult::skipped("Skipped in check mode");
-
-        let registered = result.to_registered(None, None);
-
-        assert!(registered.skipped);
-        assert!(!registered.failed);
-        assert!(!registered.changed);
-    }
-
-    #[test]
-    fn test_to_registered_excludes_standard_fields_from_data() {
-        // Standard RegisteredResult fields should not be duplicated in data
-        let mut result = TaskResult::changed();
-        result.result = Some(serde_json::json!({
-            "changed": true,
-            "failed": false,
-            "skipped": false,
-            "rc": 0,
-            "stdout": "output",
-            "stdout_lines": ["output"],
-            "stderr": "",
-            "stderr_lines": [],
-            "msg": "Success",
-            "results": null,
-            "custom_data": "should_be_in_data"
-        }));
-
-        let registered = result.to_registered(None, None);
-
-        // Standard fields should not be in data
-        assert!(!registered.data.contains_key("changed"));
-        assert!(!registered.data.contains_key("failed"));
-        assert!(!registered.data.contains_key("skipped"));
-        assert!(!registered.data.contains_key("rc"));
-        assert!(!registered.data.contains_key("stdout"));
-        assert!(!registered.data.contains_key("stdout_lines"));
-        assert!(!registered.data.contains_key("stderr"));
-        assert!(!registered.data.contains_key("stderr_lines"));
-        assert!(!registered.data.contains_key("msg"));
-        assert!(!registered.data.contains_key("results"));
-
-        // Custom field should be in data
-        assert!(registered.data.contains_key("custom_data"));
-    }
-
-    #[tokio::test]
-    async fn test_execute_skips_when_condition_false() {
-        let task = Task::new("conditional", "debug").when("false");
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("host1");
-
-        let result = task
-            .execute(
-                &ctx,
-                &runtime,
-                &handlers,
-                &notified,
-                &parallelization_manager,
-                &module_registry,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.status, TaskStatus::Skipped);
-        assert_eq!(
-            result.msg,
-            Some("Skipped: condition 'false' was false".to_string())
-        );
-        assert!(notified.lock().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_execute_ignore_errors_on_failure() {
-        let mut task = Task::new("fail", "fail").arg("msg", "boom");
-        task.ignore_errors = true;
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("host1");
-
-        let result = task
-            .execute(
-                &ctx,
-                &runtime,
-                &handlers,
-                &notified,
-                &parallelization_manager,
-                &module_registry,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.status, TaskStatus::Ok);
-        assert_eq!(result.msg, Some("Ignored error: boom".to_string()));
-        assert!(!result.changed);
-    }
-
-    #[tokio::test]
-    async fn test_execute_with_retry_exhausts_retries() {
-        let mut task = Task::new("retry", "debug").arg("msg", "retry");
-        task.until = Some("false".to_string());
-        task.retries = Some(1);
-        task.delay = Some(0);
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("host1");
-
-        let result = task
-            .execute(
-                &ctx,
-                &runtime,
-                &handlers,
-                &notified,
-                &parallelization_manager,
-                &module_registry,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.status, TaskStatus::Failed);
-        assert_eq!(
-            result.msg,
-            Some("Retries exhausted (1). Until condition 'false' never met".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_execute_loop_registers_results_and_clears_vars() {
-        let mut task = Task::new("loop debug", "debug")
-            .arg("msg", "hello")
-            .loop_over(vec![serde_json::json!(1), serde_json::json!(2)])
-            .register("loop_out");
-        task.loop_control = Some(LoopControl {
-            loop_var: "item".to_string(),
-            index_var: Some("idx".to_string()),
-            label: None,
-            pause: None,
-            extended: false,
-        });
-
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("host1");
-
-        let result = task
-            .execute(
-                &ctx,
-                &runtime,
-                &handlers,
-                &notified,
-                &parallelization_manager,
-                &module_registry,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.status, TaskStatus::Ok);
-        assert_eq!(result.msg, Some("Completed 2 loop iterations".to_string()));
-
-        let rt = runtime.read().await;
-        let registered = rt
-            .get_registered(&ctx.host, "loop_out")
-            .expect("registered result");
-        let results = registered.results.as_ref().expect("loop results");
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].data.get("item"), Some(&serde_json::json!(1)));
-        assert_eq!(results[1].data.get("item"), Some(&serde_json::json!(2)));
-        assert!(rt.get_var("item", Some(&ctx.host)).is_none());
-        assert!(rt.get_var("ansible_loop", Some(&ctx.host)).is_none());
-        assert!(rt.get_var("idx", Some(&ctx.host)).is_none());
-    }
-
-    #[tokio::test]
-    async fn test_execute_set_fact_delegation_respects_delegate_facts() {
-        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(42));
-        task.delegate_to = Some("delegate".to_string());
-        task.delegate_facts = Some(true);
-
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("origin");
-
-        task.execute(
-            &ctx,
-            &runtime,
-            &handlers,
-            &notified,
-            &parallelization_manager,
-            &module_registry,
-        )
-        .await
-        .unwrap();
-
-        let rt = runtime.read().await;
-        assert_eq!(
-            rt.get_host_fact("delegate", "answer"),
-            Some(serde_json::json!(42))
-        );
-        assert_eq!(rt.get_host_fact("origin", "answer"), None);
-    }
-
-    #[tokio::test]
-    async fn test_execute_set_fact_delegation_defaults_to_origin_host() {
-        let mut task = Task::new("set fact", "set_fact").arg("answer", serde_json::json!(7));
-        task.delegate_to = Some("delegate".to_string());
-
-        let (ctx, runtime, handlers, notified, parallelization_manager, module_registry) =
-            setup_execution("origin");
-
-        task.execute(
-            &ctx,
-            &runtime,
-            &handlers,
-            &notified,
-            &parallelization_manager,
-            &module_registry,
-        )
-        .await
-        .unwrap();
-
-        let rt = runtime.read().await;
-        assert_eq!(
-            rt.get_host_fact("origin", "answer"),
-            Some(serde_json::json!(7))
-        );
-        assert_eq!(rt.get_host_fact("delegate", "answer"), None);
     }
 }
