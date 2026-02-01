@@ -1,0 +1,55 @@
+---
+- name: Template Render Benchmark
+  hosts: all
+  gather_facts: false
+  vars:
+    bench_dir: "/tmp/ansible_bench/{{ inventory_hostname }}"
+    items:
+      - item_00
+      - item_01
+      - item_02
+      - item_03
+      - item_04
+      - item_05
+      - item_06
+      - item_07
+      - item_08
+      - item_09
+      - item_10
+      - item_11
+      - item_12
+      - item_13
+      - item_14
+      - item_15
+      - item_16
+      - item_17
+      - item_18
+      - item_19
+      - item_20
+      - item_21
+      - item_22
+      - item_23
+      - item_24
+  tasks:
+    - name: Ensure benchmark directory
+      ansible.builtin.file:
+        path: "{{ bench_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Render template content
+      ansible.builtin.copy:
+        content: |
+          # Benchmark template
+          hostname={{ inventory_hostname }}
+          item={{ item | upper }}
+          token={{ item | replace('item_', 'token_') }}
+          fallback={{ missing_var | default('default') }}
+        dest: "{{ bench_dir }}/render_{{ item }}.txt"
+        mode: '0644'
+      loop: "{{ items }}"
+
+    - name: Cleanup benchmark directory
+      ansible.builtin.file:
+        path: "{{ bench_dir }}"
+        state: absent

@@ -1,0 +1,83 @@
+---
+# Security Hardening
+
+- name: Install security tools
+  pacman:
+    name:
+      - ufw
+      - fail2ban
+      - rkhunter
+    state: present
+
+- name: Configure UFW defaults
+  shell: |
+    ufw default deny incoming
+    ufw default allow outgoing
+  changed_when: false
+
+- name: Allow SSH through UFW
+  shell: |
+    ufw allow 22/tcp
+  changed_when: false
+
+- name: Enable UFW
+  shell: |
+    echo "y" | ufw enable
+  changed_when: false
+
+- name: Configure Fail2ban SSH
+  copy:
+    content: |
+      [DEFAULT]
+      bantime = 3600
+      findtime = 600
+      maxretry = 5
+
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 5
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+
+- name: Enable Fail2ban
+  systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Backup original SSH config
+  copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup
+    remote_src: true
+    mode: '0600'
+  ignore_errors: true
+
+- name: Disable root SSH login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: "PermitRootLogin no"
+    backup: true
+
+- name: Disable password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: "PasswordAuthentication no"
+    backup: true
+
+- name: Enable public key authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PubkeyAuthentication'
+    line: "PubkeyAuthentication yes"
+    backup: true
+
+- name: Restart SSH
+  systemd:
+    name: sshd
+    state: restarted

@@ -1,0 +1,100 @@
+---
+# System Services & Configuration
+
+- name: Enable NetworkManager
+  systemd:
+    name: NetworkManager
+    state: started
+    enabled: true
+
+- name: Install NetworkManager components
+  pacman:
+    name:
+      - network-manager-applet
+      - networkmanager-openconnect
+      - networkmanager-openvpn
+    state: present
+
+- name: Configure Tailscale (if enabled)
+  shell: |
+    tailscale up --authkey={{ tailscale_auth_key | default('') }} 2>/dev/null || true
+  when: enable_tailscale | default(false)
+  ignore_errors: true
+
+- name: Enable Tailscale daemon
+  systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+  when: enable_tailscale | default(false)
+
+- name: Create automatic update service
+  copy:
+    content: |
+      [Unit]
+      Description=Daily system update
+      After=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/pacman -Syu --noconfirm
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/pacman-update.service
+    mode: '0644'
+  when: enable_automatic_updates | default(true)
+
+- name: Create automatic update timer
+  copy:
+    content: |
+      [Unit]
+      Description=Run daily system update
+
+      [Timer]
+      OnCalendar=daily
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+    dest: /etc/systemd/system/pacman-update.timer
+    mode: '0644'
+  when: enable_automatic_updates | default(true)
+
+- name: Enable automatic updates timer
+  systemd:
+    name: pacman-update.timer
+    state: started
+    enabled: true
+  when: enable_automatic_updates | default(true)
+
+- name: Ensure cronie is installed
+  pacman:
+    name: cronie
+    state: present
+
+- name: Enable cronie
+  systemd:
+    name: cronie
+    state: started
+    enabled: true
+
+- name: Create backup directory
+  file:
+    path: "/home/{{ ansible_user }}/.local/bin"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Configure backup cron job
+  cron:
+    name: "Daily backup to NAS"
+    minute: "0"
+    hour: "2"
+    weekday: "*"
+    user: "{{ ansible_user }}"
+    job: "/home/{{ ansible_user }}/bin/backup-to-nas.sh >/dev/null 2>&1 || true"
+  when: backup_enabled | default(false)

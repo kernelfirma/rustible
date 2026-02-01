@@ -1,0 +1,8 @@
+---
+- name: Simple Playbook Benchmark
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Echo benchmark
+      ansible.builtin.command: echo "hello benchmark"
+      changed_when: false

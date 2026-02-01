@@ -1,0 +1,85 @@
+---
+# Notebook Deployment Playbook
+# Deploys fresh Arch-based system with complete dotfiles
+#
+# Usage:
+#   rustible run playbook.yml -i inventory.yml
+#   rustible run playbook.yml -i inventory.yml --check    # Dry run
+#   rustible run playbook.yml -i inventory.yml --plan     # Preview
+
+- name: Initialize Arch System
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    machine_type: "{{ 'laptop' if has_battery | default(true) else 'desktop' }}"
+    dotfiles_repo: "/home/{{ ansible_user }}/Repositories/dotfiles"
+
+  pre_tasks:
+    - name: Display deployment info
+      debug:
+        msg: |
+          ================================
+          Notebook Deployment Started
+          ================================
+          Host: {{ inventory_hostname }}
+          Machine Type: {{ machine_type }}
+          Arch Family: {{ ansible_os_family }}
+          ================================
+
+    - name: Update system clock
+      command: timedatectl set-ntp true
+      changed_when: false
+
+    - name: Ensure pacman database is up to date
+      pacman:
+        update_cache: true
+      register: pacman_update
+      retries: 3
+      delay: 5
+
+  roles:
+    - role: arch-setup
+      tags: ['arch', 'base']
+
+    - role: users
+      tags: ['users']
+
+    - role: packages
+      tags: ['packages']
+
+    - role: dotfiles
+      tags: ['dotfiles']
+
+    - role: graphics
+      tags: ['graphics']
+
+    - role: system
+      tags: ['system']
+
+    - role: security
+      tags: ['security']
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg: |
+          ================================
+          Deployment Complete!
+          ================================
+
+          Next Steps:
+          1. Reboot system
+          2. Login as {{ ansible_user }}
+          3. Verify Hyprland: echo $XDG_SESSION_TYPE
+          4. Check dotfiles: ls -la ~/.config/hypr
+          5. Test services: systemctl --user status
+
+          Manual Steps:
+          - Configure Hyprpaper wallpaper
+          - Set up browser profiles
+          - Configure VPN credentials
+          - Set up Bitwarden vault
+          ================================
+      tags: ['always']

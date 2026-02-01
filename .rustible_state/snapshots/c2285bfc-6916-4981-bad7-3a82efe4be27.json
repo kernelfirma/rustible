@@ -1,0 +1,20 @@
+{
+  "id": "c2285bfc-6916-4981-bad7-3a82efe4be27",
+  "session_id": "963375be-2019-4463-a164-1d5be244112d",
+  "created_at": "2026-01-29T20:41:15.888194920Z",
+  "description": "Session completed",
+  "playbook": ".tmpIccSve",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

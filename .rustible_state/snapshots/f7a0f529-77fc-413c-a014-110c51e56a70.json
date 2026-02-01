@@ -1,0 +1,20 @@
+{
+  "id": "f7a0f529-77fc-413c-a014-110c51e56a70",
+  "session_id": "d0051d75-246a-4889-a62f-3d52e4720642",
+  "created_at": "2026-01-29T20:56:09.493229461Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpQrPS4D",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

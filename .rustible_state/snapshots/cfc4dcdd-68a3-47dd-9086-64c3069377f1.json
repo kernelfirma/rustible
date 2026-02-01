@@ -1,0 +1,20 @@
+{
+  "id": "cfc4dcdd-68a3-47dd-9086-64c3069377f1",
+  "session_id": "4b6311cb-f8bb-4371-93ff-91517b408b74",
+  "created_at": "2026-01-29T20:44:28.832842083Z",
+  "description": "Session completed",
+  "playbook": "rustible_extra_vars_test",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

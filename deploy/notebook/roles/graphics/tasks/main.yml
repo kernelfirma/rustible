@@ -1,0 +1,90 @@
+---
+# Graphics & Display Configuration
+
+- name: Install Intel graphics drivers (laptop)
+  pacman:
+    name:
+      - intel-media-driver
+      - intel-ucode
+      - vulkan-intel
+    state: present
+  when: gpu_vendor == 'intel'
+
+- name: Install laptop power management
+  pacman:
+    name:
+      - tlp
+      - tlp-rdw
+      - thermald
+      - cpupower
+      - powertop
+    state: present
+  when: has_battery | default(true)
+
+- name: Enable and start TLP (laptop)
+  systemd:
+    name: tlp
+    state: started
+    enabled: true
+  when: has_battery | default(true)
+
+- name: Enable TLP sleep hook
+  systemd:
+    name: tlp-sleep
+    state: started
+    enabled: true
+  when: has_battery | default(true)
+
+- name: Install display manager (SDDM)
+  pacman:
+    name: sddm
+    state: present
+  when: has_battery | default(true)
+
+- name: Enable SDDM
+  systemd:
+    name: sddm
+    state: started
+    enabled: true
+  when: has_battery | default(true)
+
+- name: Ensure audio group exists
+  group:
+    name: audio
+    state: present
+
+- name: Ensure video group exists
+  group:
+    name: video
+    state: present
+
+- name: Install PipeWire and audio stack
+  pacman:
+    name:
+      - pipewire
+      - pipewire-alsa
+      - pipewire-pulse
+      - pipewire-jack
+      - wireplumber
+      - gst-plugins-good
+      - gst-plugins-ugly
+    state: present
+
+- name: Enable PipeWire services for user
+  shell: |
+    systemctl --user enable pipewire pipewire-pulse wireplumber 2>/dev/null || true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+
+- name: Enable Bluetooth
+  systemd:
+    name: bluetooth
+    state: started
+    enabled: true
+
+- name: Install Bluetooth packages
+  pacman:
+    name:
+      - bluez
+      - bluez-utils
+    state: present

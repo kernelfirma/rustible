@@ -1,0 +1,42 @@
+---
+# User Management
+
+- name: Ensure user exists
+  user:
+    name: "{{ ansible_user }}"
+    groups: wheel,audio,video,storage,input
+    shell: /bin/bash
+    state: present
+
+- name: Ensure user bin directory exists
+  file:
+    path: "/home/{{ ansible_user }}/bin"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Ensure user config directory exists
+  file:
+    path: "/home/{{ ansible_user }}/.config"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create user sudoers entry for passwordless pacman
+  copy:
+    content: "{{ ansible_user }} ALL=(ALL) NOPASSWD: /usr/bin/pacman\n"
+    dest: "/etc/sudoers.d/{{ ansible_user }}-pacman"
+    mode: '0440'
+    validate: 'visudo -cf %s'
+
+- name: Ensure audio group exists
+  group:
+    name: audio
+    state: present
+
+- name: Ensure video group exists
+  group:
+    name: video
+    state: present

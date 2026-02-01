@@ -1,0 +1,16 @@
+[defaults]
+# Maximum allowed regression vs baseline (percent).
+max_regression_pct = 15.0
+
+# Optional absolute limits (seconds) or minimum speedup (x).
+# max_rustible_secs = 10.0
+# min_speedup = 3.0
+
+[scenarios.simple_playbook]
+# max_regression_pct = 10.0
+
+[scenarios.file_copy_100]
+# max_regression_pct = 12.0
+
+[scenarios.template_render]
+# max_regression_pct = 10.0

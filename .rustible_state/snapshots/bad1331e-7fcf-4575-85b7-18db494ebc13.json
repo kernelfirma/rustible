@@ -1,0 +1,20 @@
+{
+  "id": "bad1331e-7fcf-4575-85b7-18db494ebc13",
+  "session_id": "4d93da4c-9451-4cd7-9405-1331e9a6d8a5",
+  "created_at": "2026-01-29T20:56:10.058052924Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpLBVihu",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

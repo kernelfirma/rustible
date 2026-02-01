@@ -1,0 +1,59 @@
+{
+  "id": "6340e913-9422-4abf-b388-fb1f53087200",
+  "session_id": "626d693c-6450-45df-bda1-f56605c6e6d6",
+  "created_at": "2026-01-29T20:46:53.001368256Z",
+  "description": "Session completed",
+  "playbook": ".tmpnD8c9Y",
+  "tasks": [
+    {
+      "id": "a2a59fbf-973b-47e4-814b-fee5a8e2a482",
+      "task_id": "Test task",
+      "task_name": "Test task",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "Hello from test"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:46:53.001262904Z",
+      "completed_at": "2026-01-29T20:46:53.001265730Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    }
+  ],
+  "host_states": {
+    "localhost": {
+      "host": "localhost",
+      "ok": 1,
+      "changed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "unreachable": false,
+      "facts": null,
+      "vars": {},
+      "last_successful_task": "Test task",
+      "last_error": null
+    }
+  },
+  "stats": {
+    "ok": 1,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

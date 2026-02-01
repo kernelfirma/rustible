@@ -1,0 +1,109 @@
+{
+  "id": "dd369766-b7ac-4be3-af30-33213b9acc7b",
+  "session_id": "a463b9eb-3098-4e95-acc1-be3d98a66acb",
+  "created_at": "2026-01-29T20:56:09.991213043Z",
+  "description": "Session completed",
+  "playbook": ".tmpOfdESR",
+  "tasks": [
+    {
+      "id": "e3807566-98f4-41a6-b144-d80e4119f285",
+      "task_id": "Task B",
+      "task_name": "Task B",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "B"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:56:09.990910672Z",
+      "completed_at": "2026-01-29T20:56:09.990913624Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    },
+    {
+      "id": "6c379304-b858-4232-b903-9f8ee753695a",
+      "task_id": "Task C",
+      "task_name": "Task C",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "C"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:56:09.991064968Z",
+      "completed_at": "2026-01-29T20:56:09.991067603Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    },
+    {
+      "id": "1e7b803c-b390-4642-aa80-bd1edca9953f",
+      "task_id": "Task A",
+      "task_name": "Task A",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "A"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:56:09.990712320Z",
+      "completed_at": "2026-01-29T20:56:09.990715963Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    }
+  ],
+  "host_states": {
+    "localhost": {
+      "host": "localhost",
+      "ok": 3,
+      "changed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "unreachable": false,
+      "facts": null,
+      "vars": {},
+      "last_successful_task": "Task C",
+      "last_error": null
+    }
+  },
+  "stats": {
+    "ok": 3,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

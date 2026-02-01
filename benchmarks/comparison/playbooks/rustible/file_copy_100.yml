@@ -1,0 +1,125 @@
+---
+- name: File Copy Benchmark (100 files)
+  hosts: all
+  gather_facts: false
+  vars:
+    bench_dir: "/tmp/rustible_bench/{{ inventory_hostname }}"
+    files:
+      - file_000
+      - file_001
+      - file_002
+      - file_003
+      - file_004
+      - file_005
+      - file_006
+      - file_007
+      - file_008
+      - file_009
+      - file_010
+      - file_011
+      - file_012
+      - file_013
+      - file_014
+      - file_015
+      - file_016
+      - file_017
+      - file_018
+      - file_019
+      - file_020
+      - file_021
+      - file_022
+      - file_023
+      - file_024
+      - file_025
+      - file_026
+      - file_027
+      - file_028
+      - file_029
+      - file_030
+      - file_031
+      - file_032
+      - file_033
+      - file_034
+      - file_035
+      - file_036
+      - file_037
+      - file_038
+      - file_039
+      - file_040
+      - file_041
+      - file_042
+      - file_043
+      - file_044
+      - file_045
+      - file_046
+      - file_047
+      - file_048
+      - file_049
+      - file_050
+      - file_051
+      - file_052
+      - file_053
+      - file_054
+      - file_055
+      - file_056
+      - file_057
+      - file_058
+      - file_059
+      - file_060
+      - file_061
+      - file_062
+      - file_063
+      - file_064
+      - file_065
+      - file_066
+      - file_067
+      - file_068
+      - file_069
+      - file_070
+      - file_071
+      - file_072
+      - file_073
+      - file_074
+      - file_075
+      - file_076
+      - file_077
+      - file_078
+      - file_079
+      - file_080
+      - file_081
+      - file_082
+      - file_083
+      - file_084
+      - file_085
+      - file_086
+      - file_087
+      - file_088
+      - file_089
+      - file_090
+      - file_091
+      - file_092
+      - file_093
+      - file_094
+      - file_095
+      - file_096
+      - file_097
+      - file_098
+      - file_099
+  tasks:
+    - name: Ensure benchmark directory
+      file:
+        path: "{{ bench_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy benchmark files
+      copy:
+        content: "benchmark {{ item }}"
+        dest: "{{ bench_dir }}/{{ item }}.txt"
+        mode: '0644'
+      loop: "{{ files }}"
+
+    - name: Cleanup benchmark directory
+      file:
+        path: "{{ bench_dir }}"
+        state: absent

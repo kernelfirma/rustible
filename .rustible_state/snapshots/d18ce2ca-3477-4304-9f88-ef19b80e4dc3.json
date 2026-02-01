@@ -1,0 +1,20 @@
+{
+  "id": "d18ce2ca-3477-4304-9f88-ef19b80e4dc3",
+  "session_id": "72551487-553c-4885-b34b-c388df75d744",
+  "created_at": "2026-01-29T20:56:09.983586454Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpVzGEEP",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

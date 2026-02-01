@@ -1,0 +1,7 @@
+---
+- name: Simple Playbook Benchmark
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Echo benchmark
+      command: echo "hello benchmark"

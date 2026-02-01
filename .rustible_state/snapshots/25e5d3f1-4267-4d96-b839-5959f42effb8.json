@@ -1,0 +1,20 @@
+{
+  "id": "25e5d3f1-4267-4d96-b839-5959f42effb8",
+  "session_id": "7151fd78-9772-462b-ad33-414b8d45e89f",
+  "created_at": "2026-01-29T20:56:09.845304561Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpu9zot4",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

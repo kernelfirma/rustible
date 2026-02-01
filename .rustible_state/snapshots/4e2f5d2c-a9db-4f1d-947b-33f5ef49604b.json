@@ -1,0 +1,20 @@
+{
+  "id": "4e2f5d2c-a9db-4f1d-947b-33f5ef49604b",
+  "session_id": "89273021-63d9-45a2-a1c5-3f4d58dde747",
+  "created_at": "2026-01-29T20:41:15.581064744Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpRTFCKi",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

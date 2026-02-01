@@ -1,0 +1,59 @@
+{
+  "id": "6a34d502-19c1-4951-815b-66ce100e74d4",
+  "session_id": "ba40c451-f734-46e1-96ce-dd334441139e",
+  "created_at": "2026-01-29T20:51:38.613273792Z",
+  "description": "Session completed",
+  "playbook": "rustible_extra_vars_test",
+  "tasks": [
+    {
+      "id": "2ca28cb4-fda8-4cd7-9792-bb9718695c9b",
+      "task_id": "Show var",
+      "task_name": "Show var",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "{{ my_var }}"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:51:38.613142842Z",
+      "completed_at": "2026-01-29T20:51:38.613146580Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    }
+  ],
+  "host_states": {
+    "localhost": {
+      "host": "localhost",
+      "ok": 1,
+      "changed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "unreachable": false,
+      "facts": null,
+      "vars": {},
+      "last_successful_task": "Show var",
+      "last_error": null
+    }
+  },
+  "stats": {
+    "ok": 1,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

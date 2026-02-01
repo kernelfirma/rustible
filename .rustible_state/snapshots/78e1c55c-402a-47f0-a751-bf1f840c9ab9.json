@@ -1,0 +1,20 @@
+{
+  "id": "78e1c55c-402a-47f0-a751-bf1f840c9ab9",
+  "session_id": "f766166c-8bea-49be-9b4a-888947a1d983",
+  "created_at": "2026-01-29T20:41:15.865648529Z",
+  "description": "Session completed",
+  "playbook": ".tmpcTMOOC",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

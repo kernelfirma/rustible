@@ -1,0 +1,20 @@
+{
+  "id": "916faf29-7116-4f7e-8c25-4b29a6979bdb",
+  "session_id": "6fa73a4b-8332-4967-b816-2dd8c6843806",
+  "created_at": "2026-01-29T20:46:53.387106659Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpsNnavm",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

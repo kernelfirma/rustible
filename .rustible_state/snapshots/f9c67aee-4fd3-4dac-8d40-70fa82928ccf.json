@@ -1,0 +1,142 @@
+{
+  "id": "f9c67aee-4fd3-4dac-8d40-70fa82928ccf",
+  "session_id": "56167a02-9b4a-4117-8442-602a6e0a3cbd",
+  "created_at": "2026-01-29T20:56:10.262420104Z",
+  "description": "Session completed",
+  "playbook": "playbook",
+  "tasks": [
+    {
+      "id": "9d7b6e9c-60cb-4446-99ac-8242b9457313",
+      "task_id": "Test task",
+      "task_name": "Test task",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "test"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:56:10.262267957Z",
+      "completed_at": "2026-01-29T20:56:10.262271785Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    },
+    {
+      "id": "669cdbda-8b42-4b58-939a-a8a5d2808042",
+      "task_id": "Gathering Facts",
+      "task_name": "Gathering Facts",
+      "host": "localhost",
+      "module": "gather_facts",
+      "args": {},
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:56:10.261571620Z",
+      "completed_at": "2026-01-29T20:56:10.261583495Z",
+      "duration_ms": 351,
+      "error": null,
+      "output": {
+        "ansible_facts": {
+          "architecture": "x86_64",
+          "date_time": "2026-01-29 21:56:10 CET",
+          "default_ipv4": "192.168.178.127",
+          "disk_available_bytes": 329826926592,
+          "disk_total_bytes": 1966789169152,
+          "disk_used_bytes": 1536979259392,
+          "distribution": "arch",
+          "distribution_pretty_name": "Arch Linux",
+          "env": {},
+          "epoch": 1769720170,
+          "interfaces": [
+            {
+              "active": false,
+              "device": "enp0s31f6",
+              "macaddress": "9c:6b:00:0f:d5:08",
+              "mtu": 1500
+            },
+            {
+              "active": true,
+              "device": "enp3s0",
+              "macaddress": "9c:6b:00:0f:d5:01",
+              "mtu": 1500
+            },
+            {
+              "active": false,
+              "device": "enp4s0",
+              "macaddress": "88:c9:b3:b3:05:e9",
+              "mtu": 1500
+            },
+            {
+              "active": false,
+              "device": "tailscale0",
+              "macaddress": "",
+              "mtu": 1280
+            },
+            {
+              "active": false,
+              "device": "wlp0s20f3",
+              "macaddress": "6a:85:15:71:5d:84",
+              "mtu": 1500
+            }
+          ],
+          "kernel": "6.18.6-arch1-1",
+          "machine": "x86_64",
+          "memfree_mb": 30309,
+          "memtotal_mb": 96384,
+          "os_family": "arch",
+          "processor": "Intel(R) Core(TM) i5-14500",
+          "processor_cores": 14,
+          "processor_count": 20,
+          "python_version": "3.14.2",
+          "swaptotal_mb": 16383,
+          "system": "Linux",
+          "uptime_seconds": 136955,
+          "user_gid": 1000,
+          "user_id": "artur",
+          "user_uid": 1000
+        }
+      },
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    }
+  ],
+  "host_states": {
+    "localhost": {
+      "host": "localhost",
+      "ok": 2,
+      "changed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "unreachable": false,
+      "facts": null,
+      "vars": {},
+      "last_successful_task": "Test task",
+      "last_error": null
+    }
+  },
+  "stats": {
+    "ok": 2,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

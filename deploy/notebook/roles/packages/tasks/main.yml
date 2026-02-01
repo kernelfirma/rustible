@@ -1,0 +1,67 @@
+---
+# Package Installation
+
+- name: Create package staging directory
+  file:
+    path: /tmp/package-lists
+    state: directory
+    mode: '0755'
+
+- name: Create core package list from dotfiles
+  copy:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/packages/core.txt"
+    dest: /tmp/package-lists/core.txt
+    remote_src: true
+  ignore_errors: true
+
+- name: Install packages from core list
+  shell: |
+    if [ -f /tmp/package-lists/core.txt ]; then
+      grep -v '^#' /tmp/package-lists/core.txt | grep -v '^$' | while read pkg; do
+        pacman -S --needed --noconfirm "$pkg" 2>/dev/null || true
+      done
+    fi
+  args:
+    creates: /tmp/core-packages-installed
+
+- name: Mark core packages as installed
+  file:
+    path: /tmp/core-packages-installed
+    state: touch
+
+- name: Install AUR helper (paru) if not present
+  shell: |
+    if ! command -v paru &> /dev/null; then
+      cd /tmp
+      rm -rf paru 2>/dev/null || true
+      git clone https://aur.archlinux.org/paru.git
+      cd paru
+      makepkg -si --noconfirm
+    fi
+  args:
+    creates: /usr/bin/paru
+
+- name: Create laptop package list from dotfiles
+  copy:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/packages/laptop.txt"
+    dest: /tmp/package-lists/laptop.txt
+    remote_src: true
+  when: has_battery | default(true)
+  ignore_errors: true
+
+- name: Install packages from laptop list
+  shell: |
+    if [ -f /tmp/package-lists/laptop.txt ]; then
+      grep -v '^#' /tmp/package-lists/laptop.txt | grep -v '^$' | while read pkg; do
+        paru -S --needed --noconfirm "$pkg" 2>/dev/null || true
+      done
+    fi
+  args:
+    creates: /tmp/laptop-packages-installed
+  when: has_battery | default(true)
+
+- name: Mark laptop packages as installed
+  file:
+    path: /tmp/laptop-packages-installed
+    state: touch
+  when: has_battery | default(true)

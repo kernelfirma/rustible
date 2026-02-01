@@ -1,0 +1,41 @@
+---
+# Notebook Inventory
+# Configure your notebook details here
+
+all:
+  vars:
+    # Common variables
+    ansible_user: artur
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    ansible_python_interpreter: /usr/bin/python3
+
+    # Deployment settings
+    enable_automatic_updates: true
+    enable_snapshots: false
+    timezone: Europe/Vienna
+
+    # Network
+    enable_tailscale: true
+    enable_nordvpn: false
+
+    # Backup
+    backup_enabled: true
+    backup_schedule: "02:00"
+
+  hosts:
+    notebook:
+      ansible_connection: ssh
+      ansible_host: 192.168.1.100
+      machine_type: laptop
+
+      # Graphics
+      gpu_vendor: intel
+      display_backend: wayland
+
+      # Hardware
+      has_battery: true
+      has_touchpad: true
+
+      # Display
+      display_scale: 1
+      display_dpi: 96

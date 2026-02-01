@@ -1,0 +1,84 @@
+{
+  "id": "e13b45b5-2877-4e14-83c4-6d769421dbf7",
+  "session_id": "7e95be63-5ce8-4fa7-8253-f41a31dad4b9",
+  "created_at": "2026-01-29T20:46:53.194331888Z",
+  "description": "Session completed",
+  "playbook": ".tmpjqmiYr",
+  "tasks": [
+    {
+      "id": "79979265-afa5-493d-855d-e402c38c97cc",
+      "task_id": "Second task",
+      "task_name": "Second task",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "Second"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:46:53.194266130Z",
+      "completed_at": "2026-01-29T20:46:53.194267569Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    },
+    {
+      "id": "76fe9bdc-12dc-467f-8bfe-593a75e62198",
+      "task_id": "First task",
+      "task_name": "First task",
+      "host": "localhost",
+      "module": "debug",
+      "args": {
+        "msg": "First"
+      },
+      "status": "ok",
+      "before_state": null,
+      "after_state": null,
+      "started_at": "2026-01-29T20:46:53.194098069Z",
+      "completed_at": "2026-01-29T20:46:53.194100616Z",
+      "duration_ms": 0,
+      "error": null,
+      "output": null,
+      "rollback_available": false,
+      "rollback_info": null,
+      "tags": [],
+      "play_name": null,
+      "role_name": null,
+      "check_mode": false,
+      "diff": null
+    }
+  ],
+  "host_states": {
+    "localhost": {
+      "host": "localhost",
+      "ok": 2,
+      "changed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "unreachable": false,
+      "facts": null,
+      "vars": {},
+      "last_successful_task": "Second task",
+      "last_error": null
+    }
+  },
+  "stats": {
+    "ok": 2,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

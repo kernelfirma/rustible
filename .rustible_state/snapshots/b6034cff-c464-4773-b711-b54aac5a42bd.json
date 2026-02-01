@@ -1,0 +1,20 @@
+{
+  "id": "b6034cff-c464-4773-b711-b54aac5a42bd",
+  "session_id": "35e80da9-e531-4040-92cb-aec61b47da8b",
+  "created_at": "2026-01-29T20:56:09.845016530Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpmkOdER",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

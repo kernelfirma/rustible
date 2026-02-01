@@ -1,0 +1,20 @@
+{
+  "id": "8707a40d-28dc-4804-991c-855508970154",
+  "session_id": "437b8848-cfc7-4079-af4f-99c47c533f2b",
+  "created_at": "2026-01-29T20:56:10.009452056Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmppMPRt2",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

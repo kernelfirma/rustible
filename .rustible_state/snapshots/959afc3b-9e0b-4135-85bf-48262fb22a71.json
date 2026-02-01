@@ -1,0 +1,20 @@
+{
+  "id": "959afc3b-9e0b-4135-85bf-48262fb22a71",
+  "session_id": "89273021-63d9-45a2-a1c5-3f4d58dde747",
+  "created_at": "2026-01-29T20:41:15.583471467Z",
+  "description": "Session completed",
+  "playbook": ".tmpRTFCKi",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

@@ -1,0 +1,20 @@
+{
+  "id": "8527ad8f-dee9-425b-a2aa-7f0cbeeade64",
+  "session_id": "4b79e4c3-3068-498a-94c2-206fb000fe56",
+  "created_at": "2026-01-29T20:56:09.505033309Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpoLawFD",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

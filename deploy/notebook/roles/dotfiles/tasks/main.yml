@@ -1,0 +1,148 @@
+---
+# Dotfiles Deployment
+
+- name: Clone dotfiles repository
+  git:
+    repo: "{{ dotfiles_repo_url | default('https://github.com/YOUR_USERNAME/dotfiles.git') }}"
+    dest: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}"
+    update: yes
+  become_user: "{{ ansible_user }}"
+  ignore_errors: true
+
+- name: Create required config directories
+  file:
+    path: "/home/{{ ansible_user }}/{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - .config/hypr
+    - .config/waybar
+    - .config/mako
+    - .config/wofi
+    - .config/wezterm
+    - .config/yazi
+    - .config/starship
+    - .config/flags
+    - .config/current-theme
+    - bin
+
+- name: Backup existing configs before linking
+  shell: |
+    for config in ~/.config/hypr/hyprland.conf ~/.config/hypr/hypridle.conf \
+                 ~/.config/hypr/hyprlock.conf ~/.vimrc ~/.config/starship.toml; do
+      [ -f "$config" ] && [ ! -L "$config" ] && mv "$config" "$config.backup.$(date +%Y%m%d_%H%M%S)"
+    done
+  changed_when: false
+  become_user: "{{ ansible_user }}"
+
+- name: Link Hyprland configs
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/hypr/{{ item.src }}"
+    dest: "/home/{{ ansible_user }}/.config/hypr/{{ item.dest }}"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - { src: 'hyprland.conf', dest: 'hyprland.conf' }
+    - { src: 'hypridle.conf', dest: 'hypridle.conf' }
+    - { src: 'hyprlock.conf', dest: 'hyprlock.conf' }
+    - { src: 'reload-hyprland.sh', dest: 'reload-hyprland.sh' }
+    - { src: 'start-waybar.sh', dest: 'start-waybar.sh' }
+    - { src: 'cycle-display-mode.sh', dest: 'cycle-display-mode.sh' }
+
+- name: Link host-specific Hyprland config
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/hypr/hosts/{{ has_battery | ternary('laptop.conf', 'desktop.conf') }}"
+    dest: "/home/{{ ansible_user }}/.config/hypr/host.conf"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Link Waybar config (laptop style)
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/waybar/{{ item.src }}"
+    dest: "/home/{{ ansible_user }}/.config/waybar/{{ item.dest }}"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - { src: 'config-laptop.jsonc', dest: 'config.jsonc' }
+    - { src: 'style-laptop.css', dest: 'style.css' }
+  when: has_battery | default(true)
+
+- name: Link Waybar config (desktop style)
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/waybar/{{ item.src }}"
+    dest: "/home/{{ ansible_user }}/.config/waybar/{{ item.dest }}"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - { src: 'config.jsonc', dest: 'config.jsonc' }
+    - { src: 'style-desktop.css', dest: 'style.css' }
+  when: not (has_battery | default(true))
+
+- name: Link other application configs
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/{{ item.app }}/{{ item.file }}"
+    dest: "/home/{{ ansible_user }}/{{ item.dest }}"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - { app: 'mako', file: 'config', dest: '.config/mako/config' }
+    - { app: 'wofi', file: 'config', dest: '.config/wofi/config' }
+    - { app: 'wofi', file: 'style.css', dest: '.config/wofi/style.css' }
+    - { app: 'wezterm', file: 'wezterm.lua', dest: '.config/wezterm/wezterm.lua' }
+    - { app: 'vim', file: 'vimrc', dest: '.vimrc' }
+    - { app: 'yazi', file: 'yazi.toml', dest: '.config/yazi/yazi.toml' }
+    - { app: 'yazi', file: 'theme.toml', dest: '.config/yazi/theme.toml' }
+    - { app: 'starship', file: 'starship.toml', dest: '.config/starship.toml' }
+
+- name: Link browser flags (laptop)
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/config/flags/{{ item.src }}"
+    dest: "/home/{{ ansible_user }}/.config/{{ item.dest }}.conf"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - { src: 'chrome-flags-laptop.conf', dest: 'chrome-flags' }
+    - { src: 'electron-flags-laptop.conf', dest: 'electron-flags' }
+  when: has_battery | default(true)
+
+- name: Link user scripts
+  file:
+    src: "{{ dotfiles_repo_local | default('/home/' + ansible_user + '/Repositories/dotfiles') }}/bin/{{ item }}"
+    dest: "/home/{{ ansible_user }}/bin/{{ item }}"
+    state: link
+    force: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  loop:
+    - cpu_stats.sh
+    - ram_stats.sh
+    - backup-to-nas.sh
+    - mount-nas.sh
+    - setup-environment.sh
+    - update
+
+- name: Make shell scripts executable
+  file:
+    path: "/home/{{ ansible_user }}/.config/hypr/{{ item }}"
+    mode: '0755'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop:
+    - reload-hyprland.sh
+    - start-waybar.sh
+    - cycle-display-mode.sh

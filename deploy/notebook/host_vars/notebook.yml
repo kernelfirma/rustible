@@ -1,0 +1,26 @@
+---
+# Host-specific variables for notebook
+
+# Hostname
+hostname: notebook
+
+# Hardware specifics (auto-detected, can override)
+has_battery: true
+has_touchpad: true
+gpu_vendor: intel
+
+# Display settings for this specific machine
+display_scale: 1
+display_dpi: 96
+
+# Battery/power management for this notebook
+battery_threshold_start_charge: 40
+battery_threshold_stop_charge: 80
+power_profile: balanced  # options: performance, balanced, powersaver
+
+# Network interfaces
+wifi_interface: wlan0
+ethernet_interface: eth0
+
+# This host's specific packages
+extra_packages: []

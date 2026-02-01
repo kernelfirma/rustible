@@ -1,0 +1,20 @@
+{
+  "id": "e2ff03ec-9258-4ddd-9d03-d1a633f46849",
+  "session_id": "53358d44-1a74-410d-beb1-e75e802af30e",
+  "created_at": "2026-01-29T20:41:15.531463190Z",
+  "description": "Session completed",
+  "playbook": ".tmp29fWLu",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

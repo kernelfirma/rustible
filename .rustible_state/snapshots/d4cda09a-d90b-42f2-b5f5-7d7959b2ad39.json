@@ -1,0 +1,20 @@
+{
+  "id": "d4cda09a-d90b-42f2-b5f5-7d7959b2ad39",
+  "session_id": "3ecd2f5e-f373-42be-98c1-afba779e13d8",
+  "created_at": "2026-01-29T20:56:10.144972744Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpaCTCRs",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

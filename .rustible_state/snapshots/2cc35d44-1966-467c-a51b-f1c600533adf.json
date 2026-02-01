@@ -1,0 +1,20 @@
+{
+  "id": "2cc35d44-1966-467c-a51b-f1c600533adf",
+  "session_id": "01efe19f-76dd-48e5-8431-381e6317666c",
+  "created_at": "2026-01-29T20:41:15.604251653Z",
+  "description": "Pre-run checkpoint",
+  "playbook": ".tmpRieEM4",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

@@ -1,0 +1,36 @@
+---
+# Common variables for all hosts
+
+# Machine detection
+has_battery: true
+has_touchpad: true
+gpu_vendor: intel
+display_backend: wayland
+
+# System settings
+timezone: Europe/Vienna
+locale: en_US.UTF-8
+
+# Dotfiles repository (update with your actual repo)
+dotfiles_repo_url: https://github.com/YOUR_USERNAME/dotfiles.git
+dotfiles_repo_local: "/home/{{ ansible_user }}/Repositories/dotfiles"
+
+# Package management
+enable_aur_helper: true
+aur_helper: paru
+
+# Services
+enable_tailscale: true
+enable_nordvpn: false
+enable_automatic_updates: true
+enable_snapshots: false
+
+# Backup settings
+backup_enabled: true
+backup_schedule: "02:00"
+backup_target: /mnt/nas/Backups
+
+# Graphics
+display_manager: sddm
+display_scale: 1
+display_dpi: 96

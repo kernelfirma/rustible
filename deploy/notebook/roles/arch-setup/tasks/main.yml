@@ -1,0 +1,116 @@
+---
+# Arch System Initialization
+
+- name: Ensure essential packages are installed
+  pacman:
+    name:
+      - base
+      - base-devel
+      - linux
+      - linux-firmware
+      - grub
+      - efibootmgr
+      - sudo
+      - openssh
+      - reflector
+      - pacman-contrib
+    state: present
+
+- name: Configure reflector for faster mirror sync
+  copy:
+    content: |
+      # Reflector configuration for faster pacman updates
+      --save /etc/pacman.d/mirrorlist
+      --protocol https
+      --country Austria,Germany,Switzerland
+      --latest 20
+      --sort rate
+    dest: /etc/xdg/reflector/reflector.conf
+    mode: '0644'
+
+- name: Enable and start reflector timer
+  systemd:
+    name: reflector.timer
+    state: started
+    enabled: true
+
+- name: Enable parallel downloads in pacman
+  lineinfile:
+    path: /etc/pacman.conf
+    regexp: '^#?ParallelDownloads'
+    line: "ParallelDownloads = 5"
+    backup: true
+
+- name: Enable Color in pacman
+  lineinfile:
+    path: /etc/pacman.conf
+    regexp: '^#?Color'
+    line: "Color"
+    backup: true
+
+- name: Enable VerbosePkgLists in pacman
+  lineinfile:
+    path: /etc/pacman.conf
+    regexp: '^#?VerbosePkgLists'
+    line: "VerbosePkgLists"
+    backup: true
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone | default('UTC') }}"
+
+- name: Set system locale
+  lineinfile:
+    path: /etc/locale.gen
+    regexp: '^#en_US.UTF-8'
+    line: "en_US.UTF-8 UTF-8"
+
+- name: Generate locales
+  command: locale-gen
+  changed_when: false
+
+- name: Set system language
+  copy:
+    content: "LANG=en_US.UTF-8\n"
+    dest: /etc/locale.conf
+    mode: '0644'
+
+- name: Enable NTP time sync
+  command: timedatectl set-ntp true
+  changed_when: false
+
+- name: Set hostname
+  hostname:
+    name: "{{ hostname | default('notebook') }}"
+
+- name: Ensure journal directory exists
+  file:
+    path: /var/log/journal
+    state: directory
+    mode: '0755'
+
+- name: Configure persistent journal
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: '^#?Storage='
+    line: "Storage=persistent"
+    backup: true
+
+- name: Enable SSH daemon
+  systemd:
+    name: sshd
+    state: started
+    enabled: true
+
+- name: Create wheel group (if missing)
+  group:
+    name: wheel
+    state: present
+
+- name: Allow wheel group sudo
+  lineinfile:
+    path: /etc/sudoers.d/wheel
+    line: "%wheel ALL=(ALL) ALL"
+    mode: '0440'
+    create: true
+    validate: 'visudo -cf %s'

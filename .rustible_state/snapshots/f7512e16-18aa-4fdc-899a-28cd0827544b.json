@@ -1,0 +1,20 @@
+{
+  "id": "f7512e16-18aa-4fdc-899a-28cd0827544b",
+  "session_id": "05e19ffd-f704-480f-a1c0-15ed7567a63a",
+  "created_at": "2026-01-29T20:41:16.060179321Z",
+  "description": "Session completed",
+  "playbook": ".tmpprPKTv",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

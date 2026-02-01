@@ -1,0 +1,25 @@
+# Example vault file for sensitive data
+# Copy this to vault.yml and encrypt with: rustible vault encrypt vault.yml
+#
+# To use:
+# 1. Copy this file: cp vault.yml.example vault.yml
+# 2. Edit vault.yml with your actual secrets
+# 3. Encrypt: rustible vault encrypt vault.yml
+# 4. Reference in playbooks with: "{{ vault_tailscale_auth_key }}"
+
+# Tailscale
+vault_tailscale_auth_key: "tskey-auth-XXXXXXXXXXXXXXXXXXXXXXXX"
+
+# VPN credentials (if using NordVPN)
+vault_nordvpn_username: "your-email@example.com"
+vault_nordvpn_password: "your-password"
+
+# SSH key for initial setup (if needed)
+vault_initial_ssh_password: "temporary-password"
+
+# Backup encryption key
+vault_backup_encryption_key: "your-backup-encryption-key"
+
+# NAS credentials for backup script
+vault_nas_username: "backup-user"
+vault_nas_password: "backup-password"

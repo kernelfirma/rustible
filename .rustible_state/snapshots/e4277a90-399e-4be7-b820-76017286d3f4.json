@@ -1,0 +1,20 @@
+{
+  "id": "e4277a90-399e-4be7-b820-76017286d3f4",
+  "session_id": "4b6311cb-f8bb-4371-93ff-91517b408b74",
+  "created_at": "2026-01-29T20:44:28.827908793Z",
+  "description": "Pre-run checkpoint",
+  "playbook": "rustible_extra_vars_test",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}

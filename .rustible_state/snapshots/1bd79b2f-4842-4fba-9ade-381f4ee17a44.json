@@ -1,0 +1,20 @@
+{
+  "id": "1bd79b2f-4842-4fba-9ade-381f4ee17a44",
+  "session_id": "fdbc14f9-318b-4c54-b9b2-43dae2ffe34d",
+  "created_at": "2026-01-29T20:41:15.808920084Z",
+  "description": "Session completed",
+  "playbook": ".tmpZPRASN",
+  "tasks": [],
+  "host_states": {},
+  "stats": {
+    "ok": 0,
+    "changed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "unreachable": 0,
+    "total": 0,
+    "duration_ms": 0
+  },
+  "metadata": {},
+  "parent_id": null
+}
