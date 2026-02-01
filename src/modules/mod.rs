@@ -33,8 +33,11 @@ pub mod meta;
 pub mod mount;
 pub mod network;
 pub mod package;
+pub mod parity;
 pub mod pause;
 pub mod pip;
+pub mod proxmox_lxc;
+pub mod proxmox_vm;
 pub mod python;
 pub mod raw;
 pub mod script;
@@ -392,12 +395,24 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("`", "backtick command substitution"),
         ("&&", "command chaining &&"),
         ("||", "command chaining ||"),
-        ("; ", "command separator ;"),
+        (";", "command separator ;"),
         ("|", "pipe operator"),
         (">", "output redirection"),
         ("<", "input redirection"),
         ("\n", "newline (multi-line command)"),
         ("\r", "carriage return"),
+        ("&", "background execution &"),
+        ("{", "brace expansion {"),
+        ("}", "brace expansion }"),
+        ("(", "subshell ("),
+        (")", "subshell )"),
+        ("[", "globbing ["),
+        ("]", "globbing ]"),
+        ("*", "globbing *"),
+        ("?", "globbing ?"),
+        ("!", "history expansion !"),
+        ("\\", "shell escaping \\"),
+        ("$", "variable expansion $"),
     ];
 
     for (pattern, description) in dangerous_patterns {
@@ -411,6 +426,33 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     }
 
     Ok(())
+}
+
+/// Get the remote temporary directory from the context variables.
+///
+/// Checks `ansible_remote_tmp` and `remote_tmp` variables.
+/// Defaults to `/tmp` if not set.
+///
+/// # Arguments
+///
+/// * `context` - The module context containing variables
+///
+/// # Returns
+///
+/// * `String` - The remote temporary directory path
+pub fn get_remote_tmp(context: &ModuleContext) -> String {
+    // Check for ansible_remote_tmp variable
+    if let Some(serde_json::Value::String(path)) = context.vars.get("ansible_remote_tmp") {
+        return path.clone();
+    }
+
+    // Check for remote_tmp variable (legacy/alternative)
+    if let Some(serde_json::Value::String(path)) = context.vars.get("remote_tmp") {
+        return path.clone();
+    }
+
+    // Default to /tmp
+    "/tmp".to_string()
 }
 
 /// Normalizes a path and optionally validates it against a base directory.
@@ -706,7 +748,13 @@ impl fmt::Display for ModuleCategory {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust,ignore,no_run
+/// # #[tokio::main]
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// # use rustible::modules::{apt, command, shell, yum, ModuleCategory, ModuleRegistry};
+/// use std::sync::Arc;
+/// # use rustible::register_modules;
+/// # let mut registry = ModuleRegistry::new();
 /// register_modules!(registry,
 ///     Commands: [
 ///         command::CommandModule,
@@ -717,7 +765,10 @@ impl fmt::Display for ModuleCategory {
 ///         yum::YumModule,
 ///     ],
 /// );
+/// # Ok(())
+/// # }
 /// ```
+#[macro_export]
 macro_rules! register_modules {
     ($registry:expr, $($category:ident: [$($module:expr),* $(,)?]),* $(,)?) => {
         $(
@@ -904,7 +955,7 @@ impl ModuleOutput {
 pub type ModuleParams = HashMap<String, serde_json::Value>;
 
 /// Context for module execution
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ModuleContext {
     /// Whether to run in check mode (dry run)
     pub check_mode: bool,
@@ -924,6 +975,8 @@ pub struct ModuleContext {
     pub become_method: Option<String>,
     /// User to become
     pub become_user: Option<String>,
+    /// Password for privilege escalation
+    pub become_password: Option<String>,
     /// Connection to use for remote operations
     pub connection: Option<Arc<dyn Connection + Send + Sync>>,
 }
@@ -944,23 +997,6 @@ impl std::fmt::Debug for ModuleContext {
                 &self.connection.as_ref().map(|c| c.identifier()),
             )
             .finish()
-    }
-}
-
-impl Default for ModuleContext {
-    fn default() -> Self {
-        Self {
-            check_mode: false,
-            diff_mode: false,
-            verbosity: 0,
-            vars: HashMap::new(),
-            facts: HashMap::new(),
-            work_dir: None,
-            r#become: false,
-            become_method: None,
-            become_user: None,
-            connection: None,
-        }
     }
 }
 
@@ -1017,6 +1053,12 @@ impl ModuleContext {
         self
     }
 
+    /// Set the privilege escalation password
+    pub fn with_become_password(mut self, password: impl Into<String>) -> Self {
+        self.become_password = Some(password.into());
+        self
+    }
+
     /// Create a builder for constructing a ModuleContext with validation
     pub fn builder() -> ModuleContextBuilder {
         ModuleContextBuilder::default()
@@ -1054,7 +1096,7 @@ pub enum ModuleContextBuilderError {
 /// assert!(context.check_mode);
 /// assert_eq!(context.verbosity, 2);
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ModuleContextBuilder {
     check_mode: bool,
     diff_mode: bool,
@@ -1065,24 +1107,8 @@ pub struct ModuleContextBuilder {
     r#become: bool,
     become_method: Option<String>,
     become_user: Option<String>,
+    become_password: Option<String>,
     connection: Option<Arc<dyn Connection + Send + Sync>>,
-}
-
-impl Default for ModuleContextBuilder {
-    fn default() -> Self {
-        Self {
-            check_mode: false,
-            diff_mode: false,
-            verbosity: 0,
-            vars: HashMap::new(),
-            facts: HashMap::new(),
-            work_dir: None,
-            r#become: false,
-            become_method: None,
-            become_user: None,
-            connection: None,
-        }
-    }
 }
 
 impl std::fmt::Debug for ModuleContextBuilder {
@@ -1097,6 +1123,7 @@ impl std::fmt::Debug for ModuleContextBuilder {
             .field("become", &self.r#become)
             .field("become_method", &self.become_method)
             .field("become_user", &self.become_user)
+            .field("has_become_password", &self.become_password.is_some())
             .field("has_connection", &self.connection.is_some())
             .finish()
     }
@@ -1176,6 +1203,12 @@ impl ModuleContextBuilder {
         self
     }
 
+    /// Set the privilege escalation password
+    pub fn become_password(mut self, password: impl Into<String>) -> Self {
+        self.become_password = Some(password.into());
+        self
+    }
+
     /// Set the connection for remote operations
     pub fn connection(mut self, conn: Arc<dyn Connection + Send + Sync>) -> Self {
         self.connection = Some(conn);
@@ -1215,6 +1248,7 @@ impl ModuleContextBuilder {
             r#become: self.r#become,
             become_method: self.become_method,
             become_user: self.become_user,
+            become_password: self.become_password,
             connection: self.connection,
         })
     }
@@ -1234,6 +1268,7 @@ impl ModuleContextBuilder {
             r#become: self.r#become,
             become_method: self.become_method,
             become_user: self.become_user,
+            become_password: self.become_password,
             connection: self.connection,
         }
     }
@@ -1294,6 +1329,13 @@ pub trait Module: Send + Sync {
         &[]
     }
 
+    /// Returns the list of optional parameters and default values.
+    ///
+    /// Modules can override to document optional params in help/output layers.
+    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
+        HashMap::new()
+    }
+
     /// Check what would change without making changes (check mode).
     ///
     /// This is a convenience method that calls execute() with check_mode=true.
@@ -1305,6 +1347,13 @@ pub trait Module: Send + Sync {
             ..context.clone()
         };
         self.execute(params, &check_context)
+    }
+
+    /// Return a diff for the module without executing changes.
+    ///
+    /// Default is no diff; modules can override to provide a preview.
+    fn diff(&self, _params: &ModuleParams, _context: &ModuleContext) -> ModuleResult<Option<Diff>> {
+        Ok(None)
     }
 }
 
@@ -1547,6 +1596,11 @@ impl ModuleRegistry {
                 known_hosts::KnownHostsModule,
                 authorized_key::AuthorizedKeyModule,
             ],
+            // Cloud provider modules
+            Cloud: [
+                proxmox_lxc::ProxmoxLxcModule,
+                proxmox_vm::ProxmoxVmModule,
+            ],
             // Security modules
             Security: [
                 firewalld::FirewalldModule,
@@ -1588,7 +1642,7 @@ impl ModuleRegistry {
         self.categories.insert(name, category);
     }
 
-    fn normalize_module_name<'a>(name: &'a str) -> &'a str {
+    fn normalize_module_name(name: &str) -> &str {
         if let Some(stripped) = name.strip_prefix("ansible.builtin.") {
             stripped.rsplit('.').next().unwrap_or(stripped)
         } else if let Some(stripped) = name.strip_prefix("ansible.legacy.") {
@@ -1855,8 +1909,41 @@ mod tests {
     fn test_validate_command_args_rejects_dangerous() {
         assert!(validate_command_args("$(cat /etc/passwd)").is_err());
         assert!(validate_command_args("nginx; reboot").is_err());
+        assert!(validate_command_args("nginx;reboot").is_err());
         assert!(validate_command_args("pkg && reboot").is_err());
         assert!(validate_command_args("cmd || curl evil.com").is_err());
+        // Extended checks
+        assert!(validate_command_args("bash;echo").is_err());
+        assert!(validate_command_args("cmd&").is_err());
+    }
+
+    #[test]
+    fn test_get_remote_tmp() {
+        // Test default
+        let ctx = ModuleContext::default();
+        assert_eq!(get_remote_tmp(&ctx), "/tmp");
+
+        // Test ansible_remote_tmp
+        let ctx = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/var/tmp");
+
+        // Test remote_tmp
+        let ctx = ModuleContextBuilder::new()
+            .var("remote_tmp", serde_json::json!("/opt/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/opt/tmp");
+
+        // Test precedence (ansible_remote_tmp wins)
+        let ctx = ModuleContextBuilder::new()
+            .var("ansible_remote_tmp", serde_json::json!("/var/tmp"))
+            .var("remote_tmp", serde_json::json!("/opt/tmp"))
+            .build()
+            .unwrap();
+        assert_eq!(get_remote_tmp(&ctx), "/var/tmp");
     }
 
     #[test]
