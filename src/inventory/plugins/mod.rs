@@ -9,7 +9,6 @@
 //! - [`aws_ec2`]: AWS EC2 instances inventory
 //! - [`azure`]: Azure Virtual Machines inventory
 //! - [`gcp`]: Google Cloud Platform Compute Engine inventory
-//! - [`proxmox`]: Proxmox VE resources inventory
 //! - [`terraform`]: Terraform state file inventory
 //! - [`docker`]: Docker containers inventory
 //!
@@ -38,25 +37,18 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore,no_run
-//! # #[tokio::main]
-//! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-//! use rustible::prelude::*;
-//! use rustible::inventory::plugins::{AwsEc2Plugin, DynamicInventoryPlugin, PluginConfig};
-//! use std::path::Path;
+//! ```rust,ignore
+//! use rustible::inventory::plugins::{AwsEc2Plugin, PluginConfig};
 //!
-//! let config = PluginConfig::from_file(Path::new("aws_ec2.yml"))?;
+//! let config = PluginConfig::from_file("aws_ec2.yml")?;
 //! let plugin = AwsEc2Plugin::new(config)?;
 //! let inventory = plugin.parse().await?;
-//! # Ok(())
-//! # }
 //! ```
 
 pub mod aws_ec2;
 pub mod azure;
 pub mod config;
 pub mod gcp;
-pub mod proxmox;
 pub mod terraform;
 
 pub use aws_ec2::AwsEc2Plugin;
@@ -66,7 +58,6 @@ pub use config::{
     KeyedGroupConfig, PluginConfig, PluginConfigBuilder, PluginConfigError, PluginConfigResult,
 };
 pub use gcp::GcpPlugin;
-pub use proxmox::ProxmoxPlugin;
 pub use terraform::{
     CacheConfig, GroupByRule, LocalBackend, ResourceMapping, TerraformBackendType,
     TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
@@ -264,11 +255,6 @@ impl DynamicPluginRegistry {
             registry.register("gcp", Arc::new(plugin));
         }
 
-        // Register Proxmox plugin
-        if let Ok(plugin) = ProxmoxPlugin::with_defaults() {
-            registry.register("proxmox", Arc::new(plugin));
-        }
-
         // Register Terraform plugin
         if let Ok(plugin) = TerraformPlugin::with_defaults() {
             registry.register("terraform", Arc::new(plugin));
@@ -335,15 +321,6 @@ pub fn create_plugin_from_config(
             })?;
             Ok(Arc::new(plugin))
         }
-        "proxmox" | "community.general.proxmox" => {
-            let plugin = ProxmoxPlugin::new(config).map_err(|e| {
-                InventoryError::DynamicInventoryFailed(format!(
-                    "Failed to create Proxmox plugin: {}",
-                    e
-                ))
-            })?;
-            Ok(Arc::new(plugin))
-        }
         "terraform" | "cloud.terraform.terraform_state" => {
             let plugin = TerraformPlugin::new(config).map_err(|e| {
                 InventoryError::DynamicInventoryFailed(format!(
@@ -354,7 +331,7 @@ pub fn create_plugin_from_config(
             Ok(Arc::new(plugin))
         }
         _ => Err(InventoryError::DynamicInventoryFailed(format!(
-            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp, proxmox, terraform",
+            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp, terraform",
             plugin_name
         ))),
     }
