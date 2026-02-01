@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use rustible::lockfile::Lockfile;
+use rustible::lockfile::{DependencySource, LockedCollection, LockedRole, Lockfile, LockfileManager};
 
 /// A checkpoint representing a saved state
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::ConnectionError;
-use crate::utils::get_regex;
 
 /// Default connection timeout in seconds
 pub const DEFAULT_TIMEOUT: u64 = 30;
@@ -22,12 +21,6 @@ pub const DEFAULT_RETRIES: u32 = 3;
 
 /// Default delay between retries in seconds
 pub const DEFAULT_RETRY_DELAY: u64 = 1;
-
-// Compile regexes once
-static HOST_DIRECTIVE_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").expect("Invalid Host regex"));
-static KV_PAIR_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").expect("Invalid KV regex"));
 
 /// Main connection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,8 +110,10 @@ impl ConnectionConfig {
 
         // Then try pattern matching
         for (pattern, config) in &self.hosts {
-            if (pattern.contains('*') || pattern.contains('?')) && matches_pattern(pattern, host) {
-                return Some(config);
+            if pattern.contains('*') || pattern.contains('?') {
+                if matches_pattern(pattern, host) {
+                    return Some(config);
+                }
             }
         }
 
@@ -402,11 +397,7 @@ impl RetryConfig {
     /// Calculate delay for a given retry attempt
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         if self.exponential_backoff {
-            let factor = 2u32.checked_pow(attempt).unwrap_or(u32::MAX);
-            let delay = self
-                .retry_delay
-                .checked_mul(factor)
-                .unwrap_or(self.max_delay);
+            let delay = self.retry_delay * 2u32.pow(attempt.min(10));
             delay.min(self.max_delay)
         } else {
             self.retry_delay
@@ -434,6 +425,11 @@ impl SshConfigParser {
         let mut current_hosts: Vec<String> = Vec::new();
         let mut current_config = HostConfig::default();
 
+        // Regex for matching Host directive
+        static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*Host\s+(.+)$").unwrap());
+        // Regex for matching key-value pairs
+        static KV_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s*(\w+)\s+(.+)$").unwrap());
+
         for line in content.lines() {
             let line = line.trim();
 
@@ -443,7 +439,7 @@ impl SshConfigParser {
             }
 
             // Check for Host directive
-            if let Some(captures) = HOST_DIRECTIVE_REGEX.captures(line) {
+            if let Some(captures) = HOST_RE.captures(line) {
                 // Save previous host config
                 if !current_hosts.is_empty() {
                     for host in &current_hosts {
@@ -459,7 +455,7 @@ impl SshConfigParser {
             }
 
             // Parse key-value pairs
-            if let Some(captures) = KV_PAIR_REGEX.captures(line) {
+            if let Some(captures) = KV_RE.captures(line) {
                 let key = captures.get(1).unwrap().as_str().to_lowercase();
                 let value = captures.get(2).unwrap().as_str().trim().to_string();
 
@@ -525,13 +521,18 @@ impl SshConfigParser {
 
 /// Match a host against a pattern (supports * and ?)
 fn matches_pattern(pattern: &str, host: &str) -> bool {
+    // Fast path for wildcard
+    if pattern == "*" {
+        return true;
+    }
+
     // Convert glob pattern to regex
     let regex_pattern = pattern
         .replace('.', r"\.")
         .replace('*', ".*")
         .replace('?', ".");
 
-    if let Ok(re) = get_regex(&format!("^{}$", regex_pattern)) {
+    if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
         re.is_match(host)
     } else {
         false

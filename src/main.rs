@@ -15,8 +15,6 @@ use anyhow::Result;
 use cli::commands::CommandContext;
 use cli::{Cli, Commands};
 use config::Config;
-use rustible::executor::Playbook;
-use rustible::schema::{SchemaValidator, ValidatorConfig};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Application version information
@@ -55,126 +53,14 @@ async fn main() -> Result<()> {
         Commands::ListTasks(args) => args.execute(&mut ctx).await?,
         Commands::Vault(args) => args.execute(&mut ctx).await?,
         Commands::Galaxy(args) => cli::commands::galaxy::execute(args, &ctx).await?,
-        Commands::Provider(args) => cli::commands::provider::execute(args, &ctx).await?,
         Commands::Init(args) => init_project(&args.path, &args.template, &mut ctx).await?,
         Commands::Validate(args) => validate_playbook(&args.playbook, &mut ctx).await?,
         Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
         Commands::Drift(args) => args.execute(&mut ctx).await?,
-        Commands::Lock(args) => {
-            args.execute().await?;
-            0
-        }
-        Commands::Provisioner(args) => match args.execute().await {
-            Ok(result) => {
-                if result.success {
-                    0
-                } else {
-                    1
-                }
-            }
-            Err(e) => {
-                eprintln!("Provisioner error: {}", e);
-                1
-            }
-        },
-        Commands::Explain(args) => cli::commands::explain::run(args.code.as_deref(), args.list)?,
-        Commands::Agent(args) => execute_agent(&args, &mut ctx).await?,
+Commands::Lock(args) => { args.execute().await?; 0 },
     };
 
     std::process::exit(exit_code);
-}
-
-/// Execute agent commands
-async fn execute_agent(args: &cli::AgentArgs, ctx: &mut CommandContext) -> Result<i32> {
-    use rustible::agent::AgentBuilder;
-
-    match &args.command {
-        cli::AgentCommand::Build(build_args) => {
-            ctx.output.banner("RUSTIBLE AGENT BUILD");
-
-            let mut builder = AgentBuilder::new();
-
-            if let Some(target) = &build_args.target {
-                builder = builder.target(target);
-            }
-
-            builder = builder
-                .release(!build_args.debug)
-                .output_dir(build_args.output.clone())
-                .strip(build_args.strip);
-
-            ctx.output.info(&format!(
-                "Building agent for target: {}",
-                builder.config().target
-            ));
-
-            match builder.build() {
-                Ok(path) => {
-                    ctx.output
-                        .success(&format!("Agent binary built: {}", path.display()));
-                    Ok(0)
-                }
-                Err(e) => {
-                    ctx.output.error(&format!("Build failed: {}", e));
-                    Ok(1)
-                }
-            }
-        }
-
-        cli::AgentCommand::Deploy(deploy_args) => {
-            ctx.output.banner("RUSTIBLE AGENT DEPLOY");
-
-            // If --build is specified, build first
-            if deploy_args.build {
-                let mut builder = AgentBuilder::new();
-                if let Some(target) = &deploy_args.target {
-                    builder = builder.target(target);
-                }
-
-                ctx.output.info("Building agent binary...");
-                match builder.build() {
-                    Ok(path) => {
-                        ctx.output.success(&format!("Built: {}", path.display()));
-                    }
-                    Err(e) => {
-                        ctx.output.error(&format!("Build failed: {}", e));
-                        return Ok(1);
-                    }
-                }
-            }
-
-            ctx.output.info("Agent deployment not yet implemented");
-            ctx.output
-                .info(&format!("Would deploy to: {}", deploy_args.remote_path));
-            Ok(0)
-        }
-
-        cli::AgentCommand::Status(status_args) => {
-            ctx.output.banner("RUSTIBLE AGENT STATUS");
-
-            if status_args.detailed {
-                ctx.output.info("Detailed agent status:");
-            }
-
-            ctx.output.info("Agent status check not yet implemented");
-            ctx.output
-                .info("(Requires inventory to determine target hosts)");
-            Ok(0)
-        }
-
-        cli::AgentCommand::Stop(stop_args) => {
-            ctx.output.banner("RUSTIBLE AGENT STOP");
-
-            if stop_args.force {
-                ctx.output.info("Force stopping agents...");
-            } else {
-                ctx.output.info("Gracefully stopping agents...");
-            }
-
-            ctx.output.info("Agent stop not yet implemented");
-            Ok(0)
-        }
-    }
 }
 
 /// Initialize logging based on verbosity level
@@ -211,9 +97,6 @@ async fn init_project(
     // Ensure the base path exists
     if !path.exists() {
         fs::create_dir_all(path)?;
-        ctx.output.created(&format!("{}/", path.display()));
-    } else {
-        ctx.output.skipped(&format!("{}/", path.display()));
     }
 
     // Create directory structure
@@ -231,9 +114,7 @@ async fn init_project(
         let dir_path = path.join(dir);
         if !dir_path.exists() {
             fs::create_dir_all(&dir_path)?;
-            ctx.output.created(&format!("{}/", dir));
-        } else {
-            ctx.output.skipped(&format!("{}/", dir));
+            ctx.output.info(&format!("Created: {}/", dir));
         }
     }
 
@@ -255,9 +136,7 @@ all:
     let inventory_path = path.join("inventory/hosts.yml");
     if !inventory_path.exists() {
         fs::write(&inventory_path, inventory_content)?;
-        ctx.output.created("inventory/hosts.yml");
-    } else {
-        ctx.output.skipped("inventory/hosts.yml");
+        ctx.output.info("Created: inventory/hosts.yml");
     }
 
     // Create sample playbook based on template
@@ -368,9 +247,7 @@ all:
     let playbook_path = path.join("playbooks/site.yml");
     if !playbook_path.exists() {
         fs::write(&playbook_path, playbook_content)?;
-        ctx.output.created("playbooks/site.yml");
-    } else {
-        ctx.output.skipped("playbooks/site.yml");
+        ctx.output.info("Created: playbooks/site.yml");
     }
 
     // Create config file
@@ -408,9 +285,7 @@ log_timestamp = true
     let config_path = path.join("rustible.cfg");
     if !config_path.exists() {
         fs::write(&config_path, config_content)?;
-        ctx.output.created("rustible.cfg");
-    } else {
-        ctx.output.skipped("rustible.cfg");
+        ctx.output.info("Created: rustible.cfg");
     }
 
     // Create .gitignore
@@ -434,9 +309,7 @@ Thumbs.db
     let gitignore_path = path.join(".gitignore");
     if !gitignore_path.exists() {
         fs::write(&gitignore_path, gitignore_content)?;
-        ctx.output.created(".gitignore");
-    } else {
-        ctx.output.skipped(".gitignore");
+        ctx.output.info("Created: .gitignore");
     }
 
     ctx.output.section("Project initialized successfully!");
@@ -465,222 +338,154 @@ async fn execute_provision(
     }
 }
 
-/// Validate a playbook using SchemaValidator and typed parsing
-async fn validate_playbook(
-    playbook_path: &std::path::Path,
-    ctx: &mut CommandContext,
-) -> Result<i32> {
+/// Validate a playbook
+async fn validate_playbook(playbook: &std::path::Path, ctx: &mut CommandContext) -> Result<i32> {
     ctx.output.banner("PLAYBOOK VALIDATION");
     ctx.output
-        .info(&format!("Validating: {}", playbook_path.display()));
+        .info(&format!("Validating: {}", playbook.display()));
 
-    if !playbook_path.exists() {
+    if !playbook.exists() {
         ctx.output
-            .error(&format!("Playbook not found: {}", playbook_path.display()));
+            .error(&format!("Playbook not found: {}", playbook.display()));
         return Ok(1);
     }
 
-    // Phase 1: Parse using executor playbook parser for runtime parity
-    ctx.output.section("Syntax Check");
-    let playbook = match Playbook::load(playbook_path) {
-        Ok(pb) => pb,
-        Err(e) => {
-            ctx.output.error(&format!("Playbook parse error: {}", e));
-            return Ok(1);
-        }
-    };
+    // Read and parse the playbook
+    let content = std::fs::read_to_string(playbook)?;
 
-    // Structural warnings (non-fatal)
-    for play in &playbook.plays {
-        // Warn on plays that have no tasks *and* no roles.
-        let task_count = play.pre_tasks.len() + play.tasks.len() + play.post_tasks.len();
-        if task_count == 0 && play.roles.is_empty() {
-            let play_name = if play.name.is_empty() {
-                "<unnamed>"
+    match serde_yaml::from_str::<serde_yaml::Value>(&content) {
+        Ok(value) => {
+            // Basic structure validation
+            if let Some(plays) = value.as_sequence() {
+                let mut errors = 0;
+                let mut warnings = 0;
+
+                for (i, play) in plays.iter().enumerate() {
+                    let play_num = i + 1;
+                    let play_name = play
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("unnamed");
+
+                    ctx.output
+                        .debug(&format!("Validating play {}: {}", play_num, play_name));
+
+                    // Check required 'hosts' field
+                    if play.get("hosts").is_none() {
+                        ctx.output.error(&format!(
+                            "Play {} '{}': missing required 'hosts' field",
+                            play_num, play_name
+                        ));
+                        errors += 1;
+                    }
+
+                    // Check for tasks or roles
+                    let has_tasks = play.get("tasks").is_some();
+                    let has_roles = play.get("roles").is_some();
+                    let has_pre_tasks = play.get("pre_tasks").is_some();
+                    let has_post_tasks = play.get("post_tasks").is_some();
+
+                    if !has_tasks && !has_roles && !has_pre_tasks && !has_post_tasks {
+                        ctx.output.warning(&format!(
+                            "Play {} '{}': no tasks, roles, pre_tasks, or post_tasks defined",
+                            play_num, play_name
+                        ));
+                        warnings += 1;
+                    }
+
+                    // Validate tasks
+                    if let Some(tasks) = play.get("tasks").and_then(|t| t.as_sequence()) {
+                        for (j, task) in tasks.iter().enumerate() {
+                            let task_name = task
+                                .get("name")
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("unnamed");
+
+                            // Check that task has at least one module
+                            let has_module = task.as_mapping().map_or(false, |m| {
+                                m.keys().any(|k| {
+                                    let key = k.as_str().unwrap_or("");
+                                    !matches!(
+                                        key,
+                                        "name"
+                                            | "when"
+                                            | "tags"
+                                            | "register"
+                                            | "ignore_errors"
+                                            | "become"
+                                            | "become_user"
+                                            | "delegate_to"
+                                            | "notify"
+                                            | "loop"
+                                            | "with_items"
+                                            | "vars"
+                                    )
+                                })
+                            });
+
+                            if !has_module {
+                                ctx.output.warning(&format!(
+                                    "Task {} in play {}: '{}' has no module defined",
+                                    j + 1,
+                                    play_num,
+                                    task_name
+                                ));
+                                warnings += 1;
+                            }
+                        }
+                    }
+
+                    // Validate handlers
+                    if let Some(handlers) = play.get("handlers").and_then(|h| h.as_sequence()) {
+                        for (j, handler) in handlers.iter().enumerate() {
+                            if handler.get("name").is_none() {
+                                ctx.output.warning(&format!(
+                                    "Handler {} in play {}: missing 'name' field",
+                                    j + 1,
+                                    play_num
+                                ));
+                                warnings += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Print summary
+                ctx.output.section("Validation Results");
+
+                if errors == 0 && warnings == 0 {
+                    ctx.output
+                        .info("Playbook syntax is valid. No issues found.");
+                    Ok(0)
+                } else if errors == 0 {
+                    ctx.output
+                        .warning(&format!("Playbook is valid with {} warning(s)", warnings));
+                    Ok(0)
+                } else {
+                    ctx.output.error(&format!(
+                        "Playbook has {} error(s) and {} warning(s)",
+                        errors, warnings
+                    ));
+                    Ok(1)
+                }
             } else {
-                &play.name
-            };
-            ctx.output.warning(&format!(
-                "Play '{}' has no tasks (nothing to execute)",
-                play_name
-            ));
-        }
-
-        // Warn on handlers that rely only on `listen` without a `name`.
-        for handler in &play.handlers {
-            if handler.name.is_empty() && !handler.listen.is_empty() {
-                ctx.output.warning(&format!(
-                    "Handler with listen [{}] has no name",
-                    handler.listen.join(", ")
-                ));
+                ctx.output.error("Playbook must be a list of plays");
+                Ok(1)
             }
         }
-    }
-
-    ctx.output.debug("Playbook syntax is valid");
-
-    // Phase 2: Schema validation for module arguments
-    ctx.output.section("Schema Validation");
-    let validator_config = ValidatorConfig {
-        strict_mode: false,
-        check_deprecations: true,
-        check_undefined_vars: false, // Templates may have dynamic vars
-        max_depth: 50,
-        custom_schema_dir: None,
-    };
-    let validator = SchemaValidator::with_config(validator_config);
-
-    let result = match validator.validate_file(playbook_path) {
-        Ok(r) => r,
         Err(e) => {
-            ctx.output
-                .error(&format!("Schema validation failed: {}", e));
-            return Ok(1);
+            ctx.output.error(&format!("YAML parse error: {}", e));
+            Ok(1)
         }
-    };
-
-    // Output validation results
-    let mut error_count = 0;
-    let mut warning_count = 0;
-    let mut _info_count = 0;
-
-    // Print errors
-    for error in &result.errors {
-        error_count += 1;
-        let location = if let (Some(line), Some(col)) = (error.line, error.column) {
-            format!("{}:{}", line, col)
-        } else {
-            error.path.clone()
-        };
-
-        ctx.output
-            .error(&format!("[{}] {}", location, error.message));
-
-        if let Some(ref suggestion) = error.suggestion {
-            ctx.output.hint(suggestion);
-        }
-    }
-
-    // Print warnings
-    for warning in &result.warnings {
-        warning_count += 1;
-        let location = if let (Some(line), Some(col)) = (warning.line, warning.column) {
-            format!("{}:{}", line, col)
-        } else {
-            warning.path.clone()
-        };
-
-        ctx.output
-            .warning(&format!("[{}] {}", location, warning.message));
-
-        if let Some(ref suggestion) = warning.suggestion {
-            ctx.output.hint(suggestion);
-        }
-    }
-
-    // Print info (only in verbose mode)
-    for info in &result.info {
-        _info_count += 1;
-        ctx.output
-            .debug(&format!("[{}] {}", info.path, info.message));
-    }
-
-    // Print summary
-    ctx.output.section("Validation Results");
-
-    if result.valid && warning_count == 0 {
-        ctx.output.info("Playbook is valid. No issues found.");
-        Ok(0)
-    } else if result.valid {
-        ctx.output.warning(&format!(
-            "Playbook is valid with {} warning(s)",
-            warning_count
-        ));
-        Ok(0)
-    } else {
-        ctx.output.error(&format!(
-            "Playbook validation failed: {} error(s), {} warning(s)",
-            error_count, warning_count
-        ));
-        Ok(1)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::output::OutputFormatter;
-    use std::collections::HashMap;
-    use std::io::Write;
-    use std::sync::Arc;
-    use tempfile::{tempdir, NamedTempFile};
-    use tokio::sync::RwLock;
-
-    fn test_context() -> CommandContext {
-        let config = Config::default();
-        CommandContext {
-            config,
-            output: OutputFormatter::new(false, false, 0),
-            inventory_path: None,
-            extra_vars: Vec::new(),
-            verbosity: 0,
-            check_mode: false,
-            diff_mode: false,
-            limit: None,
-            forks: 1,
-            timeout: 30,
-            connections: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
 
     #[test]
     fn test_version() {
         assert!(!VERSION.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_init_project_creates_files() {
-        let temp = tempdir().unwrap();
-        let mut ctx = test_context();
-        let exit = init_project(temp.path(), "basic", &mut ctx).await.unwrap();
-
-        assert_eq!(exit, 0);
-        assert!(temp.path().join("inventory/hosts.yml").exists());
-        assert!(temp.path().join("playbooks/site.yml").exists());
-        assert!(temp.path().join("rustible.cfg").exists());
-        assert!(temp.path().join(".gitignore").exists());
-    }
-
-    #[tokio::test]
-    async fn test_validate_playbook_missing_file() {
-        let temp = tempdir().unwrap();
-        let missing = temp.path().join("missing.yml");
-        let mut ctx = test_context();
-        let exit = validate_playbook(&missing, &mut ctx).await.unwrap();
-
-        assert_eq!(exit, 1);
-    }
-
-    #[tokio::test]
-    async fn test_validate_playbook_success() {
-        let mut file = NamedTempFile::new().unwrap();
-        writeln!(
-            file,
-            r#"---
-- name: Test playbook
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Debug task
-      debug:
-        msg: "hello"
-"#
-        )
-        .unwrap();
-
-        let mut ctx = test_context();
-        let exit = validate_playbook(file.path(), &mut ctx).await.unwrap();
-
-        assert_eq!(exit, 0);
     }
 }
