@@ -105,7 +105,10 @@ impl InteractiveSession {
             return Ok(None);
         }
 
-        let items: Vec<String> = playbooks.iter().map(|p| p.display().to_string()).collect();
+        let items: Vec<String> = playbooks
+            .iter()
+            .map(|p| format!("📖 {}", p.display()))
+            .collect();
 
         let selection = Select::with_theme(&self.theme)
             .with_prompt("Select a playbook")
@@ -132,7 +135,7 @@ impl InteractiveSession {
 
         let mut items: Vec<String> = inventories
             .iter()
-            .map(|p| p.display().to_string())
+            .map(|p| format!("📋 {}", p.display()))
             .collect();
         items.push("✏️ Enter custom path...".to_string());
         items.push("🏠 Use localhost (no inventory)".to_string());
@@ -172,9 +175,14 @@ impl InteractiveSession {
             return Ok(vec![]);
         }
 
+        let display_items: Vec<String> = available_tags
+            .iter()
+            .map(|tag| format!("🏷️  {}", tag))
+            .collect();
+
         let selections = MultiSelect::with_theme(&self.theme)
             .with_prompt("Select tags to run (space to select, enter to confirm)")
-            .items(available_tags)
+            .items(&display_items)
             .interact_on(&self.term)?;
 
         Ok(selections
