@@ -46,10 +46,8 @@ fn main() {
 
     let diag = module_not_found_error(
         "playbook.yml",
-        playbook_source,
-        24,
-        7,
         "pacakge",
+        Span::from_line_col(playbook_source, 24, 7, 7),
         &["package", "apt", "yum", "dnf", "pip"],
     );
     diag.eprint_with_source(playbook_source);
