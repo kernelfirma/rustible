@@ -58,7 +58,7 @@ impl CommandModule {
             }
 
             // Join argv with proper escaping for shell
-            let escaped_args: Vec<String> = argv
+            let escaped_args: Vec<std::borrow::Cow<'_, str>> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
                     "cmd" => cmd_escape(arg),
@@ -66,7 +66,6 @@ impl CommandModule {
                     "posix" | "sh" | "bash" => shell_escape(arg),
                     _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility
                 })
-                .map(|s| s.into_owned())
                 .collect();
 
             Ok(escaped_args.join(" "))
@@ -572,5 +571,38 @@ mod tests {
         let cmd = module.get_command_string(&params).unwrap();
         // Should use single quotes with doubled single quotes for PowerShell
         assert_eq!(cmd, "'echo' 'hello''world'");
+    }
+
+    #[test]
+    fn test_get_command_string_optimization() {
+        let module = CommandModule;
+
+        // Case 1: POSIX (default) with simple strings (should borrow)
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["ls", "-la", "/tmp"]),
+        );
+        let cmd = module.get_command_string(&params).unwrap();
+        assert_eq!(cmd, "ls -la /tmp");
+
+        // Case 2: POSIX with strings needing escape (should own)
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["echo", "hello world", "don't"]),
+        );
+        let cmd = module.get_command_string(&params).unwrap();
+        // echo 'hello world' 'don'\''t'
+        assert_eq!(cmd, "echo 'hello world' 'don'\\''t'");
+
+        // Case 3: Mixed simple and complex (should mix borrow and own internally)
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["grep", "pattern", "file with space.txt"]),
+        );
+        let cmd = module.get_command_string(&params).unwrap();
+        assert_eq!(cmd, "grep pattern 'file with space.txt'");
     }
 }
