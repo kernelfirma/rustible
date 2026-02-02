@@ -55,6 +55,12 @@ pub enum VaultAction {
 
     /// Decrypt a string
     DecryptString(DecryptStringArgs),
+
+    /// Initialize a new vault password file
+    Init(InitArgs),
+
+    /// Test vault connectivity / verify a vault password
+    Login(LoginArgs),
 }
 
 /// Arguments for encrypt action
@@ -168,6 +174,25 @@ pub struct EncryptStringArgs {
 pub struct DecryptStringArgs {
     /// The encrypted string to decrypt
     pub string: String,
+
+    /// Vault password file
+    #[arg(long)]
+    pub vault_password_file: Option<PathBuf>,
+}
+
+/// Arguments for init action
+#[derive(Parser, Debug, Clone)]
+pub struct InitArgs {
+    /// Path to write the password file
+    #[arg(long, default_value = ".vault_pass")]
+    pub password_file: PathBuf,
+}
+
+/// Arguments for login action
+#[derive(Parser, Debug, Clone)]
+pub struct LoginArgs {
+    /// Encrypted file to test against
+    pub file: PathBuf,
 
     /// Vault password file
     #[arg(long)]
@@ -626,6 +651,83 @@ impl VaultArgs {
                 println!("{}", String::from_utf8_lossy(&decrypted));
 
                 Ok(0)
+            }
+
+            VaultAction::Init(args) => {
+                if args.password_file.exists() {
+                    bail!(
+                        "Password file already exists: {}",
+                        args.password_file.display()
+                    );
+                }
+
+                // Generate a random 64-character password using hex encoding (32 random bytes = 64 hex chars)
+                let mut random_bytes = [0u8; 32];
+                OsRng.fill_bytes(&mut random_bytes);
+                let password: String = random_bytes
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect();
+
+                // Write the password file
+                fs::write(&args.password_file, &password)
+                    .with_context(|| {
+                        format!(
+                            "Failed to write password file: {}",
+                            args.password_file.display()
+                        )
+                    })?;
+
+                // Set permissions to 0600 (owner read/write only)
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = std::fs::Permissions::from_mode(0o600);
+                    fs::set_permissions(&args.password_file, perms)
+                        .with_context(|| {
+                            format!(
+                                "Failed to set permissions on: {}",
+                                args.password_file.display()
+                            )
+                        })?;
+                }
+
+                ctx.output.info(&format!(
+                    "Vault password file initialized: {}",
+                    args.password_file.display()
+                ));
+
+                Ok(0)
+            }
+
+            VaultAction::Login(args) => {
+                let password = get_password(args.vault_password_file.as_ref(), ctx)?;
+                let engine = VaultEngine::new(password);
+
+                let content = fs::read_to_string(&args.file)
+                    .with_context(|| format!("Failed to read file: {}", args.file.display()))?;
+
+                if !VaultEngine::is_encrypted(&content) {
+                    bail!("File is not vault-encrypted: {}", args.file.display());
+                }
+
+                let spinner = ctx.output.create_spinner("Verifying vault password...");
+                let result = engine.decrypt(&content);
+                if let Some(sp) = spinner {
+                    sp.finish_and_clear();
+                }
+
+                match result {
+                    Ok(_) => {
+                        ctx.output.info("Vault password is correct. Decryption successful.");
+                        Ok(0)
+                    }
+                    Err(_) => {
+                        ctx.output
+                            .error("Vault password verification failed. Wrong password?");
+                        Ok(1)
+                    }
+                }
             }
         }
     }

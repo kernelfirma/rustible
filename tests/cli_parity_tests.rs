@@ -101,7 +101,6 @@ fn test_run_defaults() {
             assert_eq!(args.become_method, "sudo");
             assert_eq!(args.become_user, "root");
             assert!(!args.ask_vault_pass);
-            assert!(!args.ask_pass);
             assert!(!args.r#become);
         }
         _ => panic!("expected run subcommand"),

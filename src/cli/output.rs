@@ -420,7 +420,7 @@ impl OutputFormatter {
             // Align labels using visual width
             let duration_label = "⏱️  Duration";
             let status_label = "🏁 Status";
-            let label_width = 15;
+            let label_width: usize = 15;
 
             let align_label = |text: &str| -> String {
                 let w = measure_text_width(text);

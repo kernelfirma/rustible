@@ -315,6 +315,78 @@ impl std::fmt::Debug for ProviderRegistry {
     }
 }
 
+/// A dependency requirement for a provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDependency {
+    /// Name of the required provider.
+    pub name: String,
+    /// Semver version requirement string (e.g., ">=1.0.0", "^2.0").
+    pub req: String,
+    /// Whether this dependency is optional.
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// An index entry describing a published provider version.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderIndexEntry {
+    /// Provider name.
+    pub name: String,
+    /// Version string (semver).
+    pub vers: String,
+    /// Dependencies of this provider version.
+    #[serde(default)]
+    pub deps: Vec<ProviderDependency>,
+    /// Checksum of the provider artifact.
+    #[serde(default)]
+    pub cksum: String,
+    /// Feature flags exposed by this provider.
+    #[serde(default)]
+    pub features: HashMap<String, Vec<String>>,
+    /// Whether this version has been yanked.
+    #[serde(default)]
+    pub yanked: bool,
+    /// Minimum rustible version required.
+    #[serde(default)]
+    pub rustible_version: Option<String>,
+    /// API version this provider targets.
+    #[serde(default)]
+    pub api_version: Option<String>,
+    /// Supported target platforms.
+    #[serde(default)]
+    pub targets: Vec<String>,
+    /// Capability tags for this provider version.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+impl ProviderIndexEntry {
+    /// Parse the version string into a `semver::Version`.
+    pub fn version(&self) -> Result<semver::Version, semver::Error> {
+        self.vers.parse()
+    }
+
+    /// Create an index entry from provider metadata.
+    pub fn from_metadata(metadata: &ProviderMetadata, checksum: &str) -> Self {
+        Self {
+            name: metadata.name.clone(),
+            vers: metadata.version.to_string(),
+            deps: vec![],
+            cksum: checksum.to_string(),
+            features: HashMap::new(),
+            yanked: false,
+            rustible_version: None,
+            api_version: Some(metadata.api_version.to_string()),
+            targets: metadata.supported_targets.clone(),
+            capabilities: metadata
+                .capabilities
+                .iter()
+                .map(|c| format!("{:?}", c).to_lowercase())
+                .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

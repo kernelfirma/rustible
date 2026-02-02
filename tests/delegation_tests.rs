@@ -2,6 +2,7 @@
 //!
 //! Tests delegate_to and delegate_facts directives
 
+use rustible::executor::batch_processor::{BatchConfig, BatchProcessor};
 use rustible::executor::parallelization::ParallelizationManager;
 use rustible::executor::runtime::ExecutionContext;
 use rustible::executor::runtime::RuntimeContext;
@@ -23,6 +24,7 @@ async fn test_delegate_to_basic() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     // Create a task that delegates to localhost
     let task = Task::new("Debug on localhost", "debug").arg("msg", "Hello from delegated task");
@@ -42,6 +44,8 @@ async fn test_delegate_to_basic() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 
@@ -62,6 +66,7 @@ async fn test_delegate_facts_false() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     // Create a set_fact task that delegates to localhost but stores facts on web1
     let mut task = Task::new("Set fact", "set_fact");
@@ -80,6 +85,8 @@ async fn test_delegate_facts_false() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 
@@ -106,6 +113,7 @@ async fn test_delegate_facts_true() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     // Create a set_fact task that delegates to localhost and stores facts there
     let mut task = Task::new("Set fact on delegate", "set_fact");
@@ -126,6 +134,8 @@ async fn test_delegate_facts_true() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 
@@ -152,6 +162,7 @@ async fn test_delegate_facts_default_false() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     // Create a set_fact task that delegates but doesn't specify delegate_facts
     // Default should be false (facts go to original host)
@@ -173,6 +184,8 @@ async fn test_delegate_facts_default_false() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 
@@ -199,6 +212,7 @@ async fn test_delegate_with_register() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     // Create a task that delegates and registers result
     let mut task = Task::new("Debug and register", "debug");
@@ -217,6 +231,8 @@ async fn test_delegate_with_register() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 
@@ -242,6 +258,7 @@ async fn test_no_delegation() {
     let notified = Arc::new(Mutex::new(HashSet::new()));
     let parallelization = Arc::new(ParallelizationManager::new());
     let module_registry = Arc::new(ModuleRegistry::with_builtins());
+    let batch_processor = Arc::new(BatchProcessor::new(BatchConfig::default()));
 
     let mut task = Task::new("Normal task", "set_fact");
     task.args
@@ -257,6 +274,8 @@ async fn test_no_delegation() {
             &notified,
             &parallelization,
             &module_registry,
+            &batch_processor,
+            false,
         )
         .await;
 

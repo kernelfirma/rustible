@@ -502,6 +502,9 @@ pub mod security;
 /// Compliance checks and reporting utilities.
 pub mod compliance;
 
+/// Policy-as-code enforcement (OPA/Rego and built-in Sentinel-like rules).
+pub mod policy;
+
 /// Audit logging for security-relevant events.
 pub mod audit;
 
@@ -613,7 +616,7 @@ pub mod telemetry;
 ///
 
 /// Configuration drift detection and reporting.
-// pub mod drift;  // TODO: Re-enable when drift.rs is compatible
+pub mod drift;
 /// This module provides comprehensive state tracking, persistence, diff reporting,
 /// rollback capability, and dependency tracking between tasks.
 pub mod state;
@@ -870,6 +873,12 @@ pub mod native;
 // ============================================================================
 // Agent Mode
 // ============================================================================
+
+/// Multi-tenant isolation support.
+///
+/// Provides tenant-scoped execution contexts to isolate resources,
+/// state, secrets, and inventory between tenants in shared environments.
+pub mod tenant;
 
 /// Agent mode for persistent target execution.
 ///

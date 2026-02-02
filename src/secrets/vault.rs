@@ -44,6 +44,22 @@ use super::error::{SecretError, SecretResult};
 use super::types::Secret;
 
 // ============================================================================
+// Vault Auth Response Types (for AppRole/Kubernetes login)
+// ============================================================================
+
+/// Minimal Vault login response envelope used for AppRole and Kubernetes auth.
+#[derive(Debug, Deserialize)]
+struct VaultLoginResponse {
+    auth: Option<VaultLoginAuth>,
+}
+
+/// Auth block within a Vault login response.
+#[derive(Debug, Deserialize)]
+struct VaultLoginAuth {
+    client_token: String,
+}
+
+// ============================================================================
 // Constants - AWX/Tower API Compatibility (Issue #87)
 // ============================================================================
 
@@ -287,17 +303,123 @@ impl HttpVaultClient {
                 })?;
                 self.token = Some(token);
             }
-            VaultAuthMethod::AppRole { .. } => {
-                // TODO: Implement AppRole authentication
-                return Err(SecretError::Authentication(
-                    "AppRole authentication not yet implemented".into(),
-                ));
+            VaultAuthMethod::AppRole {
+                role_id,
+                secret_id,
+                mount_path,
+            } => {
+                let url = format!(
+                    "{}/v1/auth/{}/login",
+                    self.config.address.trim_end_matches('/'),
+                    mount_path
+                );
+
+                let body = serde_json::json!({
+                    "role_id": role_id,
+                    "secret_id": secret_id
+                });
+
+                let client = reqwest::Client::new();
+                let response = client
+                    .post(&url)
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        SecretError::Connection(format!("AppRole auth request failed: {}", e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body_text = response.text().await.unwrap_or_default();
+                    return Err(SecretError::Authentication(format!(
+                        "AppRole login failed (HTTP {}): {}",
+                        status, body_text
+                    )));
+                }
+
+                let vault_resp: VaultLoginResponse =
+                    response.json().await.map_err(|e| {
+                        SecretError::Authentication(format!(
+                            "Failed to parse AppRole auth response: {}",
+                            e
+                        ))
+                    })?;
+
+                let token = vault_resp
+                    .auth
+                    .ok_or_else(|| {
+                        SecretError::Authentication(
+                            "AppRole auth response missing 'auth' block".into(),
+                        )
+                    })?
+                    .client_token;
+
+                self.token = Some(token);
             }
-            VaultAuthMethod::Kubernetes { .. } => {
-                // TODO: Implement Kubernetes authentication
-                return Err(SecretError::Authentication(
-                    "Kubernetes authentication not yet implemented".into(),
-                ));
+            VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path,
+                mount_path,
+            } => {
+                let jwt = std::fs::read_to_string(jwt_path).map_err(|e| {
+                    SecretError::Configuration(format!(
+                        "Failed to read Kubernetes JWT from '{}': {}",
+                        jwt_path, e
+                    ))
+                })?;
+
+                let url = format!(
+                    "{}/v1/auth/{}/login",
+                    self.config.address.trim_end_matches('/'),
+                    mount_path
+                );
+
+                let body = serde_json::json!({
+                    "role": role,
+                    "jwt": jwt.trim()
+                });
+
+                let client = reqwest::Client::new();
+                let response = client
+                    .post(&url)
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        SecretError::Connection(format!(
+                            "Kubernetes auth request failed: {}",
+                            e
+                        ))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body_text = response.text().await.unwrap_or_default();
+                    return Err(SecretError::Authentication(format!(
+                        "Kubernetes login failed (HTTP {}): {}",
+                        status, body_text
+                    )));
+                }
+
+                let vault_resp: VaultLoginResponse =
+                    response.json().await.map_err(|e| {
+                        SecretError::Authentication(format!(
+                            "Failed to parse Kubernetes auth response: {}",
+                            e
+                        ))
+                    })?;
+
+                let token = vault_resp
+                    .auth
+                    .ok_or_else(|| {
+                        SecretError::Authentication(
+                            "Kubernetes auth response missing 'auth' block".into(),
+                        )
+                    })?
+                    .client_token;
+
+                self.token = Some(token);
             }
         }
         Ok(())

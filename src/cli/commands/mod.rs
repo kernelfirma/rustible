@@ -4,11 +4,15 @@
 
 pub mod check;
 pub mod drift;
+pub mod fleet;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
 pub mod provision;
+pub mod provider;
+pub mod provisioner;
 pub mod run;
+pub mod state;
 pub mod vault;
 
 use crate::cli::output::OutputFormatter;

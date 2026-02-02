@@ -76,7 +76,6 @@ impl CheckArgs {
             step: false,
             ask_vault_pass: self.ask_vault_pass,
             vault_password_file: self.vault_password_file.clone(),
-            ask_pass: self.ask_pass,
             r#become: self.r#become,
             become_method: self.r#become_method.clone(),
             become_user: self.r#become_user.clone(),
@@ -84,9 +83,14 @@ impl CheckArgs {
             user: self.user.clone(),
             private_key: self.private_key.clone(),
             ssh_common_args: None,
-            plan: false,       // check mode doesn't need plan mode
-            agent_mode: false, // check mode doesn't use agent mode
-            agent_socket: "/var/run/rustible-agent.sock".to_string(),
+            plan: false,
+            auto_rollback: false,
+            forward_agent: false,
+            checkpoint_dir: None,
+            no_pipelining: false,
+            distributed: false,
+            workers: 1,
+            distribution_strategy: "adaptive".to_string(),
         };
 
         ctx.output.banner("CHECK MODE - DRY RUN");

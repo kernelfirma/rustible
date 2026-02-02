@@ -511,11 +511,56 @@ impl SecretGenerator {
         let charset: Vec<char> = charset.chars().collect();
         let mut rng = rand::thread_rng();
 
-        let password: String = (0..self.config.password_length)
-            .map(|_| charset[rng.gen_range(0..charset.len())])
+        // Guarantee at least one character from each enabled class
+        let mut required: Vec<char> = Vec::new();
+        if self.config.include_uppercase {
+            let upper: Vec<char> = if self.config.exclude_ambiguous {
+                "ABCDEFGHJKLMNPQRSTUVWXYZ"
+            } else {
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            }
+            .chars()
             .collect();
+            required.push(upper[rng.gen_range(0..upper.len())]);
+        }
+        if self.config.include_lowercase {
+            let lower: Vec<char> = if self.config.exclude_ambiguous {
+                "abcdefghjkmnpqrstuvwxyz"
+            } else {
+                "abcdefghijklmnopqrstuvwxyz"
+            }
+            .chars()
+            .collect();
+            required.push(lower[rng.gen_range(0..lower.len())]);
+        }
+        if self.config.include_numbers {
+            let digits: Vec<char> = if self.config.exclude_ambiguous {
+                "23456789"
+            } else {
+                "0123456789"
+            }
+            .chars()
+            .collect();
+            required.push(digits[rng.gen_range(0..digits.len())]);
+        }
+        if self.config.include_special {
+            let special: Vec<char> = self.config.special_chars.chars().collect();
+            if !special.is_empty() {
+                required.push(special[rng.gen_range(0..special.len())]);
+            }
+        }
 
-        Ok(SecretValue::String(password))
+        let remaining = self.config.password_length.saturating_sub(required.len());
+        let mut password: Vec<char> = required;
+        for _ in 0..remaining {
+            password.push(charset[rng.gen_range(0..charset.len())]);
+        }
+
+        // Shuffle to avoid predictable positions for required characters
+        use rand::seq::SliceRandom;
+        password.shuffle(&mut rng);
+
+        Ok(SecretValue::String(password.into_iter().collect()))
     }
 
     /// Generate a random API key.

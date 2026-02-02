@@ -461,6 +461,7 @@ fn benchmark_batch_sizes(c: &mut Criterion) {
 // ============================================================================
 
 /// Run CI gate checks - returns false if thresholds are not met
+#[cfg(feature = "ssh2-backend")]
 fn ci_gate_check() -> bool {
     let Some(config) = SshPipelineConfig::from_env() else {
         eprintln!("CI gate skipped: SSH_BENCH_* environment not configured.");
@@ -607,6 +608,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ssh2-backend")]
     fn test_ci_gate_passes() {
         assert!(ci_gate_check(), "CI gate check should pass");
     }

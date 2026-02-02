@@ -171,7 +171,7 @@ fn test_runtime_context_variable_precedence() {
     );
 
     // Task vars override play
-    ctx.set_task_var(host, "var".to_string(), serde_json::json!("task"));
+    ctx.set_task_var("var".to_string(), serde_json::json!("task"));
     assert_eq!(
         ctx.get_var("var", Some(host)),
         Some(serde_json::json!("task"))
@@ -185,7 +185,7 @@ fn test_runtime_context_variable_precedence() {
     );
 
     // Clear task vars, should fall back to extra (highest)
-    ctx.clear_task_vars(host);
+    ctx.clear_task_vars();
     assert_eq!(
         ctx.get_var("var", Some(host)),
         Some(serde_json::json!("extra"))

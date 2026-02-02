@@ -179,7 +179,7 @@ mod auth_config_tests {
         assert!(config
             .methods
             .iter()
-            .any(|m| { matches!(m, AuthMethod::Password(p) if p == password) }));
+            .any(|m| { matches!(m, AuthMethod::Password(p) if p == &password) }));
     }
 
     #[test]

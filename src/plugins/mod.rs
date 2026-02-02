@@ -92,6 +92,7 @@
 pub mod filter;
 pub mod lookup;
 pub mod provider;
+pub mod sbom;
 
 /// Prelude module for convenient imports.
 pub mod prelude {

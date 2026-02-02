@@ -1216,6 +1216,7 @@ fn parse_task_definition(
         retries: None,
         delay: None,
         until: None,
+        vars: indexmap::IndexMap::new(),
     };
 
     tasks.push(task);

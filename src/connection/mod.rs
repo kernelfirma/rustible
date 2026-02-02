@@ -566,6 +566,13 @@ pub enum ConnectionType {
         pod: String,
         container: Option<String>,
     },
+    /// WinRM connection to Windows host
+    #[cfg(feature = "winrm")]
+    WinRm {
+        host: String,
+        port: u16,
+        user: String,
+    },
 }
 
 impl ConnectionType {
@@ -585,6 +592,10 @@ impl ConnectionType {
                 } else {
                     format!("k8s://{}/{}", namespace, pod)
                 }
+            }
+            #[cfg(feature = "winrm")]
+            ConnectionType::WinRm { host, port, user } => {
+                format!("winrm://{}@{}:{}", user, host, port)
             }
         }
     }
@@ -664,6 +675,37 @@ impl ConnectionFactory {
         if host.starts_with("docker://") {
             let container = host.strip_prefix("docker://").unwrap().to_string();
             return Ok(ConnectionType::Docker { container });
+        }
+
+        // Check for WinRM connection
+        if host.starts_with("winrm://") {
+            let remainder = host.strip_prefix("winrm://").unwrap();
+            let host_config = self.config.get_host(remainder);
+            let (actual_host, port, user) = if let Some(hc) = host_config {
+                (
+                    hc.hostname.clone().unwrap_or_else(|| remainder.to_string()),
+                    hc.port.unwrap_or(5985),
+                    hc.user
+                        .clone()
+                        .unwrap_or_else(|| self.config.defaults.user.clone()),
+                )
+            } else {
+                (
+                    remainder.to_string(),
+                    5985,
+                    self.config.defaults.user.clone(),
+                )
+            };
+            #[cfg(feature = "winrm")]
+            return Ok(ConnectionType::WinRm {
+                host: actual_host,
+                port,
+                user,
+            });
+            #[cfg(not(feature = "winrm"))]
+            return Err(ConnectionError::InvalidConfig(
+                "WinRM support not available. Enable 'winrm' feature.".to_string(),
+            ));
         }
 
         // Default to SSH
@@ -756,6 +798,15 @@ impl ConnectionFactory {
                             .to_string(),
                     ))
                 }
+            }
+            #[cfg(feature = "winrm")]
+            ConnectionType::WinRm { host, port, user } => {
+                let conn = winrm::WinRmConnectionBuilder::new(host)
+                    .port(*port)
+                    .auth(winrm::WinRmAuth::negotiate(user, ""))
+                    .connect()
+                    .await?;
+                Ok(Arc::new(conn))
             }
         }
     }

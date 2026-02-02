@@ -4,9 +4,11 @@
 //! when actual system state diverges from desired configuration state.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+
+use crate::connection::{Connection, CommandResult, ConnectionResult};
 
 /// Drift detection configuration
 #[derive(Debug, Clone)]
@@ -354,23 +356,42 @@ pub struct DriftSummary {
     pub low: usize,
 }
 
-/// Drift detector
+/// Drift detector that compares actual remote state against desired configuration.
+///
+/// Requires a [`Connection`] to execute remote commands for state inspection.
+/// Without a connection, check methods return errors indicating no connection is available.
 pub struct DriftDetector {
     config: DriftConfig,
+    connection: Option<Arc<dyn Connection + Send + Sync>>,
 }
 
 impl DriftDetector {
-    /// Create a new drift detector
+    /// Create a new drift detector without a connection.
+    ///
+    /// Check methods will return errors until a connection is provided via
+    /// [`with_connection`](Self::with_connection).
     pub fn new(config: DriftConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            connection: None,
+        }
     }
 
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(DriftConfig::default())
+    /// Create a new drift detector with a connection for remote command execution.
+    pub fn with_connection(
+        config: DriftConfig,
+        connection: Arc<dyn Connection + Send + Sync>,
+    ) -> Self {
+        Self {
+            config,
+            connection: Some(connection),
+        }
     }
 
-    /// Detect drift for a single host
+    /// Detect drift for a single host by comparing desired state against actual remote state.
+    ///
+    /// Iterates over files, packages, and services in `desired_state` (according to the
+    /// config flags) and creates [`DriftItem`] entries for any detected differences.
     pub async fn detect_drift(
         &self,
         host: &str,
@@ -382,8 +403,20 @@ impl DriftDetector {
         if self.config.check_files {
             if let Some(files) = desired_state.get("files").and_then(|v| v.as_object()) {
                 for (path, expected) in files {
-                    if let Err(_) = self.check_file_state(host, path, expected).await {
-                        // Would create drift items here in real implementation
+                    match self.check_file_state(host, path, expected).await {
+                        Ok(Some(drift_item)) => report.add_drift(drift_item),
+                        Ok(None) => { /* in sync */ }
+                        Err(e) => {
+                            report.add_drift(DriftItem::new(
+                                host,
+                                DriftType::Unknown {
+                                    description: format!("File check failed for {}: {}", path, e),
+                                },
+                                DriftSeverity::Low,
+                                expected.clone(),
+                                serde_json::json!({"error": e.to_string()}),
+                            ));
+                        }
                     }
                 }
             }
@@ -393,8 +426,23 @@ impl DriftDetector {
         if self.config.check_packages {
             if let Some(packages) = desired_state.get("packages").and_then(|v| v.as_object()) {
                 for (name, expected) in packages {
-                    if let Err(_) = self.check_package_state(host, name, expected).await {
-                        // Would create drift items here in real implementation
+                    match self.check_package_state(host, name, expected).await {
+                        Ok(Some(drift_item)) => report.add_drift(drift_item),
+                        Ok(None) => { /* in sync */ }
+                        Err(e) => {
+                            report.add_drift(DriftItem::new(
+                                host,
+                                DriftType::Unknown {
+                                    description: format!(
+                                        "Package check failed for {}: {}",
+                                        name, e
+                                    ),
+                                },
+                                DriftSeverity::Low,
+                                expected.clone(),
+                                serde_json::json!({"error": e.to_string()}),
+                            ));
+                        }
                     }
                 }
             }
@@ -404,8 +452,23 @@ impl DriftDetector {
         if self.config.check_services {
             if let Some(services) = desired_state.get("services").and_then(|v| v.as_object()) {
                 for (name, expected) in services {
-                    if let Err(_) = self.check_service_state(host, name, expected).await {
-                        // Would create drift items here in real implementation
+                    match self.check_service_state(host, name, expected).await {
+                        Ok(Some(drift_item)) => report.add_drift(drift_item),
+                        Ok(None) => { /* in sync */ }
+                        Err(e) => {
+                            report.add_drift(DriftItem::new(
+                                host,
+                                DriftType::Unknown {
+                                    description: format!(
+                                        "Service check failed for {}: {}",
+                                        name, e
+                                    ),
+                                },
+                                DriftSeverity::Low,
+                                expected.clone(),
+                                serde_json::json!({"error": e.to_string()}),
+                            ));
+                        }
                     }
                 }
             }
@@ -414,38 +477,275 @@ impl DriftDetector {
         Ok(report)
     }
 
-    /// Check file state
+    /// Check file state on the remote host.
+    ///
+    /// Runs `stat` and `sha256sum` to compare permissions, ownership, and content
+    /// checksum against the expected values.
+    ///
+    /// Expected JSON fields: `checksum`, `owner`, `group`, `mode`.
     async fn check_file_state(
         &self,
         host: &str,
         path: &str,
         expected: &serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would check actual file state
-        // For now, just return Ok
-        Ok(())
+    ) -> Result<Option<DriftItem>, Box<dyn std::error::Error>> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or("No connection available for drift detection")?;
+
+        let result = conn
+            .execute(
+                &format!(
+                    "stat -c '%a %U %G' {} 2>/dev/null && sha256sum {} 2>/dev/null",
+                    path, path
+                ),
+                None,
+            )
+            .await?;
+
+        if !result.success {
+            return Ok(Some(DriftItem::new(
+                host,
+                DriftType::FileContent {
+                    path: path.to_string(),
+                },
+                DriftSeverity::High,
+                expected.clone(),
+                serde_json::json!({"exists": false}),
+            )));
+        }
+
+        let (actual_mode, actual_owner, actual_group, actual_checksum) =
+            parse_file_state(&result.stdout);
+
+        let mut diffs = serde_json::Map::new();
+
+        if let Some(exp_checksum) = expected.get("checksum").and_then(|v| v.as_str()) {
+            if let Some(ref actual) = actual_checksum {
+                if actual != exp_checksum {
+                    diffs.insert(
+                        "checksum".to_string(),
+                        serde_json::json!({"expected": exp_checksum, "actual": actual}),
+                    );
+                }
+            }
+        }
+
+        if let Some(exp_owner) = expected.get("owner").and_then(|v| v.as_str()) {
+            if let Some(ref actual) = actual_owner {
+                if actual != exp_owner {
+                    diffs.insert(
+                        "owner".to_string(),
+                        serde_json::json!({"expected": exp_owner, "actual": actual}),
+                    );
+                }
+            }
+        }
+
+        if let Some(exp_group) = expected.get("group").and_then(|v| v.as_str()) {
+            if let Some(ref actual) = actual_group {
+                if actual != exp_group {
+                    diffs.insert(
+                        "group".to_string(),
+                        serde_json::json!({"expected": exp_group, "actual": actual}),
+                    );
+                }
+            }
+        }
+
+        if let Some(exp_mode) = expected.get("mode").and_then(|v| v.as_str()) {
+            if let Some(ref actual) = actual_mode {
+                if actual != exp_mode {
+                    diffs.insert(
+                        "mode".to_string(),
+                        serde_json::json!({"expected": exp_mode, "actual": actual}),
+                    );
+                }
+            }
+        }
+
+        if diffs.is_empty() {
+            Ok(None)
+        } else {
+            // Determine the most appropriate drift type
+            let drift_type = if diffs.contains_key("checksum") {
+                DriftType::FileContent {
+                    path: path.to_string(),
+                }
+            } else {
+                DriftType::FilePermissions {
+                    path: path.to_string(),
+                }
+            };
+
+            Ok(Some(DriftItem::new(
+                host,
+                drift_type,
+                DriftSeverity::Medium,
+                expected.clone(),
+                serde_json::Value::Object(diffs),
+            )))
+        }
     }
 
-    /// Check package state
+    /// Check package state on the remote host.
+    ///
+    /// Tries `dpkg-query` (Debian/Ubuntu) first, then falls back to `rpm` (RHEL/CentOS).
+    ///
+    /// Expected JSON fields: `state` (present/absent), `version`.
     async fn check_package_state(
         &self,
         host: &str,
         name: &str,
         expected: &serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would check actual package state
-        Ok(())
+    ) -> Result<Option<DriftItem>, Box<dyn std::error::Error>> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or("No connection available for drift detection")?;
+
+        let result = conn
+            .execute(
+                &format!(
+                    "dpkg-query -W -f='${{Status}} ${{Version}}' {} 2>/dev/null || rpm -q --qf '%{{VERSION}}-%{{RELEASE}}' {} 2>/dev/null",
+                    name, name
+                ),
+                None,
+            )
+            .await?;
+
+        let expected_state = expected
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("present");
+
+        let (is_installed, actual_version) = parse_package_state(&result);
+
+        match expected_state {
+            "absent" => {
+                if is_installed {
+                    Ok(Some(DriftItem::new(
+                        host,
+                        DriftType::PackageState {
+                            name: name.to_string(),
+                        },
+                        DriftSeverity::Medium,
+                        expected.clone(),
+                        serde_json::json!({"state": "present", "version": actual_version}),
+                    )))
+                } else {
+                    Ok(None)
+                }
+            }
+            // "present" or "latest"
+            _ => {
+                if !is_installed {
+                    return Ok(Some(DriftItem::new(
+                        host,
+                        DriftType::PackageState {
+                            name: name.to_string(),
+                        },
+                        DriftSeverity::High,
+                        expected.clone(),
+                        serde_json::json!({"state": "absent"}),
+                    )));
+                }
+
+                // Check version if specified
+                if let Some(exp_version) = expected.get("version").and_then(|v| v.as_str()) {
+                    if let Some(ref actual_ver) = actual_version {
+                        if actual_ver != exp_version {
+                            return Ok(Some(DriftItem::new(
+                                host,
+                                DriftType::PackageVersion {
+                                    name: name.to_string(),
+                                },
+                                DriftSeverity::Medium,
+                                expected.clone(),
+                                serde_json::json!({"state": "present", "version": actual_ver}),
+                            )));
+                        }
+                    }
+                }
+
+                Ok(None)
+            }
+        }
     }
 
-    /// Check service state
+    /// Check service state on the remote host.
+    ///
+    /// Uses `systemctl is-active` and `systemctl is-enabled` to inspect service status.
+    ///
+    /// Expected JSON fields: `state` (started/stopped), `enabled` (true/false).
     async fn check_service_state(
         &self,
         host: &str,
         name: &str,
         expected: &serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would check actual service state
-        Ok(())
+    ) -> Result<Option<DriftItem>, Box<dyn std::error::Error>> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or("No connection available for drift detection")?;
+
+        let result = conn
+            .execute(
+                &format!(
+                    "systemctl is-active {} 2>/dev/null; echo '---'; systemctl is-enabled {} 2>/dev/null",
+                    name, name
+                ),
+                None,
+            )
+            .await?;
+
+        let (actual_active, actual_enabled) = parse_service_state(&result.stdout);
+
+        let mut diffs = serde_json::Map::new();
+
+        if let Some(exp_state) = expected.get("state").and_then(|v| v.as_str()) {
+            let expected_active = match exp_state {
+                "started" | "running" => true,
+                "stopped" | "inactive" => false,
+                _ => true,
+            };
+            if actual_active != expected_active {
+                let actual_str = if actual_active { "started" } else { "stopped" };
+                diffs.insert(
+                    "state".to_string(),
+                    serde_json::json!({"expected": exp_state, "actual": actual_str}),
+                );
+            }
+        }
+
+        if let Some(exp_enabled) = expected.get("enabled") {
+            let expected_enabled = match exp_enabled {
+                serde_json::Value::Bool(b) => *b,
+                serde_json::Value::String(s) => s == "true" || s == "enabled",
+                _ => true,
+            };
+            if actual_enabled != expected_enabled {
+                diffs.insert(
+                    "enabled".to_string(),
+                    serde_json::json!({"expected": expected_enabled, "actual": actual_enabled}),
+                );
+            }
+        }
+
+        if diffs.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(DriftItem::new(
+                host,
+                DriftType::ServiceStatus {
+                    name: name.to_string(),
+                },
+                DriftSeverity::High,
+                expected.clone(),
+                serde_json::Value::Object(diffs),
+            )))
+        }
     }
 
     /// Detect drift for multiple hosts
@@ -467,6 +767,99 @@ impl DriftDetector {
     }
 }
 
+/// Parse stat + sha256sum output into (mode, owner, group, checksum).
+///
+/// Expected format:
+/// ```text
+/// 644 root root
+/// abc123def456...  /path/to/file
+/// ```
+fn parse_file_state(
+    output: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let lines: Vec<&str> = output.lines().collect();
+    let mut mode = None;
+    let mut owner = None;
+    let mut group = None;
+    let mut checksum = None;
+
+    // First line: stat output "mode owner group"
+    if let Some(stat_line) = lines.first() {
+        let parts: Vec<&str> = stat_line.split_whitespace().collect();
+        if parts.len() >= 3 {
+            mode = Some(parts[0].to_string());
+            owner = Some(parts[1].to_string());
+            group = Some(parts[2].to_string());
+        }
+    }
+
+    // Second line: sha256sum output "hash  filename"
+    if let Some(hash_line) = lines.get(1) {
+        if let Some(hash) = hash_line.split_whitespace().next() {
+            checksum = Some(hash.to_string());
+        }
+    }
+
+    (mode, owner, group, checksum)
+}
+
+/// Parse dpkg-query or rpm output to determine installation state and version.
+///
+/// dpkg format: `install ok installed <version>`
+/// rpm format: `<version>-<release>` (or error message if not installed)
+fn parse_package_state(result: &CommandResult) -> (bool, Option<String>) {
+    if !result.success {
+        return (false, None);
+    }
+
+    let stdout = result.stdout.trim();
+
+    // dpkg-query format: "install ok installed <version>"
+    if stdout.contains("install ok installed") {
+        let version = stdout
+            .strip_prefix("install ok installed ")
+            .map(|v| v.trim().to_string());
+        return (true, version);
+    }
+
+    // rpm format: just the version string, or "package <name> is not installed"
+    if stdout.contains("is not installed") || stdout.is_empty() {
+        return (false, None);
+    }
+
+    // Assume rpm version output
+    (true, Some(stdout.to_string()))
+}
+
+/// Parse systemctl output to determine active and enabled states.
+///
+/// Expected format:
+/// ```text
+/// active
+/// ---
+/// enabled
+/// ```
+fn parse_service_state(output: &str) -> (bool, bool) {
+    let parts: Vec<&str> = output.split("---").collect();
+
+    let active = parts
+        .first()
+        .map(|s| s.trim() == "active")
+        .unwrap_or(false);
+
+    let enabled = parts
+        .get(1)
+        .map(|s| s.trim() == "enabled")
+        .unwrap_or(false);
+
+    (active, enabled)
+}
+
 impl Default for DriftDetector {
     fn default() -> Self {
         Self::new(DriftConfig::default())
@@ -476,6 +869,102 @@ impl Default for DriftDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::{
+        CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
+        TransferOptions,
+    };
+    use async_trait::async_trait;
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    /// A mock connection that returns preconfigured responses for testing.
+    struct MockConnection {
+        responses: Mutex<Vec<CommandResult>>,
+    }
+
+    impl MockConnection {
+        fn new(responses: Vec<CommandResult>) -> Self {
+            Self {
+                responses: Mutex::new(responses),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Connection for MockConnection {
+        fn identifier(&self) -> &str {
+            "mock"
+        }
+
+        async fn is_alive(&self) -> bool {
+            true
+        }
+
+        async fn execute(
+            &self,
+            _command: &str,
+            _options: Option<ExecuteOptions>,
+        ) -> ConnectionResult<CommandResult> {
+            let mut responses = self.responses.lock().unwrap();
+            if responses.is_empty() {
+                Ok(CommandResult::failure(
+                    1,
+                    String::new(),
+                    "no mock response".to_string(),
+                ))
+            } else {
+                Ok(responses.remove(0))
+            }
+        }
+
+        async fn upload(
+            &self,
+            _local_path: &Path,
+            _remote_path: &Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn upload_content(
+            &self,
+            _content: &[u8],
+            _remote_path: &Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download(
+            &self,
+            _remote_path: &Path,
+            _local_path: &Path,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download_content(&self, _remote_path: &Path) -> ConnectionResult<Vec<u8>> {
+            Ok(vec![])
+        }
+
+        async fn path_exists(&self, _path: &Path) -> ConnectionResult<bool> {
+            Ok(false)
+        }
+
+        async fn is_directory(&self, _path: &Path) -> ConnectionResult<bool> {
+            Ok(false)
+        }
+
+        async fn stat(&self, _path: &Path) -> ConnectionResult<FileStat> {
+            Err(ConnectionError::ExecutionFailed(
+                "not implemented".to_string(),
+            ))
+        }
+
+        async fn close(&self) -> ConnectionResult<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_drift_config() {
@@ -488,12 +977,14 @@ mod tests {
     fn test_drift_item() {
         let drift = DriftItem::new(
             "test-host",
-            DriftType::FileContent { path: "/etc/hosts".to_string() },
+            DriftType::FileContent {
+                path: "/etc/hosts".to_string(),
+            },
             DriftSeverity::Critical,
             serde_json::json!("expected"),
             serde_json::json!("actual"),
         );
-        
+
         assert_eq!(drift.host, "test-host");
         assert!(drift.is_new());
     }
@@ -502,15 +993,17 @@ mod tests {
     fn test_host_drift_report() {
         let mut report = HostDriftReport::new("test-host");
         assert!(!report.has_drift());
-        
+
         let drift = DriftItem::new(
             "test-host",
-            DriftType::PackageVersion { name: "nginx".to_string() },
+            DriftType::PackageVersion {
+                name: "nginx".to_string(),
+            },
             DriftSeverity::High,
             serde_json::json!("1.18.0"),
             serde_json::json!("1.19.0"),
         );
-        
+
         report.add_drift(drift);
         assert!(report.has_drift());
         assert_eq!(report.high_count, 1);
@@ -520,18 +1013,299 @@ mod tests {
     fn test_drift_report() {
         let mut report = DriftReport::new();
         assert!(!report.has_drift());
-        
+
         let mut host_report = HostDriftReport::new("host1");
         let drift = DriftItem::new(
             "host1",
-            DriftType::ServiceStatus { name: "nginx".to_string() },
+            DriftType::ServiceStatus {
+                name: "nginx".to_string(),
+            },
             DriftSeverity::Medium,
             serde_json::json!("running"),
             serde_json::json!("stopped"),
         );
         host_report.add_drift(drift);
-        
+
         report.add_host_report(host_report);
         assert!(report.has_drift());
+    }
+
+    // --- Parsing tests ---
+
+    #[test]
+    fn test_parse_file_state_full() {
+        let output = "644 root www-data\nabc123  /etc/nginx/nginx.conf\n";
+        let (mode, owner, group, checksum) = parse_file_state(output);
+        assert_eq!(mode.as_deref(), Some("644"));
+        assert_eq!(owner.as_deref(), Some("root"));
+        assert_eq!(group.as_deref(), Some("www-data"));
+        assert_eq!(checksum.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn test_parse_file_state_stat_only() {
+        let output = "755 deploy deploy\n";
+        let (mode, owner, group, checksum) = parse_file_state(output);
+        assert_eq!(mode.as_deref(), Some("755"));
+        assert_eq!(owner.as_deref(), Some("deploy"));
+        assert_eq!(group.as_deref(), Some("deploy"));
+        assert_eq!(checksum, None);
+    }
+
+    #[test]
+    fn test_parse_file_state_empty() {
+        let (mode, owner, group, checksum) = parse_file_state("");
+        assert_eq!(mode, None);
+        assert_eq!(owner, None);
+        assert_eq!(group, None);
+        assert_eq!(checksum, None);
+    }
+
+    #[test]
+    fn test_parse_package_state_dpkg_installed() {
+        let result = CommandResult::success(
+            "install ok installed 1.18.0-6ubuntu1".to_string(),
+            String::new(),
+        );
+        let (installed, version) = parse_package_state(&result);
+        assert!(installed);
+        assert_eq!(version.as_deref(), Some("1.18.0-6ubuntu1"));
+    }
+
+    #[test]
+    fn test_parse_package_state_not_installed() {
+        let result = CommandResult::failure(1, String::new(), "not found".to_string());
+        let (installed, version) = parse_package_state(&result);
+        assert!(!installed);
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn test_parse_package_state_rpm() {
+        let result = CommandResult::success("1.18.0-2.el8".to_string(), String::new());
+        let (installed, version) = parse_package_state(&result);
+        assert!(installed);
+        assert_eq!(version.as_deref(), Some("1.18.0-2.el8"));
+    }
+
+    #[test]
+    fn test_parse_package_state_rpm_not_installed() {
+        let result = CommandResult::success(
+            "package nginx is not installed".to_string(),
+            String::new(),
+        );
+        let (installed, _) = parse_package_state(&result);
+        assert!(!installed);
+    }
+
+    #[test]
+    fn test_parse_service_state_active_enabled() {
+        let output = "active\n---\nenabled\n";
+        let (active, enabled) = parse_service_state(output);
+        assert!(active);
+        assert!(enabled);
+    }
+
+    #[test]
+    fn test_parse_service_state_inactive_disabled() {
+        let output = "inactive\n---\ndisabled\n";
+        let (active, enabled) = parse_service_state(output);
+        assert!(!active);
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn test_parse_service_state_active_disabled() {
+        let output = "active\n---\ndisabled\n";
+        let (active, enabled) = parse_service_state(output);
+        assert!(active);
+        assert!(!enabled);
+    }
+
+    // --- Integration tests with MockConnection ---
+
+    #[tokio::test]
+    async fn test_detect_drift_no_connection() {
+        let detector = DriftDetector::default();
+        let state = serde_json::json!({
+            "files": {"/etc/test": {"checksum": "abc"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        // Without a connection, each check creates an Unknown drift item from the error
+        assert!(report.has_drift());
+        assert_eq!(report.total_count, 1);
+        assert_eq!(report.low_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_file_missing() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::failure(
+            1,
+            String::new(),
+            "No such file".to_string(),
+        )]));
+
+        let detector = DriftDetector::with_connection(DriftConfig::comprehensive(), conn);
+        let state = serde_json::json!({
+            "files": {"/etc/missing": {"checksum": "abc123"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.high_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_file_in_sync() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "644 root root\nabc123  /etc/test.conf\n".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(DriftConfig::comprehensive(), conn);
+        let state = serde_json::json!({
+            "files": {"/etc/test.conf": {"checksum": "abc123", "owner": "root", "group": "root", "mode": "644"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(!report.has_drift());
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_file_checksum_mismatch() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "644 root root\nwronghash  /etc/test.conf\n".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(DriftConfig::comprehensive(), conn);
+        let state = serde_json::json!({
+            "files": {"/etc/test.conf": {"checksum": "abc123", "owner": "root", "group": "root", "mode": "644"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.total_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_package_missing() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::failure(
+            1,
+            String::new(),
+            "not found".to_string(),
+        )]));
+
+        let detector = DriftDetector::with_connection(
+            DriftConfig {
+                check_files: false,
+                check_services: false,
+                ..DriftConfig::comprehensive()
+            },
+            conn,
+        );
+        let state = serde_json::json!({
+            "packages": {"nginx": {"state": "present"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.high_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_package_version_drift() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "install ok installed 1.19.0".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(
+            DriftConfig {
+                check_files: false,
+                check_services: false,
+                ..DriftConfig::comprehensive()
+            },
+            conn,
+        );
+        let state = serde_json::json!({
+            "packages": {"nginx": {"state": "present", "version": "1.18.0"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.medium_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_service_stopped() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "inactive\n---\nenabled\n".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(
+            DriftConfig {
+                check_files: false,
+                check_packages: false,
+                ..DriftConfig::comprehensive()
+            },
+            conn,
+        );
+        let state = serde_json::json!({
+            "services": {"nginx": {"state": "started", "enabled": true}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.high_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_service_in_sync() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "active\n---\nenabled\n".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(
+            DriftConfig {
+                check_files: false,
+                check_packages: false,
+                ..DriftConfig::comprehensive()
+            },
+            conn,
+        );
+        let state = serde_json::json!({
+            "services": {"nginx": {"state": "started", "enabled": true}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(!report.has_drift());
+    }
+
+    #[tokio::test]
+    async fn test_detect_drift_package_should_be_absent() {
+        let conn = Arc::new(MockConnection::new(vec![CommandResult::success(
+            "install ok installed 1.18.0".to_string(),
+            String::new(),
+        )]));
+
+        let detector = DriftDetector::with_connection(
+            DriftConfig {
+                check_files: false,
+                check_services: false,
+                ..DriftConfig::comprehensive()
+            },
+            conn,
+        );
+        let state = serde_json::json!({
+            "packages": {"badpkg": {"state": "absent"}},
+        });
+
+        let report = detector.detect_drift("host1", &state).await.unwrap();
+        assert!(report.has_drift());
+        assert_eq!(report.medium_count, 1);
     }
 }

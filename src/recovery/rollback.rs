@@ -36,11 +36,14 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
+
+use crate::modules::ModuleRegistry;
 
 /// Error type for rollback operations
 #[derive(Error, Debug)]
@@ -547,6 +550,8 @@ impl Default for RollbackContext {
 pub struct RollbackManager {
     contexts: HashMap<String, RollbackContext>,
     plans: HashMap<String, RollbackPlan>,
+    /// Optional module registry for executing rollback actions via modules
+    module_registry: Option<Arc<ModuleRegistry>>,
 }
 
 impl RollbackManager {
@@ -555,7 +560,19 @@ impl RollbackManager {
         Self {
             contexts: HashMap::new(),
             plans: HashMap::new(),
+            module_registry: None,
         }
+    }
+
+    /// Set the module registry for executing rollback actions via modules
+    pub fn with_module_registry(mut self, registry: Arc<ModuleRegistry>) -> Self {
+        self.module_registry = Some(registry);
+        self
+    }
+
+    /// Set the module registry (mutable reference version)
+    pub fn set_module_registry(&mut self, registry: Arc<ModuleRegistry>) {
+        self.module_registry = Some(registry);
     }
 
     /// Begin a new rollback context
@@ -674,38 +691,101 @@ impl RollbackManager {
                 service,
                 target_state,
             } => {
-                // This would typically call systemctl or similar
-                warn!(
-                    "Service state change not implemented: {} -> {}",
-                    service, target_state
-                );
+                if let Some(ref registry) = self.module_registry {
+                    let params: crate::modules::ModuleParams = [
+                        ("name".to_string(), serde_json::Value::String(service.clone())),
+                        ("state".to_string(), serde_json::Value::String(target_state.clone())),
+                    ].into_iter().collect();
+                    let ctx = crate::modules::ModuleContext::default();
+                    if let Err(e) = registry.execute("service", &params, &ctx) {
+                        return Err(RollbackError::RollbackFailed(format!(
+                            "Failed to change service {} to {}: {}", service, target_state, e
+                        )));
+                    }
+                } else {
+                    warn!(
+                        "Service state change not implemented (no module registry): {} -> {}",
+                        service, target_state
+                    );
+                }
             }
 
             UndoOperation::RemovePackage { name } => {
-                // This would typically call package manager
-                warn!("Package removal not implemented: {}", name);
+                if let Some(ref registry) = self.module_registry {
+                    let params: crate::modules::ModuleParams = [
+                        ("name".to_string(), serde_json::Value::String(name.clone())),
+                        ("state".to_string(), serde_json::Value::String("absent".to_string())),
+                    ].into_iter().collect();
+                    let ctx = crate::modules::ModuleContext::default();
+                    if let Err(e) = registry.execute("package", &params, &ctx) {
+                        return Err(RollbackError::RollbackFailed(format!(
+                            "Failed to remove package {}: {}", name, e
+                        )));
+                    }
+                } else {
+                    warn!("Package removal not implemented (no module registry): {}", name);
+                }
             }
 
             UndoOperation::InstallPackage { name, version } => {
-                // This would typically call package manager
-                warn!(
-                    "Package installation not implemented: {}{}",
-                    name,
-                    version
-                        .as_ref()
-                        .map(|v| format!("={}", v))
-                        .unwrap_or_default()
-                );
+                if let Some(ref registry) = self.module_registry {
+                    let mut params: crate::modules::ModuleParams = [
+                        ("name".to_string(), serde_json::Value::String(name.clone())),
+                        ("state".to_string(), serde_json::Value::String("present".to_string())),
+                    ].into_iter().collect();
+                    if let Some(ver) = version {
+                        params.insert("version".to_string(), serde_json::Value::String(ver.clone()));
+                    }
+                    let ctx = crate::modules::ModuleContext::default();
+                    if let Err(e) = registry.execute("package", &params, &ctx) {
+                        return Err(RollbackError::RollbackFailed(format!(
+                            "Failed to install package {}: {}", name, e
+                        )));
+                    }
+                } else {
+                    warn!(
+                        "Package installation not implemented (no module registry): {}{}",
+                        name,
+                        version
+                            .as_ref()
+                            .map(|v| format!("={}", v))
+                            .unwrap_or_default()
+                    );
+                }
             }
 
             UndoOperation::DeleteUser { username } => {
-                // This would typically call userdel
-                warn!("User deletion not implemented: {}", username);
+                if let Some(ref registry) = self.module_registry {
+                    let params: crate::modules::ModuleParams = [
+                        ("name".to_string(), serde_json::Value::String(username.clone())),
+                        ("state".to_string(), serde_json::Value::String("absent".to_string())),
+                    ].into_iter().collect();
+                    let ctx = crate::modules::ModuleContext::default();
+                    if let Err(e) = registry.execute("user", &params, &ctx) {
+                        return Err(RollbackError::RollbackFailed(format!(
+                            "Failed to delete user {}: {}", username, e
+                        )));
+                    }
+                } else {
+                    warn!("User deletion not implemented (no module registry): {}", username);
+                }
             }
 
             UndoOperation::RestoreUser { username, .. } => {
-                // This would typically recreate the user
-                warn!("User restoration not implemented: {}", username);
+                if let Some(ref registry) = self.module_registry {
+                    let params: crate::modules::ModuleParams = [
+                        ("name".to_string(), serde_json::Value::String(username.clone())),
+                        ("state".to_string(), serde_json::Value::String("present".to_string())),
+                    ].into_iter().collect();
+                    let ctx = crate::modules::ModuleContext::default();
+                    if let Err(e) = registry.execute("user", &params, &ctx) {
+                        return Err(RollbackError::RollbackFailed(format!(
+                            "Failed to restore user {}: {}", username, e
+                        )));
+                    }
+                } else {
+                    warn!("User restoration not implemented (no module registry): {}", username);
+                }
             }
 
             UndoOperation::ExecuteCommand { command, args } => {

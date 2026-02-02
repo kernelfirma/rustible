@@ -13,7 +13,7 @@
 use crate::error::{Error, Result};
 use indexmap::IndexMap;
 use lru::LruCache;
-use minijinja::value::{Value as MiniJinjaValue, ValueKind};
+use minijinja::value::{Kwargs, Value as MiniJinjaValue, ValueKind};
 use minijinja::{Environment, ErrorKind};
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
@@ -503,8 +503,16 @@ fn is_truthy_value(value: &MiniJinjaValue) -> bool {
 // FILTERS
 // ============================================================================
 
-fn filter_default(value: MiniJinjaValue, default: Option<MiniJinjaValue>) -> MiniJinjaValue {
+fn filter_default(
+    value: MiniJinjaValue,
+    default: Option<MiniJinjaValue>,
+    kwargs: Kwargs,
+) -> MiniJinjaValue {
     if value.is_undefined() || value.is_none() {
+        // Check for value= kwarg (Ansible/Jinja2 compatibility)
+        if let Ok(v) = kwargs.get::<MiniJinjaValue>("value") {
+            return v;
+        }
         default.unwrap_or(MiniJinjaValue::from(""))
     } else {
         value

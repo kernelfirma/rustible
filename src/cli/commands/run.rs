@@ -75,6 +75,34 @@ pub struct RunArgs {
     /// Plan mode - show what would be executed without running
     #[arg(long)]
     pub plan: bool,
+
+    /// Automatically rollback changes on playbook failure
+    #[arg(long)]
+    pub auto_rollback: bool,
+
+    /// Forward SSH agent to remote hosts (enables agent forwarding)
+    #[arg(short = 'A', long)]
+    pub forward_agent: bool,
+
+    /// Directory for storing recovery checkpoints (enables checkpointing)
+    #[arg(long)]
+    pub checkpoint_dir: Option<PathBuf>,
+
+    /// Disable command pipelining (batch loop coalescing)
+    #[arg(long)]
+    pub no_pipelining: bool,
+
+    /// Enable distributed execution across worker nodes
+    #[arg(long)]
+    pub distributed: bool,
+
+    /// Number of worker nodes for distributed execution
+    #[arg(long, default_value = "1")]
+    pub workers: usize,
+
+    /// Distribution strategy (round-robin, capacity-aware, affinity, adaptive)
+    #[arg(long, default_value = "adaptive")]
+    pub distribution_strategy: String,
 }
 
 impl RunArgs {
@@ -193,10 +221,45 @@ impl RunArgs {
             task_timeout: 300,
             gather_facts: true,
             extra_vars,
+            auto_rollback: self.auto_rollback,
+            forward_agent: self.forward_agent,
+            pipelining: !self.no_pipelining,
+            r#become: self.r#become,
+            become_method: self.become_method.clone(),
+            become_user: self.become_user.clone(),
+            become_password: None,
+            distributed: self.distributed,
+            workers: self.workers,
+            distribution_strategy: self.distribution_strategy.clone(),
         };
 
         // Create executor with runtime context
-        let executor = Executor::with_runtime(executor_config, runtime);
+        let mut executor = Executor::with_runtime(executor_config, runtime);
+
+        // Wire up RecoveryManager when auto_rollback or checkpoint_dir is set
+        if self.auto_rollback || self.checkpoint_dir.is_some() {
+            use rustible::recovery::{RecoveryConfig, RecoveryManager};
+
+            let mut recovery_config = RecoveryConfig::default();
+            recovery_config.enable_rollback = self.auto_rollback;
+
+            if let Some(ref dir) = self.checkpoint_dir {
+                recovery_config.enable_checkpoints = true;
+                recovery_config.checkpoint_config.checkpoint_dir = dir.clone();
+                ctx.output.info(&format!(
+                    "Checkpointing enabled: {}",
+                    dir.display()
+                ));
+            }
+
+            if self.auto_rollback {
+                recovery_config.enable_transactions = true;
+                ctx.output.info("Auto-rollback enabled with transaction tracking");
+            }
+
+            let recovery_manager = std::sync::Arc::new(RecoveryManager::new(recovery_config));
+            executor = executor.with_recovery_manager(recovery_manager);
+        }
 
         // Run playbook using executor
         ctx.output.info(&format!("Running playbook: {}", playbook.name));
@@ -873,14 +936,14 @@ impl RunArgs {
                         }
                     }
                     for host in &hosts {
-                        ctx.output.task_result(host, TaskStatus::Ok, None);
+                        ctx.output.task_result(host, TaskStatus::Ok, None, None);
                         stats.lock().await.record(host, TaskStatus::Ok);
                     }
                 }
                 Err(e) => {
                     for host in &hosts {
                         ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()), None);
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                     return Err(anyhow::anyhow!("Failed to gather facts: {}", e));
@@ -1081,6 +1144,7 @@ impl RunArgs {
                         host,
                         TaskStatus::Skipped,
                         Some("conditional check failed"),
+                        None,
                     );
                     stats.lock().await.record(host, TaskStatus::Skipped);
                     continue;
@@ -1096,6 +1160,7 @@ impl RunArgs {
                     host,
                     TaskStatus::Changed,
                     Some(&format!("[check mode] would run: {}", module)),
+                    None,
                 );
                 stats.lock().await.record(host, TaskStatus::Changed);
                 continue;
@@ -1119,7 +1184,7 @@ impl RunArgs {
                     } else {
                         TaskStatus::Ok
                     };
-                    ctx.output.task_result(host, status, message.as_deref());
+                    ctx.output.task_result(host, status, message.as_deref(), None);
                     stats.lock().await.record(host, status);
                 }
                 Err(e) => {
@@ -1134,11 +1199,12 @@ impl RunArgs {
                             host,
                             TaskStatus::Ignored,
                             Some(&format!("ignored error: {}", e)),
+                            None,
                         );
                         stats.lock().await.record(host, TaskStatus::Ignored);
                     } else {
                         ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()));
+                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()), None);
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                 }

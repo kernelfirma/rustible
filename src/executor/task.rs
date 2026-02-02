@@ -285,6 +285,9 @@ pub struct Task {
     /// Until condition for retry loop
     #[serde(default)]
     pub until: Option<String>,
+    /// Task-level variables
+    #[serde(default)]
+    pub vars: IndexMap<String, JsonValue>,
 }
 
 /// Role of a task within a block structure
@@ -339,6 +342,7 @@ impl Default for Task {
             retries: None,
             delay: None,
             until: None,
+            vars: IndexMap::new(),
         }
     }
 }
@@ -436,6 +440,7 @@ impl From<crate::playbook::Task> for Task {
             retries: pt.retries,
             delay: pt.delay,
             until: pt.until,
+            vars: IndexMap::new(),
         }
     }
 }
@@ -493,7 +498,7 @@ impl Task {
     }
 
     /// Execute the task
-    #[instrument(skip(self, ctx, runtime, handlers, notified, parallelization_manager, module_registry), fields(task_name = %self.name, host = %ctx.host))]
+    #[instrument(skip(self, ctx, runtime, handlers, notified, parallelization_manager, module_registry, batch_processor), fields(task_name = %self.name, host = %ctx.host))]
     pub async fn execute(
         &self,
         ctx: &ExecutionContext,
@@ -502,6 +507,8 @@ impl Task {
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
         module_registry: &Arc<ModuleRegistry>,
+        batch_processor: &Arc<crate::executor::batch_processor::BatchProcessor>,
+        pipelining: bool,
     ) -> ExecutorResult<TaskResult> {
         info!("Executing task: {}", self.name);
 
@@ -575,6 +582,8 @@ impl Task {
                     notified,
                     parallelization_manager,
                     module_registry,
+                    batch_processor,
+                    pipelining,
                 )
                 .await;
         }
@@ -677,9 +686,37 @@ impl Task {
         notified: &Arc<Mutex<std::collections::HashSet<String>>>,
         parallelization_manager: &Arc<ParallelizationManager>,
         module_registry: &Arc<ModuleRegistry>,
+        batch_processor: &Arc<crate::executor::batch_processor::BatchProcessor>,
+        pipelining: bool,
     ) -> ExecutorResult<TaskResult> {
         let total_items = items.len();
         debug!("Executing loop with {} items", total_items);
+
+        // Attempt batch optimization when pipelining is enabled
+        if pipelining {
+            use crate::executor::batch_processor::BatchAnalysis;
+            let analysis = batch_processor.analyze_loop(&self.module, &self.args, items);
+            if let BatchAnalysis::Batchable(strategy) = analysis {
+                debug!(
+                    "Loop eligible for batching with strategy {:?}, {} items",
+                    strategy,
+                    items.len()
+                );
+                return self
+                    .execute_batched_loop(
+                        items,
+                        strategy,
+                        batch_processor,
+                        ctx,
+                        runtime,
+                        handlers,
+                        notified,
+                        parallelization_manager,
+                        module_registry,
+                    )
+                    .await;
+            }
+        }
 
         // Pre-allocate with known capacity
         let mut loop_results = Vec::with_capacity(total_items);
@@ -837,6 +874,214 @@ impl Task {
         }
 
         Ok(result)
+    }
+
+    /// Execute a batched loop using the BatchProcessor.
+    ///
+    /// Instead of executing one module call per loop item, this coalesces
+    /// items into a single operation (e.g., `apt install nginx vim htop`
+    /// instead of 3 separate `apt install` calls).
+    async fn execute_batched_loop(
+        &self,
+        items: &[JsonValue],
+        strategy: crate::executor::batch_processor::BatchStrategy,
+        batch_processor: &Arc<crate::executor::batch_processor::BatchProcessor>,
+        ctx: &ExecutionContext,
+        runtime: &Arc<RwLock<RuntimeContext>>,
+        handlers: &Arc<RwLock<HashMap<String, Handler>>>,
+        notified: &Arc<Mutex<std::collections::HashSet<String>>>,
+        parallelization_manager: &Arc<ParallelizationManager>,
+        module_registry: &Arc<ModuleRegistry>,
+    ) -> ExecutorResult<TaskResult> {
+        use crate::executor::batch_processor::BatchStrategy;
+
+        let batched_op = batch_processor
+            .create_batch(&self.module, &self.args, items, &self.loop_var, strategy)
+            .map_err(|e| {
+                ExecutorError::RuntimeError(format!("Failed to create batch: {}", e))
+            })?;
+
+        debug!(
+            "Executing batched loop: {} items coalesced into single {} call",
+            batched_op.items.len(),
+            batched_op.module
+        );
+
+        // For ParallelTransfer, fall back to sequential per-item execution
+        // since file transfers can't be truly coalesced into one call
+        if matches!(batched_op.strategy, BatchStrategy::ParallelTransfer) {
+            // Set each loop var and execute individually but with connection reuse
+            // (the connection reuse already happens at the SSH layer)
+            let mut loop_results = Vec::with_capacity(items.len());
+            let mut any_changed = false;
+            let mut any_failed = false;
+
+            for (index, item) in items.iter().enumerate() {
+                {
+                    let mut rt = runtime.write().await;
+                    rt.set_task_var(self.loop_var.clone(), item.clone());
+                    rt.set_task_var(
+                        "ansible_loop".to_string(),
+                        serde_json::json!({
+                            "index": index + 1,
+                            "index0": index,
+                            "first": index == 0,
+                            "last": index == items.len() - 1,
+                            "length": items.len(),
+                        }),
+                    );
+                }
+
+                let result = self
+                    .execute_module(
+                        ctx,
+                        runtime,
+                        handlers,
+                        notified,
+                        parallelization_manager,
+                        module_registry,
+                    )
+                    .await?;
+
+                if result.changed {
+                    any_changed = true;
+                }
+                if result.status == TaskStatus::Failed {
+                    any_failed = true;
+                    if !self.ignore_errors {
+                        loop_results.push(result.to_registered(None, None));
+                        break;
+                    }
+                }
+                loop_results.push(result.to_registered(None, None));
+            }
+
+            {
+                let mut rt = runtime.write().await;
+                rt.remove_task_vars(&[&self.loop_var, "ansible_loop"]);
+            }
+
+            let status = if any_failed && !self.ignore_errors {
+                TaskStatus::Failed
+            } else if any_changed {
+                TaskStatus::Changed
+            } else {
+                TaskStatus::Ok
+            };
+
+            let result = TaskResult {
+                status,
+                changed: any_changed,
+                msg: Some(format!(
+                    "Completed {} loop iterations (parallel transfer)",
+                    loop_results.len()
+                )),
+                result: Some(
+                    serde_json::to_value(&loop_results).unwrap_or(JsonValue::Null),
+                ),
+                diff: None,
+            };
+
+            if let Some(ref register_name) = self.register {
+                let mut registered = RegisteredResult::ok(any_changed);
+                registered.results = Some(loop_results);
+                let mut rt = runtime.write().await;
+                rt.register_result(&ctx.host, register_name.clone(), registered);
+            }
+
+            if any_changed && !any_failed {
+                for handler_name in &self.notify {
+                    let mut n = notified.lock().await;
+                    n.insert(handler_name.clone());
+                }
+            }
+
+            return Ok(result);
+        }
+
+        // For PackageList, CommandPipeline, and Generic strategies:
+        // Create a temporary task with the batched args and execute once
+        let batched_task = Task {
+            name: self.name.clone(),
+            module: batched_op.module.clone(),
+            args: batched_op.args.clone(),
+            when: None,
+            notify: Vec::new(),
+            register: None,
+            loop_items: None,
+            loop_var: self.loop_var.clone(),
+            loop_control: None,
+            ignore_errors: self.ignore_errors,
+            changed_when: self.changed_when.clone(),
+            failed_when: self.failed_when.clone(),
+            delegate_to: None,
+            delegate_facts: None,
+            run_once: false,
+            tags: Vec::new(),
+            r#become: self.r#become,
+            become_user: self.become_user.clone(),
+            block_id: None,
+            block_role: BlockRole::Normal,
+            retries: None,
+            delay: None,
+            until: None,
+            vars: IndexMap::new(),
+        };
+
+        let result = batched_task
+            .execute_module(
+                ctx,
+                runtime,
+                handlers,
+                notified,
+                parallelization_manager,
+                module_registry,
+            )
+            .await?;
+
+        // Synthesize per-item results from the single batched result
+        let per_item_results: Vec<RegisteredResult> = items
+            .iter()
+            .enumerate()
+            .map(|(_i, item)| {
+                let mut reg = result.to_registered(None, None);
+                reg.data
+                    .insert("item".to_string(), item.clone());
+                reg
+            })
+            .collect();
+
+        let final_result = TaskResult {
+            status: result.status,
+            changed: result.changed,
+            msg: Some(format!(
+                "Batched {} items into single {} call",
+                items.len(),
+                batched_op.module,
+            )),
+            result: Some(
+                serde_json::to_value(&per_item_results).unwrap_or(JsonValue::Null),
+            ),
+            diff: result.diff,
+        };
+
+        // Register combined result if needed
+        if let Some(ref register_name) = self.register {
+            let mut registered = RegisteredResult::ok(result.changed);
+            registered.results = Some(per_item_results);
+            let mut rt = runtime.write().await;
+            rt.register_result(&ctx.host, register_name.clone(), registered);
+        }
+
+        // Notify handlers if task changed
+        if result.changed && result.status != TaskStatus::Failed {
+            for handler_name in &self.notify {
+                let mut n = notified.lock().await;
+                n.insert(handler_name.clone());
+            }
+        }
+
+        Ok(final_result)
     }
 
     /// Execute task with until/retries/delay retry logic
@@ -2144,6 +2389,12 @@ impl Task {
             // Convert to executor task
             let executor_task: Task = playbook_task.into();
             // Use Box::pin to handle async recursion
+            // Included tasks get their own default batch processor
+            let include_batch_processor = Arc::new(
+                crate::executor::batch_processor::BatchProcessor::new(
+                    crate::executor::batch_processor::BatchConfig::default(),
+                ),
+            );
             let result = Box::pin(executor_task.execute(
                 ctx,
                 runtime,
@@ -2151,6 +2402,8 @@ impl Task {
                 notified,
                 parallelization_manager,
                 module_registry,
+                &include_batch_processor,
+                true, // pipelining enabled for included tasks
             ))
             .await?;
 

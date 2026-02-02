@@ -142,9 +142,17 @@ pub enum Commands {
     #[command(name = "explain")]
     Explain(ExplainArgs),
 
+    /// Manage state (list, show, pull, push, remove)
+    #[command(name = "state")]
+    State(commands::state::StateArgs),
+
     /// Agent operations (build, deploy, status)
     #[command(name = "agent")]
     Agent(AgentArgs),
+
+    /// Show fleet infrastructure dashboard
+    #[command(name = "fleet")]
+    Fleet(commands::fleet::FleetArgs),
 }
 
 /// Arguments for agent command

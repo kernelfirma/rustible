@@ -3,7 +3,8 @@
 //! Run with: cargo run --example rich_error_demo
 
 use rustible::diagnostics::{
-    module_not_found_error, undefined_variable_error, yaml_syntax_error, RichDiagnostic, Span,
+    connection_error, missing_required_arg_error, module_not_found_error,
+    template_syntax_error, undefined_variable_error, yaml_syntax_error, RichDiagnostic, Span,
 };
 
 fn main() {
@@ -99,6 +100,56 @@ fn main() {
     .with_help("Define these variables in vars, group_vars, or host_vars");
 
     diag.eprint_with_source(source);
+
+    // --- New demos for enhanced helper functions ---
+
+    println!("\n{}\n", "=".repeat(70));
+    println!("DEMO 5: YAML Tab Detection with Auto-Fix Suggestion");
+    println!("{}\n", "=".repeat(70));
+
+    let tab_yaml = "---\n- name: Tabbed playbook\n\thosts: all\n\ttasks:\n\t  - name: Do stuff\n";
+    let diag = yaml_syntax_error("tabbed.yml", tab_yaml, 3, 1, "tab character found");
+    diag.eprint_with_source(tab_yaml);
+
+    println!("\n{}\n", "=".repeat(70));
+    println!("DEMO 6: Template Unclosed Delimiter Detection");
+    println!("{}\n", "=".repeat(70));
+
+    let unclosed_tpl = "---\n- name: Bad template\n  debug:\n    msg: \"{{ hostname\"\n";
+    let diag = template_syntax_error(
+        "template_err.yml",
+        unclosed_tpl,
+        4,
+        10,
+        "unclosed expression delimiter",
+    );
+    diag.eprint_with_source(unclosed_tpl);
+
+    println!("\n{}\n", "=".repeat(70));
+    println!("DEMO 7: Connection Error with Pattern-Matched Suggestions");
+    println!("{}\n", "=".repeat(70));
+
+    let inv_source = "---\nall:\n  hosts:\n    web01:\n      ansible_host: 192.168.1.10\n";
+    let diag = connection_error(
+        "inventory.yml",
+        "web01",
+        "Connection refused",
+        Span::from_line_col(inv_source, 4, 5, 5),
+    );
+    diag.eprint_with_source(inv_source);
+
+    println!("\n{}\n", "=".repeat(70));
+    println!("DEMO 8: Missing Required Argument with Suggestion");
+    println!("{}\n", "=".repeat(70));
+
+    let copy_source = "---\n- name: Copy files\n  hosts: all\n  tasks:\n    - name: Deploy config\n      copy:\n        dest: /etc/app.conf\n";
+    let diag = missing_required_arg_error(
+        "copy_task.yml",
+        "copy",
+        "src",
+        Span::from_line_col(copy_source, 6, 7, 4),
+    );
+    diag.eprint_with_source(copy_source);
 
     println!();
 }

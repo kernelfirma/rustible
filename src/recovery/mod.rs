@@ -261,6 +261,18 @@ impl RecoveryManager {
         }
     }
 
+    /// Set the module registry for rollback operations.
+    ///
+    /// This propagates the registry to the inner `RollbackManager`, enabling
+    /// module-based rollback execution instead of warn-only stubs.
+    pub fn set_module_registry(&self, registry: Arc<crate::modules::ModuleRegistry>) {
+        if let Some(ref rm) = self.rollback_manager {
+            if let Ok(mut mgr) = rm.try_write() {
+                mgr.set_module_registry(registry);
+            }
+        }
+    }
+
     /// Create a builder for configuring the recovery manager
     pub fn builder() -> RecoveryManagerBuilder {
         RecoveryManagerBuilder::new()

@@ -260,6 +260,43 @@ pub struct ExecutorConfig {
     /// These have the highest precedence and override all other variables.
     /// Similar to Ansible's `--extra-vars` or `-e` option.
     pub extra_vars: HashMap<String, serde_json::Value>,
+
+    /// Enable automatic rollback on playbook failure (default: false).
+    ///
+    /// When enabled, the executor will attempt to undo changes made by
+    /// successfully completed tasks when a subsequent task fails. Rollback
+    /// actions are executed via the module registry using inverse arguments.
+    pub auto_rollback: bool,
+
+    /// Forward the local SSH agent to remote hosts (default: false).
+    ///
+    /// When enabled, the SSH agent on the local machine is made available
+    /// to processes on remote hosts, enabling git-over-SSH, multi-hop
+    /// deployments, and bastion workflows.
+    /// Similar to `ssh -A` or Ansible's `ansible_ssh_forward_agent`.
+    pub forward_agent: bool,
+
+    /// Enable command pipelining for batch operations (default: true).
+    ///
+    /// When enabled, independent loop operations (e.g., package installs)
+    /// are coalesced into single commands to reduce SSH round-trips.
+    pub pipelining: bool,
+
+    /// Enable privilege escalation (default: false).
+    pub r#become: bool,
+    /// Privilege escalation method (default: "sudo").
+    pub become_method: String,
+    /// Target user for privilege escalation (default: "root").
+    pub become_user: String,
+    /// Password for privilege escalation (default: None).
+    pub become_password: Option<String>,
+
+    /// Enable distributed execution across worker nodes (default: false).
+    pub distributed: bool,
+    /// Number of worker nodes for distributed execution (default: 1).
+    pub workers: usize,
+    /// Distribution strategy for work assignment (default: "adaptive").
+    pub distribution_strategy: String,
 }
 
 impl Default for ExecutorConfig {
@@ -273,6 +310,16 @@ impl Default for ExecutorConfig {
             task_timeout: 300,
             gather_facts: true,
             extra_vars: HashMap::new(),
+            auto_rollback: false,
+            forward_agent: false,
+            pipelining: true,
+            r#become: false,
+            become_method: "sudo".to_string(),
+            become_user: "root".to_string(),
+            become_password: None,
+            distributed: false,
+            workers: 1,
+            distribution_strategy: "adaptive".to_string(),
         }
     }
 }
@@ -397,6 +444,10 @@ pub struct Executor {
     connection_factory: Option<Arc<ConnectionFactory>>,
     /// Shared module registry for task execution
     module_registry: Arc<ModuleRegistry>,
+    /// Accumulated state records for tasks that made changes (for rollback)
+    changed_tasks: Arc<Mutex<Vec<crate::state::TaskStateRecord>>>,
+    /// Batch processor for coalescing loop operations
+    batch_processor: Arc<BatchProcessor>,
 }
 
 impl Executor {
@@ -413,6 +464,8 @@ impl Executor {
             recovery_manager: None,
             connection_factory: None,
             module_registry: Arc::new(ModuleRegistry::default()),
+            changed_tasks: Arc::new(Mutex::new(Vec::new())),
+            batch_processor: Arc::new(BatchProcessor::new(BatchConfig::default())),
         }
     }
 
@@ -429,6 +482,8 @@ impl Executor {
             recovery_manager: None,
             connection_factory: None,
             module_registry: Arc::new(ModuleRegistry::default()),
+            changed_tasks: Arc::new(Mutex::new(Vec::new())),
+            batch_processor: Arc::new(BatchProcessor::new(BatchConfig::default())),
         }
     }
 
@@ -442,6 +497,44 @@ impl Executor {
     pub fn with_connection_factory(mut self, factory: ConnectionFactory) -> Self {
         self.connection_factory = Some(Arc::new(factory));
         self
+    }
+
+    /// Known reversible modules that can be automatically rolled back
+    const REVERSIBLE_MODULES: &'static [&'static str] = &[
+        "apt", "yum", "dnf", "package", "service", "systemd",
+        "file", "copy", "template", "user", "group", "lineinfile",
+    ];
+
+    /// Build a `TaskStateRecord` from task execution data for rollback tracking.
+    ///
+    /// Only called for tasks whose result status is `Changed`.
+    fn build_task_state_record(
+        task: &Task,
+        host: &str,
+        status: crate::state::TaskStatus,
+    ) -> crate::state::TaskStateRecord {
+        // Convert task args (IndexMap<String, JsonValue>) to a JSON Value
+        let args_json: serde_json::Value = {
+            let map: serde_json::Map<String, serde_json::Value> = task
+                .args
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            serde_json::Value::Object(map)
+        };
+
+        let rollback_available = Self::REVERSIBLE_MODULES.contains(&task.module.as_str());
+
+        crate::state::TaskStateRecord {
+            task_id: task.name.clone(),
+            task_name: task.name.clone(),
+            host: host.to_string(),
+            module: task.module.clone(),
+            args: args_json,
+            status,
+            rollback_available,
+            ..Default::default()
+        }
     }
 
     /// Get a connection for a host from the connection factory
@@ -541,6 +634,11 @@ impl Executor {
             }
         }
 
+        // Trigger automatic system rollback on failure
+        if result.is_err() && self.config.auto_rollback {
+            self.execute_system_rollback().await;
+        }
+
         result
     }
 
@@ -630,6 +728,7 @@ impl Executor {
                 retries: None,
                 delay: None,
                 until: None,
+                vars: IndexMap::new(),
             };
             all_tasks.push(gather_facts_task);
         }
@@ -939,6 +1038,8 @@ impl Executor {
                         &self.notified_handlers,
                         &self.parallelization_manager,
                         &self.module_registry,
+                        &self.batch_processor,
+                        self.config.pipelining,
                     )
                     .await;
 
@@ -978,6 +1079,18 @@ impl Executor {
                         {
                             warn!("Failed to record task outcome for host {}: {}", host, e);
                         }
+                    }
+                }
+
+                // Record changed tasks for rollback
+                if let Ok(ref result) = task_result {
+                    if result.status == TaskStatus::Changed {
+                        let record = Self::build_task_state_record(
+                            task,
+                            &host,
+                            crate::state::TaskStatus::Changed,
+                        );
+                        self.changed_tasks.lock().await.push(record);
                     }
                 }
 
@@ -1023,6 +1136,9 @@ impl Executor {
                 let recovery_manager = self.recovery_manager.clone();
                 let connection_factory = self.connection_factory.clone();
                 let module_registry = Arc::clone(&self.module_registry);
+                let changed_tasks = Arc::clone(&self.changed_tasks);
+                let batch_processor = Arc::clone(&self.batch_processor);
+                let pipelining = self.config.pipelining;
                 let tx_id = tx_id.clone();
 
                 tokio::spawn(async move {
@@ -1064,7 +1180,7 @@ impl Executor {
                         }
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry)
+                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry, &batch_processor, pipelining)
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1103,6 +1219,18 @@ impl Executor {
                                 {
                                     warn!("Failed to record task outcome for host {}: {}", host, e);
                                 }
+                            }
+                        }
+
+                        // Record changed tasks for rollback
+                        if let Ok(ref result) = task_result {
+                            if result.status == TaskStatus::Changed {
+                                let record = Executor::build_task_state_record(
+                                    task,
+                                    &host,
+                                    crate::state::TaskStatus::Changed,
+                                );
+                                changed_tasks.lock().await.push(record);
                             }
                         }
 
@@ -1294,6 +1422,8 @@ impl Executor {
                     &self.notified_handlers,
                     &self.parallelization_manager,
                     &self.module_registry,
+                    &self.batch_processor,
+                    self.config.pipelining,
                 )
                 .await;
 
@@ -1346,6 +1476,17 @@ impl Executor {
                     }
                 }
             }
+            // Record changed tasks for rollback
+            for (host, res) in &results {
+                if res.status == TaskStatus::Changed {
+                    let record = Self::build_task_state_record(
+                        task,
+                        host,
+                        crate::state::TaskStatus::Changed,
+                    );
+                    self.changed_tasks.lock().await.push(record);
+                }
+            }
             return Ok(results);
         }
 
@@ -1371,6 +1512,8 @@ impl Executor {
                 let parallelization = Arc::clone(&self.parallelization_manager);
                 let connection_factory = self.connection_factory.clone();
                 let module_registry = Arc::clone(&self.module_registry);
+                let batch_processor = Arc::clone(&self.batch_processor);
+                let pipelining = self.config.pipelining;
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1399,7 +1542,7 @@ impl Executor {
                     }
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
+                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry, &batch_processor, pipelining)
                         .await;
 
                     match result {
@@ -1460,7 +1603,128 @@ impl Executor {
                 }
             }
         }
+        // Record changed tasks for rollback
+        for (host, res) in &results {
+            if res.status == TaskStatus::Changed {
+                let record = Self::build_task_state_record(
+                    task,
+                    host,
+                    crate::state::TaskStatus::Changed,
+                );
+                self.changed_tasks.lock().await.push(record);
+            }
+        }
         Ok(results)
+    }
+
+    /// Execute automatic system rollback by undoing changed tasks via module calls.
+    ///
+    /// Uses `state::rollback::RollbackExecutor` to generate a rollback plan from
+    /// recorded `TaskStateRecord` entries, then executes each action through the
+    /// module registry. This is best-effort: errors are logged per action and
+    /// execution continues with remaining actions.
+    async fn execute_system_rollback(&self) {
+        let changed_tasks: Vec<crate::state::TaskStateRecord> = {
+            let mut tasks = self.changed_tasks.lock().await;
+            std::mem::take(&mut *tasks)
+        };
+
+        if changed_tasks.is_empty() {
+            info!("Auto-rollback: no changed tasks to roll back");
+            return;
+        }
+
+        info!(
+            "Auto-rollback: generating rollback plan for {} changed tasks",
+            changed_tasks.len()
+        );
+
+        let rollback_executor =
+            crate::state::rollback::RollbackExecutor::new(crate::state::StateConfig::default());
+
+        let plan = match rollback_executor.create_plan(&changed_tasks) {
+            Ok(plan) => plan,
+            Err(e) => {
+                error!("Auto-rollback: failed to create rollback plan: {}", e);
+                return;
+            }
+        };
+
+        if plan.is_empty() {
+            info!("Auto-rollback: rollback plan is empty, nothing to undo");
+            return;
+        }
+
+        info!(
+            "Auto-rollback: executing {} rollback actions",
+            plan.actions.len()
+        );
+
+        for action in &plan.actions {
+            if self.config.check_mode {
+                info!(
+                    "Auto-rollback (dry-run): would execute {} on {} with module '{}'",
+                    action.description, action.host, action.module
+                );
+                continue;
+            }
+
+            if let Err(e) = self.execute_rollback_action(action).await {
+                error!(
+                    "Auto-rollback: failed to execute action '{}': {}",
+                    action.description, e
+                );
+            } else {
+                info!("Auto-rollback: completed '{}'", action.description);
+            }
+        }
+
+        info!("Auto-rollback: rollback sequence completed");
+    }
+
+    /// Execute a single rollback action by calling the appropriate module.
+    async fn execute_rollback_action(
+        &self,
+        action: &crate::state::rollback::RollbackAction,
+    ) -> Result<(), ExecutorError> {
+        // Convert JSON args to ModuleParams (HashMap<String, serde_json::Value>)
+        let params: crate::modules::ModuleParams = match &action.args {
+            serde_json::Value::Object(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            _ => {
+                return Err(ExecutorError::Other(format!(
+                    "Rollback action '{}' has non-object args",
+                    action.description
+                )));
+            }
+        };
+
+        // Build module context
+        let mut ctx = crate::modules::ModuleContext {
+            check_mode: self.config.check_mode,
+            diff_mode: self.config.diff_mode,
+            verbosity: self.config.verbosity,
+            ..Default::default()
+        };
+
+        // Get connection for the target host
+        if let Some(conn) = self.get_connection_for_host(&action.host).await {
+            ctx.connection = Some(conn);
+        }
+
+        // Execute the module
+        match self.module_registry.execute(&action.module, &params, &ctx) {
+            Ok(output) => {
+                debug!(
+                    "Rollback module '{}' on host '{}': {:?}",
+                    action.module, action.host, output
+                );
+                Ok(())
+            }
+            Err(e) => Err(ExecutorError::Other(format!(
+                "Rollback module '{}' failed on host '{}': {}",
+                action.module, action.host, e
+            ))),
+        }
     }
 
     /// Update host statistics based on task result
@@ -1634,6 +1898,7 @@ impl Executor {
                     retries: None,
                     delay: None,
                     until: None,
+                    vars: IndexMap::new(),
                 };
 
                 // Run handler on all hosts

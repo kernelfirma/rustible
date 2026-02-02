@@ -332,6 +332,8 @@ struct ClientHandler {
     known_hosts_path: Option<PathBuf>,
     /// Whether to accept unknown hosts (first connection)
     accept_unknown: bool,
+    /// Whether agent forwarding is enabled for this connection
+    forward_agent: bool,
 }
 
 /// A parsed entry from known_hosts file
@@ -358,7 +360,14 @@ impl ClientHandler {
             known_hosts,
             known_hosts_path: path,
             accept_unknown,
+            forward_agent: false,
         }
+    }
+
+    /// Set whether agent forwarding is enabled
+    fn with_forward_agent(mut self, forward_agent: bool) -> Self {
+        self.forward_agent = forward_agent;
+        self
     }
 
     /// Load and parse ~/.ssh/known_hosts file
@@ -615,6 +624,111 @@ impl Handler for ClientHandler {
             }
         }
     }
+
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: russh::Channel<russh::client::Msg>,
+        _session: &mut russh::client::Session,
+    ) -> Result<(), Self::Error> {
+        if !self.forward_agent {
+            warn!(host = %self.host, "Server opened agent channel but forwarding is disabled, ignoring");
+            return Ok(());
+        }
+
+        debug!(host = %self.host, "Server opened agent forwarding channel, starting proxy");
+
+        // Spawn a task to proxy agent protocol between the channel and local agent
+        let host = self.host.clone();
+        tokio::spawn(async move {
+            if let Err(e) = proxy_agent_channel(channel).await {
+                warn!(host = %host, error = %e, "Agent forwarding channel error");
+            }
+        });
+
+        Ok(())
+    }
+}
+
+/// Proxy SSH agent protocol messages between a russh channel and the local SSH agent.
+///
+/// The SSH agent protocol uses length-prefixed messages (4-byte big-endian length + body).
+/// This function connects to the local agent via `SSH_AUTH_SOCK` and bidirectionally
+/// relays complete agent protocol messages.
+async fn proxy_agent_channel(
+    mut channel: russh::Channel<russh::client::Msg>,
+) -> Result<(), ConnectionError> {
+    let socket_path = std::env::var("SSH_AUTH_SOCK").map_err(|_| {
+        ConnectionError::InvalidConfig("SSH_AUTH_SOCK not set, cannot proxy agent".into())
+    })?;
+
+    let agent_stream = tokio::net::UnixStream::connect(&socket_path)
+        .await
+        .map_err(|e| {
+            ConnectionError::ConnectionFailed(format!(
+                "Failed to connect to local SSH agent at {}: {}",
+                socket_path, e
+            ))
+        })?;
+
+    let (agent_read, agent_write) = tokio::io::split(agent_stream);
+    let agent_read = Arc::new(Mutex::new(agent_read));
+    let agent_write = Arc::new(Mutex::new(agent_write));
+
+    // Forward data from channel to agent and responses back
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { ref data }) => {
+                // Write request data to the local agent
+                {
+                    let mut writer = agent_write.lock().await;
+                    if let Err(e) = writer.write_all(data).await {
+                        debug!(error = %e, "Failed to write to agent socket");
+                        break;
+                    }
+                    if let Err(e) = writer.flush().await {
+                        debug!(error = %e, "Failed to flush agent socket");
+                        break;
+                    }
+                }
+
+                // Read response from agent (length-prefixed: 4 bytes length + body)
+                let mut reader = agent_read.lock().await;
+                let mut len_buf = [0u8; 4];
+                if let Err(e) = reader.read_exact(&mut len_buf).await {
+                    debug!(error = %e, "Failed to read agent response length");
+                    break;
+                }
+                let response_len = u32::from_be_bytes(len_buf) as usize;
+
+                // Read the response body
+                let mut response_body = vec![0u8; response_len];
+                if let Err(e) = reader.read_exact(&mut response_body).await {
+                    debug!(error = %e, "Failed to read agent response body");
+                    break;
+                }
+
+                // Send length + body back through the channel
+                let mut response = Vec::with_capacity(4 + response_len);
+                response.extend_from_slice(&len_buf);
+                response.extend_from_slice(&response_body);
+
+                let mut cursor = std::io::Cursor::new(response);
+                if let Err(e) = channel.data(&mut cursor).await {
+                    debug!(error = %e, "Failed to send agent response to channel");
+                    break;
+                }
+            }
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
+                break;
+            }
+            _ => {
+                // Ignore other message types
+            }
+        }
+    }
+
+    let _ = channel.eof().await;
+    Ok(())
 }
 
 /// Russh connection implementation with performance optimizations
@@ -996,6 +1110,7 @@ impl RusshConnection {
         let known_hosts_path = ssh_common::user_known_hosts_path(host_config);
 
         ClientHandler::new(host, port, accept_unknown, known_hosts_path)
+            .with_forward_agent(host_config.forward_agent)
     }
 
     /// Perform the actual connection
@@ -1462,6 +1577,13 @@ impl Connection for RusshConnection {
 
             // Drop the handle guard to release the read lock
             drop(handle_guard);
+
+            // Request agent forwarding if enabled
+            if self.host_config.forward_agent {
+                if let Err(e) = channel.agent_forward(true).await {
+                    warn!("Failed to request agent forwarding: {}", e);
+                }
+            }
 
             // 2. Execute the command
             channel.exec(true, full_command).await.map_err(|e| {

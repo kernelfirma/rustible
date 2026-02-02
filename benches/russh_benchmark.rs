@@ -41,7 +41,9 @@
 //! environment variable and gracefully exits with a message if not configured.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+#[cfg(feature = "ssh2-backend")]
 use std::io::{Read, Write};
+#[cfg(feature = "ssh2-backend")]
 use std::net::TcpStream;
 use std::path::Path;
 use std::time::Duration;
@@ -124,6 +126,7 @@ fn generate_test_data(size_bytes: usize) -> Vec<u8> {
 // ============================================================================
 
 /// Establish an ssh2 connection
+#[cfg(feature = "ssh2-backend")]
 fn ssh2_connect(config: &SshBenchConfig) -> ssh2::Session {
     let tcp = TcpStream::connect((&config.host[..], config.port)).unwrap();
     let mut session = ssh2::Session::new().unwrap();
@@ -136,6 +139,7 @@ fn ssh2_connect(config: &SshBenchConfig) -> ssh2::Session {
 }
 
 /// Execute a single command with ssh2
+#[cfg(feature = "ssh2-backend")]
 fn ssh2_execute(session: &ssh2::Session, command: &str) -> String {
     let mut channel = session.channel_session().unwrap();
     channel.exec(command).unwrap();
@@ -146,6 +150,7 @@ fn ssh2_execute(session: &ssh2::Session, command: &str) -> String {
 }
 
 /// Upload data via ssh2 SFTP
+#[cfg(feature = "ssh2-backend")]
 fn ssh2_upload(session: &ssh2::Session, data: &[u8], remote_path: &str) {
     let sftp = session.sftp().unwrap();
     let mut remote_file = sftp.create(Path::new(remote_path)).unwrap();
@@ -153,6 +158,7 @@ fn ssh2_upload(session: &ssh2::Session, data: &[u8], remote_path: &str) {
 }
 
 /// Download data via ssh2 SFTP
+#[cfg(feature = "ssh2-backend")]
 fn ssh2_download(session: &ssh2::Session, remote_path: &str) -> Vec<u8> {
     let sftp = session.sftp().unwrap();
     let mut remote_file = sftp.open(Path::new(remote_path)).unwrap();
@@ -166,6 +172,7 @@ fn ssh2_download(session: &ssh2::Session, remote_path: &str) -> Vec<u8> {
 // ============================================================================
 
 /// Establish a russh connection using async-ssh2-tokio
+#[cfg(feature = "ssh2-backend")]
 async fn russh_connect(config: &SshBenchConfig) -> async_ssh2_tokio::client::Client {
     use async_ssh2_tokio::client::{AuthMethod, Client, ServerCheckMethod};
 
@@ -181,6 +188,7 @@ async fn russh_connect(config: &SshBenchConfig) -> async_ssh2_tokio::client::Cli
 }
 
 /// Execute a single command with russh
+#[cfg(feature = "ssh2-backend")]
 async fn russh_execute(client: &async_ssh2_tokio::client::Client, command: &str) -> String {
     let result = client.execute(command).await.unwrap();
     result.stdout
@@ -188,6 +196,7 @@ async fn russh_execute(client: &async_ssh2_tokio::client::Client, command: &str)
 
 /// Upload data via russh (using base64 encoding over command)
 /// Note: async-ssh2-tokio doesn't expose SFTP directly, so we use command-based transfer
+#[cfg(feature = "ssh2-backend")]
 async fn russh_upload(client: &async_ssh2_tokio::client::Client, data: &[u8], remote_path: &str) {
     use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(data);
@@ -196,6 +205,7 @@ async fn russh_upload(client: &async_ssh2_tokio::client::Client, data: &[u8], re
 }
 
 /// Download data via russh (using base64 encoding over command)
+#[cfg(feature = "ssh2-backend")]
 async fn russh_download(client: &async_ssh2_tokio::client::Client, remote_path: &str) -> Vec<u8> {
     use base64::Engine;
     let cmd = format!("base64 < {}", remote_path);
@@ -209,6 +219,7 @@ async fn russh_download(client: &async_ssh2_tokio::client::Client, remote_path: 
 // Connection Benchmarks
 // ============================================================================
 
+#[cfg(feature = "ssh2-backend")]
 fn bench_connection(c: &mut Criterion) {
     let Some(config) = SshBenchConfig::from_env() else {
         eprintln!("Skipping connection benchmarks: SSH_BENCH_HOST not set");
@@ -259,6 +270,7 @@ fn bench_connection(c: &mut Criterion) {
 // Command Execution Benchmarks
 // ============================================================================
 
+#[cfg(feature = "ssh2-backend")]
 fn bench_execution(c: &mut Criterion) {
     let Some(config) = SshBenchConfig::from_env() else {
         eprintln!("Skipping execution benchmarks: SSH_BENCH_HOST not set");
@@ -345,6 +357,7 @@ fn bench_execution(c: &mut Criterion) {
 // File Transfer Benchmarks
 // ============================================================================
 
+#[cfg(feature = "ssh2-backend")]
 fn bench_transfer(c: &mut Criterion) {
     let Some(config) = SshBenchConfig::from_env() else {
         eprintln!("Skipping transfer benchmarks: SSH_BENCH_HOST not set");
@@ -451,6 +464,7 @@ fn bench_transfer(c: &mut Criterion) {
 // Parallel Execution Benchmarks
 // ============================================================================
 
+#[cfg(feature = "ssh2-backend")]
 fn bench_parallel(c: &mut Criterion) {
     let Some(config) = SshBenchConfig::from_env() else {
         eprintln!("Skipping parallel benchmarks: SSH_BENCH_HOST not set");
@@ -573,6 +587,7 @@ fn bench_parallel(c: &mut Criterion) {
 // ============================================================================
 
 /// Benchmark channel multiplexing - multiple commands on same connection
+#[cfg(feature = "ssh2-backend")]
 fn bench_multiplex(c: &mut Criterion) {
     let Some(config) = SshBenchConfig::from_env() else {
         eprintln!("Skipping multiplex benchmarks: SSH_BENCH_HOST not set");
@@ -989,30 +1004,35 @@ fn criterion_config() -> Criterion {
         .with_output_color(true)
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_group! {
     name = connection_benches;
     config = criterion_config();
     targets = bench_connection
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_group! {
     name = execution_benches;
     config = criterion_config();
     targets = bench_execution
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_group! {
     name = transfer_benches;
     config = criterion_config();
     targets = bench_transfer
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_group! {
     name = parallel_benches;
     config = criterion_config();
     targets = bench_parallel
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_group! {
     name = multiplex_benches;
     config = criterion_config();
@@ -1049,6 +1069,7 @@ criterion_group! {
     targets = bench_mock_playbook
 }
 
+#[cfg(feature = "ssh2-backend")]
 criterion_main!(
     // Mock benchmarks (always run, no SSH required)
     mock_overhead_benches,
@@ -1062,6 +1083,16 @@ criterion_main!(
     transfer_benches,
     parallel_benches,
     multiplex_benches
+);
+
+#[cfg(not(feature = "ssh2-backend"))]
+criterion_main!(
+    // Mock benchmarks (always run, no SSH required)
+    mock_overhead_benches,
+    mock_parallel_benches,
+    mock_concurrent_benches,
+    mock_latency_benches,
+    mock_playbook_benches,
 );
 
 // ============================================================================

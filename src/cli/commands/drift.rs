@@ -31,8 +31,33 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
+
+use reqwest;
+
+use rustible::inventory::Inventory;
+use rustible::modules::{ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleRegistry};
 
 use super::CommandContext;
+
+/// Modules that are non-stateful and should be skipped during drift detection.
+const NON_DRIFT_MODULES: &[&str] = &[
+    "command",
+    "shell",
+    "raw",
+    "debug",
+    "set_fact",
+    "assert",
+    "fail",
+    "meta",
+    "pause",
+    "wait_for",
+    "include_vars",
+    "include_tasks",
+    "import_tasks",
+    "script",
+    "facts",
+];
 
 /// Arguments for the drift command
 #[derive(Parser, Debug, Clone)]
@@ -71,6 +96,18 @@ pub struct DriftArgs {
     /// Timeout for drift checks in seconds
     #[arg(long, default_value = "300")]
     pub timeout: u64,
+
+    /// Maximum allowed drift percentage (0-100). Exit code 2 if breached.
+    #[arg(long)]
+    pub sla_max_drift_percent: Option<f64>,
+
+    /// Webhook URL to POST drift alerts to when SLA is breached
+    #[arg(long)]
+    pub alert_webhook: Option<String>,
+
+    /// Email address for drift alerts (stored in report; sending not implemented)
+    #[arg(long)]
+    pub alert_email: Option<String>,
 }
 
 /// Status of a resource's drift
@@ -175,6 +212,86 @@ pub struct DriftSummary {
     pub unknown: usize,
 }
 
+/// Convert YAML module args to ModuleParams (HashMap<String, serde_json::Value>)
+fn yaml_to_module_params(args: &serde_yaml::Value) -> ModuleParams {
+    let mut params = ModuleParams::new();
+    match args {
+        serde_yaml::Value::Mapping(map) => {
+            for (key, value) in map {
+                if let Some(key_str) = key.as_str() {
+                    if let Ok(json_val) = serde_json::to_value(value) {
+                        params.insert(key_str.to_string(), json_val);
+                    }
+                }
+            }
+        }
+        serde_yaml::Value::String(s) => {
+            // String shorthand: treat as the "name" parameter (e.g. "package: nginx")
+            params.insert(
+                "name".to_string(),
+                serde_json::Value::String(s.clone()),
+            );
+        }
+        serde_yaml::Value::Null => {}
+        other => {
+            // For scalar values, store as free_form
+            if let Ok(json_val) = serde_json::to_value(other) {
+                params.insert("free_form".to_string(), json_val);
+            }
+        }
+    }
+    params
+}
+
+/// Convert module output diff to the CLI DriftDiff type
+fn module_output_to_drift_diff(output: &ModuleOutput) -> Option<DriftDiff> {
+    let mut changed_fields = Vec::new();
+
+    if let Some(ref diff) = output.diff {
+        if !diff.before.is_empty() || !diff.after.is_empty() {
+            changed_fields.push(FieldDiff {
+                field: "state".to_string(),
+                current: diff.before.clone(),
+                desired: diff.after.clone(),
+            });
+        }
+        // If there are details, add them as an additional field diff
+        if let Some(ref details) = diff.details {
+            if !details.is_empty() {
+                changed_fields.push(FieldDiff {
+                    field: "details".to_string(),
+                    current: String::new(),
+                    desired: details.clone(),
+                });
+            }
+        }
+    }
+
+    // Also inspect data for common field-level details
+    for (key, value) in &output.data {
+        match key.as_str() {
+            "path" | "mode" | "owner" | "group" | "state" | "version" => {
+                changed_fields.push(FieldDiff {
+                    field: key.clone(),
+                    current: String::new(),
+                    desired: value.to_string(),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    if changed_fields.is_empty() {
+        None
+    } else {
+        Some(DriftDiff {
+            changed_fields,
+            added_fields: Vec::new(),
+            removed_fields: Vec::new(),
+        })
+    }
+}
+
 impl DriftArgs {
     /// Execute the drift command
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
@@ -188,8 +305,8 @@ impl DriftArgs {
         let plays: Vec<serde_yaml::Value> = serde_yaml::from_str(&playbook_content)?;
 
         // Build inventory
-        let inventory = ctx.inventory();
-        if inventory.is_none() {
+        let inventory_path = ctx.inventory();
+        if inventory_path.is_none() {
             ctx.output
                 .error("No inventory specified. Use -i <inventory>");
             return Ok(1);
@@ -211,12 +328,74 @@ impl DriftArgs {
             self.print_report(ctx, &report);
         }
 
-        // Return exit code based on drift status
-        if report.summary.drifted > 0 || report.summary.missing > 0 {
-            Ok(2) // Drift detected
+        // Determine base exit code from drift status
+        let mut exit_code = if report.summary.drifted > 0 || report.summary.missing > 0 {
+            2 // Drift detected
         } else {
-            Ok(0) // No drift
+            0 // No drift
+        };
+
+        // SLA tracking: check if drift percentage exceeds threshold
+        if let Some(sla_threshold) = self.sla_max_drift_percent {
+            let total = report.summary.total_resources as f64;
+            let drift_percent = if total > 0.0 {
+                (report.summary.drifted + report.summary.missing + report.summary.extra) as f64
+                    / total
+                    * 100.0
+            } else {
+                0.0
+            };
+
+            if drift_percent > sla_threshold {
+                ctx.output.error(&format!(
+                    "SLA BREACH: drift {:.1}% exceeds threshold {:.1}%",
+                    drift_percent, sla_threshold
+                ));
+
+                if let Some(ref email) = self.alert_email {
+                    ctx.output.warning(&format!(
+                        "Alert email registered: {} (sending not implemented)",
+                        email
+                    ));
+                }
+
+                if let Some(ref webhook_url) = self.alert_webhook {
+                    let payload = serde_json::json!({
+                        "event": "drift_sla_breach",
+                        "drift_percent": drift_percent,
+                        "sla_threshold": sla_threshold,
+                        "total_resources": report.summary.total_resources,
+                        "drifted_resources": report.summary.drifted,
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    });
+
+                    ctx.output
+                        .info(&format!("Sending SLA breach alert to {}", webhook_url));
+
+                    let client = reqwest::Client::new();
+                    match client.post(webhook_url).json(&payload).send().await {
+                        Ok(resp) => {
+                            if resp.status().is_success() {
+                                ctx.output.success("Webhook alert sent successfully");
+                            } else {
+                                ctx.output.warning(&format!(
+                                    "Webhook returned status: {}",
+                                    resp.status()
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            ctx.output
+                                .warning(&format!("Failed to send webhook alert: {}", e));
+                        }
+                    }
+                }
+
+                exit_code = 2;
+            }
         }
+
+        Ok(exit_code)
     }
 
     /// Detect drift by comparing current state to desired state
@@ -225,23 +404,67 @@ impl DriftArgs {
         ctx: &mut CommandContext,
         plays: &[serde_yaml::Value],
     ) -> Result<DriftReport> {
+        let registry = ModuleRegistry::with_builtins();
+
+        // Load inventory
+        let inventory_path = ctx
+            .inventory()
+            .cloned()
+            .expect("inventory checked in execute()");
+        let inventory = Inventory::load(&inventory_path).map_err(|e| {
+            anyhow::anyhow!("Failed to load inventory from {}: {}", inventory_path.display(), e)
+        })?;
+
         let mut findings = Vec::new();
         let mut hosts_checked = Vec::new();
 
         for play in plays {
             let hosts_pattern = play.get("hosts").and_then(|h| h.as_str()).unwrap_or("all");
 
-            // In a real implementation, this would resolve the host pattern
-            // and connect to each host to gather current state
-            let play_hosts = vec![hosts_pattern.to_string()];
+            // Resolve hosts from the inventory using the pattern
+            let play_hosts: Vec<String> = match inventory.get_hosts_for_pattern(hosts_pattern) {
+                Ok(hosts) => hosts.iter().map(|h| h.name.clone()).collect(),
+                Err(e) => {
+                    ctx.output.warning(&format!(
+                        "Could not resolve host pattern '{}': {}",
+                        hosts_pattern, e
+                    ));
+                    continue;
+                }
+            };
+
+            // Apply limit filter if set
+            let play_hosts: Vec<String> = if let Some(ref limit) = self.limit {
+                match inventory.get_hosts_for_pattern(limit) {
+                    Ok(limit_hosts) => {
+                        let limit_names: std::collections::HashSet<&str> =
+                            limit_hosts.iter().map(|h| h.name.as_str()).collect();
+                        play_hosts
+                            .into_iter()
+                            .filter(|h| limit_names.contains(h.as_str()))
+                            .collect()
+                    }
+                    Err(_) => {
+                        // Fall back to simple string match against limit
+                        play_hosts
+                            .into_iter()
+                            .filter(|h| h.contains(limit.as_str()))
+                            .collect()
+                    }
+                }
+            } else {
+                play_hosts
+            };
+
             hosts_checked.extend(play_hosts.clone());
 
             // Get tasks from the play
             if let Some(tasks) = play.get("tasks").and_then(|t| t.as_sequence()) {
                 for task in tasks {
-                    // Check drift for each task
                     for host in &play_hosts {
-                        if let Some(finding) = self.check_task_drift(ctx, host, task).await? {
+                        if let Some(finding) =
+                            self.check_task_drift(ctx, host, task, &registry).await?
+                        {
                             let status = finding.status.clone();
                             findings.push(finding);
 
@@ -285,12 +508,13 @@ impl DriftArgs {
         })
     }
 
-    /// Check drift for a single task
+    /// Check drift for a single task by executing the module in check_mode
     async fn check_task_drift(
         &self,
         ctx: &CommandContext,
         host: &str,
         task: &serde_yaml::Value,
+        registry: &ModuleRegistry,
     ) -> Result<Option<DriftFinding>> {
         let task_name = task
             .get("name")
@@ -300,18 +524,20 @@ impl DriftArgs {
         // Detect module type from task
         let (module_type, module_args) = self.detect_module(task)?;
 
+        // Skip non-stateful modules that can't have drift
+        if NON_DRIFT_MODULES.contains(&module_type.as_str()) || module_type == "unknown" {
+            return Ok(None);
+        }
+
         if let Some(ref filter) = self.resource_type {
             if module_type != *filter {
                 return Ok(None);
             }
         }
 
-        // Simulate drift detection based on module type
-        // In a real implementation, this would:
-        // 1. Connect to the host
-        // 2. Gather current state for the resource
-        // 3. Compare to desired state from task arguments
-        let finding = self.simulate_drift_check(host, task_name, &module_type, &module_args)?;
+        // Execute the module in check_mode to detect drift
+        let finding =
+            self.execute_drift_check(host, task_name, &module_type, &module_args, registry)?;
 
         if self.detailed && finding.status != DriftStatus::InSync {
             ctx.output.debug(&format!(
@@ -321,6 +547,113 @@ impl DriftArgs {
         }
 
         Ok(Some(finding))
+    }
+
+    /// Execute a module in check_mode to detect drift
+    fn execute_drift_check(
+        &self,
+        host: &str,
+        task_name: &str,
+        module_type: &str,
+        module_args: &serde_yaml::Value,
+        registry: &ModuleRegistry,
+    ) -> Result<DriftFinding> {
+        let params = yaml_to_module_params(module_args);
+        let desired_state = serde_json::to_value(module_args).ok();
+
+        // Build module context with check_mode and diff_mode enabled
+        let module_ctx = ModuleContext::new()
+            .with_check_mode(true)
+            .with_diff_mode(true);
+
+        // Execute with timeout
+        let timeout_duration = Duration::from_secs(self.timeout);
+        let result = {
+            let start = std::time::Instant::now();
+            let res = registry.execute(module_type, &params, &module_ctx);
+            if start.elapsed() > timeout_duration {
+                return Ok(DriftFinding {
+                    host: host.to_string(),
+                    resource: task_name.to_string(),
+                    resource_type: module_type.to_string(),
+                    status: DriftStatus::Unknown,
+                    current_state: None,
+                    desired_state,
+                    description: format!(
+                        "{} on {} timed out after {}s",
+                        task_name, host, self.timeout
+                    ),
+                    diff: None,
+                });
+            }
+            res
+        };
+
+        match result {
+            Ok(output) => {
+                if output.changed {
+                    // Module reports it would change something -> resource has drifted
+                    let drift_diff = module_output_to_drift_diff(&output);
+                    Ok(DriftFinding {
+                        host: host.to_string(),
+                        resource: task_name.to_string(),
+                        resource_type: module_type.to_string(),
+                        status: DriftStatus::Drifted,
+                        current_state: Some(output.to_result_json()),
+                        desired_state,
+                        description: format!(
+                            "{} on {} has drifted: {}",
+                            task_name, host, output.msg
+                        ),
+                        diff: drift_diff,
+                    })
+                } else {
+                    // Module reports no changes needed -> in sync
+                    Ok(DriftFinding {
+                        host: host.to_string(),
+                        resource: task_name.to_string(),
+                        resource_type: module_type.to_string(),
+                        status: DriftStatus::InSync,
+                        current_state: Some(output.to_result_json()),
+                        desired_state,
+                        description: format!("{} on {} is in sync", task_name, host),
+                        diff: None,
+                    })
+                }
+            }
+            Err(ModuleError::NotFound(_)) => {
+                // Unknown module - can't check drift
+                Ok(DriftFinding {
+                    host: host.to_string(),
+                    resource: task_name.to_string(),
+                    resource_type: module_type.to_string(),
+                    status: DriftStatus::Unknown,
+                    current_state: None,
+                    desired_state,
+                    description: format!(
+                        "Module '{}' not found in registry, cannot check drift for {}",
+                        module_type, task_name
+                    ),
+                    diff: None,
+                })
+            }
+            Err(e) => {
+                // Execution error - report as unknown drift status
+                Ok(DriftFinding {
+                    host: host.to_string(),
+                    resource: task_name.to_string(),
+                    resource_type: module_type.to_string(),
+                    status: DriftStatus::Unknown,
+                    current_state: None,
+                    desired_state,
+                    description: format!(
+                        "Error checking drift for {} on {}: {}",
+                        task_name, host, e
+                    ),
+                    diff: None,
+                })
+            }
+        }
     }
 
     /// Detect which module a task uses
@@ -375,34 +708,6 @@ impl DriftArgs {
         }
 
         Ok(("unknown".to_string(), serde_yaml::Value::Null))
-    }
-
-    /// Simulate drift check (placeholder for actual implementation)
-    fn simulate_drift_check(
-        &self,
-        host: &str,
-        task_name: &str,
-        module_type: &str,
-        module_args: &serde_yaml::Value,
-    ) -> Result<DriftFinding> {
-        // This is a simulation - in real implementation, this would:
-        // 1. Execute check-mode equivalent for the module
-        // 2. Compare gathered facts with desired state
-
-        // For now, return an in-sync status as a placeholder
-        Ok(DriftFinding {
-            host: host.to_string(),
-            resource: task_name.to_string(),
-            resource_type: module_type.to_string(),
-            status: DriftStatus::InSync,
-            current_state: Some(serde_json::json!({
-                "module": module_type,
-                "state": "present"
-            })),
-            desired_state: Some(serde_json::to_value(module_args)?),
-            description: format!("{} on {} is in sync", task_name, host),
-            diff: None,
-        })
     }
 
     /// Print the drift report
@@ -611,5 +916,65 @@ mod tests {
         assert_eq!(args.playbook, PathBuf::from("playbook.yml"));
         assert_eq!(args.limit, Some("webservers".to_string()));
         assert!(args.detailed);
+    }
+
+    #[test]
+    fn test_yaml_to_module_params_mapping() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+            path: /etc/hosts
+            owner: root
+            mode: "0644"
+            "#,
+        )
+        .unwrap();
+
+        let params = yaml_to_module_params(&yaml);
+        assert_eq!(
+            params.get("path"),
+            Some(&serde_json::Value::String("/etc/hosts".to_string()))
+        );
+        assert_eq!(
+            params.get("owner"),
+            Some(&serde_json::Value::String("root".to_string()))
+        );
+        assert_eq!(
+            params.get("mode"),
+            Some(&serde_json::Value::String("0644".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_yaml_to_module_params_string() {
+        let yaml = serde_yaml::Value::String("nginx".to_string());
+        let params = yaml_to_module_params(&yaml);
+        assert_eq!(
+            params.get("name"),
+            Some(&serde_json::Value::String("nginx".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_yaml_to_module_params_null() {
+        let yaml = serde_yaml::Value::Null;
+        let params = yaml_to_module_params(&yaml);
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn test_non_drift_modules_skipped() {
+        for module in NON_DRIFT_MODULES {
+            assert!(
+                NON_DRIFT_MODULES.contains(module),
+                "{} should be in skip list",
+                module
+            );
+        }
+        // Ensure stateful modules are NOT in the skip list
+        assert!(!NON_DRIFT_MODULES.contains(&"file"));
+        assert!(!NON_DRIFT_MODULES.contains(&"package"));
+        assert!(!NON_DRIFT_MODULES.contains(&"service"));
+        assert!(!NON_DRIFT_MODULES.contains(&"user"));
+        assert!(!NON_DRIFT_MODULES.contains(&"copy"));
     }
 }

@@ -135,30 +135,18 @@ pub struct ModuleParityTracker {
 impl ModuleParityTracker {
     /// Create a new module parity tracker with default modules.
     pub fn new() -> Self {
-        let tracker = Self {
-            modules: Arc::new(RwLock::new(HashMap::new())),
-        };
-        
-        // Initialize with known modules
-        tracker.init_default_modules();
-        
-        tracker
-    }
-
-    /// Initialize with default set of Ansible modules.
-    fn init_default_modules(&self) {
-        let defaults = self.get_default_modules();
-        let modules = Arc::clone(&self.modules);
-        tokio::spawn(async move {
-            let mut map = modules.write().await;
-            for module in defaults {
-                map.insert(module.name.clone(), module);
-            }
-        });
+        let defaults = Self::get_default_modules_static();
+        let mut modules = HashMap::new();
+        for module in defaults {
+            modules.insert(module.name.clone(), module);
+        }
+        Self {
+            modules: Arc::new(RwLock::new(modules)),
+        }
     }
 
     /// Get the default set of Ansible modules to track.
-    fn get_default_modules(&self) -> Vec<ModuleInfo> {
+    fn get_default_modules_static() -> Vec<ModuleInfo> {
         vec![
             // Core modules (fully implemented)
             ModuleInfo::new(
