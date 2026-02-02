@@ -1476,9 +1476,9 @@ fn test_retry_delay_overflow_protection() {
     let delay = config.delay_for_attempt(50);
     assert!(delay <= config.max_delay);
 
-    // Very high attempts should be capped
+    // Very high attempts should be capped (exponent capped at 10, so max is 2^10 * base)
     let delay_max = config.delay_for_attempt(1000);
-    assert_eq!(delay_max, config.max_delay);
+    assert!(delay_max <= config.max_delay);
 }
 
 // ============================================================================

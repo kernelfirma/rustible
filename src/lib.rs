@@ -414,12 +414,12 @@ pub mod strategy;
 /// let status = cache.status();
 /// println!("Cache hit rate: {:.2}%", status.facts_hit_rate * 100.0);
 /// # Ok(())
-
-/// Performance benchmarking and comparison against Ansible.
-pub mod benchmarks;
 /// # }
 /// ```
 pub mod cache;
+
+/// Performance benchmarking and comparison against Ansible.
+pub mod benchmarks;
 
 // ============================================================================
 // Startup Optimization

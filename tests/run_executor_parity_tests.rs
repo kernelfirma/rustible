@@ -72,8 +72,6 @@ fn test_run_simple_playbook_cli() {
         .arg(playbook.path())
         .arg("-i")
         .arg(inventory.path())
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -119,8 +117,6 @@ fn test_run_with_check_mode_cli() {
         .arg("-i")
         .arg(inventory.path())
         .arg("--check")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -202,8 +198,6 @@ fn test_run_with_extra_vars_cli() {
         .arg(inventory.path())
         .arg("-e")
         .arg("my_extra_var=test_value")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -245,8 +239,6 @@ fn test_run_with_tags_cli() {
         .arg(inventory.path())
         .arg("--tags")
         .arg("mytag")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -292,8 +284,6 @@ fn test_run_verbosity_levels_cli() {
         .arg("-i")
         .arg(inventory.path())
         .arg("-v")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -309,8 +299,6 @@ fn test_run_verbosity_levels_cli() {
         .arg("-i")
         .arg(inventory.path())
         .arg("-vv")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -436,8 +424,6 @@ fn test_run_recap_stats_format_cli() {
         .arg(playbook.path())
         .arg("-i")
         .arg(inventory.path())
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -487,8 +473,6 @@ fn test_run_with_diff_mode_cli() {
         .arg("-i")
         .arg(inventory.path())
         .arg("--diff")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -531,8 +515,6 @@ fn test_run_with_forks_cli() {
         .arg(inventory.path())
         .arg("-f")
         .arg("10")
-        .arg("--connection")
-        .arg("local")
         .output()
         .expect("Failed to execute command");
 
@@ -570,8 +552,6 @@ fn test_run_with_json_callback_cli() {
         .arg(playbook.path())
         .arg("-i")
         .arg(inventory.path())
-        .arg("--connection")
-        .arg("local")
         .env("RUSTIBLE_STDOUT_CALLBACK", "json")
         .output()
         .expect("Failed to execute command");
