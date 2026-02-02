@@ -116,8 +116,15 @@ impl FileModule {
         }
     }
 
-    fn set_permissions(path: &Path, mode: u32) -> ModuleResult<bool> {
-        let meta = fs::symlink_metadata(path)?;
+    fn set_permissions(path: &Path, mode: u32, metadata: Option<&fs::Metadata>) -> ModuleResult<bool> {
+        let meta_storage;
+        let meta = match metadata {
+            Some(m) => m,
+            None => {
+                meta_storage = fs::symlink_metadata(path)?;
+                &meta_storage
+            }
+        };
 
         // Don't change permissions on symlinks
         if meta.file_type().is_symlink() {
@@ -132,10 +139,18 @@ impl FileModule {
         Ok(false)
     }
 
-    fn set_owner(path: &Path, owner: Option<u32>, group: Option<u32>) -> ModuleResult<bool> {
+    fn set_owner(path: &Path, owner: Option<u32>, group: Option<u32>, metadata: Option<&fs::Metadata>) -> ModuleResult<bool> {
         use std::os::unix::fs::chown;
 
-        let meta = fs::symlink_metadata(path)?;
+        let meta_storage;
+        let meta = match metadata {
+            Some(m) => m,
+            None => {
+                meta_storage = fs::symlink_metadata(path)?;
+                &meta_storage
+            }
+        };
+
         let current_user_id = meta.uid();
         let current_group_id = meta.gid();
 
@@ -193,26 +208,42 @@ impl FileModule {
         )))
     }
 
+    /// Check if SELinux is enabled on the system
+    #[cfg(target_os = "linux")]
+    fn check_selinux_enabled() -> bool {
+        use std::process::Command;
+        let sestatus = Command::new("sestatus").output();
+        match sestatus {
+            Ok(output) => {
+                let status = String::from_utf8_lossy(&output.stdout);
+                status.contains("SELinux status:                 enabled")
+            }
+            Err(_) => false,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn check_selinux_enabled() -> bool {
+        false
+    }
+
     /// Set SELinux context on a file (Linux-specific)
     #[cfg(target_os = "linux")]
-    fn set_selinux_context(path: &Path, context: &SelinuxContext) -> ModuleResult<bool> {
+    fn set_selinux_context(path: &Path, context: &SelinuxContext, selinux_enabled: Option<bool>) -> ModuleResult<bool> {
         use std::process::Command;
 
         if !context.is_set() {
             return Ok(false);
         }
 
-        // Check if SELinux is enabled
-        let sestatus = Command::new("sestatus").output();
-        let selinux_enabled = match sestatus {
-            Ok(output) => {
-                let status = String::from_utf8_lossy(&output.stdout);
-                status.contains("SELinux status:                 enabled")
-            }
-            Err(_) => false,
+        // Use cached status if provided, otherwise check
+        let enabled = if let Some(e) = selinux_enabled {
+            e
+        } else {
+            Self::check_selinux_enabled()
         };
 
-        if !selinux_enabled {
+        if !enabled {
             // SELinux not available, skip silently
             return Ok(false);
         }
@@ -253,7 +284,7 @@ impl FileModule {
 
     /// Stub for non-Linux systems
     #[cfg(not(target_os = "linux"))]
-    fn set_selinux_context(_path: &Path, context: &SelinuxContext) -> ModuleResult<bool> {
+    fn set_selinux_context(_path: &Path, context: &SelinuxContext, _selinux_enabled: Option<bool>) -> ModuleResult<bool> {
         if context.is_set() {
             // Warn that SELinux is not available but don't fail
             return Ok(false);
@@ -271,6 +302,13 @@ impl FileModule {
         selinux: &SelinuxContext,
     ) -> ModuleResult<bool> {
         let mut changed = false;
+
+        // Check SELinux status once if needed
+        let selinux_enabled = if selinux.is_set() {
+            Some(Self::check_selinux_enabled())
+        } else {
+            None
+        };
 
         for entry in walkdir::WalkDir::new(path).follow_links(follow) {
             let entry = match entry {
@@ -290,20 +328,29 @@ impl FileModule {
                 continue;
             }
 
+            // Fetch metadata once per file to reuse for permissions and owner checks
+            // We use symlink_metadata because set_permissions/set_owner use it
+            let metadata = if mode.is_some() || owner.is_some() || group.is_some() {
+                 Some(fs::symlink_metadata(entry_path).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to stat {}: {}", entry_path.display(), e)))?)
+            } else {
+                None
+            };
+            let metadata_ref = metadata.as_ref();
+
             // Set mode if specified
             if let Some(m) = mode {
-                if Self::set_permissions(entry_path, m)? {
+                if Self::set_permissions(entry_path, m, metadata_ref)? {
                     changed = true;
                 }
             }
 
             // Set ownership if specified
-            if Self::set_owner(entry_path, owner, group)? {
+            if Self::set_owner(entry_path, owner, group, metadata_ref)? {
                 changed = true;
             }
 
             // Set SELinux context if specified
-            if Self::set_selinux_context(entry_path, selinux)? {
+            if Self::set_selinux_context(entry_path, selinux, selinux_enabled)? {
                 changed = true;
             }
         }
@@ -597,13 +644,13 @@ impl Module for FileModule {
 
                 let created = Self::create_directory(path, mode, recurse)?;
                 let perm_changed = if let Some(m) = mode {
-                    Self::set_permissions(path, m)?
+                    Self::set_permissions(path, m, None)?
                 } else {
                     false
                 };
-                let owner_changed = Self::set_owner(path, owner, group)?;
+                let owner_changed = Self::set_owner(path, owner, group, None)?;
                 let times_changed = Self::set_times(path, access_time, modification_time)?;
-                let selinux_changed = Self::set_selinux_context(path, &selinux)?;
+                let selinux_changed = Self::set_selinux_context(path, &selinux, None)?;
 
                 // Apply attributes recursively if requested
                 let recursive_changed = if recurse && path.is_dir() {
@@ -672,13 +719,13 @@ impl Module for FileModule {
 
                 let created = Self::create_file(&target_path, mode)?;
                 let perm_changed = if let Some(m) = mode {
-                    Self::set_permissions(&target_path, m)?
+                    Self::set_permissions(&target_path, m, None)?
                 } else {
                     false
                 };
-                let owner_changed = Self::set_owner(&target_path, owner, group)?;
+                let owner_changed = Self::set_owner(&target_path, owner, group, None)?;
                 let times_changed = Self::set_times(&target_path, access_time, modification_time)?;
-                let selinux_changed = Self::set_selinux_context(&target_path, &selinux)?;
+                let selinux_changed = Self::set_selinux_context(&target_path, &selinux, None)?;
 
                 if created {
                     Ok(ModuleOutput::changed(format!(
@@ -795,10 +842,10 @@ impl Module for FileModule {
                 }
 
                 if let Some(m) = mode {
-                    Self::set_permissions(path, m)?;
+                    Self::set_permissions(path, m, None)?;
                 }
-                Self::set_owner(path, owner, group)?;
-                Self::set_selinux_context(path, &selinux)?;
+                Self::set_owner(path, owner, group, None)?;
+                Self::set_selinux_context(path, &selinux, None)?;
 
                 Ok(ModuleOutput::changed(format!("Touched '{}'", path_str)))
             }

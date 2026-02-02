@@ -22,3 +22,7 @@
 ## 2024-05-25 - [Lineinfile Optimization]
 **Learning:** `lineinfile` module was unconditionally cloning the file content for diff generation even when diffs were not requested. It also allocated a vector of matching indices for regex replacement.
 **Action:** Guard expensive clones with feature flags (like `diff_mode`). Use in-place iteration or single-pass search (`position`, `find`) instead of `collect()` + loop when modifying data, especially for "first match" scenarios.
+
+## 2024-05-26 - [File Module Syscall Reduction]
+**Learning:** Recursive file operations using `walkdir` can trigger excessive syscalls if internal helpers (`set_permissions`, `set_owner`) re-stat the file. Furthermore, checking global system state (like `sestatus`) inside a file loop spawns a subprocess for every file, causing massive slowdowns.
+**Action:** Reuse `metadata` obtained from `walkdir` or a single `stat` call across multiple attribute setters. Cache system checks (like SELinux status) outside the recursive loop.
