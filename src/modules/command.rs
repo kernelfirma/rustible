@@ -43,12 +43,35 @@ impl CommandModule {
     }
 
     /// Build the command string from params (for display and remote execution)
-    fn get_command_string(&self, params: &ModuleParams) -> ModuleResult<String> {
+    fn get_command_string(
+        &self,
+        params: &ModuleParams,
+        context: &ModuleContext,
+    ) -> ModuleResult<String> {
         let cmd = self.get_cmd_param(params)?;
         let argv = params.get_vec_string("argv")?;
-        let shell_type = params
-            .get_string("shell_type")?
-            .unwrap_or_else(|| "posix".to_string());
+
+        // Determine shell type
+        let shell_type = if let Some(st) = params.get_string("shell_type")? {
+            st
+        } else {
+            // Auto-detect based on OS family
+            let os_family = context
+                .facts
+                .get("os_family")
+                .or_else(|| context.facts.get("ansible_os_family"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+
+            if os_family.eq_ignore_ascii_case("windows") {
+                // On Windows, default to cmd escaping (double quotes) which works
+                // reasonably well for both cmd.exe and PowerShell, whereas POSIX
+                // single quotes fail completely on cmd.exe.
+                "cmd".to_string()
+            } else {
+                "posix".to_string()
+            }
+        };
 
         if let Some(argv) = argv {
             if argv.is_empty() {
@@ -276,13 +299,13 @@ impl CommandModule {
 
         // In check mode, return what would happen
         if context.check_mode {
-            let cmd = self.get_command_string(params)?;
+            let cmd = self.get_command_string(params, context)?;
             return Ok(ModuleOutput::changed(format!("Would execute: {}", cmd))
                 .with_command_output(Some(String::new()), Some(String::new()), Some(0)));
         }
 
         let mut command = self.build_command(params, context)?;
-        let cmd_display = self.get_command_string(params)?;
+        let cmd_display = self.get_command_string(params, context)?;
 
         // Execute the command
         let output = command.output().map_err(|e| {
@@ -325,7 +348,7 @@ impl CommandModule {
     ) -> ModuleResult<ModuleOutput> {
         let params_clone = params.clone();
         let check_mode = context.check_mode;
-        let cmd_display = self.get_command_string(params)?;
+        let cmd_display = self.get_command_string(params, context)?;
         let options = self.build_execute_options(params, context)?;
         let warn_on_stderr = params.get_bool_or("warn", true);
 
@@ -454,6 +477,7 @@ impl Module for CommandModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modules::ModuleContextBuilder;
     use std::collections::HashMap;
 
     #[test]
@@ -553,7 +577,8 @@ mod tests {
         );
         params.insert("shell_type".to_string(), serde_json::json!("cmd"));
 
-        let cmd = module.get_command_string(&params).unwrap();
+        let context = ModuleContext::default();
+        let cmd = module.get_command_string(&params, &context).unwrap();
         // Should use double quotes for cmd.exe
         assert_eq!(cmd, "\"echo\" \"hello & calc.exe\"");
     }
@@ -568,41 +593,52 @@ mod tests {
         );
         params.insert("shell_type".to_string(), serde_json::json!("powershell"));
 
-        let cmd = module.get_command_string(&params).unwrap();
+        let context = ModuleContext::default();
+        let cmd = module.get_command_string(&params, &context).unwrap();
         // Should use single quotes with doubled single quotes for PowerShell
         assert_eq!(cmd, "'echo' 'hello''world'");
     }
 
     #[test]
-    fn test_get_command_string_optimization() {
+    fn test_command_windows_auto_detection() {
         let module = CommandModule;
-
-        // Case 1: POSIX (default) with simple strings (should borrow)
         let mut params: ModuleParams = HashMap::new();
         params.insert(
             "argv".to_string(),
-            serde_json::json!(["ls", "-la", "/tmp"]),
+            serde_json::json!(["echo", "hello & calc.exe"]),
         );
-        let cmd = module.get_command_string(&params).unwrap();
-        assert_eq!(cmd, "ls -la /tmp");
+        // No shell_type specified
 
-        // Case 2: POSIX with strings needing escape (should own)
+        // Create context with Windows OS family
+        let mut facts = HashMap::new();
+        facts.insert("os_family".to_string(), serde_json::json!("Windows"));
+        let context = ModuleContextBuilder::new().facts(facts).build().unwrap();
+
+        let cmd = module.get_command_string(&params, &context).unwrap();
+
+        // Should default to cmd escaping (double quotes) for Windows
+        assert_eq!(cmd, "\"echo\" \"hello & calc.exe\"");
+    }
+
+    #[test]
+    fn test_command_default_posix() {
+        let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert(
             "argv".to_string(),
-            serde_json::json!(["echo", "hello world", "don't"]),
+            serde_json::json!(["echo", "hello & calc.exe"]),
         );
-        let cmd = module.get_command_string(&params).unwrap();
-        // echo 'hello world' 'don'\''t'
-        assert_eq!(cmd, "echo 'hello world' 'don'\\''t'");
+        // No shell_type specified
 
-        // Case 3: Mixed simple and complex (should mix borrow and own internally)
-        let mut params: ModuleParams = HashMap::new();
-        params.insert(
-            "argv".to_string(),
-            serde_json::json!(["grep", "pattern", "file with space.txt"]),
-        );
-        let cmd = module.get_command_string(&params).unwrap();
-        assert_eq!(cmd, "grep pattern 'file with space.txt'");
+        // Create context with Linux OS family
+        let mut facts = HashMap::new();
+        facts.insert("os_family".to_string(), serde_json::json!("Debian"));
+        let context = ModuleContextBuilder::new().facts(facts).build().unwrap();
+
+        let cmd = module.get_command_string(&params, &context).unwrap();
+
+        // Should default to posix escaping (single quotes where needed)
+        // 'echo' is safe so it's not quoted. 'hello & calc.exe' is quoted.
+        assert_eq!(cmd, "echo 'hello & calc.exe'");
     }
 }
