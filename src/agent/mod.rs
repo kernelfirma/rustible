@@ -206,6 +206,8 @@ pub enum AgentMethod {
     Facts,
     /// Ping/health check
     Ping,
+    /// Query agent status
+    Status,
     /// Shutdown agent
     Shutdown,
 }
