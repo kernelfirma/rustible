@@ -3,6 +3,7 @@
 //! Provides colored output, progress indicators, and various output formats.
 
 use colored::Colorize;
+use console::measure_text_width;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -330,7 +331,7 @@ impl OutputFormatter {
         let max_host_len = stats
             .hosts
             .keys()
-            .map(|h| h.len())
+            .map(|h| measure_text_width(h))
             .max()
             .unwrap_or(0)
             .max(30);
@@ -361,7 +362,7 @@ impl OutputFormatter {
                 };
 
                 // Manual padding to ensure proper visual alignment with ANSI codes
-                let padding_len = max_host_len.saturating_sub(host.len());
+                let padding_len = max_host_len.saturating_sub(measure_text_width(host));
                 print!("{}{:width$}: ", host_colored, "", width = padding_len);
                 print!("{} ", fmt_stat("ok", host_stats.ok, colored::Color::Green));
                 print!(
@@ -416,9 +417,20 @@ impl OutputFormatter {
             let line = "─".repeat(width).bright_black();
             println!("{}", line);
 
+            // Align labels using visual width
+            let duration_label = "⏱️  Duration";
+            let status_label = "🏁 Status";
+            let label_width = 15;
+
+            let align_label = |text: &str| -> String {
+                let w = measure_text_width(text);
+                let padding = label_width.saturating_sub(w);
+                format!("{}{}", text, " ".repeat(padding))
+            };
+
             println!(
                 "  {} : {}",
-                format!("{:<15}", "⏱️  Duration").bright_white(),
+                align_label(duration_label).bright_white(),
                 duration_str.cyan()
             );
 
@@ -427,7 +439,7 @@ impl OutputFormatter {
                 let status_msg = format!("✖ FAILED ({} errors)", failures);
                 println!(
                     "  {} : {}",
-                    format!("{:<14}", "🏁 Status").bright_white(),
+                    align_label(status_label).bright_white(),
                     status_msg.red().bold()
                 );
             } else {
@@ -442,20 +454,20 @@ impl OutputFormatter {
                 };
                 println!(
                     "  {} : {}",
-                    format!("{:<14}", "🏁 Status").bright_white(),
+                    align_label(status_label).bright_white(),
                     status_msg.color(status_color).bold()
                 );
             }
 
             println!();
+
+            // Generate banners with correct visual width
+            let banner_width = 60;
+
             if stats.has_failures() {
                 let failures = stats.total_failed();
                 let message = format!("✖ FAILED ({} errors)", failures);
-                let width: usize = 60;
-                let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "━".repeat(padding);
-                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("{} {} {}", left_pad, message, right_pad);
+                let banner = format_banner(&message, banner_width);
                 println!("{}", banner.red().bold());
             } else {
                 let changes = stats.total_changed();
@@ -464,11 +476,7 @@ impl OutputFormatter {
                 } else {
                     "✔ SUCCESS (no changes)".to_string()
                 };
-                let width: usize = 60;
-                let padding = width.saturating_sub(message.len()) / 2;
-                let left_pad = "━".repeat(padding);
-                let right_pad = "━".repeat(width.saturating_sub(padding + message.len()));
-                let banner = format!("{} {} {}", left_pad, message, right_pad);
+                let banner = format_banner(&message, banner_width);
                 println!("{}", banner.green().bold());
             }
 
@@ -848,6 +856,20 @@ impl OutputFormatter {
     }
 }
 
+/// Helper to format a centered banner with consistent visual width
+fn format_banner(message: &str, width: usize) -> String {
+    let msg_width = measure_text_width(message);
+    // 2 spaces around message
+    let available = width.saturating_sub(msg_width + 2);
+    let padding = available / 2;
+    let left_pad = "━".repeat(padding);
+    // Ensure total width is exactly `width`
+    let used = padding + msg_width + 2;
+    let right_pad_len = width.saturating_sub(used);
+    let right_pad = "━".repeat(right_pad_len);
+    format!("{} {} {}", left_pad, message, right_pad)
+}
+
 /// Statistics for a single host
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct HostStats {
@@ -1039,5 +1061,29 @@ mod tests {
         assert_eq!(format_duration(Duration::from_secs(3600)), "1h");
         assert_eq!(format_duration(Duration::from_secs(3660)), "1h 1m");
         assert_eq!(format_duration(Duration::from_secs(3665)), "1h 1m 5s");
+    }
+
+    #[test]
+    fn test_format_banner() {
+        // Test with a short message
+        let msg = "TEST";
+        let width = 60;
+        let banner = format_banner(msg, width);
+        // Visual width should be 60
+        assert_eq!(measure_text_width(&banner), 60);
+        assert!(banner.contains("TEST"));
+
+        // Test with multi-byte emoji
+        let msg_emoji = "✔ SUCCESS";
+        let banner_emoji = format_banner(msg_emoji, width);
+
+        // Visual width should still be 60 despite multi-byte characters
+        assert_eq!(measure_text_width(&banner_emoji), 60);
+        assert!(banner_emoji.contains("SUCCESS"));
+
+        // Test with very long message (should minimize padding)
+        let msg_long = "A very long message that takes up most of the space";
+        let banner_long = format_banner(msg_long, width);
+        assert_eq!(measure_text_width(&banner_long), 60);
     }
 }
