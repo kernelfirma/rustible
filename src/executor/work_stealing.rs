@@ -40,7 +40,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -85,7 +85,7 @@
 //!
 //! The scheduler provides configuration presets for common workload types:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -111,7 +111,7 @@
 //!
 //! Work items can be assigned priorities and weights for smart scheduling:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -134,7 +134,7 @@
 //!
 //! Monitor scheduler performance with built-in statistics:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -173,7 +173,7 @@ use tracing::trace;
 ///
 /// # Examples
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -209,7 +209,7 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -239,7 +239,7 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -267,7 +267,7 @@ impl<T> WorkItem<T> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -366,7 +366,7 @@ impl<T> WorkQueue<T> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -434,7 +434,7 @@ impl WorkStealingConfig {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -469,7 +469,7 @@ impl WorkStealingConfig {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -508,7 +508,7 @@ impl WorkStealingConfig {
 ///
 /// # Examples
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -759,7 +759,7 @@ impl<T: Send + Sync + Clone + 'static> WorkStealingScheduler<T> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -805,7 +805,7 @@ impl WorkStealingStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;
@@ -858,7 +858,7 @@ impl WorkStealingStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::prelude::*;

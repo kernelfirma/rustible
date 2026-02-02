@@ -109,7 +109,6 @@ fn test_apt_module_parallelization_host_exclusive() {
 }
 
 #[test]
-#[ignore = "Implementation detail mismatch with test expectations"]
 fn test_apt_module_required_params() {
     let module = AptModule;
     let required = module.required_params();

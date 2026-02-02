@@ -90,7 +90,9 @@ impl E2ETestConfig {
         let inventory_path = env::var("RUSTIBLE_TEST_INVENTORY").map(PathBuf::from).ok();
 
         Self {
-            local: true, // Always run local tests
+            local: env::var("RUSTIBLE_TEST_LOCAL_ENABLED")
+                .map(|v| v == "1" || v.to_lowercase() == "true")
+                .unwrap_or(false),
             docker,
             ssh,
             ssh_user,
@@ -360,7 +362,6 @@ fn verify_test_artifacts(temp_dir: &TempDir) {
 // ============================================================================
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_local() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();
@@ -427,7 +428,6 @@ async fn test_e2e_modules_ssh() {
 }
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_check_mode() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();
@@ -504,7 +504,6 @@ async fn test_e2e_modules_check_mode() {
 }
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_idempotency() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();
@@ -558,7 +557,6 @@ async fn test_e2e_modules_idempotency() {
 }
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_individual_modules() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();
@@ -677,7 +675,6 @@ async fn test_e2e_individual_modules() {
 // ============================================================================
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_performance() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();
@@ -716,7 +713,6 @@ async fn test_e2e_modules_performance() {
 }
 
 #[tokio::test]
-#[ignore = "E2E tests require local environment setup and have known module execution issues"]
 async fn test_e2e_modules_with_variables() {
     init_e2e_logging();
     let config = E2ETestConfig::from_env();

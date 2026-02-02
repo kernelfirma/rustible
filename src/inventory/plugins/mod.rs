@@ -37,12 +37,17 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use rustible::inventory::plugins::{AwsEc2Plugin, PluginConfig};
+//! ```rust,no_run
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use rustible::inventory::plugins::{AwsEc2Plugin, PluginConfig, DynamicInventoryPlugin};
+//! use std::path::Path;
 //!
-//! let config = PluginConfig::from_file("aws_ec2.yml")?;
+//! let config = PluginConfig::from_file(Path::new("aws_ec2.yml"))?;
 //! let plugin = AwsEc2Plugin::new(config)?;
 //! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod aws_ec2;

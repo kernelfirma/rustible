@@ -13,7 +13,7 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::prelude::*;
 //! use rustible::api::{ApiServer, ApiConfig};
 //!

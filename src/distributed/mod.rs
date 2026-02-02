@@ -24,7 +24,7 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::distributed::{Controller, ClusterConfig, ControllerId};
 //!
 //! #[tokio::main]

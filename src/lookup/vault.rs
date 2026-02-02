@@ -11,7 +11,7 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::lookup::{LookupRegistry, LookupContext, VaultLookup};
 //! use std::sync::Arc;
 //!

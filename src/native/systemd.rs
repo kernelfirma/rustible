@@ -13,8 +13,9 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::native::systemd::{SystemdNative, UnitInfo, UnitState};
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use rustible::native::systemd::{SystemdNative, UnitInfo};
 //!
 //! let systemd = SystemdNative::new()?;
 //!
@@ -24,6 +25,8 @@
 //!
 //! // List all services
 //! let services = systemd.list_units("service")?;
+//! # Ok(())
+//! # }
 //! ```
 
 use super::{NativeError, NativeResult};

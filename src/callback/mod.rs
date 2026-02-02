@@ -55,7 +55,7 @@
 //!
 //! Use the [`prelude`] module for convenient imports:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::callback::prelude::*;
@@ -82,7 +82,7 @@
 //!
 //! Implement [`ExecutionCallback`] to create custom callbacks:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::callback::prelude::*;
@@ -212,7 +212,7 @@ pub type SharedCallback = std::sync::Arc<dyn crate::traits::ExecutionCallback>;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;

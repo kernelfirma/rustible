@@ -31,7 +31,6 @@ fn homelab_inventory_path() -> PathBuf {
 }
 
 #[tokio::test]
-#[ignore = "Requires homelab hosts and SSH access"]
 async fn test_homelab_smoke_playbook() {
     if !homelab_enabled() {
         eprintln!("Skipping homelab playbook test (RUSTIBLE_HOMELAB_TESTS not set)");

@@ -21,21 +21,26 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::native::{apt, systemd, users};
 //!
 //! // Check if native apt is available
 //! if apt::is_native_available() {
-//!     let packages = apt::list_installed().await?;
+//!     let mut apt_native = apt::AptNative::new()?;
+//!     let packages = apt_native.list_installed()?;
 //! }
 //!
-//! // Use native systemd if D-Bus is available
+//! // Use native systemd if available
 //! if systemd::is_native_available() {
-//!     systemd::start_unit("nginx.service").await?;
+//!     let sd = systemd::SystemdNative::new()?;
+//!     let status = sd.get_unit_status("nginx.service")?;
 //! }
 //!
 //! // Native user lookup
 //! let user = users::get_user_by_name("www-data")?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod apt;

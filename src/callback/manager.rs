@@ -46,7 +46,7 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::callback::manager::{CallbackManager, PluginPriority};
@@ -126,7 +126,7 @@ impl PluginPriority {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::callback::prelude::*;
@@ -281,7 +281,7 @@ impl PluginEntry {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;
@@ -350,7 +350,7 @@ impl CallbackManager {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// # use rustible::callback::manager::{CallbackManager, PluginPriority};
@@ -394,7 +394,7 @@ impl CallbackManager {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// # use rustible::callback::manager::CallbackManager;

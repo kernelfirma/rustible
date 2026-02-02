@@ -16,7 +16,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use rustible::api::awx::{AwxCompatHandler, JobLaunchRequest};
 //!
 //! let handler = AwxCompatHandler::new(state);

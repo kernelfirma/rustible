@@ -22,7 +22,7 @@ use std::path::PathBuf;
 /// Merge an Option<T> field - uses `other` if Some, otherwise falls back to `base`
 ///
 /// # Example
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -47,7 +47,7 @@ macro_rules! merge_option {
 /// Merge a field with a known default value - uses `other` if non-default, otherwise `base`
 ///
 /// # Example
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -80,7 +80,7 @@ macro_rules! merge_with_default {
 /// Merge a Vec field - uses `other` if non-empty, otherwise `base`
 ///
 /// # Example
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -113,7 +113,7 @@ macro_rules! merge_vec {
 /// Merge a HashMap field - extends `base` with entries from `other`
 ///
 /// # Example
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;

@@ -22,18 +22,22 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::secrets::vault::{VaultProvider, VaultConfig, VaultAuthMethod};
 //!
 //! let config = VaultConfig {
 //!     address: "https://vault.example.com:8200".to_string(),
 //!     auth_method: VaultAuthMethod::Token,
 //!     namespace: Some("my-namespace".to_string()),
-//!     token_env: Some("VAULT_TOKEN".to_string()),
+//!     token_env: "VAULT_TOKEN".to_string(),
 //! };
 //!
 //! let provider = VaultProvider::new(config).await?;
 //! let secret = provider.get_secret("secret/data/myapp").await?;
+//! # Ok(())
+//! # }
 //! ```
 
 use async_trait::async_trait;

@@ -9,7 +9,7 @@
 //!
 //! # Type-Safe Result Access
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -29,7 +29,7 @@
 //!
 //! # Loop Results
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -49,7 +49,7 @@
 //!
 //! # Failed Task Info
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;

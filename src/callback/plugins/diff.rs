@@ -131,7 +131,7 @@ struct DiffStats {
 ///
 /// # Usage
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;
@@ -165,7 +165,7 @@ impl DiffCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::callback::prelude::*;
@@ -182,7 +182,7 @@ impl DiffCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::callback::prelude::*;
@@ -504,7 +504,7 @@ impl ExecutionCallback for DiffCallback {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;
@@ -623,7 +623,7 @@ impl ExecutionCallback for CompositeCallback {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;
@@ -674,7 +674,7 @@ pub fn generate_diff(before: &str, after: &str, _context_lines: usize) -> String
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;

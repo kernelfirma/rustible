@@ -124,8 +124,27 @@ fn test_docker_container_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Docker daemon connection"]
-fn test_docker_container_execute() {}
+fn test_docker_container_execute() {
+    let module = DockerContainerModule;
+    let params = with_image(with_name(create_params(), "test-container"), "nginx:latest");
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    // Without the docker feature, this returns Unsupported error.
+    // With the docker feature but no daemon, it would fail with ExecutionFailed.
+    // Either way, the module should process params and return a clear error.
+    assert!(
+        result.is_err(),
+        "Execute without Docker daemon/feature should return an error"
+    );
+    let err = result.unwrap_err();
+    let err_msg = format!("{}", err);
+    assert!(
+        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention docker or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Docker Image Module Tests
@@ -166,8 +185,23 @@ fn test_docker_image_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Docker daemon connection"]
-fn test_docker_image_execute() {}
+fn test_docker_image_execute() {
+    let module = DockerImageModule;
+    let params = with_name(create_params(), "nginx");
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without Docker daemon/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention docker or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Docker Network Module Tests
@@ -208,8 +242,23 @@ fn test_docker_network_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Docker daemon connection"]
-fn test_docker_network_execute() {}
+fn test_docker_network_execute() {
+    let module = DockerNetworkModule;
+    let params = with_name(create_params(), "test-network");
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without Docker daemon/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention docker or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Docker Volume Module Tests
@@ -250,8 +299,23 @@ fn test_docker_volume_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Docker daemon connection"]
-fn test_docker_volume_execute() {}
+fn test_docker_volume_execute() {
+    let module = DockerVolumeModule;
+    let params = with_name(create_params(), "test-volume");
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without Docker daemon/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention docker or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Docker Compose Module Tests
@@ -293,8 +357,25 @@ fn test_docker_compose_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Docker daemon and docker-compose"]
-fn test_docker_compose_execute() {}
+fn test_docker_compose_execute() {
+    let module = DockerComposeModule;
+    let mut params = create_params();
+    params.insert("project_src".to_string(), serde_json::json!("/tmp/test-compose"));
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    // docker_compose always requires a tokio runtime; without one it fails.
+    assert!(
+        result.is_err(),
+        "Execute without runtime/Docker should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("runtime") || err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("Unsupported"),
+        "Error should mention runtime or docker issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Kubernetes Namespace Module Tests
@@ -335,8 +416,24 @@ fn test_k8s_namespace_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Kubernetes cluster connection"]
-fn test_k8s_namespace_execute() {}
+fn test_k8s_namespace_execute() {
+    let module = K8sNamespaceModule;
+    let mut params = with_name(create_params(), "test-ns");
+    params.insert("state".to_string(), serde_json::json!("present"));
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without K8s cluster/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention Kubernetes or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Kubernetes Deployment Module Tests
@@ -385,8 +482,26 @@ fn test_k8s_deployment_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Kubernetes cluster connection"]
-fn test_k8s_deployment_execute() {}
+fn test_k8s_deployment_execute() {
+    let module = K8sDeploymentModule;
+    let mut params = with_namespace(with_name(create_params(), "test-deploy"), "default");
+    params.insert("image".to_string(), serde_json::json!("nginx:latest"));
+    params.insert("replicas".to_string(), serde_json::json!(2));
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    // Without kubernetes feature, returns Unsupported error
+    assert!(
+        result.is_err(),
+        "Execute without K8s cluster/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention Kubernetes or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Kubernetes Service Module Tests
@@ -427,8 +542,23 @@ fn test_k8s_service_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Kubernetes cluster connection"]
-fn test_k8s_service_execute() {}
+fn test_k8s_service_execute() {
+    let module = K8sServiceModule;
+    let params = with_namespace(with_name(create_params(), "test-svc"), "default");
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without K8s cluster/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention Kubernetes or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Kubernetes ConfigMap Module Tests
@@ -469,8 +599,27 @@ fn test_k8s_configmap_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Kubernetes cluster connection"]
-fn test_k8s_configmap_execute() {}
+fn test_k8s_configmap_execute() {
+    let module = K8sConfigMapModule;
+    let mut params = with_namespace(with_name(create_params(), "test-cm"), "default");
+    params.insert(
+        "data".to_string(),
+        serde_json::json!({"app.conf": "key=value"}),
+    );
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without K8s cluster/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention Kubernetes or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Kubernetes Secret Module Tests
@@ -511,8 +660,27 @@ fn test_k8s_secret_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires Kubernetes cluster connection"]
-fn test_k8s_secret_execute() {}
+fn test_k8s_secret_execute() {
+    let module = K8sSecretModule;
+    let mut params = with_namespace(with_name(create_params(), "test-secret"), "default");
+    params.insert(
+        "string_data".to_string(),
+        serde_json::json!({"password": "s3cret"}),
+    );
+    let context = rustible::modules::ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without K8s cluster/feature should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        "Error should mention Kubernetes or runtime issue, got: {}",
+        err_msg
+    );
+}
 
 // ============================================================================
 // Cross-Module Tests

@@ -14,7 +14,7 @@
 //!
 //! ## Usage
 //!
-//! ```ignore
+//! ```text
 //! use rustible::cli::change_detection::{ChangeDetectorRegistry, ChangePrediction};
 //!
 //! let registry = ChangeDetectorRegistry::new();

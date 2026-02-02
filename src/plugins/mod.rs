@@ -21,7 +21,7 @@
 //!
 //! # Usage Example
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::plugins::filter::FilterRegistry;
@@ -45,7 +45,7 @@
 //!
 //! Filters are registered directly with the minijinja environment:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use minijinja::Environment;
@@ -64,7 +64,7 @@
 //!
 //! Implement the [`lookup::LookupPlugin`] trait:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::plugins::lookup::prelude::*;

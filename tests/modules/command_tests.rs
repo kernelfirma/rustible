@@ -37,7 +37,6 @@ fn test_command_module_classification() {
 }
 
 #[test]
-#[ignore = "Implementation detail mismatch with test expectations"]
 fn test_command_module_required_params() {
     let module = CommandModule;
     let required = module.required_params();

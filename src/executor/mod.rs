@@ -23,8 +23,12 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy};
+//! # use rustible::executor::Playbook;
+//! # let playbook = Playbook::parse("- hosts: all\n  tasks:\n    - name: Ping\n      ping: {}\n", None)?;
 //!
 //! // Configure the executor
 //! let config = ExecutorConfig {
@@ -42,6 +46,8 @@
 //! // Get summary statistics
 //! let stats = Executor::summarize_results(&results);
 //! println!("OK: {}, Changed: {}, Failed: {}", stats.ok, stats.changed, stats.failed);
+//! # Ok(())
+//! # }
 //! ```
 
 /// Include handler for dynamic task inclusion.
@@ -422,8 +428,12 @@ pub struct HostResult {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use rustible::executor::{Executor, ExecutorConfig};
+/// # use rustible::executor::Playbook;
+/// # let playbook = Playbook::parse("- hosts: all\n  tasks:\n    - name: Ping\n      ping: {}\n", None)?;
 ///
 /// let executor = Executor::new(ExecutorConfig::default());
 /// let results = executor.run_playbook(&playbook).await?;
@@ -431,6 +441,8 @@ pub struct HostResult {
 /// for (host, result) in &results {
 ///     println!("{}: OK={}, Changed={}", host, result.stats.ok, result.stats.changed);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct Executor {
     config: ExecutorConfig,

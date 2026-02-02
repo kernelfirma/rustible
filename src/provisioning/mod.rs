@@ -61,7 +61,7 @@
 //!       cidr_block: "10.0.1.0/24"
 //! ```
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::prelude::*;
 //! use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
 //!

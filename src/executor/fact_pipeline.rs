@@ -17,7 +17,7 @@
 //! For remote hosts, use `ConnectionFactGatherer` which wraps an SSH/remote
 //! connection and gathers facts via remote command execution:
 //!
-//! ```ignore
+//! ```text
 //! let gatherer = ConnectionFactGatherer::new(connection);
 //! let result = pipeline.gather_facts("remote-host", gatherer).await;
 //! ```
@@ -455,7 +455,7 @@ impl AsyncFactGathererFactory for SimpleFactGathererFactory {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```text
 /// use rustible::connection::SshConnection;
 /// use rustible::executor::fact_pipeline::{ConnectionFactGatherer, FactPipeline};
 ///

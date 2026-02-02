@@ -708,14 +708,9 @@ mod host_pattern_fuzzing {
         // in pattern matching on macOS CI. This should be investigated separately.
         // See: get_hosts_for_pattern() appears to have unbounded recursion with bracket patterns
 
-        // NOTE: invalid_pattern_error_not_panic test disabled due to stack overflow
-        // in pattern matching with arbitrary Unicode strings. This should be investigated
-        // separately. See: get_hosts_for_pattern() has unbounded recursion with some patterns.
-
-        /// Property: Invalid patterns should return errors, not panic
-        /// IGNORED: get_hosts_for_pattern() has unbounded recursion causing stack overflow
+        /// Property: Invalid patterns should return errors, not panic.
+        /// Pattern recursion is now bounded by MAX_PATTERN_DEPTH to prevent stack overflow.
         #[test]
-        #[ignore]
         fn invalid_pattern_error_not_panic(pattern in "\\PC{0,100}") {
             let inventory = Inventory::new();
             // Should not panic, but may return an error

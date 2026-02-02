@@ -11,8 +11,11 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use rustible::plugins::provider::{Provider, ProviderMetadata, ModuleDescriptor, ProviderCapability};
+//! ```rust,no_run
+//! use rustible::plugins::provider::{
+//!     Provider, ProviderMetadata, ModuleDescriptor, ProviderCapability,
+//!     ProviderError, ModuleParams, ModuleOutput, ModuleContext,
+//! };
 //!
 //! struct AwsProvider;
 //!

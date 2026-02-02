@@ -1,9 +1,12 @@
 //! Integration tests for the sysctl module
 //!
-//! Note: Most tests are marked #[ignore] as they require a connection
-//! for remote execution. Run with --ignored to test against a real system.
+//! Tests validate parameter handling, error paths, and module metadata.
+//! Execute tests verify proper error reporting when no connection is available,
+//! and validate that parameters are correctly parsed before the connection check.
 
-use rustible::modules::{sysctl::SysctlModule, Module, ModuleParams};
+use rustible::modules::{
+    sysctl::SysctlModule, Module, ModuleContext, ModuleContextBuilder, ModuleError, ModuleParams,
+};
 use std::collections::HashMap;
 
 fn create_params() -> ModuleParams {
@@ -13,6 +16,14 @@ fn create_params() -> ModuleParams {
 fn with_name(mut params: ModuleParams, name: &str) -> ModuleParams {
     params.insert("name".to_string(), serde_json::json!(name));
     params
+}
+
+/// Helper to build a check_mode context without a connection.
+fn check_mode_context() -> ModuleContext {
+    ModuleContextBuilder::new()
+        .check_mode(true)
+        .build()
+        .expect("valid context")
 }
 
 // ============================================================================
@@ -86,49 +97,195 @@ fn test_sysctl_validate_absent_state() {
 // ============================================================================
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_set_value() {
-    // Would test setting a sysctl value
+    // Verify that setting a sysctl value with valid params reaches connection check
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "net.ipv4.ip_forward");
+    params.insert("value".to_string(), serde_json::json!("1"));
+    params.insert("state".to_string(), serde_json::json!("present"));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(
+                msg.contains("connection"),
+                "Should require connection, got: {}",
+                msg
+            );
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_remove_value() {
-    // Would test removing a sysctl entry
+    // Verify that absent state reaches the connection check
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "net.ipv4.ip_forward");
+    params.insert("state".to_string(), serde_json::json!("absent"));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_persist() {
-    // Would test persisting to sysctl.conf
+    // Verify that sysctl_file param is accepted and module reaches connection check
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "vm.swappiness");
+    params.insert("value".to_string(), serde_json::json!("10"));
+    params.insert(
+        "sysctl_file".to_string(),
+        serde_json::json!("/etc/sysctl.d/99-custom.conf"),
+    );
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_reload() {
-    // Would test sysctl reload behavior
+    // Verify that reload param is accepted and module reaches connection check
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "net.core.somaxconn");
+    params.insert("value".to_string(), serde_json::json!("4096"));
+    params.insert("reload".to_string(), serde_json::json!(true));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_idempotent() {
-    // Would test idempotency
+    // Verify that calling execute twice with same params produces the same error
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "net.ipv4.ip_forward");
+    params.insert("value".to_string(), serde_json::json!("1"));
+
+    let context = check_mode_context();
+    let result1 = module.execute(&params, &context);
+    let result2 = module.execute(&params, &context);
+
+    assert!(result1.is_err());
+    assert!(result2.is_err());
+    assert_eq!(
+        format!("{}", result1.unwrap_err()),
+        format!("{}", result2.unwrap_err()),
+    );
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_check_mode() {
-    // Would test check mode
+    // Verify that check() convenience method also requires a connection
+    let module = SysctlModule;
+    let mut params = with_name(create_params(), "kernel.pid_max");
+    params.insert("value".to_string(), serde_json::json!("65535"));
+
+    let context = ModuleContextBuilder::new()
+        .check_mode(false)
+        .build()
+        .expect("valid context");
+
+    // check() sets check_mode=true internally and calls execute()
+    let result = module.check(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_network_params() {
-    // Would test network parameters
+    // Verify various network-related sysctl params are accepted
+    let module = SysctlModule;
+    let network_params = [
+        ("net.ipv4.tcp_syncookies", "1"),
+        ("net.ipv4.conf.all.rp_filter", "1"),
+        ("net.ipv4.tcp_max_syn_backlog", "8192"),
+        ("net.core.rmem_max", "16777216"),
+    ];
+
+    let context = check_mode_context();
+    for (param_name, param_value) in &network_params {
+        let mut params = with_name(create_params(), param_name);
+        params.insert("value".to_string(), serde_json::json!(param_value));
+
+        let result = module.execute(&params, &context);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ModuleError::ExecutionFailed(msg) => {
+                assert!(
+                    msg.contains("connection"),
+                    "Param '{}' should pass validation, got: {}",
+                    param_name,
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ExecutionFailed for '{}', got: {:?}",
+                param_name, other
+            ),
+        }
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_sysctl_kernel_params() {
-    // Would test kernel parameters
+    // Verify various kernel-related sysctl params are accepted
+    let module = SysctlModule;
+    let kernel_params = [
+        ("kernel.pid_max", "65535"),
+        ("kernel.shmmax", "68719476736"),
+        ("kernel.msgmax", "65536"),
+        ("kernel.core_pattern", "core"),
+    ];
+
+    let context = check_mode_context();
+    for (param_name, param_value) in &kernel_params {
+        let mut params = with_name(create_params(), param_name);
+        params.insert("value".to_string(), serde_json::json!(param_value));
+
+        let result = module.execute(&params, &context);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ModuleError::ExecutionFailed(msg) => {
+                assert!(
+                    msg.contains("connection"),
+                    "Param '{}' should pass validation, got: {}",
+                    param_name,
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ExecutionFailed for '{}', got: {:?}",
+                param_name, other
+            ),
+        }
+    }
 }

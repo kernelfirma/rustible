@@ -67,8 +67,11 @@
 //!
 //! The inventory plugin system allows extending inventory sources:
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::inventory::plugin::{
+//!     InventoryPlugin,
 //!     InventoryPluginFactory,
 //!     InventoryPluginConfig,
 //!     InventoryCache,
@@ -82,6 +85,8 @@
 //!
 //! let plugin = InventoryPluginFactory::create("aws_ec2", config)?;
 //! let inventory = plugin.parse().await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Pattern Matching
@@ -1027,6 +1032,26 @@ impl Inventory {
     /// - `~regex` - regex match on hostname
     /// - `*` - wildcard match
     pub fn get_hosts_for_pattern(&self, pattern: &str) -> InventoryResult<Vec<&Host>> {
+        self.get_hosts_for_pattern_inner(pattern, 0)
+    }
+
+    /// Maximum recursion depth for pattern matching to prevent stack overflow
+    /// with malformed or adversarial patterns containing many `:` characters.
+    const MAX_PATTERN_DEPTH: usize = 20;
+
+    fn get_hosts_for_pattern_inner(
+        &self,
+        pattern: &str,
+        depth: usize,
+    ) -> InventoryResult<Vec<&Host>> {
+        if depth > Self::MAX_PATTERN_DEPTH {
+            return Err(InventoryError::InvalidPattern(format!(
+                "Pattern recursion depth exceeded (max {}): {}",
+                Self::MAX_PATTERN_DEPTH,
+                pattern
+            )));
+        }
+
         let pattern = pattern.trim();
 
         if pattern.is_empty() {
@@ -1040,7 +1065,7 @@ impl Inventory {
 
         // Handle complex patterns with operators
         if pattern.contains(':') {
-            return self.parse_complex_pattern(pattern);
+            return self.parse_complex_pattern(pattern, depth);
         }
 
         // Handle regex pattern
@@ -1087,7 +1112,11 @@ impl Inventory {
     }
 
     /// Parse a complex pattern with operators
-    fn parse_complex_pattern(&self, pattern: &str) -> InventoryResult<Vec<&Host>> {
+    fn parse_complex_pattern(
+        &self,
+        pattern: &str,
+        depth: usize,
+    ) -> InventoryResult<Vec<&Host>> {
         let mut result: HashSet<&str> = HashSet::new();
         let mut first = true;
 
@@ -1104,19 +1133,19 @@ impl Inventory {
             if part.starts_with('&') {
                 // Intersection
                 let sub_pattern = &part[1..];
-                let sub_hosts = self.get_hosts_for_pattern(sub_pattern)?;
+                let sub_hosts = self.get_hosts_for_pattern_inner(sub_pattern, depth + 1)?;
                 let sub_set: HashSet<&str> = sub_hosts.iter().map(|h| h.name.as_str()).collect();
                 result = result.intersection(&sub_set).cloned().collect();
             } else if part.starts_with('!') {
                 // Exclusion
                 let sub_pattern = &part[1..];
-                let sub_hosts = self.get_hosts_for_pattern(sub_pattern)?;
+                let sub_hosts = self.get_hosts_for_pattern_inner(sub_pattern, depth + 1)?;
                 for host in sub_hosts {
                     result.remove(host.name.as_str());
                 }
             } else {
                 // Union
-                let sub_hosts = self.get_hosts_for_pattern(part)?;
+                let sub_hosts = self.get_hosts_for_pattern_inner(part, depth + 1)?;
 
                 if first {
                     for host in sub_hosts {

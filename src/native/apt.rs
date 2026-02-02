@@ -12,10 +12,11 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::native::apt::{AptNative, PackageInfo};
 //!
-//! let apt = AptNative::new()?;
+//! let mut apt = AptNative::new()?;
 //!
 //! // Get package info
 //! if let Some(pkg) = apt.get_package("nginx")? {
@@ -24,6 +25,8 @@
 //!
 //! // List all installed packages
 //! let packages = apt.list_installed()?;
+//! # Ok(())
+//! # }
 //! ```
 
 use super::{NativeError, NativeResult};

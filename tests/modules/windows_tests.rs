@@ -521,7 +521,6 @@ mod execution_tests {
     use rustible::modules::ModuleContext;
 
     #[test]
-    #[ignore = "Requires Windows target with WinRM connection"]
     fn test_win_copy_execute_check_mode() {
         let module = WinCopyModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
@@ -535,7 +534,6 @@ mod execution_tests {
     }
 
     #[test]
-    #[ignore = "Requires Windows target with WinRM connection"]
     fn test_win_service_execute_check_mode() {
         let module = WinServiceModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
@@ -548,7 +546,6 @@ mod execution_tests {
     }
 
     #[test]
-    #[ignore = "Requires Windows target with WinRM connection"]
     fn test_win_user_execute_check_mode() {
         let module = WinUserModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
@@ -561,7 +558,6 @@ mod execution_tests {
     }
 
     #[test]
-    #[ignore = "Requires Windows target with WinRM connection"]
     fn test_win_package_execute_check_mode() {
         let module = WinPackageModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
@@ -575,7 +571,6 @@ mod execution_tests {
     }
 
     #[test]
-    #[ignore = "Requires Windows target with WinRM connection"]
     fn test_win_feature_execute_check_mode() {
         let module = WinFeatureModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();

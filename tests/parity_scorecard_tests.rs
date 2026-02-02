@@ -1008,8 +1008,11 @@ fn build_baseline_scorecard() -> ParityScorecard {
 }
 
 #[test]
-#[ignore]
 fn write_baseline_snapshot() {
+    if std::env::var("RUSTIBLE_WRITE_BASELINE").is_err() {
+        eprintln!("Skipping baseline write (set RUSTIBLE_WRITE_BASELINE=1 to regenerate)");
+        return;
+    }
     let scorecard = build_current_scorecard();
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

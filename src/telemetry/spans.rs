@@ -80,7 +80,7 @@ impl SpanExt for Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -134,7 +134,7 @@ pub fn create_play_span(name: &str, hosts_pattern: &str) -> Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
@@ -192,7 +192,7 @@ pub fn create_module_span(module: &str, host: &str) -> Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;

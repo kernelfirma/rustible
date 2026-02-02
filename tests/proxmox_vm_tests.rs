@@ -236,7 +236,6 @@ fn build_params(config: &ProxmoxTestConfig, state: Option<&str>) -> ModuleParams
 }
 
 #[test]
-#[ignore = "Requires Proxmox API access; set RUSTIBLE_PVE_* env vars"]
 fn test_proxmox_vm_status_and_optional_lifecycle() {
     let config = match ProxmoxTestConfig::from_env() {
         Some(config) => config,
@@ -295,7 +294,6 @@ fn test_proxmox_vm_status_and_optional_lifecycle() {
 }
 
 #[test]
-#[ignore = "Requires Proxmox API access; set RUSTIBLE_PVE_* env vars"]
 fn test_proxmox_vm_present_clone_absent_safe() {
     let config = match ProxmoxTestConfig::from_env() {
         Some(config) => config,

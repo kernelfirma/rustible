@@ -9,7 +9,7 @@
 //! - CRUD operation validation
 //! - Idempotency verification patterns
 //!
-//! Execution tests that require actual databases are marked #[ignore].
+//! Execution tests that require actual databases skip at runtime if the database client is unavailable.
 //!
 //! Note: These tests require the `database` feature to be enabled.
 //! Run with: cargo test --test database_integration_tests --features database
@@ -931,9 +931,26 @@ mod idempotency_tests {
 mod remote_execution {
     use super::*;
 
+    fn has_mysql() -> bool {
+        std::process::Command::new("mysql")
+            .arg("--version")
+            .output()
+            .is_ok()
+    }
+
+    fn has_postgresql() -> bool {
+        std::process::Command::new("psql")
+            .arg("--version")
+            .output()
+            .is_ok()
+    }
+
     #[tokio::test]
-    #[ignore = "Requires MySQL database"]
     async fn test_mysql_db_create_check_mode() {
+        if !has_mysql() {
+            eprintln!("Skipping: MySQL client not available");
+            return;
+        }
         let module = MysqlDbModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_integration_db"));
@@ -947,8 +964,11 @@ mod remote_execution {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_postgresql_db_create_check_mode() {
+        if !has_postgresql() {
+            eprintln!("Skipping: PostgreSQL client not available");
+            return;
+        }
         let module = PostgresqlDbModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_integration_db"));
@@ -962,8 +982,11 @@ mod remote_execution {
     }
 
     #[tokio::test]
-    #[ignore = "Requires MySQL database"]
     async fn test_mysql_user_create_check_mode() {
+        if !has_mysql() {
+            eprintln!("Skipping: MySQL client not available");
+            return;
+        }
         let module = MysqlUserModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_user"));
@@ -976,8 +999,11 @@ mod remote_execution {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_postgresql_user_create_check_mode() {
+        if !has_postgresql() {
+            eprintln!("Skipping: PostgreSQL client not available");
+            return;
+        }
         let module = PostgresqlUserModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_user"));

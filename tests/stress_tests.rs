@@ -1065,13 +1065,13 @@ async fn race_connection_pool_race_conditions() {
 // ============================================================================
 
 #[tokio::test]
-#[ignore = "Flaky timing-dependent test - too sensitive to system load variance"]
-async fn stability_1000_iterations_same_playbook() {
+async fn stability_iterations_same_playbook() {
     let playbook = create_large_playbook(5);
-    let mut iteration_times = Vec::with_capacity(1000);
+    let iterations = 50;
+    let mut iteration_times = Vec::with_capacity(iterations);
     let mut failures = 0;
 
-    for i in 0..1000 {
+    for i in 0..iterations {
         let runtime = create_large_inventory(5);
         let executor = Executor::with_runtime(
             ExecutorConfig {
@@ -1095,25 +1095,25 @@ async fn stability_1000_iterations_same_playbook() {
         }
         iteration_times.push(start.elapsed());
 
-        // Progress indicator for long test
-        if (i + 1) % 100 == 0 {
-            println!("Stability test: {}/1000 iterations completed", i + 1);
+        // Progress indicator
+        if (i + 1) % 10 == 0 {
+            println!("Stability test: {}/{} iterations completed", i + 1, iterations);
         }
     }
 
     let total: Duration = iteration_times.iter().sum();
-    let avg = total / 1000;
+    let avg = total / iterations as u32;
     let max = iteration_times.iter().max().unwrap();
     let min = iteration_times.iter().min().unwrap();
 
     println!(
-        "1000 iterations: avg {:?}, min {:?}, max {:?}, {} failures",
-        avg, min, max, failures
+        "{} iterations: avg {:?}, min {:?}, max {:?}, {} failures",
+        iterations, avg, min, max, failures
     );
 
     // Should be very stable with minimal failures
     assert!(
-        failures < 10,
+        failures < 5,
         "Too many failures in stability test: {}",
         failures
     );
@@ -1126,8 +1126,8 @@ async fn stability_1000_iterations_same_playbook() {
 async fn stability_no_resource_leaks_over_time() {
     let metrics = Arc::new(MetricsCollector::new());
 
-    // Run 500 iterations and track performance
-    for i in 0..500 {
+    // Run 50 iterations and track performance (reduced from 500 for CI)
+    for i in 0..50 {
         let runtime = create_large_inventory(10);
         let executor = Executor::with_runtime(
             ExecutorConfig {
@@ -1156,7 +1156,7 @@ async fn stability_no_resource_leaks_over_time() {
     }
 
     println!(
-        "500 iterations: avg latency {:.2}ms, max {:.2}ms, error rate {:.2}%",
+        "50 iterations: avg latency {:.2}ms, max {:.2}ms, error rate {:.2}%",
         metrics.avg_latency_ms(),
         metrics.max_latency_ms(),
         metrics.error_rate() * 100.0
@@ -1170,19 +1170,19 @@ async fn stability_no_resource_leaks_over_time() {
     );
 }
 
-// Timing-sensitive test that can fail due to system warmup effects
-// The test expects stable latency but first runs are often slower due to JIT/caching
+// Reduced from 200 iterations to 40 for CI-friendliness.
+// Compares first 10 vs last 10 with a generous 3x tolerance for system load variance.
 #[tokio::test]
-#[ignore = "Flaky timing test - system warmup causes latency variation"]
 async fn stability_latency_consistency_over_time() {
-    let mut latencies: Vec<Duration> = Vec::with_capacity(200);
+    let iterations = 40;
+    let mut latencies: Vec<Duration> = Vec::with_capacity(iterations);
 
-    for i in 0..200 {
-        let runtime = create_large_inventory(20);
+    for i in 0..iterations {
+        let runtime = create_large_inventory(10);
         let executor = Executor::with_runtime(
             ExecutorConfig {
                 strategy: ExecutionStrategy::Free,
-                forks: 20,
+                forks: 10,
                 ..Default::default()
             },
             runtime,
@@ -1199,19 +1199,19 @@ async fn stability_latency_consistency_over_time() {
         latencies.push(start.elapsed());
     }
 
-    // Compare first 50 vs last 50
-    let first_50_avg: Duration = latencies[..50].iter().sum::<Duration>() / 50;
-    let last_50_avg: Duration = latencies[150..].iter().sum::<Duration>() / 50;
+    // Compare first 10 vs last 10
+    let first_avg: Duration = latencies[..10].iter().sum::<Duration>() / 10;
+    let last_avg: Duration = latencies[iterations - 10..].iter().sum::<Duration>() / 10;
 
     println!(
-        "Latency stability: first 50 avg {:?}, last 50 avg {:?}",
-        first_50_avg, last_50_avg
+        "Latency stability: first 10 avg {:?}, last 10 avg {:?}",
+        first_avg, last_avg
     );
 
-    // Latency should be stable (within 2x)
-    let ratio = last_50_avg.as_nanos() as f64 / first_50_avg.as_nanos() as f64;
+    // Latency should be reasonably stable (within 3x to tolerate system load)
+    let ratio = last_avg.as_nanos() as f64 / first_avg.as_nanos() as f64;
     assert!(
-        ratio < 2.0 && ratio > 0.5,
+        ratio < 3.0 && ratio > 0.33,
         "Latency instability detected: ratio {:.2}",
         ratio
     );

@@ -36,7 +36,7 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::config::GalaxyConfig;
 //! use rustible::galaxy::{Galaxy, RequirementsFile};
 //!

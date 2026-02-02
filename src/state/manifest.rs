@@ -12,7 +12,7 @@
 //!
 //! ## Usage
 //!
-//! ```ignore
+//! ```text
 //! use rustible::state::manifest::{HostManifest, ManifestStore, ResourceState};
 //!
 //! let mut store = ManifestStore::new("./state/manifests");

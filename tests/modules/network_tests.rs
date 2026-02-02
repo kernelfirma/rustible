@@ -176,9 +176,26 @@ fn test_ios_config_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires actual Cisco IOS device connection"]
 fn test_ios_config_execute() {
-    // Would test actual execution against a Cisco IOS device
+    let module = IosConfigModule;
+    let params = with_lines(
+        create_params(),
+        vec!["hostname Router1", "ip domain-name example.com"],
+    );
+    // No connection provided, so execute should fail with a clear error
+    let context = ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without network connection should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        "Error should mention connection or runtime issue, got: {}",
+        err_msg
+    );
 }
 
 // ============================================================================
@@ -244,9 +261,22 @@ fn test_nxos_config_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires actual Cisco Nexus device connection"]
 fn test_nxos_config_execute() {
-    // Would test actual execution against a Cisco Nexus device
+    let module = NxosConfigModule;
+    let params = with_lines(create_params(), vec!["feature bgp", "feature vrf"]);
+    let context = ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without network connection should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        "Error should mention connection or runtime issue, got: {}",
+        err_msg
+    );
 }
 
 // ============================================================================
@@ -315,9 +345,26 @@ fn test_junos_config_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires actual Juniper device connection"]
 fn test_junos_config_execute() {
-    // Would test actual execution against a Juniper device
+    let module = JunosConfigModule;
+    let mut params = create_params();
+    params.insert(
+        "config".to_string(),
+        serde_json::json!("set system host-name router1"),
+    );
+    let context = ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without network connection should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("No connection") || err_msg.contains("JunOS"),
+        "Error should mention connection or runtime issue, got: {}",
+        err_msg
+    );
 }
 
 // ============================================================================
@@ -390,9 +437,23 @@ fn test_eos_config_validate_empty_params() {
 }
 
 #[test]
-#[ignore = "Requires actual Arista EOS device connection"]
 fn test_eos_config_execute() {
-    // Would test actual execution against an Arista EOS device
+    let module = EosConfigModule;
+    let mut params = with_lines(create_params(), vec!["hostname Switch1"]);
+    params.insert("transport".to_string(), serde_json::json!("ssh"));
+    let context = ModuleContext::new().with_check_mode(true);
+
+    let result = module.execute(&params, &context);
+    assert!(
+        result.is_err(),
+        "Execute without network connection should return an error"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        "Error should mention connection or runtime issue, got: {}",
+        err_msg
+    );
 }
 
 // ============================================================================

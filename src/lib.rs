@@ -52,7 +52,7 @@
 //!
 //! ## Quick Example
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! use rustible::prelude::*;
 //! use rustible::executor::{Executor, ExecutorConfig, Playbook as ExecPlaybook};
 //! use rustible::executor::runtime::RuntimeContext;
@@ -125,7 +125,7 @@ pub mod prelude {
     //!
     //! # Example
     //!
-    //! ```rust,ignore,no_run
+    //! ```rust,no_run
     //! use rustible::prelude::*;
     //! use rustible::executor::{ExecutorConfig, Playbook as ExecPlaybook};
     //! use rustible::executor::runtime::RuntimeContext;
@@ -335,7 +335,7 @@ pub mod inventory;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::executor::{Executor, ExecutorConfig};
@@ -393,7 +393,7 @@ pub mod strategy;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::cache::{CacheManager, CacheConfig};
@@ -447,7 +447,7 @@ pub mod startup;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::modules::{ModuleRegistry, ModuleContext, ModuleParams};
@@ -645,7 +645,7 @@ pub mod recovery;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// use rustible::distributed::{Controller, ClusterConfig, ControllerId};
 ///
 /// #[tokio::main]
@@ -706,7 +706,7 @@ pub mod distributed;
 ///       cidr_block: "10.0.1.0/24"
 /// ```
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
@@ -745,7 +745,7 @@ pub mod provisioning;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// use rustible::api::{ApiServer, ApiConfig};
 ///
 /// #[tokio::main]
@@ -783,7 +783,7 @@ pub mod collection;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// use rustible::config::GalaxyConfig;
 /// use rustible::galaxy::{Galaxy, RequirementsFile};
 ///
@@ -820,7 +820,7 @@ pub mod galaxy;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::lockfile::{Lockfile, LockfileManager};
@@ -853,7 +853,8 @@ pub mod lockfile;
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use rustible::native::{apt, systemd, users};
 ///
 /// // Native package lookup
@@ -866,6 +867,8 @@ pub mod lockfile;
 /// if let Some(user) = users::get_user_by_name("www-data")? {
 ///     println!("UID: {}", user.uid);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(unix)]
 pub mod native;

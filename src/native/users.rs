@@ -12,7 +12,8 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use rustible::native::users::{get_user_by_name, get_group_by_name, UserInfo};
 //!
 //! // Look up a user
@@ -24,6 +25,8 @@
 //! if let Some(group) = get_group_by_name("sudo")? {
 //!     println!("GID: {}, Members: {:?}", group.gid, group.members);
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 use super::{NativeError, NativeResult};

@@ -17,7 +17,7 @@
 //!
 //! Use `StartupMetrics` to profile application initialization:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;

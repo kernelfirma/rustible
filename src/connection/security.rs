@@ -14,7 +14,7 @@
 //! Host key pinning provides defense against MITM attacks by requiring
 //! SSH servers to present a pre-approved public key fingerprint.
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -30,7 +30,7 @@
 //!
 //! Configure multi-hop SSH connections through bastion hosts:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -46,7 +46,7 @@
 //!
 //! Restrict module execution to specific networks and ports:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -62,7 +62,7 @@
 //!
 //! Configure TLS certificate validation for HTTPS connections:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
@@ -79,7 +79,7 @@
 //!
 //! Log all encryption-related events for security auditing:
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;

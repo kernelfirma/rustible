@@ -37,7 +37,7 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore,no_run
+//! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::callback::prelude::*;
@@ -217,7 +217,7 @@ impl Default for DefaultCallbackConfig {
 ///
 /// # Example
 ///
-/// ```rust,ignore,no_run
+/// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::callback::prelude::*;
@@ -257,7 +257,7 @@ impl DefaultCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::callback::prelude::*;
@@ -277,7 +277,7 @@ impl DefaultCallback {
     ///
     /// # Example
     ///
-    /// ```rust,ignore,no_run
+    /// ```rust,no_run
     /// # #[tokio::main]
     /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     /// use rustible::callback::prelude::*;

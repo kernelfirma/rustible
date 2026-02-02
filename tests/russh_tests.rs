@@ -9,7 +9,7 @@
 //!    - Command result parsing
 //!    - Error type conversions
 //!
-//! 2. **Integration tests** - Tests that require real SSH infrastructure (marked with #[ignore])
+//! 2. **Integration tests** - Tests that require real SSH infrastructure (skip at runtime if unavailable)
 //!    - Connection establishment
 //!    - Command execution
 //!    - File upload/download
@@ -1241,7 +1241,6 @@ mod integration_tests {
     /// - RUSTIBLE_SSH_TEST_PORT: SSH server port (default: 22)
     /// - RUSTIBLE_SSH_TEST_USER: SSH username (default: testuser)
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure - set RUSTIBLE_SSH_TEST_HOST env var"]
     async fn test_russh_connect() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1260,7 +1259,6 @@ mod integration_tests {
 
     /// Test executing a command on a real SSH server
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure - set RUSTIBLE_SSH_TEST_HOST env var"]
     async fn test_russh_execute() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1286,7 +1284,6 @@ mod integration_tests {
 
     /// Test uploading a file via SFTP to a real SSH server
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure - set RUSTIBLE_SSH_TEST_HOST env var"]
     async fn test_russh_upload() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1320,7 +1317,6 @@ mod integration_tests {
 
     /// Test downloading a file via SFTP from a real SSH server
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure - set RUSTIBLE_SSH_TEST_HOST env var"]
     async fn test_russh_download() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1360,7 +1356,6 @@ mod integration_tests {
 
     /// Test SFTP operations on a real SSH server
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure - set RUSTIBLE_SSH_TEST_HOST env var"]
     async fn test_russh_sftp_operations() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1406,7 +1401,6 @@ mod integration_tests {
 
     /// Test SSH connection with key authentication
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure with key auth"]
     async fn test_russh_key_authentication() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1449,7 +1443,6 @@ mod integration_tests {
 
     /// Test SSH connection with password authentication
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure with password auth"]
     async fn test_russh_password_authentication() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1468,7 +1461,6 @@ mod integration_tests {
     /// - RUSTIBLE_SSH_TEST_JUMP_USER: SSH jump host username (default: same as target)
     /// - RUSTIBLE_SSH_TEST_JUMP_KEY: SSH jump host private key path (optional)
     #[tokio::test]
-    #[ignore = "Requires SSH infrastructure with jump host"]
     async fn test_russh_proxy_jump() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1529,7 +1521,6 @@ mod integration_tests {
     /// - RUSTIBLE_SSH_TEST_JUMP2_USER: Second jump host username (default: same as target)
     /// - RUSTIBLE_SSH_TEST_JUMP2_KEY: Second jump host private key path (optional)
     #[tokio::test]
-    #[ignore = "Requires SSH infrastructure with multi-hop jump hosts"]
     async fn test_russh_proxy_jump_multi() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");
@@ -1598,7 +1589,6 @@ mod integration_tests {
 
     /// Test connection retry behavior
     #[tokio::test]
-    #[ignore = "Requires controllable SSH infrastructure"]
     async fn test_russh_connection_retry() {
         // TODO: Test connection retry with real infrastructure
         eprintln!("Would test connection retry");
@@ -1606,7 +1596,6 @@ mod integration_tests {
 
     /// Test concurrent command execution
     #[tokio::test]
-    #[ignore = "Requires real SSH infrastructure"]
     async fn test_russh_concurrent_execution() {
         if !has_ssh_infrastructure() {
             eprintln!("Skipping: No SSH infrastructure available");

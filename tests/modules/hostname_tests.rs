@@ -1,9 +1,13 @@
 //! Integration tests for the hostname module
 //!
-//! Note: Most tests are marked #[ignore] as they require a connection
-//! or privileged access. Run with --ignored to test against a real system.
+//! Tests validate parameter handling, error paths, and module metadata.
+//! Execute tests verify proper error reporting when no connection is available,
+//! and validate that parameters are correctly parsed before the connection check.
 
-use rustible::modules::{hostname::HostnameModule, Module, ModuleParams};
+use rustible::modules::{
+    hostname::HostnameModule, Module, ModuleContext, ModuleContextBuilder, ModuleError,
+    ModuleParams,
+};
 use std::collections::HashMap;
 
 fn create_params() -> ModuleParams {
@@ -13,6 +17,14 @@ fn create_params() -> ModuleParams {
 fn with_name(mut params: ModuleParams, name: &str) -> ModuleParams {
     params.insert("name".to_string(), serde_json::json!(name));
     params
+}
+
+/// Helper to build a check_mode context without a connection.
+fn check_mode_context() -> ModuleContext {
+    ModuleContextBuilder::new()
+        .check_mode(true)
+        .build()
+        .expect("valid context")
 }
 
 // ============================================================================
@@ -113,43 +125,133 @@ fn test_hostname_validate_with_strategy() {
 // ============================================================================
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_set_simple() {
-    // Would test setting a simple hostname
+    // Verify that a simple hostname passes validation and reaches the connection check
+    let module = HostnameModule;
+    let params = with_name(create_params(), "myserver");
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(
+                msg.contains("connection"),
+                "Should require connection, got: {}",
+                msg
+            );
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_set_fqdn() {
-    // Would test setting a fully qualified domain name
+    // Verify that a FQDN passes validation and reaches the connection check
+    let module = HostnameModule;
+    let params = with_name(create_params(), "myserver.example.com");
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_file_strategy() {
-    // Would test file-based hostname strategy
+    // Verify that file strategy param is accepted and reaches connection check
+    let module = HostnameModule;
+    let mut params = with_name(create_params(), "filehost");
+    params.insert("use".to_string(), serde_json::json!("file"));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_systemd_strategy() {
-    // Would test systemd hostnamectl strategy
+    // Verify that systemd strategy param is accepted and reaches connection check
+    let module = HostnameModule;
+    let mut params = with_name(create_params(), "systemdhost");
+    params.insert("use".to_string(), serde_json::json!("systemd"));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_command_strategy() {
-    // Would test hostname command strategy
+    // Verify that auto strategy (which detects command vs systemd) reaches connection check
+    let module = HostnameModule;
+    let mut params = with_name(create_params(), "autohost");
+    params.insert("use".to_string(), serde_json::json!("auto"));
+
+    let context = check_mode_context();
+    let result = module.execute(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_idempotent() {
-    // Would test idempotency
+    // Verify that calling execute twice with the same params produces the same error
+    let module = HostnameModule;
+    let params = with_name(create_params(), "idempotent-host");
+
+    let context = check_mode_context();
+    let result1 = module.execute(&params, &context);
+    let result2 = module.execute(&params, &context);
+
+    assert!(result1.is_err());
+    assert!(result2.is_err());
+    assert_eq!(
+        format!("{}", result1.unwrap_err()),
+        format!("{}", result2.unwrap_err()),
+    );
 }
 
 #[test]
-#[ignore = "Requires connection for remote execution"]
 fn test_hostname_check_mode() {
-    // Would test check mode
+    // Verify that the check() convenience method also requires a connection
+    let module = HostnameModule;
+    let params = with_name(create_params(), "checkhost");
+
+    let context = ModuleContextBuilder::new()
+        .check_mode(false)
+        .build()
+        .expect("valid context");
+
+    // check() sets check_mode=true internally and calls execute()
+    let result = module.check(&params, &context);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ModuleError::ExecutionFailed(msg) => {
+            assert!(msg.contains("connection"));
+        }
+        other => panic!("Expected ExecutionFailed, got: {:?}", other),
+    }
 }
