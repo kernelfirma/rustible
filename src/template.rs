@@ -184,6 +184,25 @@ impl TemplateEngine {
         env.add_test("failed", test_failed);
         env.add_test("changed", test_changed);
         env.add_test("skipped", test_skipped);
+
+        // Aliases (Ansible compatibility)
+        env.add_test("null", test_none);
+        env.add_test("dict", test_mapping);
+        env.add_test("list", test_sequence);
+
+        // Numeric tests
+        env.add_test("odd", test_odd);
+        env.add_test("even", test_even);
+        env.add_test("divisibleby", test_divisibleby);
+
+        // Collection tests
+        env.add_test("in", test_in);
+        env.add_test("subset", test_subset);
+        env.add_test("superset", test_superset);
+
+        // Other
+        env.add_test("callable", test_callable);
+        env.add_test("escaped", test_escaped);
     }
 
     fn render_cached<S: serde::Serialize>(&self, template: &str, vars: &S) -> Result<String> {
@@ -468,6 +487,11 @@ static EXPRESSION_ENV: Lazy<Environment<'static>> =
 /// Global shared template engine instance
 pub static TEMPLATE_ENGINE: Lazy<Arc<TemplateEngine>> =
     Lazy::new(|| Arc::new(TemplateEngine::new()));
+
+/// Get a reference to the global template engine
+pub fn get_engine() -> &'static Arc<TemplateEngine> {
+    &TEMPLATE_ENGINE
+}
 
 /// Helper function to check if a MiniJinja value is truthy
 /// Uses MiniJinja's built-in Jinja2-compatible truthiness semantics
@@ -1242,6 +1266,73 @@ fn test_skipped(value: &MiniJinjaValue) -> bool {
     false
 }
 
+fn test_odd(value: &MiniJinjaValue) -> bool {
+    value.as_i64().map(|n| n % 2 != 0).unwrap_or(false)
+}
+
+fn test_even(value: &MiniJinjaValue) -> bool {
+    value.as_i64().map(|n| n % 2 == 0).unwrap_or(false)
+}
+
+fn test_divisibleby(value: &MiniJinjaValue, num: &MiniJinjaValue) -> bool {
+    match (value.as_i64(), num.as_i64()) {
+        (Some(v), Some(n)) if n != 0 => v % n == 0,
+        _ => false,
+    }
+}
+
+fn test_in(value: &MiniJinjaValue, seq: &MiniJinjaValue) -> bool {
+    if let Some(s) = seq.as_str() {
+        if let Some(v) = value.as_str() {
+            return s.contains(v);
+        }
+    }
+    if let Ok(iter) = seq.try_iter() {
+        let value_str = value.to_string();
+        for item in iter {
+            if item.to_string() == value_str {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn test_subset(value: &MiniJinjaValue, other: &MiniJinjaValue) -> bool {
+    if let Ok(iter_a) = value.try_iter() {
+        for item in iter_a {
+            let item_str = item.to_string();
+            let mut found = false;
+            if let Ok(iter_b) = other.try_iter() {
+                for b_item in iter_b {
+                    if b_item.to_string() == item_str {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if !found {
+                return false;
+            }
+        }
+        true
+    } else {
+        false
+    }
+}
+
+fn test_superset(value: &MiniJinjaValue, other: &MiniJinjaValue) -> bool {
+    test_subset(other, value)
+}
+
+fn test_callable(_value: &MiniJinjaValue) -> bool {
+    false
+}
+
+fn test_escaped(_value: &MiniJinjaValue) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1470,5 +1561,125 @@ mod tests {
             .render("{{ ('a: 1' | from_yaml).a }}", &vars)
             .unwrap();
         assert_eq!(result.trim(), "1");
+    }
+
+    #[test]
+    fn test_aliases_null_dict_list() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("x".to_string(), JsonValue::Null);
+        vars.insert(
+            "d".to_string(),
+            serde_json::json!({"a": 1}),
+        );
+        vars.insert(
+            "l".to_string(),
+            serde_json::json!([1, 2, 3]),
+        );
+
+        assert!(engine.evaluate_condition("x is null", &vars).unwrap());
+        assert!(engine.evaluate_condition("x is none", &vars).unwrap());
+        assert!(engine.evaluate_condition("d is dict", &vars).unwrap());
+        assert!(engine.evaluate_condition("d is mapping", &vars).unwrap());
+        assert!(engine.evaluate_condition("l is list", &vars).unwrap());
+        assert!(engine.evaluate_condition("l is sequence", &vars).unwrap());
+    }
+
+    #[test]
+    fn test_odd_even() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("a".to_string(), serde_json::json!(3));
+        vars.insert("b".to_string(), serde_json::json!(4));
+        vars.insert("s".to_string(), JsonValue::String("hello".to_string()));
+
+        assert!(engine.evaluate_condition("a is odd", &vars).unwrap());
+        assert!(!engine.evaluate_condition("a is even", &vars).unwrap());
+        assert!(engine.evaluate_condition("b is even", &vars).unwrap());
+        assert!(!engine.evaluate_condition("b is odd", &vars).unwrap());
+        // Non-numeric returns false
+        assert!(!engine.evaluate_condition("s is odd", &vars).unwrap());
+        assert!(!engine.evaluate_condition("s is even", &vars).unwrap());
+    }
+
+    #[test]
+    fn test_divisibleby() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("n".to_string(), serde_json::json!(12));
+
+        assert!(engine
+            .evaluate_condition("n is divisibleby(3)", &vars)
+            .unwrap());
+        assert!(engine
+            .evaluate_condition("n is divisibleby(4)", &vars)
+            .unwrap());
+        assert!(!engine
+            .evaluate_condition("n is divisibleby(5)", &vars)
+            .unwrap());
+    }
+
+    #[test]
+    fn test_in() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert(
+            "items".to_string(),
+            serde_json::json!(["a", "b", "c"]),
+        );
+        vars.insert("x".to_string(), JsonValue::String("b".to_string()));
+        vars.insert("y".to_string(), JsonValue::String("z".to_string()));
+
+        assert!(engine.evaluate_condition("x is in(items)", &vars).unwrap());
+        assert!(!engine.evaluate_condition("y is in(items)", &vars).unwrap());
+    }
+
+    #[test]
+    fn test_subset_superset() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("small".to_string(), serde_json::json!([1, 2]));
+        vars.insert("big".to_string(), serde_json::json!([1, 2, 3, 4]));
+
+        assert!(engine
+            .evaluate_condition("small is subset(big)", &vars)
+            .unwrap());
+        assert!(!engine
+            .evaluate_condition("big is subset(small)", &vars)
+            .unwrap());
+        assert!(engine
+            .evaluate_condition("big is superset(small)", &vars)
+            .unwrap());
+        assert!(!engine
+            .evaluate_condition("small is superset(big)", &vars)
+            .unwrap());
+    }
+
+    #[test]
+    fn test_subset_empty() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("empty".to_string(), serde_json::json!([]));
+        vars.insert("items".to_string(), serde_json::json!([1, 2]));
+
+        // Empty set is subset of anything
+        assert!(engine
+            .evaluate_condition("empty is subset(items)", &vars)
+            .unwrap());
+        // Non-empty is not subset of empty
+        assert!(!engine
+            .evaluate_condition("items is subset(empty)", &vars)
+            .unwrap());
+    }
+
+    #[test]
+    fn test_callable_and_escaped() {
+        let engine = TemplateEngine::new();
+        let mut vars = IndexMap::new();
+        vars.insert("x".to_string(), serde_json::json!(42));
+
+        // These always return false
+        assert!(!engine.evaluate_condition("x is callable", &vars).unwrap());
+        assert!(!engine.evaluate_condition("x is escaped", &vars).unwrap());
     }
 }

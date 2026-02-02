@@ -215,6 +215,14 @@ pub struct ExecutionContext {
     pub connection: Option<Arc<dyn Connection + Send + Sync>>,
     /// Python interpreter path on remote host
     pub python_interpreter: String,
+    /// Whether to become another user (privilege escalation)
+    pub r#become: bool,
+    /// User to become (default: "root")
+    pub become_user: String,
+    /// Method for privilege escalation (default: "sudo")
+    pub become_method: String,
+    /// Password for privilege escalation
+    pub become_password: Option<String>,
 }
 
 impl std::fmt::Debug for ExecutionContext {
@@ -229,6 +237,10 @@ impl std::fmt::Debug for ExecutionContext {
                 &self.connection.as_ref().map(|c| c.identifier()),
             )
             .field("python_interpreter", &self.python_interpreter)
+            .field("become", &self.r#become)
+            .field("become_user", &self.become_user)
+            .field("become_method", &self.become_method)
+            .field("has_become_password", &self.become_password.is_some())
             .finish()
     }
 }
@@ -242,6 +254,10 @@ impl ExecutionContext {
             verbosity: 0,
             connection: None,
             python_interpreter: "/usr/bin/python3".to_string(),
+            r#become: false,
+            become_user: "root".to_string(),
+            become_method: "sudo".to_string(),
+            become_password: None,
         }
     }
 
@@ -541,6 +557,14 @@ impl RuntimeContext {
     /// Get all variables merged for a specific host
     ///
     /// # Performance
+    /// Get the playbook directory from magic vars
+    pub fn get_playbook_dir(&self) -> Option<std::path::PathBuf> {
+        self.magic_vars
+            .get("playbook_dir")
+            .and_then(|v| v.as_str())
+            .map(std::path::PathBuf::from)
+    }
+
     /// This is a hot path function. Optimizations applied:
     /// - Pre-sized capacity for IndexMap to reduce reallocations
     /// - Cached host string comparison

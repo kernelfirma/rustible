@@ -167,6 +167,7 @@ pub struct RichDiagnostic {
     pub notes: Vec<String>,
     pub related: Vec<RelatedInfo>,
     pub suggestions: Vec<Suggestion>,
+    pub secondary_labels: Vec<(Span, String)>,
 }
 
 impl RichDiagnostic {
@@ -203,6 +204,7 @@ impl RichDiagnostic {
             notes: Vec::new(),
             related: Vec::new(),
             suggestions: Vec::new(),
+            secondary_labels: Vec::new(),
         }
     }
 
@@ -236,6 +238,16 @@ impl RichDiagnostic {
         self
     }
 
+    pub fn with_secondary_label(mut self, span: Span, message: &str) -> Self {
+        self.secondary_labels.push((span, message.to_string()));
+        self
+    }
+
+    /// Render the diagnostic with the given source and print to stderr.
+    pub fn eprint_with_source(&self, source: &str) {
+        eprint!("{}", self.render_with_source(Some(source)));
+    }
+
     pub fn render(&self) -> String {
         self.render_with_source(None)
     }
@@ -267,6 +279,14 @@ impl RichDiagnostic {
                     Label::new((self.file.clone(), self.span.range()))
                         .with_message(label.clone())
                         .with_color(color),
+                );
+            }
+
+            for (sec_span, sec_msg) in &self.secondary_labels {
+                report = report.with_label(
+                    Label::new((self.file.clone(), sec_span.range()))
+                        .with_message(sec_msg.clone())
+                        .with_color(Color::Blue),
                 );
             }
 

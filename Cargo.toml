@@ -16,7 +16,7 @@ gcp = []
 # Database modules (PostgreSQL, MySQL, etc.) - stub implementation
 database = ["dep:sqlx"]
 # WinRM connection support (Windows Remote Management) - stub implementation
-winrm = ["dep:secrecy", "dep:zeroize", "dep:md4"]
+winrm = ["dep:secrecy", "dep:md4"]
 # HTTP client features with reqwest - stub implementation
 reqwest = []
 # Background warmup of lazy-initialized components
@@ -71,6 +71,7 @@ futures = "0.3"
 # Error handling
 thiserror = "2.0"
 anyhow = "1.0"
+ariadne = "0.5"
 
 # Serialization
 serde = { version = "1.0", features = ["derive", "rc"] }
@@ -93,7 +94,7 @@ shellexpand = "=3.1.0"  # Pin to avoid dirs 6.x which requires Rust 1.88+
 shell-words = "1.1"
 which = "5.0"  # Pin to avoid home 0.5.12 which requires Rust 1.88+
 uuid = { version = "1.6", features = ["v4", "serde"] }
-semver = "1.0"
+semver = { version = "1.0", features = ["serde"] }
 urlencoding = "2.1"
 
 # Template engine (Jinja2-compatible)
@@ -117,10 +118,11 @@ argon2 = "0.5"
 rand = "0.8"
 base64 = "0.22"
 secrecy = { version = "0.8", features = ["serde"], optional = true }
-zeroize = { version = "1.7", optional = true }
+zeroize = "1.7"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
+humantime = "2"
 humantime-serde = "1.1"
 
 # SSH connectivity - pure Rust (russh)
@@ -149,6 +151,7 @@ similar = "2.4"
 
 # Parallel execution
 rayon = "1.8"
+num_cpus = "1.16"
 
 # Graph algorithms for state dependency tracking
 petgraph = "0.6"

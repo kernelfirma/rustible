@@ -99,8 +99,7 @@ pub mod prelude {
     pub use super::lookup::prelude::*;
     pub use super::provider::{
         ModuleContext, ModuleDescriptor, ModuleOutput, ModuleParams, OutputDescriptor,
-        ParameterDescriptor, Provider, ProviderCapability, ProviderDependency, ProviderError,
-        ProviderIndex, ProviderIndexEntry, ProviderMetadata, ProviderRegistry,
-        ProviderRegistryIndex,
+        ParameterDescriptor, Provider, ProviderCapability, ProviderError,
+        ProviderMetadata, ProviderRegistry,
     };
 }

@@ -122,6 +122,7 @@ use crate::connection::ConnectionFactory;
 use crate::executor::parallelization::ParallelizationManager;
 use crate::executor::runtime::{ExecutionContext, RuntimeContext};
 use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
+use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 /// Errors that can occur during playbook and task execution.
@@ -177,6 +178,16 @@ pub enum ExecutorError {
     /// Other miscellaneous errors.
     #[error("{0}")]
     Other(String),
+
+    /// Template rendering error.
+    #[error("Template error: {0}")]
+    TemplateError(String),
+}
+
+impl From<crate::error::Error> for ExecutorError {
+    fn from(err: crate::error::Error) -> Self {
+        ExecutorError::TemplateError(err.to_string())
+    }
 }
 
 /// Result type for executor operations.
@@ -384,6 +395,8 @@ pub struct Executor {
     recovery_manager: Option<Arc<RecoveryManager>>,
     /// Connection factory for remote execution
     connection_factory: Option<Arc<ConnectionFactory>>,
+    /// Shared module registry for task execution
+    module_registry: Arc<ModuleRegistry>,
 }
 
 impl Executor {
@@ -399,6 +412,7 @@ impl Executor {
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
             connection_factory: None,
+            module_registry: Arc::new(ModuleRegistry::default()),
         }
     }
 
@@ -414,6 +428,7 @@ impl Executor {
             parallelization_manager: Arc::new(ParallelizationManager::new()),
             recovery_manager: None,
             connection_factory: None,
+            module_registry: Arc::new(ModuleRegistry::default()),
         }
     }
 
@@ -923,6 +938,7 @@ impl Executor {
                         &self.handlers,
                         &self.notified_handlers,
                         &self.parallelization_manager,
+                        &self.module_registry,
                     )
                     .await;
 
@@ -1006,6 +1022,7 @@ impl Executor {
                 let parallelization_local = Arc::clone(&self.parallelization_manager);
                 let recovery_manager = self.recovery_manager.clone();
                 let connection_factory = self.connection_factory.clone();
+                let module_registry = Arc::clone(&self.module_registry);
                 let tx_id = tx_id.clone();
 
                 tokio::spawn(async move {
@@ -1047,7 +1064,7 @@ impl Executor {
                         }
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local)
+                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry)
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1276,6 +1293,7 @@ impl Executor {
                     &self.handlers,
                     &self.notified_handlers,
                     &self.parallelization_manager,
+                    &self.module_registry,
                 )
                 .await;
 
@@ -1352,6 +1370,7 @@ impl Executor {
                 let notified = Arc::clone(&self.notified_handlers);
                 let parallelization = Arc::clone(&self.parallelization_manager);
                 let connection_factory = self.connection_factory.clone();
+                let module_registry = Arc::clone(&self.module_registry);
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1380,7 +1399,7 @@ impl Executor {
                     }
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization)
+                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry)
                         .await;
 
                     match result {

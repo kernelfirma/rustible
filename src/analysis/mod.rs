@@ -559,16 +559,16 @@ pub(crate) mod helpers {
     use regex::Regex;
     use std::collections::HashSet;
 
-    lazy_static::lazy_static! {
-        /// Regex to match Jinja2 variable references: {{ var_name }}
-        static ref JINJA_VAR_PATTERN: Regex = Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*[}|]").unwrap();
+    use once_cell::sync::Lazy;
 
-        /// Regex to match Jinja2 variable references with filters: {{ var | filter }}
-        static ref JINJA_VAR_FILTER_PATTERN: Regex = Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\|").unwrap();
+    /// Regex to match Jinja2 variable references: {{ var_name }}
+    static JINJA_VAR_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*[}|]").unwrap());
 
-        /// Regex to match when condition variables
-        static ref WHEN_VAR_PATTERN: Regex = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
-    }
+    /// Regex to match Jinja2 variable references with filters: {{ var | filter }}
+    static JINJA_VAR_FILTER_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\|").unwrap());
+
+    /// Regex to match when condition variables
+    static WHEN_VAR_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap());
 
     /// Extract variable names from a Jinja2 template string
     pub fn extract_jinja_variables(text: &str) -> HashSet<String> {

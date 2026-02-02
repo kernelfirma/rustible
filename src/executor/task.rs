@@ -236,7 +236,7 @@ pub struct Task {
     pub register: Option<String>,
     /// Items to loop over
     #[serde(default)]
-    pub loop_items: Option<Vec<JsonValue>>,
+    pub loop_items: Option<LoopSource>,
     /// Loop variable name (default: "item")
     #[serde(default = "default_loop_var")]
     pub loop_var: String,
@@ -300,6 +300,15 @@ pub enum BlockRole {
     Always,
 }
 
+/// Source for loop iteration data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LoopSource {
+    /// Static list of items
+    Items(Vec<JsonValue>),
+    /// Template string to evaluate for items
+    Template(String),
+}
+
 fn default_loop_var() -> String {
     "item".to_string()
 }
@@ -355,7 +364,10 @@ impl From<crate::playbook::Task> for Task {
         let loop_items = if let Some(v) = pt.loop_.or(pt.with_items) {
             // Standard loop or with_items - expect array
             if let Some(arr) = v.as_array() {
-                Some(arr.clone())
+                Some(LoopSource::Items(arr.clone()))
+            } else if let Some(s) = v.as_str() {
+                // Could be a template string like "{{ my_list }}"
+                Some(LoopSource::Template(s.to_string()))
             } else {
                 None
             }
@@ -366,7 +378,7 @@ impl From<crate::playbook::Task> for Task {
                     .iter()
                     .map(|(k, val)| serde_json::json!({"key": k, "value": val}))
                     .collect();
-                Some(items)
+                Some(LoopSource::Items(items))
             } else {
                 None
             }
@@ -374,9 +386,9 @@ impl From<crate::playbook::Task> for Task {
             // with_fileglob - for now just pass patterns as strings
             // (actual glob expansion happens at runtime)
             if let Some(arr) = v.as_array() {
-                Some(arr.clone())
+                Some(LoopSource::Items(arr.clone()))
             } else if v.is_string() {
-                Some(vec![v])
+                Some(LoopSource::Items(vec![v]))
             } else {
                 None
             }
@@ -464,7 +476,7 @@ impl Task {
 
     /// Set loop items
     pub fn loop_over(mut self, items: Vec<JsonValue>) -> Self {
-        self.loop_items = Some(items);
+        self.loop_items = Some(LoopSource::Items(items));
         self
     }
 
@@ -532,7 +544,23 @@ impl Task {
         };
 
         // Handle loops - for set_fact, use fact_storage_ctx; for others, use execution_ctx
-        if let Some(ref items) = self.loop_items {
+        if let Some(ref loop_source) = self.loop_items {
+            let resolved_items = match loop_source {
+                LoopSource::Items(items) => items.clone(),
+                LoopSource::Template(template) => {
+                    // Resolve template to get items
+                    let rt = runtime.read().await;
+                    let vars: std::collections::HashMap<String, JsonValue> =
+                        rt.get_merged_vars(&execution_ctx.host).into_iter().collect();
+                    let engine = get_engine();
+                    let rendered = engine.render(template, &vars)
+                        .map_err(|e| crate::executor::ExecutorError::RuntimeError(
+                            format!("Failed to resolve loop template '{}': {}", template, e)
+                        ))?;
+                    serde_json::from_str::<Vec<JsonValue>>(&rendered)
+                        .unwrap_or_else(|_| vec![JsonValue::String(rendered)])
+                }
+            };
             let loop_ctx = if self.module == "set_fact" {
                 &fact_storage_ctx
             } else {
@@ -540,7 +568,7 @@ impl Task {
             };
             return self
                 .execute_loop(
-                    items,
+                    &resolved_items,
                     loop_ctx,
                     runtime,
                     handlers,
@@ -1356,6 +1384,7 @@ impl Task {
                     r#become: ctx.r#become,
                     become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
                     become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+                    become_password: ctx.become_password.clone(),
                     connection: ctx.connection.clone(),
                 };
 
@@ -1396,6 +1425,7 @@ impl Task {
             r#become: ctx.r#become,
             become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
             become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
 
@@ -1442,6 +1472,7 @@ impl Task {
             r#become: ctx.r#become,
             become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
             become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
 
@@ -1495,6 +1526,7 @@ impl Task {
             r#become: ctx.r#become,
             become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
             become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
 

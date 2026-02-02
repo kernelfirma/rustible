@@ -424,9 +424,9 @@ impl<C: VaultClient> VaultProvider<C> {
             })?;
             let mut filtered = HashMap::new();
             filtered.insert(key.to_string(), value.clone());
-            Ok(Secret::from_string_map(filtered))
+            Ok(Secret::from_string_map(secret_path, filtered))
         } else {
-            Ok(Secret::from_string_map(data))
+            Ok(Secret::from_string_map(secret_path, data))
         }
     }
 
