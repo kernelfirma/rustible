@@ -1142,6 +1142,9 @@ pub fn test_executor_config() -> ExecutorConfig {
         become_method: "sudo".to_string(),
         become_user: "root".to_string(),
         become_password: None,
+        distributed: false,
+        workers: 1,
+        distribution_strategy: "adaptive".to_string(),
     }
 }
 
@@ -1163,6 +1166,9 @@ pub fn test_check_mode_config() -> ExecutorConfig {
         become_method: "sudo".to_string(),
         become_user: "root".to_string(),
         become_password: None,
+        distributed: false,
+        workers: 1,
+        distribution_strategy: "adaptive".to_string(),
     }
 }
 

@@ -319,8 +319,8 @@ pub struct RuntimeContext {
     /// Role defaults (lowest precedence)
     role_defaults: IndexMap<String, JsonValue>,
 
-    /// Block-level variables
-    block_vars: IndexMap<String, JsonValue>,
+    /// Block-level variables (stack for nested scoping)
+    block_vars_stack: Vec<IndexMap<String, JsonValue>>,
 
     /// Include vars (from include_vars module)
     include_vars: IndexMap<String, JsonValue>,
@@ -620,6 +620,13 @@ impl RuntimeContext {
             merged.insert(k.clone(), v.clone());
         }
 
+        // Block vars (from stack, bottom to top for proper scoping)
+        for scope in &self.block_vars_stack {
+            for (k, v) in scope {
+                merged.insert(k.clone(), v.clone());
+            }
+        }
+
         // Task vars
         for (k, v) in &self.task_vars {
             merged.insert(k.clone(), v.clone());
@@ -634,15 +641,13 @@ impl RuntimeContext {
                     serde_json::to_value(host_data.get_all_facts()).unwrap_or(JsonValue::Null),
                 );
 
-                // Also expose each fact as a top-level ansible_* variable
-                // Facts like {"hostname": "server1"} become {"ansible_hostname": "server1"}
+                // Expose each fact as a top-level variable under both raw name
+                // and ansible_* prefix (matching Ansible behavior)
                 for (fact_name, fact_value) in host_data.get_all_facts() {
-                    let prefixed_name = if fact_name.starts_with("ansible_") {
-                        fact_name.clone()
-                    } else {
-                        format!("ansible_{}", fact_name)
-                    };
-                    merged.insert(prefixed_name, fact_value.clone());
+                    merged.insert(fact_name.clone(), fact_value.clone());
+                    if !fact_name.starts_with("ansible_") {
+                        merged.insert(format!("ansible_{}", fact_name), fact_value.clone());
+                    }
                 }
             }
 
@@ -835,15 +840,34 @@ impl RuntimeContext {
         self.role_defaults.insert(name, value);
     }
 
-    /// Set a block-level variable
+    /// Set a block-level variable on the current (topmost) scope
     pub fn set_block_var(&mut self, name: String, value: JsonValue) {
         trace!("Setting block var: {} = {:?}", name, value);
-        self.block_vars.insert(name, value);
+        if let Some(top) = self.block_vars_stack.last_mut() {
+            top.insert(name, value);
+        } else {
+            // No scope pushed yet; create one
+            let mut scope = IndexMap::new();
+            scope.insert(name, value);
+            self.block_vars_stack.push(scope);
+        }
     }
 
-    /// Clear block-level variables (called when exiting a block)
+    /// Push a new block scope with the given variables
+    pub fn push_block_vars(&mut self, vars: IndexMap<String, JsonValue>) {
+        trace!("Pushing block scope with {} vars", vars.len());
+        self.block_vars_stack.push(vars);
+    }
+
+    /// Pop the topmost block scope (called when exiting a block)
+    pub fn pop_block_vars(&mut self) {
+        trace!("Popping block scope");
+        self.block_vars_stack.pop();
+    }
+
+    /// Clear all block-level variables (called when exiting all blocks)
     pub fn clear_block_vars(&mut self) {
-        self.block_vars.clear();
+        self.block_vars_stack.clear();
     }
 
     /// Set an include_vars variable
@@ -1035,9 +1059,11 @@ impl RuntimeContext {
             return Some(v.clone());
         }
 
-        // 6. Block vars
-        if let Some(v) = self.block_vars.get(name) {
-            return Some(v.clone());
+        // 6. Block vars (search stack from top to bottom)
+        for scope in self.block_vars_stack.iter().rev() {
+            if let Some(v) = scope.get(name) {
+                return Some(v.clone());
+            }
         }
 
         // 5. Play variables

@@ -1396,6 +1396,12 @@ impl Executor {
     ) -> ExecutorResult<HashMap<String, TaskResult>> {
         debug!("Running task '{}' on {} hosts", task.name, hosts.len());
 
+        // Set task-level vars (including block vars merged during parsing) on runtime
+        if !task.vars.is_empty() {
+            let mut rt = self.runtime.write().await;
+            rt.push_block_vars(task.vars.clone());
+        }
+
         // OPTIMIZATION: Fast path for single host - avoid Arc overhead and tokio::spawn
         if hosts.len() == 1 {
             let host = &hosts[0];
@@ -1486,6 +1492,11 @@ impl Executor {
                     );
                     self.changed_tasks.lock().await.push(record);
                 }
+            }
+            // Pop task-level vars from runtime (single-host fast path)
+            if !task.vars.is_empty() {
+                let mut rt = self.runtime.write().await;
+                rt.pop_block_vars();
             }
             return Ok(results);
         }
@@ -1614,6 +1625,13 @@ impl Executor {
                 self.changed_tasks.lock().await.push(record);
             }
         }
+
+        // Pop task-level vars from runtime
+        if !task.vars.is_empty() {
+            let mut rt = self.runtime.write().await;
+            rt.pop_block_vars();
+        }
+
         Ok(results)
     }
 

@@ -36,13 +36,13 @@ fn test_boolean_coercion_yes_no() {
 
     // 'yes' should be truthy
     let result = engine
-        .evaluate_condition("{{ 'yes' | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("'yes' | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "'yes' should be truthy");
 
     // 'no' should be falsy
     let result = engine
-        .evaluate_condition("{{ 'no' | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("'no' | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "'no' should be falsy");
 }
@@ -53,7 +53,7 @@ fn test_boolean_coercion_true_false_strings() {
 
     // Case-insensitive true
     for val in ["true", "True", "TRUE"] {
-        let template = format!("{{{{ '{}' | bool }}}}", val);
+        let template = format!("'{}' | bool", val);
         let result = engine
             .evaluate_condition(&template, &vars_from_json(json!({})))
             .unwrap();
@@ -62,7 +62,7 @@ fn test_boolean_coercion_true_false_strings() {
 
     // Case-insensitive false
     for val in ["false", "False", "FALSE"] {
-        let template = format!("{{{{ '{}' | bool }}}}", val);
+        let template = format!("'{}' | bool", val);
         let result = engine
             .evaluate_condition(&template, &vars_from_json(json!({})))
             .unwrap();
@@ -76,13 +76,13 @@ fn test_boolean_coercion_on_off() {
 
     // 'on' should be truthy
     let result = engine
-        .evaluate_condition("{{ 'on' | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("'on' | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "'on' should be truthy");
 
     // 'off' should be falsy
     let result = engine
-        .evaluate_condition("{{ 'off' | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("'off' | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "'off' should be falsy");
 }
@@ -93,13 +93,13 @@ fn test_boolean_coercion_numeric() {
 
     // 1 should be truthy
     let result = engine
-        .evaluate_condition("{{ 1 | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("1 | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(result, "1 should be truthy");
 
     // 0 should be falsy
     let result = engine
-        .evaluate_condition("{{ 0 | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("0 | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "0 should be falsy");
 }
@@ -110,13 +110,13 @@ fn test_boolean_coercion_empty_values() {
 
     // Empty string should be falsy
     let result = engine
-        .evaluate_condition("{{ '' | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("'' | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "empty string should be falsy");
 
     // Empty list should be falsy
     let result = engine
-        .evaluate_condition("{{ [] | bool }}", &vars_from_json(json!({})))
+        .evaluate_condition("[] | bool", &vars_from_json(json!({})))
         .unwrap();
     assert!(!result, "empty list should be falsy");
 }

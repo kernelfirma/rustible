@@ -1038,10 +1038,17 @@ fn parse_task_definition(
             block_parsed.extend(parse_task_definition(task_def, playbook_path)?);
         }
 
+        // Extract block-level vars
+        let block_vars = extract_task_vars(&def.module);
+
         // Apply block-level properties to all tasks and mark as block tasks
+        // Only set block_id/block_role for tasks that don't already have one
+        // (preserving nested block structure from recursive parsing)
         for mut task in block_parsed {
-            task.block_id = Some(block_id.clone());
-            task.block_role = BlockRole::Normal;
+            if task.block_id.is_none() {
+                task.block_id = Some(block_id.clone());
+                task.block_role = BlockRole::Normal;
+            }
             if def.r#become {
                 task.r#become = true;
             }
@@ -1050,6 +1057,10 @@ fn parse_task_definition(
                     task.when = Some(when.to_condition());
                 }
             }
+            // Merge block vars into task (task's own vars take precedence)
+            for (k, v) in &block_vars {
+                task.vars.entry(k.clone()).or_insert_with(|| v.clone());
+            }
             tasks.push(task);
         }
 
@@ -1057,10 +1068,13 @@ fn parse_task_definition(
         if let Some(rescue_tasks) = def.rescue {
             for task_def in rescue_tasks {
                 let mut rescue_parsed = parse_task_definition(task_def, playbook_path)?;
-                // Mark these as rescue tasks
+                // Mark these as rescue tasks and merge block vars
                 for task in &mut rescue_parsed {
                     task.block_id = Some(block_id.clone());
                     task.block_role = BlockRole::Rescue;
+                    for (k, v) in &block_vars {
+                        task.vars.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
                 }
                 tasks.extend(rescue_parsed);
             }
@@ -1070,10 +1084,13 @@ fn parse_task_definition(
         if let Some(always_tasks) = def.always {
             for task_def in always_tasks {
                 let mut always_parsed = parse_task_definition(task_def, playbook_path)?;
-                // Mark these as always tasks
+                // Mark these as always tasks and merge block vars
                 for task in &mut always_parsed {
                     task.block_id = Some(block_id.clone());
                     task.block_role = BlockRole::Always;
+                    for (k, v) in &block_vars {
+                        task.vars.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
                 }
                 tasks.extend(always_parsed);
             }
@@ -1216,11 +1233,20 @@ fn parse_task_definition(
         retries: None,
         delay: None,
         until: None,
-        vars: indexmap::IndexMap::new(),
+        vars: extract_task_vars(&def.module),
     };
 
     tasks.push(task);
     Ok(tasks)
+}
+
+/// Extract the `vars` mapping from the flattened module fields.
+fn extract_task_vars(module: &IndexMap<String, JsonValue>) -> IndexMap<String, JsonValue> {
+    module
+        .get("vars")
+        .and_then(|v| v.as_object())
+        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default()
 }
 
 fn normalize_builtin_module_name(name: &str) -> &str {

@@ -645,6 +645,14 @@ fn filter_string(value: MiniJinjaValue) -> String {
 }
 
 fn filter_bool(value: MiniJinjaValue) -> bool {
+    // Ansible-compatible bool filter: handles yes/no/true/false/on/off/1/0 strings
+    if let Some(s) = value.as_str() {
+        match s.to_lowercase().as_str() {
+            "true" | "yes" | "on" | "1" | "y" | "t" => return true,
+            "false" | "no" | "off" | "0" | "n" | "f" | "" => return false,
+            _ => {}
+        }
+    }
     is_truthy_value(&value)
 }
 

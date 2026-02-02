@@ -270,7 +270,9 @@ mod tag_inheritance {
         let playbook = fixtures_dir().join("include_tasks_tags.yml");
 
         // Include_tasks should respect tags
+        // Run from the fixtures dir so relative include paths resolve correctly
         rustible_cmd()
+            .current_dir(fixtures_dir())
             .arg("run")
             .arg(&playbook)
             .arg("--tags")
