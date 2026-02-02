@@ -305,18 +305,14 @@ mod tests {
         assert!(matches!(result, Err(LookupError::MissingArgument(_))));
     }
 
-    // Integration tests that require a running Vault instance
     #[test]
-    #[ignore = "Requires running Vault instance"]
-    fn test_vault_lookup_integration() {
-        // This test would require:
-        // 1. Running Vault instance
-        // 2. VAULT_ADDR and VAULT_TOKEN environment variables
-        // 3. A secret at the specified path
+    fn test_vault_lookup_missing_env() {
+        // Without VAULT_ADDR and VAULT_TOKEN set, lookup should fail gracefully
         let lookup = VaultLookup::new();
         let context = LookupContext::default();
 
-        // Example: lookup("vault", &["secret/data/test#value"], &context)
-        // Would need actual Vault setup
+        let result = lookup.lookup(&["secret/data/test#value"], &context);
+        // Should fail because no Vault connection is available
+        assert!(result.is_err());
     }
 }

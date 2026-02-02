@@ -906,7 +906,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky on CI - file modification time precision varies"]
     fn test_file_dependency() {
         // Create a temp file
         let temp_dir = std::env::temp_dir();
@@ -918,6 +917,9 @@ mod tests {
 
         let dep = dep.unwrap();
         assert!(!dep.is_modified());
+
+        // Sleep to ensure filesystem timestamp granularity is exceeded
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Modify the file
         std::fs::write(&temp_file, "modified").unwrap();

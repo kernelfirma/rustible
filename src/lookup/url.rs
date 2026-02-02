@@ -302,93 +302,53 @@ mod tests {
         assert!(matches!(result, Err(LookupError::MissingArgument(_))));
     }
 
-    // Note: The following tests require network access and are marked as ignored
-    // They can be run manually with `cargo test -- --ignored`
-
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_fetch_http() {
+    fn test_url_lookup_rejects_non_http() {
         let lookup = UrlLookup::new();
         let context = LookupContext::default();
 
-        let result = lookup.lookup(&["https://httpbin.org/get"], &context);
-        assert!(result.is_ok());
-        let values = result.unwrap();
-        assert_eq!(values.len(), 1);
-        assert!(values[0].contains("httpbin"));
+        let result = lookup.lookup(&["ftp://example.com/file"], &context);
+        assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_with_headers() {
+    fn test_url_lookup_validate_rejects_null_bytes() {
         let lookup = UrlLookup::new();
-        let context = LookupContext::default();
-
-        let result = lookup.lookup(
-            &[
-                "https://httpbin.org/headers",
-                "headers=X-Custom-Header:TestValue",
-            ],
-            &context,
-        );
-        assert!(result.is_ok());
-        let values = result.unwrap();
-        assert!(values[0].contains("X-Custom-Header"));
+        let result = lookup.validate_url("https://example.com/\0bad");
+        assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_with_auth() {
+    fn test_url_lookup_validate_accepts_valid_urls() {
         let lookup = UrlLookup::new();
-        let context = LookupContext::default();
-
-        let result = lookup.lookup(
-            &[
-                "https://httpbin.org/basic-auth/user/passwd",
-                "username=user",
-                "password=passwd",
-            ],
-            &context,
-        );
-        assert!(result.is_ok());
-        let values = result.unwrap();
-        assert!(values[0].contains("authenticated"));
+        assert!(lookup.validate_url("https://example.com").is_ok());
+        assert!(lookup.validate_url("http://localhost:8080/api").is_ok());
+        assert!(lookup.validate_url("https://api.example.com/v1?key=val").is_ok());
     }
 
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_404() {
+    fn test_url_lookup_header_parsing_multiple() {
         let lookup = UrlLookup::new();
-        let context = LookupContext::default();
-
-        let result = lookup.lookup(&["https://httpbin.org/status/404"], &context);
-        assert!(matches!(result, Err(LookupError::Http(_))));
+        let headers = lookup
+            .parse_headers("Accept:text/html,X-Foo:bar")
+            .unwrap();
+        assert_eq!(headers.len(), 2);
+        assert_eq!(headers[0].0, "Accept");
+        assert_eq!(headers[0].1, "text/html");
+        assert_eq!(headers[1].0, "X-Foo");
+        assert_eq!(headers[1].1, "bar");
     }
 
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_timeout() {
+    fn test_url_lookup_header_parsing_empty() {
         let lookup = UrlLookup::new();
-        let context = LookupContext::new().with_timeout(1);
-
-        // This endpoint delays for 10 seconds, but we set timeout to 1 second
-        let result = lookup.lookup(&["https://httpbin.org/delay/10"], &context);
-        assert!(matches!(result, Err(LookupError::Timeout(_))));
+        let headers = lookup.parse_headers("").unwrap();
+        assert!(headers.is_empty());
     }
 
     #[test]
-    #[ignore = "requires network access"]
-    fn test_url_lookup_split_lines() {
-        let lookup = UrlLookup::new();
-        let context = LookupContext::default();
-
-        // This returns multiple lines of data
-        let result = lookup.lookup(
-            &["https://httpbin.org/robots.txt", "split_lines=true"],
-            &context,
-        );
-        assert!(result.is_ok());
-        let values = result.unwrap();
-        assert!(values.len() >= 1);
+    fn test_url_lookup_context_timeout() {
+        let context = LookupContext::new().with_timeout(5);
+        assert_eq!(context.timeout_secs, 5);
     }
 }

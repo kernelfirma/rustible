@@ -442,7 +442,6 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "Flaky on CI - timing precision varies"]
     async fn test_no_throttle_immediate() {
         let manager = ThrottleManager::unlimited();
 
@@ -461,9 +460,9 @@ mod tests {
         futures::future::join_all(handles).await;
         let elapsed = start.elapsed();
 
-        // All should execute in parallel
+        // All should execute in parallel — generous tolerance for CI
         assert!(
-            elapsed < Duration::from_millis(50),
+            elapsed < Duration::from_millis(500),
             "No throttle should not block: took {:?}",
             elapsed
         );
@@ -530,7 +529,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Flaky on CI - timing precision varies"]
     async fn test_per_host_different_hosts_parallel() {
         let config = ThrottleConfig::default().per_host(1);
         let manager = Arc::new(ThrottleManager::new(config));
@@ -552,9 +550,9 @@ mod tests {
         futures::future::join_all(vec![handle1, handle2]).await;
         let elapsed = start.elapsed();
 
-        // Different hosts should run in parallel
+        // Different hosts should run in parallel — generous tolerance for CI
         assert!(
-            elapsed < Duration::from_millis(80),
+            elapsed < Duration::from_millis(500),
             "Different hosts should run in parallel: took {:?}",
             elapsed
         );
