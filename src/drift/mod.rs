@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
-use crate::connection::{Connection, CommandResult, ConnectionResult};
+use crate::connection::{Connection, CommandResult};
 
 /// Drift detection configuration
 #[derive(Debug, Clone)]

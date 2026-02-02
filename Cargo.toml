@@ -19,6 +19,10 @@ database = ["dep:sqlx"]
 winrm = ["dep:secrecy", "dep:md4"]
 # HTTP client features with reqwest - stub implementation
 reqwest = []
+# Experimental features gate
+experimental = []
+# Distributed execution support
+distributed = []
 # Background warmup of lazy-initialized components
 startup-warmup = []
 # REST API server

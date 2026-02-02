@@ -16,7 +16,7 @@ use dialoguer::theme::ColorfulTheme;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self};
 use std::path::PathBuf;
 
 /// Vault header marker

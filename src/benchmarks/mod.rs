@@ -417,6 +417,7 @@ impl Default for BenchmarkRunner {
 }
 
 /// Benchmark scenario trait
+#[allow(async_fn_in_trait)]
 pub trait BenchmarkScenario: Send + Sync {
     /// Get scenario name
     fn name(&self) -> &str;

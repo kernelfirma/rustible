@@ -3,11 +3,9 @@
 //! Implements 50+ commonly used Jinja2 filters to maintain compatibility
 //! with existing Ansible templates.
 
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 use thiserror::Error;
@@ -512,7 +510,8 @@ fn filter_b64encode(value: &Value) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
     
-    Ok(Value::String(base64::encode(s)))
+    use base64::Engine;
+    Ok(Value::String(base64::engine::general_purpose::STANDARD.encode(s)))
 }
 
 fn filter_b64decode(value: &Value) -> FilterResult<Value> {
@@ -521,7 +520,8 @@ fn filter_b64decode(value: &Value) -> FilterResult<Value> {
         message: "Expected base64 string".to_string(),
     })?;
     
-    let decoded = base64::decode(s)
+    use base64::Engine;
+    let decoded = base64::engine::general_purpose::STANDARD.decode(s)
         .map_err(|e| FilterError::Base64(e.to_string()))?;
     
     String::from_utf8(decoded)

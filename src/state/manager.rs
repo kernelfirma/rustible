@@ -5,14 +5,12 @@
 
 use crate::error::{Error as RustibleError, Result};
 use crate::state::storage::{StateBackend, StateFile};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
 use blake3::Hash;
-use futures::future::join_all;
 
 /// Represents the lifecycle state of a resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

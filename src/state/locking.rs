@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// Errors that can occur in state locking operations.
 #[derive(Debug, Error)]
