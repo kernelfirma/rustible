@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `regex_search` filter in template engine
+- Provisioning state backends (local, S3, GCS, Azure Blob, Consul, HTTP) with locking support
+- State lifecycle CLI (`provision init`, `provision migrate`, `provision import-terraform`)
 
 ### Fixed
 - Monitoring setup test failing due to template syntax

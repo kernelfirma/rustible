@@ -1,6 +1,6 @@
 # Terraform Integration Compatibility
 
-> **Last Updated:** 2026-01-26
+> **Last Updated:** 2026-02-03
 > **Rustible Version:** 0.1.x
 > **Status:** Experimental (Feature-gated)
 
@@ -27,9 +27,9 @@ cargo build --release --features full-provisioning
 | Capability | Terraform | Rustible | Status |
 |------------|-----------|----------|--------|
 | Plan mode preview | Yes | Yes | Stable |
-| State management | Yes | Partial | In Progress |
+| State management | Yes | Yes | Beta |
 | Drift detection | Yes | Planned | v0.3 |
-| Remote state backends | Yes | Planned | v0.2 |
+| Remote state backends | Yes | Yes | Beta |
 | Lockfiles | Yes | Planned | v1.0 |
 | Checkpoints/rollback | No | Planned | v1.0 |
 
@@ -101,9 +101,17 @@ Requires `--features aws` or `--features provisioning`.
 
 ### Current State (v0.1)
 
-- Local state file per host
-- Basic change detection
-- No remote backends
+- Local or remote provisioning state backends
+- Optional state locking for collaborative workflows
+- Terraform state import into Rustible state
+
+State lifecycle commands:
+
+```bash
+rustible provision init
+rustible provision migrate
+rustible provision import-terraform --tfstate terraform.tfstate
+```
 
 ### Planned State Features
 
@@ -111,19 +119,18 @@ Requires `--features aws` or `--features provisioning`.
 |---------|--------|--------|
 | State manifests | In Progress | v0.2 |
 | Drift detection | Planned | v0.3 |
-| S3 remote backend | Planned | v0.2 |
-| GCS remote backend | Planned | v0.2 |
-| Azure Blob backend | Planned | v0.2 |
-| Consul backend | Planned | v0.3 |
-| State locking | Planned | v0.3 |
+| S3 remote backend | Implemented | v0.2 |
+| GCS remote backend | Implemented | v0.2 |
+| Azure Blob backend | Implemented | v0.2 |
+| Consul backend | Implemented | v0.2 |
+| State locking | Implemented | v0.2 |
 | Lockfile support | Planned | v1.0 |
 
 ### State File Location
 
 ```
-~/.rustible/state/
-  web1.example.com.json
-  web2.example.com.json
+./.rustible/provisioning.state.json
+./.rustible/provisioning.backend.json
 ```
 
 ---

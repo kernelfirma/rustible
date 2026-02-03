@@ -4,12 +4,14 @@
 //! handling plan/apply/destroy workflows.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
 use serde_json::Value;
 use tokio::sync::Semaphore;
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 
 use super::config::InfrastructureConfig;
@@ -18,6 +20,8 @@ use super::plan::{ExecutionPlan, PlanBuilder, PlannedAction};
 use super::registry::{ProviderRegistry, ResourceRegistry};
 use super::resolver::{ResolvedConfig, ResolverContext, TemplateResolver};
 use super::state::{ProvisioningState, ResourceId, ResourceState};
+use super::state_backends::{BackendConfig, LocalBackend, StateBackend};
+use super::state_lock::StateLockManager;
 use super::traits::{ChangeType, ProviderConfig, ResourceResult};
 
 // ============================================================================
@@ -29,6 +33,9 @@ use super::traits::{ChangeType, ProviderConfig, ResourceResult};
 pub struct ExecutorConfig {
     /// Path to state file
     pub state_path: PathBuf,
+
+    /// Optional backend configuration for remote state
+    pub state_backend: Option<BackendConfig>,
 
     /// Maximum parallel operations
     pub parallelism: usize,
@@ -56,6 +63,7 @@ impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
             state_path: PathBuf::from(".rustible/provisioning.state.json"),
+            state_backend: None,
             parallelism: 10,
             auto_approve: false,
             backup_state: true,
@@ -194,6 +202,12 @@ pub struct ProvisioningExecutor {
     /// Current state
     state: RwLock<ProvisioningState>,
 
+    /// State backend
+    state_backend: Arc<dyn StateBackend>,
+
+    /// State lock manager (if available)
+    lock_manager: Option<Arc<StateLockManager>>,
+
     /// Parallelism semaphore
     semaphore: Arc<Semaphore>,
 
@@ -215,8 +229,29 @@ impl ProvisioningExecutor {
         config: InfrastructureConfig,
         executor_config: ExecutorConfig,
     ) -> ProvisioningResult<Self> {
-        // Load existing state
-        let state = ProvisioningState::load(&executor_config.state_path).await?;
+        // Resolve backend and load state
+        let state_backend: Arc<dyn StateBackend> = if let Some(ref backend_config) =
+            executor_config.state_backend
+        {
+            Arc::from(backend_config.create_backend().await?)
+        } else {
+            Arc::new(LocalBackend::new(executor_config.state_path.clone()))
+        };
+
+        let state = match state_backend.load().await? {
+            Some(state) => state,
+            None => ProvisioningState::new(),
+        };
+
+        let lock_manager = if executor_config.lock_state {
+            state_backend.lock_backend().map(|backend| {
+                let manager = StateLockManager::from_arc(backend)
+                    .with_timeout(Duration::from_secs(executor_config.lock_timeout));
+                Arc::new(manager)
+            })
+        } else {
+            None
+        };
 
         // Setup provider registry
         let provider_registry = Arc::new(ProviderRegistry::with_builtins());
@@ -249,6 +284,8 @@ impl ProvisioningExecutor {
             provider_registry,
             resource_registry,
             state: RwLock::new(state),
+            state_backend,
+            lock_manager,
             semaphore,
             resolver,
             resolver_context: RwLock::new(resolver_context),
@@ -258,6 +295,33 @@ impl ProvisioningExecutor {
     /// Get the current state
     pub fn state(&self) -> ProvisioningState {
         self.state.read().clone()
+    }
+
+    async fn with_state_lock<F, T>(&self, operation: &str, work: F) -> ProvisioningResult<T>
+    where
+        F: Future<Output = ProvisioningResult<T>>,
+    {
+        let lock_manager = self.lock_manager.clone();
+        if let Some(manager) = lock_manager {
+            let guard = manager.lock(operation).await?;
+            let result = work.await;
+            let unlock_result = manager.unlock(guard).await;
+            if let Err(err) = unlock_result {
+                if result.is_ok() {
+                    return Err(err);
+                }
+                warn!("State lock release failed: {}", err);
+            }
+            result
+        } else {
+            work.await
+        }
+    }
+
+    async fn save_state(&self) -> ProvisioningResult<()> {
+        let mut state = self.state.write();
+        state.prepare_for_save();
+        self.state_backend.save(&state).await
     }
 
     /// Generate an execution plan
@@ -424,120 +488,120 @@ impl ProvisioningExecutor {
 
     /// Apply an execution plan
     pub async fn apply(&self, plan: &ExecutionPlan) -> ProvisioningResult<ApplyResult> {
-        if !plan.has_changes() {
-            info!("No changes to apply");
-            return Ok(ApplyResult::new());
-        }
+        self.with_state_lock("apply", async {
+            if !plan.has_changes() {
+                info!("No changes to apply");
+                return Ok(ApplyResult::new());
+            }
 
-        // Backup state if configured
-        if self.executor_config.backup_state {
-            let state = self.state.read();
-            let backup_dir = self
-                .executor_config
-                .state_path
-                .parent()
-                .unwrap_or(Path::new("."));
-            state.backup(backup_dir.join("backups")).await?;
-        }
+            // Backup state if configured
+            if self.executor_config.backup_state {
+                let state = self.state.read();
+                let backup_dir = self
+                    .executor_config
+                    .state_path
+                    .parent()
+                    .unwrap_or(Path::new("."));
+                state.backup(backup_dir.join("backups")).await?;
+            }
 
-        // Initialize resolver context from current state
-        {
-            let state = self.state.read().clone();
-            let new_ctx = ResolverContext::from_config_and_state(&self.config, &state);
-            *self.resolver_context.write() = new_ctx;
-        }
+            // Initialize resolver context from current state
+            {
+                let state = self.state.read().clone();
+                let new_ctx = ResolverContext::from_config_and_state(&self.config, &state);
+                *self.resolver_context.write() = new_ctx;
+            }
 
-        let mut result = ApplyResult::new();
+            let mut result = ApplyResult::new();
 
-        // Get execution order
-        let ordered_actions = plan.execution_order()?;
+            // Get execution order
+            let ordered_actions = plan.execution_order()?;
 
-        info!("Applying {} actions...", ordered_actions.len());
+            info!("Applying {} actions...", ordered_actions.len());
 
-        for action in ordered_actions {
-            match self.apply_action_with_resolution(action).await {
-                Ok(resource_result) => {
-                    match action.change_type {
-                        ChangeType::Create => {
-                            result.created += 1;
-                            if resource_result.success {
-                                self.update_state_after_create(action, &resource_result)
-                                    .await?;
-                                // Update resolver context for subsequent resources
-                                self.update_resolver_context(
-                                    &action.resource_id,
-                                    &resource_result.attributes,
-                                );
+            for action in ordered_actions {
+                match self.apply_action_with_resolution(action).await {
+                    Ok(resource_result) => {
+                        match action.change_type {
+                            ChangeType::Create => {
+                                result.created += 1;
+                                if resource_result.success {
+                                    self.update_state_after_create(action, &resource_result)
+                                        .await?;
+                                    // Update resolver context for subsequent resources
+                                    self.update_resolver_context(
+                                        &action.resource_id,
+                                        &resource_result.attributes,
+                                    );
+                                }
+                            }
+                            ChangeType::Update => {
+                                result.updated += 1;
+                                if resource_result.success {
+                                    self.update_state_after_update(action, &resource_result)
+                                        .await?;
+                                    // Update resolver context
+                                    self.update_resolver_context(
+                                        &action.resource_id,
+                                        &resource_result.attributes,
+                                    );
+                                }
+                            }
+                            ChangeType::Replace => {
+                                result.replaced += 1;
+                                if resource_result.success {
+                                    self.update_state_after_replace(action, &resource_result)
+                                        .await?;
+                                    // Update resolver context
+                                    self.update_resolver_context(
+                                        &action.resource_id,
+                                        &resource_result.attributes,
+                                    );
+                                }
+                            }
+                            ChangeType::Destroy => {
+                                result.destroyed += 1;
+                                if resource_result.success {
+                                    self.update_state_after_destroy(action).await?;
+                                    // Remove from resolver context
+                                    self.resolver_context
+                                        .write()
+                                        .resources
+                                        .remove(&action.resource_id.address());
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        // Collect outputs
+                        for (key, value) in resource_result.outputs {
+                            result.outputs.insert(key, value);
+                        }
+
+                        // Collect warnings
+                        for warning in resource_result.warnings {
+                            result.warnings.push(warning);
+                        }
+
+                        if !resource_result.success {
+                            if let Some(error) = resource_result.error {
+                                result.add_error(action.resource_id.address(), error);
                             }
                         }
-                        ChangeType::Update => {
-                            result.updated += 1;
-                            if resource_result.success {
-                                self.update_state_after_update(action, &resource_result)
-                                    .await?;
-                                // Update resolver context
-                                self.update_resolver_context(
-                                    &action.resource_id,
-                                    &resource_result.attributes,
-                                );
-                            }
-                        }
-                        ChangeType::Replace => {
-                            result.replaced += 1;
-                            if resource_result.success {
-                                self.update_state_after_replace(action, &resource_result)
-                                    .await?;
-                                // Update resolver context
-                                self.update_resolver_context(
-                                    &action.resource_id,
-                                    &resource_result.attributes,
-                                );
-                            }
-                        }
-                        ChangeType::Destroy => {
-                            result.destroyed += 1;
-                            if resource_result.success {
-                                self.update_state_after_destroy(action).await?;
-                                // Remove from resolver context
-                                self.resolver_context
-                                    .write()
-                                    .resources
-                                    .remove(&action.resource_id.address());
-                            }
-                        }
-                        _ => {}
                     }
-
-                    // Collect outputs
-                    for (key, value) in resource_result.outputs {
-                        result.outputs.insert(key, value);
+                    Err(e) => {
+                        error!("Failed to apply {}: {}", action.resource_id, e);
+                        result.add_error(action.resource_id.address(), e.to_string());
                     }
-
-                    // Collect warnings
-                    for warning in resource_result.warnings {
-                        result.warnings.push(warning);
-                    }
-
-                    if !resource_result.success {
-                        if let Some(error) = resource_result.error {
-                            result.add_error(action.resource_id.address(), error);
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to apply {}: {}", action.resource_id, e);
-                    result.add_error(action.resource_id.address(), e.to_string());
                 }
             }
-        }
 
-        // Save state
-        self.state
-            .write()
-            .save(&self.executor_config.state_path)
-            .await?;
+            // Save state
+            self.save_state().await?;
 
-        Ok(result)
+            Ok(result)
+        })
+        .await
     }
 
     /// Apply a single action with template resolution
@@ -723,57 +787,62 @@ impl ProvisioningExecutor {
 
     /// Refresh state from cloud
     pub async fn refresh(&self) -> ProvisioningResult<()> {
-        info!("Refreshing state from cloud providers...");
+        self.with_state_lock("refresh", async {
+            info!("Refreshing state from cloud providers...");
 
-        let state = self.state.read().clone();
-        let mut updated_resources = Vec::new();
+            let state = self.state.read().clone();
+            let mut updated_resources = Vec::new();
 
-        for (_, resource) in &state.resources {
-            let resource_impl = match self.resource_registry.get(&resource.resource_type) {
-                Ok(r) => r,
-                Err(_) => {
-                    warn!("Unknown resource type: {}", resource.resource_type);
-                    continue;
-                }
-            };
+            for (_, resource) in &state.resources {
+                let resource_impl = match self.resource_registry.get(&resource.resource_type) {
+                    Ok(r) => r,
+                    Err(_) => {
+                        warn!("Unknown resource type: {}", resource.resource_type);
+                        continue;
+                    }
+                };
 
-            let provider_lock = match self.provider_registry.get_provider(&resource.provider) {
-                Ok(p) => p,
-                Err(_) => {
-                    warn!("Provider not initialized: {}", resource.provider);
-                    continue;
-                }
-            };
+                let provider_lock = match self.provider_registry.get_provider(&resource.provider) {
+                    Ok(p) => p,
+                    Err(_) => {
+                        warn!("Provider not initialized: {}", resource.provider);
+                        continue;
+                    }
+                };
 
-            let provider = provider_lock.read();
-            let ctx = provider.context()?;
+                let provider = provider_lock.read();
+                let ctx = provider.context()?;
 
-            match resource_impl.read(&resource.cloud_id, &ctx).await {
-                Ok(read_result) => {
-                    if read_result.exists {
-                        let mut updated = resource.clone();
-                        updated.update_attributes(read_result.attributes);
-                        updated_resources.push(updated);
-                    } else {
-                        warn!(
-                            "Resource {} no longer exists in cloud",
-                            resource.id.address()
-                        );
+                match resource_impl.read(&resource.cloud_id, &ctx).await {
+                    Ok(read_result) => {
+                        if read_result.exists {
+                            let mut updated = resource.clone();
+                            updated.update_attributes(read_result.attributes);
+                            updated_resources.push(updated);
+                        } else {
+                            warn!(
+                                "Resource {} no longer exists in cloud",
+                                resource.id.address()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to refresh {}: {}", resource.id.address(), e);
                     }
                 }
-                Err(e) => {
-                    warn!("Failed to refresh {}: {}", resource.id.address(), e);
-                }
             }
-        }
 
-        // Update state with refreshed resources
-        let mut state = self.state.write();
-        for resource in updated_resources {
-            state.add_resource(resource);
-        }
+            // Update state with refreshed resources
+            let mut state = self.state.write();
+            for resource in updated_resources {
+                state.add_resource(resource);
+            }
 
-        Ok(())
+            self.save_state().await?;
+
+            Ok(())
+        })
+        .await
     }
 
     /// Import an existing resource
@@ -783,46 +852,46 @@ impl ProvisioningExecutor {
         name: &str,
         cloud_id: &str,
     ) -> ProvisioningResult<ResourceState> {
-        info!("Importing {} as {}.{}", cloud_id, resource_type, name);
+        self.with_state_lock("import", async {
+            info!("Importing {} as {}.{}", cloud_id, resource_type, name);
 
-        let resource = self.resource_registry.get(resource_type)?;
-        let (provider_name, _) = super::registry::parse_resource_type(resource_type)?;
+            let resource = self.resource_registry.get(resource_type)?;
+            let (provider_name, _) = super::registry::parse_resource_type(resource_type)?;
 
-        let provider_lock = self.provider_registry.get_provider(&provider_name)?;
-        let provider = provider_lock.read();
-        let ctx = provider.context()?;
+            let provider_lock = self.provider_registry.get_provider(&provider_name)?;
+            let provider = provider_lock.read();
+            let ctx = provider.context()?;
 
-        let result = resource.import(cloud_id, &ctx).await?;
+            let result = resource.import(cloud_id, &ctx).await?;
 
-        if !result.success {
-            return Err(ProvisioningError::ImportError {
-                resource_type: resource_type.to_string(),
-                resource_id: cloud_id.to_string(),
-                message: result.error.unwrap_or_else(|| "Unknown error".to_string()),
-            });
-        }
+            if !result.success {
+                return Err(ProvisioningError::ImportError {
+                    resource_type: resource_type.to_string(),
+                    resource_id: cloud_id.to_string(),
+                    message: result.error.unwrap_or_else(|| "Unknown error".to_string()),
+                });
+            }
 
-        let id = ResourceId::new(resource_type, name);
-        let config = self
-            .get_resource_config(&id)
-            .unwrap_or(Value::Object(Default::default()));
+            let id = ResourceId::new(resource_type, name);
+            let config = self
+                .get_resource_config(&id)
+                .unwrap_or(Value::Object(Default::default()));
 
-        let resource_state = ResourceState::new(
-            id,
-            result.cloud_id.as_deref().unwrap_or(cloud_id),
-            provider_name,
-            config,
-            result.attributes,
-        );
+            let resource_state = ResourceState::new(
+                id,
+                result.cloud_id.as_deref().unwrap_or(cloud_id),
+                provider_name,
+                config,
+                result.attributes,
+            );
 
-        // Add to state
-        self.state.write().add_resource(resource_state.clone());
-        self.state
-            .write()
-            .save(&self.executor_config.state_path)
-            .await?;
+            // Add to state
+            self.state.write().add_resource(resource_state.clone());
+            self.save_state().await?;
 
-        Ok(resource_state)
+            Ok(resource_state)
+        })
+        .await
     }
 
     /// Show current state
@@ -909,6 +978,7 @@ mod tests {
         assert_eq!(config.parallelism, 10);
         assert!(!config.auto_approve);
         assert!(config.backup_state);
+        assert!(config.state_backend.is_none());
     }
 
     // ========================================================================

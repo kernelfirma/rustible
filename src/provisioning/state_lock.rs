@@ -204,6 +204,37 @@ pub trait LockBackend: Send + Sync {
 }
 
 // ============================================================================
+// Lock Backend Adapter
+// ============================================================================
+
+struct ArcLockBackend {
+    backend: Arc<dyn LockBackend>,
+}
+
+#[async_trait]
+impl LockBackend for ArcLockBackend {
+    async fn acquire(&self, info: &LockInfo, timeout: Duration) -> ProvisioningResult<bool> {
+        self.backend.acquire(info, timeout).await
+    }
+
+    async fn release(&self, lock_id: &str) -> ProvisioningResult<bool> {
+        self.backend.release(lock_id).await
+    }
+
+    async fn get_lock(&self) -> ProvisioningResult<Option<LockInfo>> {
+        self.backend.get_lock().await
+    }
+
+    async fn force_unlock(&self, lock_id: &str) -> ProvisioningResult<()> {
+        self.backend.force_unlock(lock_id).await
+    }
+
+    fn backend_name(&self) -> &str {
+        self.backend.backend_name()
+    }
+}
+
+// ============================================================================
 // File-Based Lock Implementation
 // ============================================================================
 
@@ -736,6 +767,11 @@ impl StateLockManager {
             lock_expiration: Some(Duration::from_secs(3600)), // 1 hour default
             self_ref: None,
         }
+    }
+
+    /// Create a new lock manager from an Arc backend
+    pub fn from_arc(backend: Arc<dyn LockBackend>) -> Self {
+        Self::new(Box::new(ArcLockBackend { backend }))
     }
 
     /// Create a new lock manager with custom timeout

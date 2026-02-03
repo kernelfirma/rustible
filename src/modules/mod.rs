@@ -1627,6 +1627,35 @@ impl ModuleRegistry {
         // Network device modules (registered via helper function)
         network::register_network_modules(&mut registry);
 
+        #[cfg(feature = "aws")]
+        register_modules!(registry,
+            Cloud: [
+                cloud::Ec2InstanceModule,
+                cloud::AwsS3Module,
+                cloud::Ec2SecurityGroupModule,
+                cloud::Ec2VpcModule,
+            ],
+        );
+
+        #[cfg(feature = "azure")]
+        register_modules!(registry,
+            Cloud: [
+                cloud::AzureVmModule,
+                cloud::AzureResourceGroupModule,
+                cloud::AzureNetworkInterfaceModule,
+            ],
+        );
+
+        #[cfg(feature = "gcp")]
+        register_modules!(registry,
+            Cloud: [
+                cloud::GcpComputeInstanceModule,
+                cloud::GcpComputeFirewallModule,
+                cloud::GcpComputeNetworkModule,
+                cloud::GcpServiceAccountModule,
+            ],
+        );
+
         registry
     }
 

@@ -343,6 +343,8 @@ async fn execute_provision(
         ProvisionCommands::Import(args) => args.execute(ctx).await,
         ProvisionCommands::Show(args) => args.execute(ctx).await,
         ProvisionCommands::Refresh(args) => args.execute(ctx).await,
+        ProvisionCommands::Migrate(args) => args.execute(ctx).await,
+        ProvisionCommands::ImportTerraform(args) => args.execute(ctx).await,
         ProvisionCommands::Init(args) => args.execute(ctx).await,
     }
 }
