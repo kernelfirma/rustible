@@ -519,7 +519,10 @@ mod tests {
 
         let result = module.validate_params(&params);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("potentially dangerous pattern"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("potentially dangerous pattern"));
     }
 
     #[test]

@@ -192,7 +192,10 @@ fn test_ios_config_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        err_msg.contains("connection")
+            || err_msg.contains("runtime")
+            || err_msg.contains("SSH")
+            || err_msg.contains("reachable"),
         "Error should mention connection or runtime issue, got: {}",
         err_msg
     );
@@ -273,7 +276,10 @@ fn test_nxos_config_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        err_msg.contains("connection")
+            || err_msg.contains("runtime")
+            || err_msg.contains("SSH")
+            || err_msg.contains("reachable"),
         "Error should mention connection or runtime issue, got: {}",
         err_msg
     );
@@ -361,7 +367,10 @@ fn test_junos_config_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("No connection") || err_msg.contains("JunOS"),
+        err_msg.contains("connection")
+            || err_msg.contains("runtime")
+            || err_msg.contains("No connection")
+            || err_msg.contains("JunOS"),
         "Error should mention connection or runtime issue, got: {}",
         err_msg
     );
@@ -450,7 +459,10 @@ fn test_eos_config_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("connection") || err_msg.contains("runtime") || err_msg.contains("SSH") || err_msg.contains("reachable"),
+        err_msg.contains("connection")
+            || err_msg.contains("runtime")
+            || err_msg.contains("SSH")
+            || err_msg.contains("reachable"),
         "Error should mention connection or runtime issue, got: {}",
         err_msg
     );

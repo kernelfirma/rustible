@@ -413,7 +413,7 @@ async fn test_fork_limit_with_different_values() {
             task_timeout: 60,
             gather_facts: false,
             extra_vars: HashMap::new(),
-        ..Default::default()
+            ..Default::default()
         };
 
         let start = Instant::now();

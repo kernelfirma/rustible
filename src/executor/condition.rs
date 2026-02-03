@@ -209,7 +209,12 @@ fn transform_defined_syntax(expr: &str) -> String {
         if let Some(end) = result[start..].find(')') {
             let var_name = &result[start + 8..start + end].trim();
             let replacement = format!("{} is defined", var_name);
-            result = format!("{}{}{}", &result[..start], replacement, &result[start + end + 1..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                replacement,
+                &result[start + end + 1..]
+            );
         }
     }
 
@@ -218,7 +223,12 @@ fn transform_defined_syntax(expr: &str) -> String {
         if let Some(end) = result[start..].find(')') {
             let var_name = &result[start + 10..start + end].trim();
             let replacement = format!("{} is undefined", var_name);
-            result = format!("{}{}{}", &result[..start], replacement, &result[start + end + 1..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                replacement,
+                &result[start + end + 1..]
+            );
         }
     }
 

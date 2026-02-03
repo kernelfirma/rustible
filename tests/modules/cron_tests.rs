@@ -149,7 +149,10 @@ fn test_cron_update_job() {
     // Verify that update params (present with all schedule fields) are accepted
     let module = CronModule;
     let mut params = with_name(create_params(), "updated job");
-    params.insert("job".to_string(), serde_json::json!("/usr/bin/new-script.sh"));
+    params.insert(
+        "job".to_string(),
+        serde_json::json!("/usr/bin/new-script.sh"),
+    );
     params.insert("minute".to_string(), serde_json::json!("30"));
     params.insert("hour".to_string(), serde_json::json!("3"));
     params.insert("day".to_string(), serde_json::json!("1"));
@@ -172,7 +175,9 @@ fn test_cron_update_job() {
 fn test_cron_special_times() {
     // Verify that special_time params like @reboot, @hourly, @daily are accepted
     let module = CronModule;
-    let special_times = ["@reboot", "@hourly", "@daily", "@weekly", "@monthly", "@yearly"];
+    let special_times = [
+        "@reboot", "@hourly", "@daily", "@weekly", "@monthly", "@yearly",
+    ];
 
     let context = check_mode_context();
     for st in &special_times {

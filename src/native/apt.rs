@@ -469,11 +469,21 @@ fn compare_version_string(v1: &str, v2: &str) -> std::cmp::Ordering {
                 if a.is_ascii_digit() && b.is_ascii_digit() {
                     let mut n1 = String::new();
                     while let Some(&c) = c1.peek() {
-                        if c.is_ascii_digit() { n1.push(c); c1.next(); } else { break; }
+                        if c.is_ascii_digit() {
+                            n1.push(c);
+                            c1.next();
+                        } else {
+                            break;
+                        }
                     }
                     let mut n2 = String::new();
                     while let Some(&c) = c2.peek() {
-                        if c.is_ascii_digit() { n2.push(c); c2.next(); } else { break; }
+                        if c.is_ascii_digit() {
+                            n2.push(c);
+                            c2.next();
+                        } else {
+                            break;
+                        }
                     }
 
                     let num1: u64 = n1.parse().unwrap_or(0);

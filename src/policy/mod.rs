@@ -104,9 +104,7 @@ impl PolicySet {
         match &self.engine {
             PolicyEngine::Opa => {
                 let path = self.opa_policy_path.as_deref().ok_or_else(|| {
-                    PolicyError::OpaEvalFailed(
-                        "No OPA policy path configured".to_string(),
-                    )
+                    PolicyError::OpaEvalFailed("No OPA policy path configured".to_string())
                 })?;
                 evaluate_opa_policy(path, "data.rustible.deny", input)
             }
@@ -225,10 +223,7 @@ fn severity_label(s: &RuleSeverity) -> &'static str {
 
 /// Evaluate a single condition, returning a list of violation messages (empty
 /// means the rule passed).
-fn evaluate_condition(
-    condition: &RuleCondition,
-    input: &Value,
-) -> PolicyResult<Vec<String>> {
+fn evaluate_condition(condition: &RuleCondition, input: &Value) -> PolicyResult<Vec<String>> {
     match condition {
         RuleCondition::DenyFieldPattern { field, pattern } => {
             eval_deny_field_pattern(field, pattern, input)
@@ -244,11 +239,7 @@ fn evaluate_condition(
 
 // --- Individual condition evaluators ---
 
-fn eval_deny_field_pattern(
-    field: &str,
-    pattern: &str,
-    input: &Value,
-) -> PolicyResult<Vec<String>> {
+fn eval_deny_field_pattern(field: &str, pattern: &str, input: &Value) -> PolicyResult<Vec<String>> {
     let re = Regex::new(pattern).map_err(|e| PolicyError::InvalidRegex {
         pattern: pattern.to_string(),
         source: e,
@@ -296,10 +287,7 @@ fn eval_deny_module(module_name: &str, input: &Value) -> PolicyResult<Vec<String
     Ok(violations)
 }
 
-fn eval_deny_privilege_escalation(
-    host_pattern: &str,
-    input: &Value,
-) -> PolicyResult<Vec<String>> {
+fn eval_deny_privilege_escalation(host_pattern: &str, input: &Value) -> PolicyResult<Vec<String>> {
     let re = Regex::new(host_pattern).map_err(|e| PolicyError::InvalidRegex {
         pattern: host_pattern.to_string(),
         source: e,
@@ -307,10 +295,7 @@ fn eval_deny_privilege_escalation(
     let plays = plays_from_input(input);
     let mut violations = Vec::new();
     for play in plays {
-        let hosts = play
-            .get("hosts")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let hosts = play.get("hosts").and_then(|v| v.as_str()).unwrap_or("");
         if re.is_match(hosts) {
             let play_become = play
                 .get("become")
@@ -457,10 +442,7 @@ fn decode_policy_value(value: Value) -> PolicyDecision {
             raw: None,
         },
         Value::Object(map) => {
-            let allow = map
-                .get("allow")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let allow = map.get("allow").and_then(|v| v.as_bool()).unwrap_or(false);
             let deny = map
                 .get("deny")
                 .and_then(|v| v.as_array())

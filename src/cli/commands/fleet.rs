@@ -76,10 +76,7 @@ async fn execute_status(args: &FleetStatusArgs, ctx: &mut CommandContext) -> Res
     ctx.output.banner("FLEET STATUS");
 
     // Try to load inventory
-    let inventory_path = args
-        .inventory
-        .clone()
-        .or_else(|| ctx.inventory().cloned());
+    let inventory_path = args.inventory.clone().or_else(|| ctx.inventory().cloned());
 
     let (hosts, groups) = if let Some(inv_path) = &inventory_path {
         match load_inventory_summary(inv_path) {
@@ -132,10 +129,7 @@ async fn execute_status(args: &FleetStatusArgs, ctx: &mut CommandContext) -> Res
 async fn execute_hosts(args: &FleetHostsArgs, ctx: &mut CommandContext) -> Result<i32> {
     ctx.output.banner("FLEET HOSTS");
 
-    let inventory_path = args
-        .inventory
-        .clone()
-        .or_else(|| ctx.inventory().cloned());
+    let inventory_path = args.inventory.clone().or_else(|| ctx.inventory().cloned());
 
     let (hosts, _groups) = if let Some(inv_path) = &inventory_path {
         match load_inventory_summary(inv_path) {
@@ -195,12 +189,14 @@ async fn execute_history(args: &FleetHistoryArgs, ctx: &mut CommandContext) -> R
     // List recent log files
     let mut entries: Vec<_> = std::fs::read_dir(log_dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "json" || ext == "log"))
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map_or(false, |ext| ext == "json" || ext == "log")
+        })
         .collect();
 
-    entries.sort_by_key(|e| {
-        std::cmp::Reverse(e.metadata().ok().and_then(|m| m.modified().ok()))
-    });
+    entries.sort_by_key(|e| std::cmp::Reverse(e.metadata().ok().and_then(|m| m.modified().ok())));
     entries.truncate(args.limit);
 
     if entries.is_empty() {
@@ -226,10 +222,7 @@ async fn execute_history(args: &FleetHistoryArgs, ctx: &mut CommandContext) -> R
             .collect();
         println!("{}", serde_json::to_string_pretty(&items)?);
     } else {
-        println!(
-            "{:<25} {:<40} {:<10}",
-            "TIMESTAMP", "FILE", "SIZE"
-        );
+        println!("{:<25} {:<40} {:<10}", "TIMESTAMP", "FILE", "SIZE");
         println!("{}", "-".repeat(75));
         for entry in &entries {
             let metadata = entry.metadata()?;
@@ -280,17 +273,13 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
                     let connection = host_val
                         .as_mapping()
                         .and_then(|m| {
-                            m.get(&serde_yaml::Value::String(
-                                "ansible_connection".to_string(),
-                            ))
+                            m.get(&serde_yaml::Value::String("ansible_connection".to_string()))
                         })
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
                     let port = host_val
                         .as_mapping()
-                        .and_then(|m| {
-                            m.get(&serde_yaml::Value::String("ansible_port".to_string()))
-                        })
+                        .and_then(|m| m.get(&serde_yaml::Value::String("ansible_port".to_string())))
                         .and_then(|v| v.as_u64())
                         .map(|p| p as u16);
                     hosts.push(HostInfo {
@@ -306,13 +295,10 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
             if let Some(children) = group_val.get("children").and_then(|c| c.as_mapping()) {
                 for (child_key, child_val) in children {
                     let child_name = child_key.as_str().unwrap_or("unknown").to_string();
-                    if let Some(child_hosts) =
-                        child_val.get("hosts").and_then(|h| h.as_mapping())
-                    {
+                    if let Some(child_hosts) = child_val.get("hosts").and_then(|h| h.as_mapping()) {
                         groups.push(child_name.clone());
                         for (host_key, host_val) in child_hosts {
-                            let host_name =
-                                host_key.as_str().unwrap_or("unknown").to_string();
+                            let host_name = host_key.as_str().unwrap_or("unknown").to_string();
                             let connection = host_val
                                 .as_mapping()
                                 .and_then(|m| {
@@ -325,9 +311,7 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
                             let port = host_val
                                 .as_mapping()
                                 .and_then(|m| {
-                                    m.get(&serde_yaml::Value::String(
-                                        "ansible_port".to_string(),
-                                    ))
+                                    m.get(&serde_yaml::Value::String("ansible_port".to_string()))
                                 })
                                 .and_then(|v| v.as_u64())
                                 .map(|p| p as u16);

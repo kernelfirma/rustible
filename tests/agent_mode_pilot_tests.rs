@@ -137,9 +137,7 @@ mod builder_tests {
 
     #[test]
     fn test_agent_builder_debug_build() {
-        let builder = AgentBuilder::new()
-            .release(false)
-            .strip(false);
+        let builder = AgentBuilder::new().release(false).strip(false);
 
         let config = builder.config();
         assert!(!config.release);
@@ -148,8 +146,7 @@ mod builder_tests {
 
     #[test]
     fn test_agent_builder_output_dir() {
-        let builder = AgentBuilder::new()
-            .output_dir(PathBuf::from("/custom/output"));
+        let builder = AgentBuilder::new().output_dir(PathBuf::from("/custom/output"));
 
         let config = builder.config();
         assert_eq!(config.output_dir, PathBuf::from("/custom/output"));
@@ -404,8 +401,7 @@ mod execute_params_tests {
             "shell": true
         }"#;
 
-        let params: ExecuteParams =
-            serde_json::from_str(json).expect("Failed to deserialize");
+        let params: ExecuteParams = serde_json::from_str(json).expect("Failed to deserialize");
 
         assert_eq!(params.command, "cat /etc/hostname");
         assert_eq!(params.cwd, Some("/tmp".to_string()));
@@ -902,7 +898,8 @@ mod pilot_workflow_tests {
                 RESULT="success"
                 echo "Step 2: Result is $RESULT"
                 echo "Step 3: Done"
-            "#.to_string(),
+            "#
+            .to_string(),
             cwd: Some("/tmp".to_string()),
             env: HashMap::new(),
             timeout: Some(60),

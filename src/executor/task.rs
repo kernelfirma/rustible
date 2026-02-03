@@ -557,13 +557,17 @@ impl Task {
                 LoopSource::Template(template) => {
                     // Resolve template to get items
                     let rt = runtime.read().await;
-                    let vars: std::collections::HashMap<String, JsonValue> =
-                        rt.get_merged_vars(&execution_ctx.host).into_iter().collect();
+                    let vars: std::collections::HashMap<String, JsonValue> = rt
+                        .get_merged_vars(&execution_ctx.host)
+                        .into_iter()
+                        .collect();
                     let engine = get_engine();
-                    let rendered = engine.render(template, &vars)
-                        .map_err(|e| crate::executor::ExecutorError::RuntimeError(
-                            format!("Failed to resolve loop template '{}': {}", template, e)
-                        ))?;
+                    let rendered = engine.render(template, &vars).map_err(|e| {
+                        crate::executor::ExecutorError::RuntimeError(format!(
+                            "Failed to resolve loop template '{}': {}",
+                            template, e
+                        ))
+                    })?;
                     serde_json::from_str::<Vec<JsonValue>>(&rendered)
                         .unwrap_or_else(|_| vec![JsonValue::String(rendered)])
                 }
@@ -794,7 +798,14 @@ impl Task {
 
             // Execute for this item with parallelization enforcement
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
+                .execute_module(
+                    ctx,
+                    runtime,
+                    handlers,
+                    notified,
+                    parallelization_manager,
+                    module_registry,
+                )
                 .await?;
 
             // Extract and store ansible_facts from module results in loops
@@ -897,9 +908,7 @@ impl Task {
 
         let batched_op = batch_processor
             .create_batch(&self.module, &self.args, items, &self.loop_var, strategy)
-            .map_err(|e| {
-                ExecutorError::RuntimeError(format!("Failed to create batch: {}", e))
-            })?;
+            .map_err(|e| ExecutorError::RuntimeError(format!("Failed to create batch: {}", e)))?;
 
         debug!(
             "Executing batched loop: {} items coalesced into single {} call",
@@ -976,9 +985,7 @@ impl Task {
                     "Completed {} loop iterations (parallel transfer)",
                     loop_results.len()
                 )),
-                result: Some(
-                    serde_json::to_value(&loop_results).unwrap_or(JsonValue::Null),
-                ),
+                result: Some(serde_json::to_value(&loop_results).unwrap_or(JsonValue::Null)),
                 diff: None,
             };
 
@@ -1045,8 +1052,7 @@ impl Task {
             .enumerate()
             .map(|(_i, item)| {
                 let mut reg = result.to_registered(None, None);
-                reg.data
-                    .insert("item".to_string(), item.clone());
+                reg.data.insert("item".to_string(), item.clone());
                 reg
             })
             .collect();
@@ -1059,9 +1065,7 @@ impl Task {
                 items.len(),
                 batched_op.module,
             )),
-            result: Some(
-                serde_json::to_value(&per_item_results).unwrap_or(JsonValue::Null),
-            ),
+            result: Some(serde_json::to_value(&per_item_results).unwrap_or(JsonValue::Null)),
             diff: result.diff,
         };
 
@@ -1112,7 +1116,14 @@ impl Task {
 
             // Execute the module
             let result = self
-                .execute_module(ctx, runtime, handlers, notified, parallelization_manager, module_registry)
+                .execute_module(
+                    ctx,
+                    runtime,
+                    handlers,
+                    notified,
+                    parallelization_manager,
+                    module_registry,
+                )
                 .await?;
 
             // Extract and store ansible_facts from module results during retries
@@ -1216,9 +1227,15 @@ impl Task {
             "debug" => self.execute_debug(&args, ctx).await,
             "set_fact" => self.execute_set_fact(&args, ctx, runtime).await,
             "command" | "shell" => self.execute_command(&args, ctx, runtime).await,
-            "copy" => self.execute_copy(&args, ctx, runtime, module_registry).await,
+            "copy" => {
+                self.execute_copy(&args, ctx, runtime, module_registry)
+                    .await
+            }
             "file" => self.execute_file(&args, ctx, module_registry).await,
-            "template" => self.execute_template(&args, ctx, runtime, module_registry).await,
+            "template" => {
+                self.execute_template(&args, ctx, runtime, module_registry)
+                    .await
+            }
             "package" | "apt" | "yum" | "dnf" => self.execute_package(&args, ctx).await,
             "service" | "systemd" => self.execute_service(&args, ctx).await,
             "user" => self.execute_user(&args, ctx).await,
@@ -1627,8 +1644,16 @@ impl Task {
                     facts: std::collections::HashMap::new(),
                     work_dir: None,
                     r#become: ctx.r#become,
-                    become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-                    become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+                    become_method: if ctx.r#become {
+                        Some(ctx.r#become_method.clone())
+                    } else {
+                        None
+                    },
+                    become_user: if ctx.r#become {
+                        Some(ctx.r#become_user.clone())
+                    } else {
+                        None
+                    },
                     become_password: ctx.become_password.clone(),
                     connection: ctx.connection.clone(),
                 };
@@ -1668,8 +1693,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
@@ -1715,8 +1748,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
@@ -1769,8 +1810,16 @@ impl Task {
             facts: std::collections::HashMap::new(),
             work_dir: None,
             r#become: ctx.r#become,
-            become_method: if ctx.r#become { Some(ctx.r#become_method.clone()) } else { None },
-            become_user: if ctx.r#become { Some(ctx.r#become_user.clone()) } else { None },
+            become_method: if ctx.r#become {
+                Some(ctx.r#become_method.clone())
+            } else {
+                None
+            },
+            become_user: if ctx.r#become {
+                Some(ctx.r#become_user.clone())
+            } else {
+                None
+            },
             become_password: ctx.become_password.clone(),
             connection: ctx.connection.clone(),
         };
@@ -2154,8 +2203,9 @@ impl Task {
         // Determine base path from playbook directory, falling back to current directory
         let base_path = {
             let rt = runtime.read().await;
-            rt.get_playbook_dir()
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+            rt.get_playbook_dir().unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            })
         };
 
         let mut all_vars: IndexMap<String, JsonValue> = IndexMap::new();
@@ -2355,8 +2405,9 @@ impl Task {
         // Determine base path from the playbook directory, falling back to current directory
         let base_path = {
             let rt = runtime.read().await;
-            rt.get_playbook_dir()
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+            rt.get_playbook_dir().unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            })
         };
         let handler = crate::executor::include_handler::IncludeTasksHandler::new(base_path);
 
@@ -2390,11 +2441,10 @@ impl Task {
             let executor_task: Task = playbook_task.into();
             // Use Box::pin to handle async recursion
             // Included tasks get their own default batch processor
-            let include_batch_processor = Arc::new(
-                crate::executor::batch_processor::BatchProcessor::new(
+            let include_batch_processor =
+                Arc::new(crate::executor::batch_processor::BatchProcessor::new(
                     crate::executor::batch_processor::BatchConfig::default(),
-                ),
-            );
+                ));
             let result = Box::pin(executor_task.execute(
                 ctx,
                 runtime,

@@ -67,8 +67,14 @@ pub fn classify_action(module: &str, args: Option<&Value>) -> ActionType {
         }
 
         // Package management
-        "apt" | "ansible.builtin.apt" | "yum" | "ansible.builtin.yum" | "dnf"
-        | "ansible.builtin.dnf" | "package" | "ansible.builtin.package" => {
+        "apt"
+        | "ansible.builtin.apt"
+        | "yum"
+        | "ansible.builtin.yum"
+        | "dnf"
+        | "ansible.builtin.dnf"
+        | "package"
+        | "ansible.builtin.package" => {
             if let Some(args) = args {
                 match args.get("state").and_then(|s| s.as_str()) {
                     Some("absent") | Some("removed") => ActionType::Delete,
@@ -99,17 +105,32 @@ pub fn classify_action(module: &str, args: Option<&Value>) -> ActionType {
         }
 
         // Command/shell - unknown effect
-        "command" | "ansible.builtin.command" | "shell" | "ansible.builtin.shell" | "raw"
-        | "ansible.builtin.raw" | "script" | "ansible.builtin.script" => ActionType::Unknown,
+        "command"
+        | "ansible.builtin.command"
+        | "shell"
+        | "ansible.builtin.shell"
+        | "raw"
+        | "ansible.builtin.raw"
+        | "script"
+        | "ansible.builtin.script" => ActionType::Unknown,
 
         // Debug - no change
-        "debug" | "ansible.builtin.debug" | "set_fact" | "ansible.builtin.set_fact" | "assert"
+        "debug"
+        | "ansible.builtin.debug"
+        | "set_fact"
+        | "ansible.builtin.set_fact"
+        | "assert"
         | "ansible.builtin.assert" => ActionType::NoChange,
 
         // Include/import - no direct change
-        "include_tasks" | "ansible.builtin.include_tasks" | "import_tasks"
-        | "ansible.builtin.import_tasks" | "include_role" | "ansible.builtin.include_role"
-        | "import_role" | "ansible.builtin.import_role" => ActionType::NoChange,
+        "include_tasks"
+        | "ansible.builtin.include_tasks"
+        | "import_tasks"
+        | "ansible.builtin.import_tasks"
+        | "include_role"
+        | "ansible.builtin.include_role"
+        | "import_role"
+        | "ansible.builtin.import_role" => ActionType::NoChange,
 
         // Default - unknown
         _ => ActionType::Unknown,
@@ -151,8 +172,14 @@ pub fn describe_action(module: &str, args: Option<&Value>, action_type: ActionTy
             format!("will {} from template: {}", action_verb, dest)
         }
 
-        "apt" | "ansible.builtin.apt" | "yum" | "ansible.builtin.yum" | "dnf"
-        | "ansible.builtin.dnf" | "package" | "ansible.builtin.package" => {
+        "apt"
+        | "ansible.builtin.apt"
+        | "yum"
+        | "ansible.builtin.yum"
+        | "dnf"
+        | "ansible.builtin.dnf"
+        | "package"
+        | "ansible.builtin.package" => {
             let name = args
                 .and_then(|a| a.get("name"))
                 .and_then(|n| n.as_str())
@@ -808,10 +835,7 @@ fn test_command_classify() {
     .unwrap();
 
     // Commands are always Unknown (unpredictable effect)
-    assert_eq!(
-        classify_action("command", Some(&args)),
-        ActionType::Unknown
-    );
+    assert_eq!(classify_action("command", Some(&args)), ActionType::Unknown);
 }
 
 #[test]
@@ -901,10 +925,7 @@ fn test_assert_classify() {
 
 #[test]
 fn test_include_tasks_classify() {
-    assert_eq!(
-        classify_action("include_tasks", None),
-        ActionType::NoChange
-    );
+    assert_eq!(classify_action("include_tasks", None), ActionType::NoChange);
 }
 
 #[test]
@@ -1281,21 +1302,39 @@ fn test_action_type_display() {
 fn test_full_plan_simulation() {
     // Simulate a typical playbook's plan output
     let tasks = vec![
-        ("file", r#"path: /opt/app
+        (
+            "file",
+            r#"path: /opt/app
 state: directory
-mode: '0755'"#),
-        ("copy", r#"src: files/app.conf
-dest: /opt/app/config.yml"#),
-        ("apt", r#"name: nginx
-state: present"#),
-        ("apt", r#"name: telnet
-state: absent"#),
-        ("service", r#"name: nginx
+mode: '0755'"#,
+        ),
+        (
+            "copy",
+            r#"src: files/app.conf
+dest: /opt/app/config.yml"#,
+        ),
+        (
+            "apt",
+            r#"name: nginx
+state: present"#,
+        ),
+        (
+            "apt",
+            r#"name: telnet
+state: absent"#,
+        ),
+        (
+            "service",
+            r#"name: nginx
 state: started
-enabled: true"#),
-        ("user", r#"name: appuser
+enabled: true"#,
+        ),
+        (
+            "user",
+            r#"name: appuser
 state: present
-shell: /bin/bash"#),
+shell: /bin/bash"#,
+        ),
         ("debug", r#"msg: Deployment complete"#),
     ];
 
@@ -1321,8 +1360,11 @@ fn test_idempotent_playbook_simulation() {
     // Simulate a playbook that makes no changes (all resources in sync)
     let tasks = vec![
         ("debug", r#"msg: Starting checks"#),
-        ("assert", r#"that:
-  - app_version is defined"#),
+        (
+            "assert",
+            r#"that:
+  - app_version is defined"#,
+        ),
         ("set_fact", r#"check_complete: true"#),
     ];
 

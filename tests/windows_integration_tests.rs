@@ -55,7 +55,10 @@ mod win_copy_integration {
         // Verify module implements all required interface methods
         assert_eq!(module.name(), "win_copy");
         assert!(!module.description().is_empty());
-        assert_eq!(module.classification(), ModuleClassification::NativeTransport);
+        assert_eq!(
+            module.classification(),
+            ModuleClassification::NativeTransport
+        );
 
         // Verify validate_params properly enforces dest requirement
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
@@ -80,7 +83,10 @@ mod win_copy_integration {
         let module = WinCopyModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("src".to_string(), serde_json::json!("/local/file.txt"));
-        params.insert("dest".to_string(), serde_json::json!("C:\\remote\\file.txt"));
+        params.insert(
+            "dest".to_string(),
+            serde_json::json!("C:\\remote\\file.txt"),
+        );
         params.insert("force".to_string(), serde_json::json!(true));
 
         assert!(module.validate_params(&params).is_ok());
@@ -102,7 +108,10 @@ mod win_copy_integration {
         let module = WinCopyModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("content".to_string(), serde_json::json!("secure content"));
-        params.insert("dest".to_string(), serde_json::json!("C:\\secure\\file.txt"));
+        params.insert(
+            "dest".to_string(),
+            serde_json::json!("C:\\secure\\file.txt"),
+        );
         params.insert(
             "owner".to_string(),
             serde_json::json!("BUILTIN\\Administrators"),
@@ -597,7 +606,10 @@ mod win_feature_integration {
     fn test_win_feature_with_source() {
         let module = WinFeatureModule;
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
-        params.insert("name".to_string(), serde_json::json!("NET-Framework-45-Core"));
+        params.insert(
+            "name".to_string(),
+            serde_json::json!("NET-Framework-45-Core"),
+        );
         params.insert("state".to_string(), serde_json::json!("present"));
         params.insert("source".to_string(), serde_json::json!("D:\\sources\\sxs"));
 
@@ -692,7 +704,10 @@ mod cross_module_integration {
         // Deploy config
         play.add_task(
             Task::new("Deploy web.config", "win_copy")
-                .arg("content", "<?xml version=\"1.0\"?><configuration></configuration>")
+                .arg(
+                    "content",
+                    "<?xml version=\"1.0\"?><configuration></configuration>",
+                )
                 .arg("dest", "C:\\inetpub\\wwwroot\\web.config"),
         );
 

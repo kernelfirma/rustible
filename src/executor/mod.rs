@@ -110,10 +110,10 @@ pub use dependency::{
 pub use fact_pipeline::{FactPipeline, FactPipelineConfig, FactResult};
 pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
 pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
+pub use playbook::{Play, Playbook};
 pub use register::{FailedTaskInfo, LoopResults, RegisteredResultExt};
 pub use throttle::{ThrottleConfig, ThrottleManager, ThrottleStats};
 pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, WorkStealingStats};
-pub use playbook::{Play, Playbook};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -513,8 +513,18 @@ impl Executor {
 
     /// Known reversible modules that can be automatically rolled back
     const REVERSIBLE_MODULES: &'static [&'static str] = &[
-        "apt", "yum", "dnf", "package", "service", "systemd",
-        "file", "copy", "template", "user", "group", "lineinfile",
+        "apt",
+        "yum",
+        "dnf",
+        "package",
+        "service",
+        "systemd",
+        "file",
+        "copy",
+        "template",
+        "user",
+        "group",
+        "lineinfile",
     ];
 
     /// Build a `TaskStateRecord` from task execution data for rollback tracking.
@@ -663,6 +673,8 @@ impl Executor {
     ) -> ExecutorResult<HashMap<String, HostResult>> {
         info!("Starting play: {}", play.name);
 
+        let vars_from_files = self.load_vars_files(play).await?;
+
         // Register handlers for this play
         {
             let mut handlers = self.handlers.write().await;
@@ -682,6 +694,9 @@ impl Executor {
             let mut runtime = self.runtime.write().await;
             for (key, value) in &play.vars {
                 runtime.set_play_var(key.clone(), value.clone());
+            }
+            for (key, value) in vars_from_files {
+                runtime.set_play_var(key, value);
             }
             // Load role variables into runtime context
             // Role variables are set as play vars since they have similar precedence
@@ -1192,7 +1207,16 @@ impl Executor {
                         }
 
                         let task_result = task
-                            .execute(&ctx, &runtime, &handlers, &notified, &parallelization_local, &module_registry, &batch_processor, pipelining)
+                            .execute(
+                                &ctx,
+                                &runtime,
+                                &handlers,
+                                &notified,
+                                &parallelization_local,
+                                &module_registry,
+                                &batch_processor,
+                                pipelining,
+                            )
                             .await;
 
                         if let Some(rm) = &recovery_manager {
@@ -1565,7 +1589,16 @@ impl Executor {
                     }
 
                     let result = task
-                        .execute(&ctx, &runtime, &handlers, &notified, &parallelization, &module_registry, &batch_processor, pipelining)
+                        .execute(
+                            &ctx,
+                            &runtime,
+                            &handlers,
+                            &notified,
+                            &parallelization,
+                            &module_registry,
+                            &batch_processor,
+                            pipelining,
+                        )
                         .await;
 
                     match result {
@@ -1629,11 +1662,8 @@ impl Executor {
         // Record changed tasks for rollback
         for (host, res) in &results {
             if res.status == TaskStatus::Changed {
-                let record = Self::build_task_state_record(
-                    task,
-                    host,
-                    crate::state::TaskStatus::Changed,
-                );
+                let record =
+                    Self::build_task_state_record(task, host, crate::state::TaskStatus::Changed);
                 self.changed_tasks.lock().await.push(record);
             }
         }
@@ -1719,7 +1749,9 @@ impl Executor {
     ) -> Result<(), ExecutorError> {
         // Convert JSON args to ModuleParams (HashMap<String, serde_json::Value>)
         let params: crate::modules::ModuleParams = match &action.args {
-            serde_json::Value::Object(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            serde_json::Value::Object(map) => {
+                map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            }
             _ => {
                 return Err(ExecutorError::Other(format!(
                     "Rollback action '{}' has non-object args",
@@ -1990,6 +2022,73 @@ impl Executor {
     /// Get reference to runtime context
     pub fn runtime(&self) -> Arc<RwLock<RuntimeContext>> {
         Arc::clone(&self.runtime)
+    }
+
+    async fn load_vars_files(
+        &self,
+        play: &Play,
+    ) -> ExecutorResult<IndexMap<String, serde_json::Value>> {
+        use crate::executor::playbook::VarsFileSpec;
+        use crate::vars::terraform::TerraformVarImporter;
+        use std::path::{Path, PathBuf};
+
+        let mut vars = IndexMap::new();
+        if play.vars_files.is_empty() {
+            return Ok(vars);
+        }
+
+        let base_dir = play.playbook_dir.as_deref();
+
+        for spec in &play.vars_files {
+            match spec {
+                VarsFileSpec::Path(path) => {
+                    let full_path = if Path::new(path).is_absolute() {
+                        PathBuf::from(path)
+                    } else if let Some(base) = base_dir {
+                        base.join(path)
+                    } else {
+                        PathBuf::from(path)
+                    };
+
+                    let content = tokio::fs::read_to_string(&full_path).await.map_err(|e| {
+                        ExecutorError::IoError(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Failed to read vars file {}: {}", full_path.display(), e),
+                        ))
+                    })?;
+
+                    let yaml_vars: IndexMap<String, serde_yaml::Value> =
+                        serde_yaml::from_str(&content).map_err(|e| {
+                            ExecutorError::ParseError(format!(
+                                "Failed to parse vars file {}: {}",
+                                full_path.display(),
+                                e
+                            ))
+                        })?;
+
+                    for (key, value) in yaml_vars {
+                        if let Ok(json_value) = serde_json::to_value(value) {
+                            vars.insert(key, json_value);
+                        }
+                    }
+                }
+                VarsFileSpec::Terraform { terraform } => {
+                    let tf_vars = TerraformVarImporter::import_outputs(terraform, base_dir)
+                        .await
+                        .map_err(|e| {
+                            ExecutorError::ParseError(format!(
+                                "Terraform vars import failed: {}",
+                                e
+                            ))
+                        })?;
+                    for (key, value) in tf_vars {
+                        vars.insert(key, value);
+                    }
+                }
+            }
+        }
+
+        Ok(vars)
     }
 
     /// Get execution statistics summary

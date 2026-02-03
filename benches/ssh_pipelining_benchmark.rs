@@ -68,9 +68,7 @@ impl SshPipelineConfig {
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(22);
-        let user = std::env::var("SSH_BENCH_USER")
-            .ok()
-            .unwrap_or_else(whoami);
+        let user = std::env::var("SSH_BENCH_USER").ok().unwrap_or_else(whoami);
         let key_path = std::env::var("SSH_BENCH_KEY")
             .ok()
             .unwrap_or_else(|| "~/.ssh/id_ed25519".to_string());
@@ -184,7 +182,9 @@ mod real_ssh {
                 let mut session = Session::new().unwrap();
                 session.set_tcp_stream(tcp);
                 session.handshake().unwrap();
-                session.userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None).ok();
+                session
+                    .userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None)
+                    .ok();
 
                 if session.authenticated() {
                     if let Ok(mut channel) = session.channel_session() {
@@ -209,7 +209,9 @@ mod real_ssh {
             let mut session = Session::new().unwrap();
             session.set_tcp_stream(tcp);
             session.handshake().unwrap();
-            session.userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None).ok();
+            session
+                .userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None)
+                .ok();
 
             if session.authenticated() {
                 for cmd in commands {
@@ -234,7 +236,9 @@ mod real_ssh {
             let mut session = Session::new().unwrap();
             session.set_tcp_stream(tcp);
             session.handshake().unwrap();
-            session.userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None).ok();
+            session
+                .userauth_pubkey_file(&config.user, None, Path::new(&config.key_path), None)
+                .ok();
 
             if session.authenticated() {
                 // Execute all commands in rapid succession
@@ -270,11 +274,32 @@ fn benchmark_pipelining_simulation(c: &mut Criterion) {
     // Test with different command counts
     let command_sets: Vec<(&str, Vec<&str>)> = vec![
         ("1_simple", vec!["echo 1"]),
-        ("5_simple", vec!["echo 1", "echo 2", "echo 3", "echo 4", "echo 5"]),
-        ("10_simple", vec!["echo 1", "echo 2", "echo 3", "echo 4", "echo 5",
-             "echo 6", "echo 7", "echo 8", "echo 9", "echo 10"]),
-        ("10_varied", vec!["ls -la", "cat /etc/hostname", "uptime", "free -m", "df -h",
-             "ps aux", "netstat -an", "top -bn1", "vmstat", "iostat"]),
+        (
+            "5_simple",
+            vec!["echo 1", "echo 2", "echo 3", "echo 4", "echo 5"],
+        ),
+        (
+            "10_simple",
+            vec![
+                "echo 1", "echo 2", "echo 3", "echo 4", "echo 5", "echo 6", "echo 7", "echo 8",
+                "echo 9", "echo 10",
+            ],
+        ),
+        (
+            "10_varied",
+            vec![
+                "ls -la",
+                "cat /etc/hostname",
+                "uptime",
+                "free -m",
+                "df -h",
+                "ps aux",
+                "netstat -an",
+                "top -bn1",
+                "vmstat",
+                "iostat",
+            ],
+        ),
     ];
 
     for (label, commands) in &command_sets {
@@ -285,21 +310,13 @@ fn benchmark_pipelining_simulation(c: &mut Criterion) {
             BenchmarkId::new("sequential", label),
             commands,
             |b, cmds| {
-                b.iter(|| {
-                    simulate_sequential_commands(black_box(cmds))
-                });
+                b.iter(|| simulate_sequential_commands(black_box(cmds)));
             },
         );
 
-        group.bench_with_input(
-            BenchmarkId::new("pipelined", label),
-            commands,
-            |b, cmds| {
-                b.iter(|| {
-                    simulate_pipelined_commands(black_box(cmds))
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("pipelined", label), commands, |b, cmds| {
+            b.iter(|| simulate_pipelined_commands(black_box(cmds)));
+        });
     }
 
     group.finish();
@@ -311,8 +328,16 @@ fn benchmark_speedup_verification(c: &mut Criterion) {
     group.sample_size(20);
 
     let commands: Vec<&str> = vec![
-        "echo test1", "echo test2", "echo test3", "echo test4", "echo test5",
-        "echo test6", "echo test7", "echo test8", "echo test9", "echo test10",
+        "echo test1",
+        "echo test2",
+        "echo test3",
+        "echo test4",
+        "echo test5",
+        "echo test6",
+        "echo test7",
+        "echo test8",
+        "echo test9",
+        "echo test10",
     ];
 
     // Measure sequential baseline
@@ -339,15 +364,26 @@ fn benchmark_speedup_verification(c: &mut Criterion) {
 
     // CI Gate checks
     if speedup < MIN_PIPELINING_SPEEDUP {
-        eprintln!("⚠️  WARNING: Speedup {:.2}x is below minimum threshold {:.1}x",
-                  speedup, MIN_PIPELINING_SPEEDUP);
+        eprintln!(
+            "⚠️  WARNING: Speedup {:.2}x is below minimum threshold {:.1}x",
+            speedup, MIN_PIPELINING_SPEEDUP
+        );
         eprintln!("   This would fail CI gate checks!");
     } else if speedup >= EXCELLENT_PIPELINING_SPEEDUP {
-        println!("✅ EXCELLENT: Speedup {:.2}x exceeds target {:.1}x", speedup, EXCELLENT_PIPELINING_SPEEDUP);
+        println!(
+            "✅ EXCELLENT: Speedup {:.2}x exceeds target {:.1}x",
+            speedup, EXCELLENT_PIPELINING_SPEEDUP
+        );
     } else if speedup >= TARGET_PIPELINING_SPEEDUP {
-        println!("✅ GOOD: Speedup {:.2}x meets target {:.1}x", speedup, TARGET_PIPELINING_SPEEDUP);
+        println!(
+            "✅ GOOD: Speedup {:.2}x meets target {:.1}x",
+            speedup, TARGET_PIPELINING_SPEEDUP
+        );
     } else {
-        println!("⚠️  ACCEPTABLE: Speedup {:.2}x meets minimum {:.1}x", speedup, MIN_PIPELINING_SPEEDUP);
+        println!(
+            "⚠️  ACCEPTABLE: Speedup {:.2}x meets minimum {:.1}x",
+            speedup, MIN_PIPELINING_SPEEDUP
+        );
     }
 
     group.bench_function("speedup_verification", |b| {
@@ -376,25 +412,23 @@ fn benchmark_real_ssh_pipelining(c: &mut Criterion) {
     group.sample_size(10);
 
     let commands: Vec<&str> = vec![
-        "echo test1", "echo test2", "echo test3", "echo test4", "echo test5",
+        "echo test1",
+        "echo test2",
+        "echo test3",
+        "echo test4",
+        "echo test5",
     ];
 
     group.bench_function("sequential", |b| {
-        b.iter(|| {
-            real_ssh::sequential_execution(&config, black_box(&commands))
-        });
+        b.iter(|| real_ssh::sequential_execution(&config, black_box(&commands)));
     });
 
     group.bench_function("pipelined", |b| {
-        b.iter(|| {
-            real_ssh::pipelined_execution(&config, black_box(&commands))
-        });
+        b.iter(|| real_ssh::pipelined_execution(&config, black_box(&commands)));
     });
 
     group.bench_function("multiplexed", |b| {
-        b.iter(|| {
-            real_ssh::multiplexed_execution(&config, black_box(&commands))
-        });
+        b.iter(|| real_ssh::multiplexed_execution(&config, black_box(&commands)));
     });
 
     group.finish();
@@ -413,9 +447,7 @@ fn benchmark_scaling(c: &mut Criterion) {
             BenchmarkId::new("pipelined", count),
             &commands,
             |b, cmds| {
-                b.iter(|| {
-                    simulate_pipelined_commands(black_box(cmds))
-                });
+                b.iter(|| simulate_pipelined_commands(black_box(cmds)));
             },
         );
     }
@@ -473,8 +505,8 @@ fn ci_gate_check() -> bool {
     }
 
     let commands: Vec<&str> = vec![
-        "echo 1", "echo 2", "echo 3", "echo 4", "echo 5",
-        "echo 6", "echo 7", "echo 8", "echo 9", "echo 10",
+        "echo 1", "echo 2", "echo 3", "echo 4", "echo 5", "echo 6", "echo 7", "echo 8", "echo 9",
+        "echo 10",
     ];
 
     // Run multiple iterations for stable measurement
@@ -513,16 +545,28 @@ fn ci_gate_check() -> bool {
     println!();
 
     if speedup < MIN_PIPELINING_SPEEDUP {
-        eprintln!("❌ FAILED: Speedup {:.2}x is below minimum {:.1}x", speedup, MIN_PIPELINING_SPEEDUP);
+        eprintln!(
+            "❌ FAILED: Speedup {:.2}x is below minimum {:.1}x",
+            speedup, MIN_PIPELINING_SPEEDUP
+        );
         false
     } else if speedup >= EXCELLENT_PIPELINING_SPEEDUP {
-        println!("✅ PASSED (EXCELLENT): {:.2}x >= {:.1}x", speedup, EXCELLENT_PIPELINING_SPEEDUP);
+        println!(
+            "✅ PASSED (EXCELLENT): {:.2}x >= {:.1}x",
+            speedup, EXCELLENT_PIPELINING_SPEEDUP
+        );
         true
     } else if speedup >= TARGET_PIPELINING_SPEEDUP {
-        println!("✅ PASSED (GOOD): {:.2}x >= {:.1}x", speedup, TARGET_PIPELINING_SPEEDUP);
+        println!(
+            "✅ PASSED (GOOD): {:.2}x >= {:.1}x",
+            speedup, TARGET_PIPELINING_SPEEDUP
+        );
         true
     } else {
-        println!("✅ PASSED (ACCEPTABLE): {:.2}x >= {:.1}x", speedup, MIN_PIPELINING_SPEEDUP);
+        println!(
+            "✅ PASSED (ACCEPTABLE): {:.2}x >= {:.1}x",
+            speedup, MIN_PIPELINING_SPEEDUP
+        );
         true
     }
 }
@@ -574,15 +618,16 @@ mod tests {
         assert!(
             pipe_time < seq_time,
             "Pipelined should be faster than sequential: {:?} vs {:?}",
-            pipe_time, seq_time
+            pipe_time,
+            seq_time
         );
     }
 
     #[test]
     fn test_pipelining_speedup_meets_threshold() {
         let commands: Vec<&str> = vec![
-            "echo 1", "echo 2", "echo 3", "echo 4", "echo 5",
-            "echo 6", "echo 7", "echo 8", "echo 9", "echo 10",
+            "echo 1", "echo 2", "echo 3", "echo 4", "echo 5", "echo 6", "echo 7", "echo 8",
+            "echo 9", "echo 10",
         ];
 
         // Average over multiple runs
@@ -603,7 +648,8 @@ mod tests {
         assert!(
             speedup >= MIN_PIPELINING_SPEEDUP,
             "Speedup {:.2}x should be >= {:.1}x",
-            speedup, MIN_PIPELINING_SPEEDUP
+            speedup,
+            MIN_PIPELINING_SPEEDUP
         );
     }
 
@@ -626,7 +672,8 @@ mod tests {
         assert!(
             ratio > 0.5 && ratio < 2.0,
             "Single command should have similar performance: {:?} vs {:?}",
-            seq_time, pipe_time
+            seq_time,
+            pipe_time
         );
     }
 

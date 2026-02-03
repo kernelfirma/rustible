@@ -693,13 +693,22 @@ impl RollbackManager {
             } => {
                 if let Some(ref registry) = self.module_registry {
                     let params: crate::modules::ModuleParams = [
-                        ("name".to_string(), serde_json::Value::String(service.clone())),
-                        ("state".to_string(), serde_json::Value::String(target_state.clone())),
-                    ].into_iter().collect();
+                        (
+                            "name".to_string(),
+                            serde_json::Value::String(service.clone()),
+                        ),
+                        (
+                            "state".to_string(),
+                            serde_json::Value::String(target_state.clone()),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect();
                     let ctx = crate::modules::ModuleContext::default();
                     if let Err(e) = registry.execute("service", &params, &ctx) {
                         return Err(RollbackError::RollbackFailed(format!(
-                            "Failed to change service {} to {}: {}", service, target_state, e
+                            "Failed to change service {} to {}: {}",
+                            service, target_state, e
                         )));
                     }
                 } else {
@@ -714,16 +723,25 @@ impl RollbackManager {
                 if let Some(ref registry) = self.module_registry {
                     let params: crate::modules::ModuleParams = [
                         ("name".to_string(), serde_json::Value::String(name.clone())),
-                        ("state".to_string(), serde_json::Value::String("absent".to_string())),
-                    ].into_iter().collect();
+                        (
+                            "state".to_string(),
+                            serde_json::Value::String("absent".to_string()),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect();
                     let ctx = crate::modules::ModuleContext::default();
                     if let Err(e) = registry.execute("package", &params, &ctx) {
                         return Err(RollbackError::RollbackFailed(format!(
-                            "Failed to remove package {}: {}", name, e
+                            "Failed to remove package {}: {}",
+                            name, e
                         )));
                     }
                 } else {
-                    warn!("Package removal not implemented (no module registry): {}", name);
+                    warn!(
+                        "Package removal not implemented (no module registry): {}",
+                        name
+                    );
                 }
             }
 
@@ -731,15 +749,24 @@ impl RollbackManager {
                 if let Some(ref registry) = self.module_registry {
                     let mut params: crate::modules::ModuleParams = [
                         ("name".to_string(), serde_json::Value::String(name.clone())),
-                        ("state".to_string(), serde_json::Value::String("present".to_string())),
-                    ].into_iter().collect();
+                        (
+                            "state".to_string(),
+                            serde_json::Value::String("present".to_string()),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect();
                     if let Some(ver) = version {
-                        params.insert("version".to_string(), serde_json::Value::String(ver.clone()));
+                        params.insert(
+                            "version".to_string(),
+                            serde_json::Value::String(ver.clone()),
+                        );
                     }
                     let ctx = crate::modules::ModuleContext::default();
                     if let Err(e) = registry.execute("package", &params, &ctx) {
                         return Err(RollbackError::RollbackFailed(format!(
-                            "Failed to install package {}: {}", name, e
+                            "Failed to install package {}: {}",
+                            name, e
                         )));
                     }
                 } else {
@@ -757,34 +784,58 @@ impl RollbackManager {
             UndoOperation::DeleteUser { username } => {
                 if let Some(ref registry) = self.module_registry {
                     let params: crate::modules::ModuleParams = [
-                        ("name".to_string(), serde_json::Value::String(username.clone())),
-                        ("state".to_string(), serde_json::Value::String("absent".to_string())),
-                    ].into_iter().collect();
+                        (
+                            "name".to_string(),
+                            serde_json::Value::String(username.clone()),
+                        ),
+                        (
+                            "state".to_string(),
+                            serde_json::Value::String("absent".to_string()),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect();
                     let ctx = crate::modules::ModuleContext::default();
                     if let Err(e) = registry.execute("user", &params, &ctx) {
                         return Err(RollbackError::RollbackFailed(format!(
-                            "Failed to delete user {}: {}", username, e
+                            "Failed to delete user {}: {}",
+                            username, e
                         )));
                     }
                 } else {
-                    warn!("User deletion not implemented (no module registry): {}", username);
+                    warn!(
+                        "User deletion not implemented (no module registry): {}",
+                        username
+                    );
                 }
             }
 
             UndoOperation::RestoreUser { username, .. } => {
                 if let Some(ref registry) = self.module_registry {
                     let params: crate::modules::ModuleParams = [
-                        ("name".to_string(), serde_json::Value::String(username.clone())),
-                        ("state".to_string(), serde_json::Value::String("present".to_string())),
-                    ].into_iter().collect();
+                        (
+                            "name".to_string(),
+                            serde_json::Value::String(username.clone()),
+                        ),
+                        (
+                            "state".to_string(),
+                            serde_json::Value::String("present".to_string()),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect();
                     let ctx = crate::modules::ModuleContext::default();
                     if let Err(e) = registry.execute("user", &params, &ctx) {
                         return Err(RollbackError::RollbackFailed(format!(
-                            "Failed to restore user {}: {}", username, e
+                            "Failed to restore user {}: {}",
+                            username, e
                         )));
                     }
                 } else {
-                    warn!("User restoration not implemented (no module registry): {}", username);
+                    warn!(
+                        "User restoration not implemented (no module registry): {}",
+                        username
+                    );
                 }
             }
 

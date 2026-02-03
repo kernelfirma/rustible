@@ -442,16 +442,16 @@ mod ansible_parity_tests {
     #[test]
     fn test_win_service_ansible_params_documented() {
         let ansible_params = vec![
-            "name",               // Service name
-            "state",              // started, stopped, restarted, paused, absent
-            "start_mode",         // auto, delayed, manual, disabled
-            "display_name",       // Display name
-            "description",        // Service description
-            "path",               // Path to service binary
-            "dependencies",       // Service dependencies
-            "username",           // Service account
-            "password",           // Service account password
-            "desktop_interact",   // Allow desktop interaction
+            "name",                     // Service name
+            "state",                    // started, stopped, restarted, paused, absent
+            "start_mode",               // auto, delayed, manual, disabled
+            "display_name",             // Display name
+            "description",              // Service description
+            "path",                     // Path to service binary
+            "dependencies",             // Service dependencies
+            "username",                 // Service account
+            "password",                 // Service account password
+            "desktop_interact",         // Allow desktop interaction
             "force_dependent_services", // Force stop dependents
         ];
 
@@ -462,15 +462,15 @@ mod ansible_parity_tests {
     #[test]
     fn test_win_package_ansible_params_documented() {
         let ansible_params = vec![
-            "name",             // Package name
-            "path",             // Path to installer
-            "product_id",       // Product ID for MSI
-            "arguments",        // Installer arguments
-            "state",            // present, absent
-            "provider",         // msi, msu, chocolatey
-            "creates_path",     // Path to check if installed
-            "creates_service",  // Service to check
-            "creates_version",  // Version to check
+            "name",            // Package name
+            "path",            // Path to installer
+            "product_id",      // Product ID for MSI
+            "arguments",       // Installer arguments
+            "state",           // present, absent
+            "provider",        // msi, msu, chocolatey
+            "creates_path",    // Path to check if installed
+            "creates_service", // Service to check
+            "creates_version", // Version to check
         ];
 
         assert!(ansible_params.len() >= 8);
@@ -480,18 +480,18 @@ mod ansible_parity_tests {
     #[test]
     fn test_win_user_ansible_params_documented() {
         let ansible_params = vec![
-            "name",               // Username
-            "password",           // Password
-            "state",              // present, absent, query
-            "groups",             // Group membership
-            "groups_action",      // add, remove, replace
-            "fullname",           // Full name
-            "description",        // User description
-            "password_expired",   // Force password change
-            "password_never_expires", // Never expire password
+            "name",                        // Username
+            "password",                    // Password
+            "state",                       // present, absent, query
+            "groups",                      // Group membership
+            "groups_action",               // add, remove, replace
+            "fullname",                    // Full name
+            "description",                 // User description
+            "password_expired",            // Force password change
+            "password_never_expires",      // Never expire password
             "user_cannot_change_password", // Prevent user changes
-            "account_disabled",   // Disable account
-            "account_locked",     // Lock account
+            "account_disabled",            // Disable account
+            "account_locked",              // Lock account
         ];
 
         assert!(ansible_params.len() >= 10);
@@ -515,13 +515,13 @@ mod ansible_parity_tests {
     #[test]
     fn test_win_copy_ansible_params_documented() {
         let ansible_params = vec![
-            "src",              // Source file/directory
-            "dest",             // Destination path
-            "content",          // Inline content
-            "backup",           // Create backup
-            "force",            // Overwrite existing
-            "remote_src",       // Source is on remote
-            "decrypt",          // Decrypt vault content
+            "src",        // Source file/directory
+            "dest",       // Destination path
+            "content",    // Inline content
+            "backup",     // Create backup
+            "force",      // Overwrite existing
+            "remote_src", // Source is on remote
+            "decrypt",    // Decrypt vault content
         ];
 
         assert!(ansible_params.len() >= 5);
@@ -613,15 +613,7 @@ mod security_tests {
     #[test]
     fn test_all_validators_reject_command_injection() {
         // Common injection patterns that should be rejected by all validators
-        let injection_patterns = vec![
-            "$(cmd)",
-            "`cmd`",
-            "a;b",
-            "a|b",
-            "a&b",
-            "a>b",
-            "a<b",
-        ];
+        let injection_patterns = vec!["$(cmd)", "`cmd`", "a;b", "a|b", "a&b", "a>b", "a<b"];
 
         for pattern in &injection_patterns {
             // Path validator should reject

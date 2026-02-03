@@ -41,8 +41,7 @@ impl Span {
 
     /// Create a span from line/column (1-based) with a given length.
     pub fn from_line_col(source: &str, line: usize, column: usize, len: usize) -> Self {
-        let (start, line, column) = offset_for_line_col(source, line, column)
-            .unwrap_or((0, 0, 0));
+        let (start, line, column) = offset_for_line_col(source, line, column).unwrap_or((0, 0, 0));
         let end = start.saturating_add(len.max(1));
         Self {
             start,
@@ -54,7 +53,11 @@ impl Span {
 
     /// Range for ariadne labels.
     pub fn range(&self) -> Range<usize> {
-        let end = if self.end > self.start { self.end } else { self.start + 1 };
+        let end = if self.end > self.start {
+            self.end
+        } else {
+            self.start + 1
+        };
         self.start..end
     }
 
@@ -315,9 +318,16 @@ impl RichDiagnostic {
         if let Some(code) = &self.code {
             output.push_str(&format!("{} ", code));
         }
-        output.push_str(&format!("{}: {}", severity_label(self.severity), self.message));
+        output.push_str(&format!(
+            "{}: {}",
+            severity_label(self.severity),
+            self.message
+        ));
         if self.span.has_line_col() {
-            output.push_str(&format!("\n --> {}:{}:{}", self.file, self.span.line, self.span.column));
+            output.push_str(&format!(
+                "\n --> {}:{}:{}",
+                self.file, self.span.line, self.span.column
+            ));
         } else {
             output.push_str(&format!("\n --> {}", self.file));
         }
@@ -724,7 +734,10 @@ pub fn missing_required_arg_error(
     span: Span,
 ) -> RichDiagnostic {
     RichDiagnostic::error(
-        format!("Missing required argument '{}' for module '{}'", arg, module),
+        format!(
+            "Missing required argument '{}' for module '{}'",
+            arg, module
+        ),
         path.as_ref(),
         span,
     )
@@ -822,10 +835,12 @@ fn levenshtein(a: &str, b: &str) -> usize {
     for i in 1..=a_len {
         curr[0] = i;
         for j in 1..=b_len {
-            let cost = if a_bytes[i - 1] == b_bytes[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
+            let cost = if a_bytes[i - 1] == b_bytes[j - 1] {
+                0
+            } else {
+                1
+            };
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -943,7 +958,10 @@ mod tests {
     fn test_yaml_syntax_error_missing_colon() {
         let source = "name foo";
         let diag = yaml_syntax_error("test.yml", source, 1, 1, "missing colon");
-        let colon_sugg = diag.suggestions.iter().find(|s| s.message.contains("colon"));
+        let colon_sugg = diag
+            .suggestions
+            .iter()
+            .find(|s| s.message.contains("colon"));
         assert!(colon_sugg.is_some());
         let sugg = colon_sugg.unwrap();
         assert_eq!(sugg.replacement.as_deref(), Some("name: foo"));
@@ -967,7 +985,10 @@ mod tests {
     fn test_template_unclosed_expression() {
         let source = "{{ foo";
         let diag = template_syntax_error("test.yml", source, 1, 1, "unclosed expression");
-        let sugg = diag.suggestions.iter().find(|s| s.message.contains("Close"));
+        let sugg = diag
+            .suggestions
+            .iter()
+            .find(|s| s.message.contains("Close"));
         assert!(sugg.is_some());
         assert!(sugg.unwrap().replacement.as_ref().unwrap().contains("}}"));
     }
@@ -976,7 +997,10 @@ mod tests {
     fn test_template_unclosed_block_tag() {
         let source = "{% if true";
         let diag = template_syntax_error("test.yml", source, 1, 1, "unclosed block");
-        let sugg = diag.suggestions.iter().find(|s| s.message.contains("block tag"));
+        let sugg = diag
+            .suggestions
+            .iter()
+            .find(|s| s.message.contains("block tag"));
         assert!(sugg.is_some());
         assert!(sugg.unwrap().replacement.as_ref().unwrap().contains("%}"));
     }
@@ -1025,21 +1049,30 @@ mod tests {
         let diag = connection_error("test.yml", "web01", "Connection refused", Span::new(0, 5));
         assert!(diag.suggestions.len() >= 2);
         assert!(diag.suggestions.iter().any(|s| s.message.contains("SSH")));
-        assert!(diag.suggestions.iter().any(|s| s.message.contains("firewall")));
+        assert!(diag
+            .suggestions
+            .iter()
+            .any(|s| s.message.contains("firewall")));
     }
 
     #[test]
     fn test_connection_error_timeout() {
         let diag = connection_error("test.yml", "web01", "Connection timed out", Span::new(0, 5));
         assert!(diag.suggestions.len() >= 2);
-        assert!(diag.suggestions.iter().any(|s| s.message.contains("reachable")));
+        assert!(diag
+            .suggestions
+            .iter()
+            .any(|s| s.message.contains("reachable")));
     }
 
     #[test]
     fn test_connection_error_auth() {
         let diag = connection_error("test.yml", "web01", "Permission denied", Span::new(0, 5));
         assert!(diag.suggestions.len() >= 2);
-        assert!(diag.suggestions.iter().any(|s| s.message.contains("SSH key")));
+        assert!(diag
+            .suggestions
+            .iter()
+            .any(|s| s.message.contains("SSH key")));
     }
 
     #[test]

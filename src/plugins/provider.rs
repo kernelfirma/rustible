@@ -302,9 +302,9 @@ impl ProviderRegistry {
         params: ModuleParams,
         ctx: ModuleContext,
     ) -> Result<ModuleOutput, ProviderError> {
-        let provider = self
-            .get(provider_name)
-            .ok_or_else(|| ProviderError::Other(format!("provider '{}' not found", provider_name)))?;
+        let provider = self.get(provider_name).ok_or_else(|| {
+            ProviderError::Other(format!("provider '{}' not found", provider_name))
+        })?;
 
         provider.invoke(module, params, ctx).await
     }
@@ -486,8 +486,12 @@ mod tests {
     #[test]
     fn test_registry_list() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(MockProvider::new("aws"))).unwrap();
-        registry.register(Arc::new(MockProvider::new("azure"))).unwrap();
+        registry
+            .register(Arc::new(MockProvider::new("aws")))
+            .unwrap();
+        registry
+            .register(Arc::new(MockProvider::new("azure")))
+            .unwrap();
         let names = registry.list();
         assert_eq!(names.len(), 2);
         assert!(names.contains(&"aws".to_string()));
@@ -497,7 +501,9 @@ mod tests {
     #[test]
     fn test_registry_find_by_capability() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(MockProvider::new("test"))).unwrap();
+        registry
+            .register(Arc::new(MockProvider::new("test")))
+            .unwrap();
         let providers = registry.find_by_capability(ProviderCapability::Read);
         assert_eq!(providers.len(), 1);
     }
@@ -505,15 +511,27 @@ mod tests {
     #[tokio::test]
     async fn test_registry_invoke() {
         let mut registry = ProviderRegistry::new();
-        registry.register(Arc::new(MockProvider::new("test"))).unwrap();
+        registry
+            .register(Arc::new(MockProvider::new("test")))
+            .unwrap();
 
         let result = registry
-            .invoke("test", "test_module", serde_json::json!({}), ModuleContext::default())
+            .invoke(
+                "test",
+                "test_module",
+                serde_json::json!({}),
+                ModuleContext::default(),
+            )
             .await;
         assert!(result.is_ok());
 
         let result = registry
-            .invoke("test", "unknown", serde_json::json!({}), ModuleContext::default())
+            .invoke(
+                "test",
+                "unknown",
+                serde_json::json!({}),
+                ModuleContext::default(),
+            )
             .await;
         assert!(matches!(result, Err(ProviderError::ModuleNotFound(_))));
     }
@@ -522,7 +540,12 @@ mod tests {
     async fn test_registry_invoke_unknown_provider() {
         let registry = ProviderRegistry::new();
         let result = registry
-            .invoke("unknown", "module", serde_json::json!({}), ModuleContext::default())
+            .invoke(
+                "unknown",
+                "module",
+                serde_json::json!({}),
+                ModuleContext::default(),
+            )
             .await;
         assert!(matches!(result, Err(ProviderError::Other(_))));
     }

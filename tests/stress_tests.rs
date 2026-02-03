@@ -1097,7 +1097,11 @@ async fn stability_iterations_same_playbook() {
 
         // Progress indicator
         if (i + 1) % 10 == 0 {
-            println!("Stability test: {}/{} iterations completed", i + 1, iterations);
+            println!(
+                "Stability test: {}/{} iterations completed",
+                i + 1,
+                iterations
+            );
         }
     }
 
@@ -1624,11 +1628,7 @@ async fn extreme_1000_hosts_concurrent() {
 
         match results {
             Ok(results) => {
-                assert_eq!(
-                    results.len(),
-                    100,
-                    "Should have results for all 100 hosts"
-                );
+                assert_eq!(results.len(), 100, "Should have results for all 100 hosts");
 
                 let mut success_count = 0;
                 let mut failure_count = 0;

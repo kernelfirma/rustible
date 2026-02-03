@@ -190,7 +190,11 @@ fn test_facts_gather_os_subset() {
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context);
-    assert!(result.is_ok(), "OS subset gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "OS subset gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
@@ -198,9 +202,13 @@ fn test_facts_gather_os_subset() {
     // OS subset should include system-level facts
     if let Some(facts) = output.data.get("ansible_facts") {
         // OS facts should contain at least system or hostname
-        let facts_obj = facts.as_object().expect("ansible_facts should be an object");
+        let facts_obj = facts
+            .as_object()
+            .expect("ansible_facts should be an object");
         assert!(
-            facts_obj.contains_key("system") || facts_obj.contains_key("hostname") || facts_obj.contains_key("distribution"),
+            facts_obj.contains_key("system")
+                || facts_obj.contains_key("hostname")
+                || facts_obj.contains_key("distribution"),
             "OS facts should contain system, hostname, or distribution info, got keys: {:?}",
             facts_obj.keys().collect::<Vec<_>>()
         );
@@ -214,14 +222,20 @@ fn test_facts_gather_hardware_subset() {
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context);
-    assert!(result.is_ok(), "Hardware subset gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Hardware subset gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
 
     // Hardware subset should include memory or processor facts
     if let Some(facts) = output.data.get("ansible_facts") {
-        let facts_obj = facts.as_object().expect("ansible_facts should be an object");
+        let facts_obj = facts
+            .as_object()
+            .expect("ansible_facts should be an object");
         // Hardware facts typically include memtotal, processor count, etc.
         // On some systems these may be empty if /proc is not available, so just verify the call succeeded
         assert!(
@@ -241,14 +255,20 @@ fn test_facts_gather_network_subset() {
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context);
-    assert!(result.is_ok(), "Network subset gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Network subset gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
 
     // Network facts should include interface or IP information
     if let Some(facts) = output.data.get("ansible_facts") {
-        let facts_obj = facts.as_object().expect("ansible_facts should be an object");
+        let facts_obj = facts
+            .as_object()
+            .expect("ansible_facts should be an object");
         assert!(
             facts_obj.contains_key("interfaces")
                 || facts_obj.contains_key("default_ipv4")
@@ -266,14 +286,20 @@ fn test_facts_gather_date_subset() {
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context);
-    assert!(result.is_ok(), "Date subset gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Date subset gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
 
     // Date facts should include date/time information
     if let Some(facts) = output.data.get("ansible_facts") {
-        let facts_obj = facts.as_object().expect("ansible_facts should be an object");
+        let facts_obj = facts
+            .as_object()
+            .expect("ansible_facts should be an object");
         assert!(
             facts_obj.contains_key("date_time")
                 || facts_obj.contains_key("epoch")
@@ -291,16 +317,24 @@ fn test_facts_gather_env_subset() {
     let context = ModuleContext::default();
 
     let result = module.execute(&params, &context);
-    assert!(result.is_ok(), "Env subset gathering should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Env subset gathering should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.changed, "Facts gathering should not report changed");
 
     // Env facts should include environment variables
     if let Some(facts) = output.data.get("ansible_facts") {
-        let facts_obj = facts.as_object().expect("ansible_facts should be an object");
+        let facts_obj = facts
+            .as_object()
+            .expect("ansible_facts should be an object");
         assert!(
-            facts_obj.contains_key("env") || facts_obj.contains_key("environment") || facts_obj.is_empty(),
+            facts_obj.contains_key("env")
+                || facts_obj.contains_key("environment")
+                || facts_obj.is_empty(),
             "Env facts should contain env or environment info (or be empty on unsupported systems)"
         );
     }

@@ -6,6 +6,7 @@
 //! - Vault-like secret handling
 
 pub mod scope;
+pub mod terraform;
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -157,6 +158,9 @@ pub enum VarsError {
 
     #[error("merge error: {0}")]
     MergeError(String),
+
+    #[error("import error: {0}")]
+    ImportError(String),
 
     #[error("type error: expected {expected}, got {actual}")]
     TypeError { expected: String, actual: String },

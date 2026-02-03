@@ -1112,11 +1112,7 @@ impl Inventory {
     }
 
     /// Parse a complex pattern with operators
-    fn parse_complex_pattern(
-        &self,
-        pattern: &str,
-        depth: usize,
-    ) -> InventoryResult<Vec<&Host>> {
+    fn parse_complex_pattern(&self, pattern: &str, depth: usize) -> InventoryResult<Vec<&Host>> {
         let mut result: HashSet<&str> = HashSet::new();
         let mut first = true;
 

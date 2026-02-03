@@ -268,7 +268,16 @@ impl ProvisionerArgs {
         let duration_secs = start_instant.elapsed().as_secs_f64();
 
         match exec_result {
-            Ok((tasks_executed, tasks_changed)) => {
+            Ok((tasks_executed, tasks_changed, tasks_failed)) => {
+                if tasks_failed > 0 {
+                    let err = ProvisionerError::ExecutionFailed(format!(
+                        "{} task(s) failed",
+                        tasks_failed
+                    ));
+                    self.log_error(&format!("Provisioning failed: {}", err));
+                    return Err(err.into());
+                }
+
                 let result = ProvisionerResult {
                     success: true,
                     started_at,
@@ -276,7 +285,7 @@ impl ProvisionerArgs {
                     duration_secs,
                     tasks_executed,
                     tasks_changed,
-                    tasks_failed: 0,
+                    tasks_failed,
                     error: None,
                     resource_type: self.resource_type.clone(),
                     resource_name: self.resource_name.clone(),
@@ -377,11 +386,12 @@ impl ProvisionerArgs {
         &self,
         context: &ProvisionerContext,
         terraform_vars: HashMap<String, serde_json::Value>,
-    ) -> Result<(usize, usize)> {
+    ) -> Result<(usize, usize, usize)> {
+        use rustible::connection::{ConnectionConfig, ConnectionFactory, HostConfig};
         use rustible::executor::playbook::Playbook;
         use rustible::executor::runtime::RuntimeContext;
         use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig};
-        use rustible::vars::Variables;
+        use rustible::inventory::{ConnectionType, Group, Host, Inventory};
 
         // Read and parse playbook
         let playbook_path: &PathBuf = &self.playbook;
@@ -392,78 +402,98 @@ impl ProvisionerArgs {
         let playbook = Playbook::parse(&playbook_content, Some(self.playbook.clone()))
             .context("Failed to parse playbook")?;
 
-        // Build runtime context with single host
-        let mut runtime = RuntimeContext::new();
-        runtime.add_host(context.resource_name.clone(), None);
+        let host_name = context.resource_name.clone();
+        let tf_group_name = format!("tf_{}", context.resource_type);
 
-        // Add terraform resource type group
-        runtime.add_host(
-            context.resource_name.clone(),
-            Some(&format!("tf_{}", context.resource_type)),
+        let mut inventory = Inventory::new();
+        let mut host = Host::new(&host_name);
+
+        let resolved_host = if self.connection == "local" {
+            "localhost".to_string()
+        } else {
+            context.host.clone()
+        };
+        host.ansible_host = Some(resolved_host);
+        host.connection.connection = match self.connection.as_str() {
+            "local" => ConnectionType::Local,
+            "docker" => ConnectionType::Docker,
+            "podman" => ConnectionType::Podman,
+            "winrm" => ConnectionType::Winrm,
+            _ => ConnectionType::Ssh,
+        };
+        host.connection.ssh.port = context.port;
+        host.connection.ssh.user = Some(context.user.clone());
+        if let Some(ref key) = self.private_key {
+            host.connection.ssh.private_key_file = Some(key.to_string_lossy().to_string());
+        }
+
+        host.set_var(
+            "terraform_resource_type",
+            serde_yaml::Value::String(context.resource_type.clone()),
+        );
+        host.set_var(
+            "terraform_resource_name",
+            serde_yaml::Value::String(context.resource_name.clone()),
         );
 
+        host.add_to_group("terraform");
+        host.add_to_group(&tf_group_name);
+
+        let mut terraform_group = Group::new("terraform");
+        terraform_group.add_host(host_name.clone());
+        inventory.add_group(terraform_group)?;
+
+        let mut resource_group = Group::new(&tf_group_name);
+        resource_group.add_host(host_name.clone());
+        inventory.add_group(resource_group)?;
+
+        inventory.add_host(host)?;
+        let runtime = RuntimeContext::from_inventory(&inventory);
+
         // Build executor config
+        let mut extra_vars = HashMap::new();
+        for (key, value) in terraform_vars {
+            extra_vars.insert(format!("terraform_{}", key), value);
+        }
+
         let config = ExecutorConfig {
             check_mode: self.dry_run,
             diff_mode: self.show_diff,
             gather_facts: true,
             forks: 1, // Single host
             strategy: ExecutionStrategy::Linear,
+            verbosity: self.verbose,
+            extra_vars,
+            r#become: self.r#become,
+            become_user: self
+                .become_user
+                .clone()
+                .unwrap_or_else(|| "root".to_string()),
             ..Default::default()
         };
 
-        // Prepare variables
-        let mut vars = Variables::new();
+        let mut conn_config = ConnectionConfig::default();
+        conn_config.defaults.user = context.user.clone();
 
-        // Add terraform metadata as variables
-        vars.set(
-            "terraform_resource_type".to_string(),
-            serde_json::Value::String(context.resource_type.clone()),
-        );
-        vars.set(
-            "terraform_resource_name".to_string(),
-            serde_json::Value::String(context.resource_name.clone()),
-        );
-        vars.set(
-            "ansible_host".to_string(),
-            serde_json::Value::String(context.host.clone()),
-        );
-        vars.set(
-            "ansible_user".to_string(),
-            serde_json::Value::String(context.user.clone()),
-        );
-        vars.set(
-            "ansible_port".to_string(),
-            serde_json::Value::Number(context.port.into()),
-        );
+        let mut host_config = HostConfig::new()
+            .hostname(context.host.clone())
+            .port(context.port)
+            .user(context.user.clone())
+            .timeout(context.connection_info.timeout)
+            .retries(context.connection_info.retries)
+            .retry_delay(context.connection_info.retry_delay);
 
-        if let Some(ref key) = self.private_key {
-            let key_path: &PathBuf = key;
-            vars.set(
-                "ansible_ssh_private_key_file".to_string(),
-                serde_json::Value::String(key_path.to_string_lossy().to_string()),
-            );
+        if let Some(ref key) = context.connection_info.private_key {
+            host_config.identity_file = Some(key.clone());
         }
-
-        // Add terraform variables (prefixed with terraform_)
-        for (key, value) in terraform_vars {
-            vars.set(format!("terraform_{}", key), value);
+        if self.connection != "ssh" {
+            host_config.connection = Some(self.connection.clone());
         }
-
-        // Add become settings
-        if self.r#become {
-            vars.set("ansible_become".to_string(), serde_json::Value::Bool(true));
-            if let Some(ref become_user) = self.become_user {
-                let user: &String = become_user;
-                vars.set(
-                    "ansible_become_user".to_string(),
-                    serde_json::Value::String(user.clone()),
-                );
-            }
-        }
+        conn_config.hosts.insert(host_name.clone(), host_config);
 
         // Create executor with runtime context
-        let executor = Executor::with_runtime(config, runtime);
+        let executor = Executor::with_runtime(config, runtime)
+            .with_connection_factory(ConnectionFactory::new(conn_config));
 
         // Execute playbook
         self.log_debug(&format!(
@@ -472,13 +502,14 @@ impl ProvisionerArgs {
             context.host
         ));
 
-        // The executor returns statistics about execution
-        // For now, we return placeholder values as the executor API may vary
-        let _result = executor;
+        let results = executor.run_playbook(&playbook).await?;
+        let summary = Executor::summarize_results(&results);
 
-        // Return placeholder stats - in a real implementation, we'd track
-        // task execution through the executor
-        Ok((1, 0))
+        let tasks_executed = summary.ok + summary.changed + summary.failed + summary.skipped;
+        let tasks_changed = summary.changed;
+        let tasks_failed = summary.failed + summary.unreachable;
+
+        Ok((tasks_executed, tasks_changed, tasks_failed))
     }
 
     /// Log info message

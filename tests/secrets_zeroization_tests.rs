@@ -8,10 +8,10 @@
 //!
 //! This serves as an audit trail for security compliance.
 
-use rustible::security::{SecretBytes, SecretString};
 use rustible::security::password_cache::{
     CacheStats, PasswordCache, PasswordCacheConfig, PasswordEntryInfo,
 };
+use rustible::security::{SecretBytes, SecretString};
 use rustible::vault::Vault;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -98,12 +98,12 @@ mod secret_string_tests {
     fn test_secret_string_special_characters() {
         // Test with special characters that might cause issues
         let secrets = vec![
-            "pass\nword",    // newline
-            "pass\tword",    // tab
-            "pass\0word",    // null byte
-            "пароль",        // Cyrillic
-            "密码",           // Chinese
-            "🔐password🔐",  // Emoji
+            "pass\nword",   // newline
+            "pass\tword",   // tab
+            "pass\0word",   // null byte
+            "пароль",       // Cyrillic
+            "密码",         // Chinese
+            "🔐password🔐", // Emoji
             "'quotes'",
             "\"double quotes\"",
             "<script>alert('xss')</script>",
@@ -177,10 +177,9 @@ mod secret_bytes_tests {
     fn test_secret_bytes_binary_data() {
         // Test with actual binary data (encryption key, etc.)
         let key = vec![
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
         ];
 
         let secret = SecretBytes::new(key.clone());
@@ -545,12 +544,7 @@ mod edge_case_tests {
 
     #[test]
     fn test_unicode_secret_redacted() {
-        let unicode_secrets = vec![
-            "пароль密码🔐",
-            "السر",
-            "パスワード",
-            "מילת סיסמה",
-        ];
+        let unicode_secrets = vec!["пароль密码🔐", "السر", "パスワード", "מילת סיסמה"];
 
         for s in unicode_secrets {
             let secret = SecretString::new(s);
@@ -563,14 +557,7 @@ mod edge_case_tests {
     #[test]
     fn test_secret_with_format_specifiers() {
         // Test that format specifiers in secrets don't cause issues
-        let dangerous_secrets = vec![
-            "{}",
-            "{:?}",
-            "{:#?}",
-            "%s%s%s",
-            "%n%n%n",
-            "{{}}",
-        ];
+        let dangerous_secrets = vec!["{}", "{:?}", "{:#?}", "%s%s%s", "%n%n%n", "{{}}"];
 
         for s in dangerous_secrets {
             let secret = SecretString::new(s);

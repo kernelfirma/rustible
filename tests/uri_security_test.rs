@@ -1,9 +1,9 @@
 use rustible::modules::uri::UriModule;
 use rustible::modules::{Module, ModuleContext, ModuleParams};
 use serde_json::json;
+use std::collections::HashMap;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-use std::collections::HashMap;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_uri_module_max_content_length_exceeded() {
@@ -21,7 +21,10 @@ async fn test_uri_module_max_content_length_exceeded() {
 
     let module = UriModule;
     let mut params: ModuleParams = HashMap::new();
-    params.insert("url".to_string(), json!(format!("{}/large", mock_server.uri())));
+    params.insert(
+        "url".to_string(),
+        json!(format!("{}/large", mock_server.uri())),
+    );
     params.insert("max_content_length".to_string(), json!(100)); // Set limit to 100 bytes
 
     let context = ModuleContext::default();
@@ -41,7 +44,6 @@ async fn test_uri_module_max_content_length_exceeded() {
     assert!(err.to_string().contains("exceeds limit"));
 }
 
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_uri_module_within_limit() {
     let mock_server = MockServer::start().await;
@@ -57,7 +59,10 @@ async fn test_uri_module_within_limit() {
 
     let module = UriModule;
     let mut params: ModuleParams = HashMap::new();
-    params.insert("url".to_string(), json!(format!("{}/ok", mock_server.uri())));
+    params.insert(
+        "url".to_string(),
+        json!(format!("{}/ok", mock_server.uri())),
+    );
     params.insert("max_content_length".to_string(), json!(100)); // Set limit to 100 bytes
 
     let context = ModuleContext::default();

@@ -35,8 +35,7 @@ const TEMPLATE_CACHE_SIZE_ENV: &str = "RUSTIBLE_TEMPLATE_CACHE_SIZE";
 pub struct TemplateEngine {
     env: RwLock<Environment<'static>>,
     template_cache: Option<Mutex<LruCache<String, String>>>,
-    expression_cache:
-        Option<Mutex<LruCache<String, Arc<minijinja::Expression<'static, 'static>>>>>,
+    expression_cache: Option<Mutex<LruCache<String, Arc<minijinja::Expression<'static, 'static>>>>>,
     template_counter: AtomicUsize,
 }
 
@@ -401,30 +400,22 @@ impl TemplateEngine {
             if let Some(cached) = cache.get(expression).cloned() {
                 cached
             } else {
-                let compiled =
-                    EXPRESSION_ENV
-                        .compile_expression_owned(expression.to_string())
-                        .map_err(|e| {
-                            Error::template_render(
-                                expression,
-                                format!("Failed to compile expression: {}", e),
-                            )
-                        })?;
-                let compiled = Arc::new(compiled);
-                cache.put(expression.to_string(), Arc::clone(&compiled));
-                compiled
-            }
-        } else {
-            Arc::new(
-                EXPRESSION_ENV
-                    .compile_expression(expression)
+                let compiled = EXPRESSION_ENV
+                    .compile_expression_owned(expression.to_string())
                     .map_err(|e| {
                         Error::template_render(
                             expression,
                             format!("Failed to compile expression: {}", e),
                         )
-                    })?,
-            )
+                    })?;
+                let compiled = Arc::new(compiled);
+                cache.put(expression.to_string(), Arc::clone(&compiled));
+                compiled
+            }
+        } else {
+            Arc::new(EXPRESSION_ENV.compile_expression(expression).map_err(|e| {
+                Error::template_render(expression, format!("Failed to compile expression: {}", e))
+            })?)
         };
 
         let result = expr.eval(vars).map_err(|e| {
@@ -434,10 +425,7 @@ impl TemplateEngine {
                     "Undefined variable in condition '{}', treating as false",
                     expression
                 );
-                return Error::template_render(
-                    expression,
-                    format!("Undefined variable: {}", e),
-                );
+                return Error::template_render(expression, format!("Undefined variable: {}", e));
             }
             Error::template_render(expression, format!("Failed to evaluate: {}", e))
         })?;
@@ -481,8 +469,7 @@ impl Default for TemplateEngine {
     }
 }
 
-static EXPRESSION_ENV: Lazy<Environment<'static>> =
-    Lazy::new(TemplateEngine::build_environment);
+static EXPRESSION_ENV: Lazy<Environment<'static>> = Lazy::new(TemplateEngine::build_environment);
 
 /// Global shared template engine instance
 pub static TEMPLATE_ENGINE: Lazy<Arc<TemplateEngine>> =
@@ -1584,14 +1571,8 @@ mod tests {
         let engine = TemplateEngine::new();
         let mut vars = IndexMap::new();
         vars.insert("x".to_string(), JsonValue::Null);
-        vars.insert(
-            "d".to_string(),
-            serde_json::json!({"a": 1}),
-        );
-        vars.insert(
-            "l".to_string(),
-            serde_json::json!([1, 2, 3]),
-        );
+        vars.insert("d".to_string(), serde_json::json!({"a": 1}));
+        vars.insert("l".to_string(), serde_json::json!([1, 2, 3]));
 
         assert!(engine.evaluate_condition("x is null", &vars).unwrap());
         assert!(engine.evaluate_condition("x is none", &vars).unwrap());
@@ -1639,10 +1620,7 @@ mod tests {
     fn test_in() {
         let engine = TemplateEngine::new();
         let mut vars = IndexMap::new();
-        vars.insert(
-            "items".to_string(),
-            serde_json::json!(["a", "b", "c"]),
-        );
+        vars.insert("items".to_string(), serde_json::json!(["a", "b", "c"]));
         vars.insert("x".to_string(), JsonValue::String("b".to_string()));
         vars.insert("y".to_string(), JsonValue::String("z".to_string()));
 

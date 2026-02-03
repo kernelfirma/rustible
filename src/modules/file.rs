@@ -116,7 +116,11 @@ impl FileModule {
         }
     }
 
-    fn set_permissions(path: &Path, mode: u32, metadata: Option<&fs::Metadata>) -> ModuleResult<bool> {
+    fn set_permissions(
+        path: &Path,
+        mode: u32,
+        metadata: Option<&fs::Metadata>,
+    ) -> ModuleResult<bool> {
         let meta_storage;
         let meta = match metadata {
             Some(m) => m,
@@ -139,7 +143,12 @@ impl FileModule {
         Ok(false)
     }
 
-    fn set_owner(path: &Path, owner: Option<u32>, group: Option<u32>, metadata: Option<&fs::Metadata>) -> ModuleResult<bool> {
+    fn set_owner(
+        path: &Path,
+        owner: Option<u32>,
+        group: Option<u32>,
+        metadata: Option<&fs::Metadata>,
+    ) -> ModuleResult<bool> {
         use std::os::unix::fs::chown;
 
         let meta_storage;
@@ -229,7 +238,11 @@ impl FileModule {
 
     /// Set SELinux context on a file (Linux-specific)
     #[cfg(target_os = "linux")]
-    fn set_selinux_context(path: &Path, context: &SelinuxContext, selinux_enabled: Option<bool>) -> ModuleResult<bool> {
+    fn set_selinux_context(
+        path: &Path,
+        context: &SelinuxContext,
+        selinux_enabled: Option<bool>,
+    ) -> ModuleResult<bool> {
         use std::process::Command;
 
         if !context.is_set() {
@@ -284,7 +297,11 @@ impl FileModule {
 
     /// Stub for non-Linux systems
     #[cfg(not(target_os = "linux"))]
-    fn set_selinux_context(_path: &Path, context: &SelinuxContext, _selinux_enabled: Option<bool>) -> ModuleResult<bool> {
+    fn set_selinux_context(
+        _path: &Path,
+        context: &SelinuxContext,
+        _selinux_enabled: Option<bool>,
+    ) -> ModuleResult<bool> {
         if context.is_set() {
             // Warn that SELinux is not available but don't fail
             return Ok(false);
@@ -331,7 +348,13 @@ impl FileModule {
             // Fetch metadata once per file to reuse for permissions and owner checks
             // We use symlink_metadata because set_permissions/set_owner use it
             let metadata = if mode.is_some() || owner.is_some() || group.is_some() {
-                 Some(fs::symlink_metadata(entry_path).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to stat {}: {}", entry_path.display(), e)))?)
+                Some(fs::symlink_metadata(entry_path).map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to stat {}: {}",
+                        entry_path.display(),
+                        e
+                    ))
+                })?)
             } else {
                 None
             };
