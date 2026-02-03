@@ -17,8 +17,10 @@
 //! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use std::path::PathBuf;
 //! use rustible::prelude::*;
 //! use rustible::provisioning::state_backends::{BackendConfig, StateBackend};
+//! use rustible::provisioning::ProvisioningState;
 //!
 //! // Create a local backend
 //! let config = BackendConfig::Local {
@@ -26,10 +28,12 @@
 //! };
 //! let backend = config.create_backend().await?;
 //!
-//! // Load state
-//! if let Some(state) = backend.load().await? {
-//!     println!("Loaded {} resources", state.resources.len());
-//! }
+//! // Load or initialize state
+//! let state = backend
+//!     .load()
+//!     .await?
+//!     .unwrap_or_else(ProvisioningState::new);
+//! println!("Loaded {} resources", state.resources.len());
 //!
 //! // Save state
 //! backend.save(&state).await?;

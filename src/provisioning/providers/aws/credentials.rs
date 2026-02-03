@@ -13,7 +13,7 @@
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
 //! use serde_json::json;
-//! use rustible::provisioning::providers::aws::credentials::resolve_credentials;
+//! use rustible::provisioning::providers::aws::resolve_credentials;
 //!
 //! // From explicit config
 //! let config = json!({
@@ -596,6 +596,7 @@ fn mask_access_key(key: &str) -> String {
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
 /// use serde_json::json;
+/// use rustible::provisioning::providers::aws::resolve_credentials;
 ///
 /// // Explicit credentials
 /// let config = json!({

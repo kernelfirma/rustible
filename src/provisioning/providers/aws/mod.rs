@@ -143,6 +143,10 @@ const RESOURCE_TYPES: &[&str] = &[
 /// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 /// use rustible::prelude::*;
 /// use rustible::provisioning::providers::aws::AwsProvider;
+/// use std::collections::HashMap;
+///
+/// let mut tags = HashMap::new();
+/// tags.insert("env".to_string(), "prod".to_string());
 ///
 /// let provider = AwsProvider::new()
 ///     .with_region("us-west-2")
