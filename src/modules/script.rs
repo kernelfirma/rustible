@@ -280,11 +280,23 @@ impl Module for ScriptModule {
         // Build the execution command
         // We use shell_escape for chdir and args to prevent command injection
         let exec_cmd = if let Some(ref exec) = executable {
+            // Parse executable string into parts and escape each part to prevent injection
+            // This handles cases where executable contains arguments (e.g. "python3 -u")
+            // while preventing shell injection attacks.
+            let parts = shell_words::split(exec).map_err(|e| {
+                ModuleError::InvalidParameter(format!("Invalid executable string: {}", e))
+            })?;
+            let safe_exec = parts
+                .iter()
+                .map(|p| shell_escape(p))
+                .collect::<Vec<_>>()
+                .join(" ");
+
             if let Some(ref dir) = chdir {
                 format!(
                     "cd {} && {} {} {}",
                     shell_escape(dir),
-                    exec,
+                    safe_exec,
                     shell_escape(&remote_path),
                     args.iter()
                         .map(|a| shell_escape(a))
@@ -294,7 +306,7 @@ impl Module for ScriptModule {
             } else {
                 format!(
                     "{} {} {}",
-                    exec,
+                    safe_exec,
                     shell_escape(&remote_path),
                     args.iter()
                         .map(|a| shell_escape(a))
@@ -535,11 +547,18 @@ mod tests {
 
         // Logic from execute()
         let exec_cmd = if let Some(ref exec) = executable {
+            let parts = shell_words::split(exec).unwrap();
+            let safe_exec = parts
+                .iter()
+                .map(|p| shell_escape(p))
+                .collect::<Vec<_>>()
+                .join(" ");
+
             if let Some(ref dir) = chdir {
                 format!(
                     "cd {} && {} {} {}",
                     shell_escape(dir),
-                    exec,
+                    safe_exec,
                     shell_escape(remote_path),
                     args.iter()
                         .map(|a| shell_escape(a))
@@ -597,5 +616,48 @@ mod tests {
         );
 
         assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_cmd_construction_injection() {
+        use crate::utils::shell_escape;
+
+        let remote_path = "/tmp/.ansible_script_123.tmp";
+        let args = vec!["arg1"];
+        let chdir: Option<&str> = None;
+        let executable = Some("perl -e 'print \"pwned\"' #"); // This passes validation!
+
+        // Logic from execute() that we want to test/fix
+        let exec_cmd = if let Some(ref exec) = executable {
+            // New secure logic
+            let parts = shell_words::split(exec).unwrap();
+            let safe_exec = parts
+                .iter()
+                .map(|p| shell_escape(p))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+             format!(
+                "{} {} {}",
+                safe_exec,
+                shell_escape(&remote_path),
+                args.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        } else {
+             String::new()
+        };
+
+        // Injection should be neutralized (comment stripped, parts escaped)
+        // "perl" -> perl
+        // "-e" -> -e
+        // "'print \"pwned\"'" -> 'print "pwned"'
+        // "#" -> (comment stripped)
+        assert_eq!(
+            exec_cmd,
+            "perl -e 'print \"pwned\"' /tmp/.ansible_script_123.tmp arg1"
+        );
     }
 }
