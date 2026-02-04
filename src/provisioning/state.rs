@@ -611,7 +611,12 @@ impl ProvisioningState {
             ProvisioningError::StatePersistenceError(format!("Failed to read state file: {}", e))
         })?;
 
-        let state: Self = serde_json::from_str(&content)?;
+        Self::from_json_str(&content)
+    }
+
+    /// Parse and validate state from JSON string
+    pub fn from_json_str(content: &str) -> ProvisioningResult<Self> {
+        let state: Self = serde_json::from_str(content)?;
 
         // Verify checksum if present
         if let Some(ref stored_checksum) = state.checksum {
@@ -635,6 +640,13 @@ impl ProvisioningState {
         Ok(state)
     }
 
+    /// Update metadata prior to persistence
+    pub fn prepare_for_save(&mut self) {
+        self.serial += 1;
+        self.last_modified = Utc::now();
+        self.checksum = Some(self.compute_checksum());
+    }
+
     /// Save state to a file
     pub async fn save(&mut self, path: impl AsRef<Path>) -> ProvisioningResult<()> {
         let path = path.as_ref();
@@ -650,9 +662,7 @@ impl ProvisioningState {
         }
 
         // Update metadata
-        self.serial += 1;
-        self.last_modified = Utc::now();
-        self.checksum = Some(self.compute_checksum());
+        self.prepare_for_save();
 
         // Serialize to pretty JSON
         let content = serde_json::to_string_pretty(self)?;

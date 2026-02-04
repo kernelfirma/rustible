@@ -5,14 +5,16 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::CommandContext;
 
 #[cfg(feature = "provisioning")]
 use rustible::provisioning::executor::ExecutorConfig;
 #[cfg(feature = "provisioning")]
-use rustible::provisioning::{InfrastructureConfig, ProvisioningExecutor, ResourceId};
+use rustible::provisioning::{
+    BackendConfig, InfrastructureConfig, ProvisioningExecutor, ProvisioningState, ResourceId,
+};
 
 /// Arguments for the provision command
 #[derive(Parser, Debug, Clone)]
@@ -43,6 +45,13 @@ pub enum ProvisionCommands {
     /// Refresh state from cloud
     Refresh(RefreshArgs),
 
+    /// Migrate provisioning state to latest version
+    Migrate(MigrateArgs),
+
+    /// Import Terraform state into Rustible state
+    #[command(name = "import-terraform")]
+    ImportTerraform(ImportTerraformArgs),
+
     /// Initialize provisioning for a project
     Init(InitArgs),
 }
@@ -69,6 +78,10 @@ pub struct PlanArgs {
     /// Path to state file
     #[arg(long)]
     pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
 
     /// Generate destroy plan
     #[arg(long)]
@@ -98,6 +111,10 @@ pub struct ApplyArgs {
     #[arg(long)]
     pub state: Option<PathBuf>,
 
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
+
     /// Skip state backup
     #[arg(long)]
     pub no_backup: bool,
@@ -125,6 +142,10 @@ pub struct DestroyArgs {
     /// Path to state file
     #[arg(long)]
     pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
 }
 
 /// Arguments for import command
@@ -143,6 +164,10 @@ pub struct ImportArgs {
     /// Path to state file
     #[arg(long)]
     pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
 }
 
 /// Arguments for show command
@@ -151,6 +176,10 @@ pub struct ShowArgs {
     /// Path to state file
     #[arg(long, default_value = ".rustible/provisioning.state.json")]
     pub state: PathBuf,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
 
     /// Show specific resource address
     #[arg(short = 'a', long)]
@@ -175,6 +204,50 @@ pub struct RefreshArgs {
     /// Path to state file
     #[arg(long)]
     pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
+}
+
+/// Arguments for migrate command
+#[derive(Parser, Debug, Clone)]
+pub struct MigrateArgs {
+    /// Path to infrastructure configuration file
+    #[arg(long, default_value = "infrastructure.rustible.yml")]
+    pub config_file: PathBuf,
+
+    /// Path to state file (local only)
+    #[arg(long)]
+    pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
+}
+
+/// Arguments for import-terraform command
+#[derive(Parser, Debug, Clone)]
+pub struct ImportTerraformArgs {
+    /// Path to terraform state file
+    #[arg(long)]
+    pub tfstate: Option<PathBuf>,
+
+    /// Terraform backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub terraform_backend_config: Option<PathBuf>,
+
+    /// Path to infrastructure configuration file (used to locate .rustible)
+    #[arg(long, default_value = "infrastructure.rustible.yml")]
+    pub config_file: PathBuf,
+
+    /// Path to state file (local only)
+    #[arg(long)]
+    pub state: Option<PathBuf>,
+
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
 }
 
 /// Arguments for init command
@@ -188,9 +261,116 @@ pub struct InitArgs {
     #[arg(long, default_value = "local")]
     pub backend: String,
 
+    /// Backend configuration file (JSON/YAML)
+    #[arg(long)]
+    pub backend_config: Option<PathBuf>,
+
     /// Force reconfiguration even if already initialized
     #[arg(long)]
     pub reconfigure: bool,
+}
+
+#[cfg(feature = "provisioning")]
+fn project_root_for_config(config_file: &Path) -> PathBuf {
+    config_file
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+#[cfg(feature = "provisioning")]
+fn default_state_path(project_root: &Path) -> PathBuf {
+    project_root.join(".rustible").join("provisioning.state.json")
+}
+
+#[cfg(feature = "provisioning")]
+fn backend_config_candidates(project_root: &Path) -> Vec<PathBuf> {
+    vec![
+        project_root
+            .join(".rustible")
+            .join("provisioning.backend.json"),
+        project_root
+            .join(".rustible")
+            .join("provisioning.backend.yaml"),
+        project_root
+            .join(".rustible")
+            .join("provisioning.backend.yml"),
+    ]
+}
+
+#[cfg(feature = "provisioning")]
+fn resolve_backend_config(
+    explicit: Option<&PathBuf>,
+    project_root: &Path,
+) -> Result<Option<BackendConfig>> {
+    if let Some(path) = explicit {
+        return Ok(Some(BackendConfig::from_path(path)?));
+    }
+
+    for candidate in backend_config_candidates(project_root) {
+        if candidate.exists() {
+            return Ok(Some(BackendConfig::from_path(candidate)?));
+        }
+    }
+
+    Ok(None)
+}
+
+#[cfg(feature = "provisioning")]
+fn resolve_state_backend(
+    explicit_backend: Option<&PathBuf>,
+    project_root: &Path,
+    state_override: Option<&PathBuf>,
+) -> Result<(Option<BackendConfig>, PathBuf)> {
+    let mut state_path = state_override
+        .cloned()
+        .unwrap_or_else(|| default_state_path(project_root));
+
+    let mut backend_config = resolve_backend_config(explicit_backend, project_root)?;
+
+    if let Some(BackendConfig::Local { path }) = backend_config.as_ref() {
+        if state_override.is_some() {
+            backend_config = Some(BackendConfig::Local {
+                path: state_path.clone(),
+            });
+        } else {
+            state_path = path.clone();
+        }
+    }
+
+    Ok((backend_config, state_path))
+}
+
+#[cfg(feature = "provisioning")]
+async fn load_state_optional(
+    backend_config: &Option<BackendConfig>,
+    state_path: &Path,
+) -> Result<Option<ProvisioningState>> {
+    if let Some(config) = backend_config {
+        let backend = config.create_backend().await?;
+        Ok(backend.load().await?)
+    } else if state_path.exists() {
+        let state = ProvisioningState::load(state_path).await?;
+        Ok(Some(state))
+    } else {
+        Ok(None)
+    }
+}
+
+#[cfg(feature = "provisioning")]
+async fn save_state(
+    backend_config: &Option<BackendConfig>,
+    state_path: &Path,
+    state: &mut ProvisioningState,
+) -> Result<()> {
+    if let Some(config) = backend_config {
+        let backend = config.create_backend().await?;
+        state.prepare_for_save();
+        backend.save(state).await?;
+    } else {
+        state.save(state_path).await?;
+    }
+    Ok(())
 }
 
 impl PlanArgs {
@@ -214,12 +394,18 @@ impl PlanArgs {
 
         let config = InfrastructureConfig::from_file(&self.config_file).await?;
 
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
         let mut executor_config = ExecutorConfig::default();
         executor_config.refresh_before_plan = self.refresh;
         executor_config.targets = self.target.clone();
-        if let Some(ref state_path) = self.state {
-            executor_config.state_path = state_path.clone();
-        }
+        executor_config.state_backend = backend_config;
+        executor_config.state_path = state_path;
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -272,15 +458,21 @@ impl ApplyArgs {
 
         let config = InfrastructureConfig::from_file(&self.config_file).await?;
 
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
         let mut executor_config = ExecutorConfig::default();
         executor_config.auto_approve = self.auto_approve;
         executor_config.parallelism = self.parallelism;
         executor_config.targets = self.target.clone();
         executor_config.backup_state = !self.no_backup;
         executor_config.lock_state = !self.no_lock;
-        if let Some(ref state_path) = self.state {
-            executor_config.state_path = state_path.clone();
-        }
+        executor_config.state_backend = backend_config;
+        executor_config.state_path = state_path;
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -351,12 +543,18 @@ impl DestroyArgs {
 
         let config = InfrastructureConfig::from_file(&self.config_file).await?;
 
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
         let mut executor_config = ExecutorConfig::default();
         executor_config.auto_approve = self.auto_approve;
         executor_config.targets = self.target.clone();
-        if let Some(ref state_path) = self.state {
-            executor_config.state_path = state_path.clone();
-        }
+        executor_config.state_backend = backend_config;
+        executor_config.state_path = state_path;
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -438,10 +636,16 @@ impl ImportArgs {
 
         let config = InfrastructureConfig::from_file(&self.config_file).await?;
 
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
         let mut executor_config = ExecutorConfig::default();
-        if let Some(ref state_path) = self.state {
-            executor_config.state_path = state_path.clone();
-        }
+        executor_config.state_backend = backend_config;
+        executor_config.state_path = state_path;
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -472,15 +676,20 @@ impl ShowArgs {
     /// Execute the show command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
-        use rustible::provisioning::ProvisioningState;
+        let project_root = PathBuf::from(".");
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            Some(&self.state),
+        )?;
 
-        if !self.state.exists() {
+        let state = load_state_optional(&backend_config, &state_path).await?;
+
+        let Some(state) = state else {
             ctx.output
-                .warning("No state file found. Run 'provision init' or 'provision apply' first.");
+                .warning("No state found. Run 'provision init' or 'provision apply' first.");
             return Ok(0);
-        }
-
-        let state = ProvisioningState::load(&self.state).await?;
+        };
 
         if let Some(ref address) = self.address {
             // Show specific resource
@@ -542,11 +751,17 @@ impl RefreshArgs {
 
         let config = InfrastructureConfig::from_file(&self.config_file).await?;
 
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
         let mut executor_config = ExecutorConfig::default();
         executor_config.targets = self.target.clone();
-        if let Some(ref state_path) = self.state {
-            executor_config.state_path = state_path.clone();
-        }
+        executor_config.state_backend = backend_config;
+        executor_config.state_path = state_path;
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
         executor.refresh().await?;
@@ -565,8 +780,118 @@ impl RefreshArgs {
     }
 }
 
+impl MigrateArgs {
+    /// Execute the migrate command
+    #[cfg(feature = "provisioning")]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("INFRASTRUCTURE STATE MIGRATE");
+
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
+        let state = load_state_optional(&backend_config, &state_path).await?;
+        let Some(mut state) = state else {
+            ctx.output.warning("No state found to migrate.");
+            return Ok(0);
+        };
+
+        if !state.needs_migration() {
+            ctx.output.info("State is already at the latest version.");
+            return Ok(0);
+        }
+
+        let from_version = state.version;
+        state.migrate_to_current()?;
+        let to_version = state.version;
+
+        save_state(&backend_config, &state_path, &mut state).await?;
+
+        ctx.output.info(&format!(
+            "Migrated state from version {} to {}.",
+            from_version, to_version
+        ));
+
+        Ok(0)
+    }
+
+    #[cfg(not(feature = "provisioning"))]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output
+            .error("Provisioning feature not enabled. Rebuild with --features provisioning");
+        Ok(1)
+    }
+}
+
+impl ImportTerraformArgs {
+    /// Execute the import-terraform command
+    #[cfg(feature = "provisioning")]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("IMPORT TERRAFORM STATE");
+
+        let project_root = project_root_for_config(&self.config_file);
+        let (backend_config, state_path) = resolve_state_backend(
+            self.backend_config.as_ref(),
+            &project_root,
+            self.state.as_ref(),
+        )?;
+
+        let tf_state_json = if let Some(tfstate_path) = &self.tfstate {
+            if !tfstate_path.exists() {
+                ctx.output
+                    .error(&format!("Terraform state not found: {}", tfstate_path.display()));
+                return Ok(1);
+            }
+            std::fs::read_to_string(tfstate_path)?
+        } else if let Some(tf_backend_path) = &self.terraform_backend_config {
+            let tf_backend = BackendConfig::from_path(tf_backend_path)?;
+            let backend = tf_backend.create_backend().await?;
+            let content = backend.load_raw().await?;
+            match content {
+                Some(content) => content,
+                None => {
+                    ctx.output
+                        .error("Terraform backend returned no state content.");
+                    return Ok(1);
+                }
+            }
+        } else {
+            ctx.output.error(
+                "Provide --tfstate or --terraform-backend-config to import Terraform state.",
+            );
+            return Ok(1);
+        };
+
+        let tf_value: serde_json::Value = serde_json::from_str(&tf_state_json)?;
+        let mut state = ProvisioningState::import_from_terraform(&tf_value)?;
+
+        save_state(&backend_config, &state_path, &mut state).await?;
+
+        ctx.output.section("Import Successful");
+        ctx.output.info(&format!(
+            "Imported {} resources.",
+            state.resource_count()
+        ));
+        ctx.output
+            .info(&format!("Outputs: {}", state.outputs.len()));
+
+        Ok(0)
+    }
+
+    #[cfg(not(feature = "provisioning"))]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output
+            .error("Provisioning feature not enabled. Rebuild with --features provisioning");
+        Ok(1)
+    }
+}
+
 impl InitArgs {
     /// Execute the init command
+    #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
         ctx.output.banner("PROVISIONING INIT");
 
@@ -629,7 +954,168 @@ outputs: {}
                 .info(&format!("Created: {}", config_path.display()));
         }
 
-        // Create empty state file if not exists
+        let default_state_path = rustible_dir.join("provisioning.state.json");
+        let backend_config_path = rustible_dir.join("provisioning.backend.json");
+
+        let backend_string = self.backend.trim().to_lowercase();
+        let backend_source_provided = self.backend_config.is_some()
+            || backend_string.starts_with("http://")
+            || backend_string.starts_with("https://");
+
+        let backend_config = if let Some(path) = &self.backend_config {
+            BackendConfig::from_path(path)?
+        } else {
+            match backend_string.as_str() {
+                "local" => BackendConfig::Local {
+                    path: default_state_path.clone(),
+                },
+                "s3" => BackendConfig::S3 {
+                    bucket: "CHANGE_ME".to_string(),
+                    key: "rustible/provisioning.state.json".to_string(),
+                    region: "us-east-1".to_string(),
+                    encrypt: true,
+                    dynamodb_table: None,
+                },
+                "gcs" => BackendConfig::Gcs {
+                    bucket: "CHANGE_ME".to_string(),
+                    key: "rustible/provisioning.state.json".to_string(),
+                },
+                "azurerm" | "azure" | "azure_blob" => BackendConfig::AzureBlob {
+                    storage_account: "CHANGE_ME".to_string(),
+                    container: "rustible-state".to_string(),
+                    name: "provisioning.state.json".to_string(),
+                },
+                "consul" => BackendConfig::Consul {
+                    address: None,
+                    path: "rustible/state".to_string(),
+                    token: None,
+                },
+                "http" => BackendConfig::Http {
+                    address: "https://example.com/state".to_string(),
+                    lock_address: None,
+                    unlock_address: None,
+                    username: None,
+                    password: None,
+                },
+                value if value.starts_with("http://") || value.starts_with("https://") => {
+                    BackendConfig::Http {
+                        address: self.backend.clone(),
+                        lock_address: None,
+                        unlock_address: None,
+                        username: None,
+                        password: None,
+                    }
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Unsupported backend type: {}",
+                        self.backend
+                    ))
+                }
+            }
+        };
+
+        if !backend_config_path.exists() || self.reconfigure {
+            let content = serde_json::to_string_pretty(&backend_config)?;
+            std::fs::write(&backend_config_path, content)?;
+            ctx.output
+                .info(&format!("Created: {}", backend_config_path.display()));
+        } else {
+            ctx.output
+                .info(&format!("Backend config exists: {}", backend_config_path.display()));
+        }
+
+        if backend_source_provided || matches!(backend_config, BackendConfig::Local { .. }) {
+            match backend_config.create_backend().await {
+                Ok(backend) => {
+                    if backend.exists().await? {
+                        ctx.output.info("State already exists; skipping initialization.");
+                    } else {
+                        let mut state = ProvisioningState::new();
+                        state.prepare_for_save();
+                        backend.save(&state).await?;
+                        ctx.output.info("Initialized provisioning state.");
+                    }
+                }
+                Err(err) => {
+                    ctx.output.warning(&format!(
+                        "Skipping backend initialization: {}",
+                        err
+                    ));
+                }
+            }
+        } else {
+            ctx.output.warning(
+                "Backend config created with placeholders. Update it and re-run init to create state.",
+            );
+        }
+
+        ctx.output.section("Provisioning initialized successfully!");
+        ctx.output.info(&format!("Backend: {}", self.backend));
+        ctx.output.info("");
+        ctx.output.info("Next steps:");
+        ctx.output
+            .info("  1. Edit infrastructure.rustible.yml to define your resources");
+        ctx.output
+            .info("  2. Run 'rustible provision plan' to see what will be created");
+        ctx.output
+            .info("  3. Run 'rustible provision apply' to create resources");
+
+        Ok(0)
+    }
+
+    #[cfg(not(feature = "provisioning"))]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("PROVISIONING INIT");
+
+        let rustible_dir = self.path.join(".rustible");
+        if !rustible_dir.exists() {
+            std::fs::create_dir_all(&rustible_dir)?;
+            ctx.output
+                .info(&format!("Created: {}/", rustible_dir.display()));
+        }
+
+        let config_path = self.path.join("infrastructure.rustible.yml");
+        if !config_path.exists() || self.reconfigure {
+            let sample_config = r#"# Rustible Infrastructure Configuration
+# Terraform-like declarative infrastructure provisioning
+
+# Provider configuration
+providers:
+  aws:
+    region: us-east-1
+    # profile: default  # Optional: AWS CLI profile
+
+# Variables
+variables:
+  environment: development
+  project_name: my-project
+
+# Local values
+locals:
+  common_tags:
+    Environment: "{{ variables.environment }}"
+    Project: "{{ variables.project_name }}"
+    ManagedBy: rustible
+
+# Resources
+resources:
+  # Example VPC
+  # aws_vpc:
+  #   main:
+  #     cidr_block: "10.0.0.0/16"
+  #     enable_dns_hostnames: true
+  #     enable_dns_support: true
+  #     tags: "{{ locals.common_tags }}"
+
+# Outputs
+outputs: {}
+"#;
+            std::fs::write(&config_path, sample_config)?;
+            ctx.output
+                .info(&format!("Created: {}", config_path.display()));
+        }
+
         let state_path = rustible_dir.join("provisioning.state.json");
         if !state_path.exists() {
             let empty_state = r#"{
@@ -645,15 +1131,6 @@ outputs: {}
 
         ctx.output.section("Provisioning initialized successfully!");
         ctx.output.info(&format!("Backend: {}", self.backend));
-        ctx.output.info("");
-        ctx.output.info("Next steps:");
-        ctx.output
-            .info("  1. Edit infrastructure.rustible.yml to define your resources");
-        ctx.output
-            .info("  2. Run 'rustible provision plan' to see what will be created");
-        ctx.output
-            .info("  3. Run 'rustible provision apply' to create resources");
-
         Ok(0)
     }
 }
@@ -704,6 +1181,20 @@ mod tests {
     struct TestRefreshCli {
         #[command(flatten)]
         args: RefreshArgs,
+    }
+
+    #[derive(Parser, Debug)]
+    #[command(name = "test")]
+    struct TestMigrateCli {
+        #[command(flatten)]
+        args: MigrateArgs,
+    }
+
+    #[derive(Parser, Debug)]
+    #[command(name = "test")]
+    struct TestImportTerraformCli {
+        #[command(flatten)]
+        args: ImportTerraformArgs,
     }
 
     #[derive(Parser, Debug)]
@@ -1138,6 +1629,37 @@ mod tests {
         assert_eq!(cli.args.state, Some(PathBuf::from("prod.state.json")));
     }
 
+    // ==================== MigrateArgs Tests ====================
+
+    #[test]
+    fn test_migrate_args_default() {
+        let cli = TestMigrateCli::try_parse_from(["test"]).unwrap();
+        assert_eq!(
+            cli.args.config_file,
+            PathBuf::from("infrastructure.rustible.yml")
+        );
+        assert!(cli.args.state.is_none());
+    }
+
+    #[test]
+    fn test_migrate_args_with_state() {
+        let cli = TestMigrateCli::try_parse_from(["test", "--state", "custom-state.json"]).unwrap();
+        assert_eq!(cli.args.state, Some(PathBuf::from("custom-state.json")));
+    }
+
+    // ==================== ImportTerraformArgs Tests ====================
+
+    #[test]
+    fn test_import_terraform_args_with_tfstate() {
+        let cli = TestImportTerraformCli::try_parse_from([
+            "test",
+            "--tfstate",
+            "terraform.tfstate",
+        ])
+        .unwrap();
+        assert_eq!(cli.args.tfstate, Some(PathBuf::from("terraform.tfstate")));
+    }
+
     // ==================== InitArgs Tests ====================
 
     #[test]
@@ -1235,6 +1757,20 @@ mod tests {
     fn test_provision_commands_refresh() {
         let cli = TestProvisionCli::try_parse_from(["rustible", "refresh"]).unwrap();
         assert!(matches!(cli.command, ProvisionCommands::Refresh(_)));
+    }
+
+    #[test]
+    fn test_provision_commands_migrate() {
+        let cli = TestProvisionCli::try_parse_from(["rustible", "migrate"]).unwrap();
+        assert!(matches!(cli.command, ProvisionCommands::Migrate(_)));
+    }
+
+    #[test]
+    fn test_provision_commands_import_terraform() {
+        let cli =
+            TestProvisionCli::try_parse_from(["rustible", "import-terraform", "--tfstate", "state.tfstate"])
+                .unwrap();
+        assert!(matches!(cli.command, ProvisionCommands::ImportTerraform(_)));
     }
 
     #[test]
@@ -1456,6 +1992,7 @@ mod tests {
             target: vec!["aws_vpc.main".to_string()],
             refresh: false,
             state: Some(PathBuf::from("state.json")),
+            backend_config: None,
             destroy: true,
         };
         let cloned = args.clone();
@@ -1475,6 +2012,7 @@ mod tests {
             target: vec!["aws_vpc.main".to_string()],
             parallelism: 5,
             state: Some(PathBuf::from("state.json")),
+            backend_config: None,
             no_backup: true,
             no_lock: true,
         };
@@ -1491,6 +2029,7 @@ mod tests {
             target: vec![],
             refresh: true,
             state: None,
+            backend_config: None,
             destroy: false,
         });
         let debug_str = format!("{:?}", plan);

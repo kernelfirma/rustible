@@ -8,8 +8,8 @@
 //!
 //! - **LocalBackend**: File-based storage with optional file locking
 //! - **S3Backend**: AWS S3 storage with optional DynamoDB locking (feature-gated)
-//! - **GcsBackend**: Google Cloud Storage (stub, feature-gated)
-//! - **AzureBlobBackend**: Azure Blob Storage (stub, feature-gated)
+//! - **GcsBackend**: Google Cloud Storage (feature-gated)
+//! - **AzureBlobBackend**: Azure Blob Storage (feature-gated)
 //! - **HttpBackend**: HTTP-based storage for Terraform Cloud compatibility
 //!
 //! ## Usage
@@ -17,8 +17,10 @@
 //! ```rust,no_run
 //! # #[tokio::main]
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//! use std::path::PathBuf;
 //! use rustible::prelude::*;
 //! use rustible::provisioning::state_backends::{BackendConfig, StateBackend};
+//! use rustible::provisioning::ProvisioningState;
 //!
 //! // Create a local backend
 //! let config = BackendConfig::Local {
@@ -26,10 +28,12 @@
 //! };
 //! let backend = config.create_backend().await?;
 //!
-//! // Load state
-//! if let Some(state) = backend.load().await? {
-//!     println!("Loaded {} resources", state.resources.len());
-//! }
+//! // Load or initialize state
+//! let state = backend
+//!     .load()
+//!     .await?
+//!     .unwrap_or_else(ProvisioningState::new);
+//! println!("Loaded {} resources", state.resources.len());
 //!
 //! // Save state
 //! backend.save(&state).await?;
@@ -37,7 +41,7 @@
 //! # }
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -58,6 +62,9 @@ use super::state_lock::{FileLock, LockBackend, LockInfo};
 pub trait StateBackend: Send + Sync {
     /// Get the backend name
     fn name(&self) -> &str;
+
+    /// Load raw state content from backend
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>>;
 
     /// Load state from backend
     async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>>;
@@ -109,7 +116,7 @@ impl StateBackend for LocalBackend {
         "local"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         if !self.state_path.exists() {
             return Ok(None);
         }
@@ -123,7 +130,16 @@ impl StateBackend for LocalBackend {
                 ))
             })?;
 
-        let state: ProvisioningState = serde_json::from_str(&content)?;
+        Ok(Some(content))
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
         Ok(Some(state))
     }
 
@@ -265,7 +281,7 @@ impl StateBackend for S3Backend {
         "s3"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         let result = self
             .client
             .get_object()
@@ -290,8 +306,7 @@ impl StateBackend for S3Backend {
                     ))
                 })?;
 
-                let state: ProvisioningState = serde_json::from_str(&content)?;
-                Ok(Some(state))
+                Ok(Some(content))
             }
             Err(sdk_err) => {
                 // Check if it's a "not found" error
@@ -306,6 +321,16 @@ impl StateBackend for S3Backend {
                 }
             }
         }
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -405,6 +430,8 @@ pub struct GcsBackend {
     bucket: String,
     /// Object key (path within bucket)
     key: String,
+    /// Base URL for API (override for tests)
+    base_url: String,
     /// HTTP client
     client: reqwest::Client,
     /// Request timeout
@@ -420,10 +447,23 @@ impl GcsBackend {
         Self {
             bucket,
             key,
+            base_url: "https://storage.googleapis.com".to_string(),
             client: reqwest::Client::new(),
             timeout: Duration::from_secs(30),
             access_token: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Override base URL (useful for tests)
+    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = base_url.into();
+        self
+    }
+
+    /// Inject an access token (useful for tests)
+    pub fn with_access_token(mut self, token: impl Into<String>) -> Self {
+        *self.access_token.write() = Some(token.into());
+        self
     }
 
     /// Create with custom timeout
@@ -445,7 +485,8 @@ impl GcsBackend {
     /// Get GCS object URL
     fn object_url(&self) -> String {
         format!(
-            "https://storage.googleapis.com/storage/v1/b/{}/o/{}",
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url.trim_end_matches('/'),
             self.bucket,
             urlencoding::encode(&self.key)
         )
@@ -454,7 +495,8 @@ impl GcsBackend {
     /// Get GCS upload URL
     fn upload_url(&self) -> String {
         format!(
-            "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+            "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+            self.base_url.trim_end_matches('/'),
             self.bucket,
             urlencoding::encode(&self.key)
         )
@@ -579,7 +621,7 @@ impl StateBackend for GcsBackend {
         "gcs"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         let request = self
             .build_request(reqwest::Method::GET, &self.download_url())
             .await?;
@@ -601,8 +643,7 @@ impl StateBackend for GcsBackend {
                     return Ok(None);
                 }
 
-                let state: ProvisioningState = serde_json::from_str(&content)?;
-                Ok(Some(state))
+                Ok(Some(content))
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => Err(ProvisioningError::CloudApiError(format!(
@@ -610,6 +651,16 @@ impl StateBackend for GcsBackend {
                 status
             ))),
         }
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -695,6 +746,8 @@ pub struct AzureBlobBackend {
     container: String,
     /// Blob name
     blob_name: String,
+    /// Base endpoint override (useful for tests)
+    endpoint_override: Option<String>,
     /// HTTP client
     client: reqwest::Client,
     /// Request timeout
@@ -713,6 +766,7 @@ impl AzureBlobBackend {
             storage_account,
             container,
             blob_name,
+            endpoint_override: None,
             client: reqwest::Client::new(),
             timeout: Duration::from_secs(30),
             use_lease_lock: true,
@@ -729,6 +783,12 @@ impl AzureBlobBackend {
     /// Disable lease-based locking
     pub fn without_lease_lock(mut self) -> Self {
         self.use_lease_lock = false;
+        self
+    }
+
+    /// Override base endpoint (useful for tests)
+    pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.endpoint_override = Some(endpoint.into());
         self
     }
 
@@ -749,10 +809,19 @@ impl AzureBlobBackend {
 
     /// Get blob URL
     fn blob_url(&self) -> String {
-        format!(
-            "https://{}.blob.core.windows.net/{}/{}",
-            self.storage_account, self.container, self.blob_name
-        )
+        if let Some(ref endpoint) = self.endpoint_override {
+            format!(
+                "{}/{}/{}",
+                endpoint.trim_end_matches('/'),
+                self.container,
+                self.blob_name
+            )
+        } else {
+            format!(
+                "https://{}.blob.core.windows.net/{}/{}",
+                self.storage_account, self.container, self.blob_name
+            )
+        }
     }
 
     /// Get authorization header using available credentials
@@ -856,7 +925,7 @@ impl StateBackend for AzureBlobBackend {
         "azurerm"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         let request = self
             .build_request(reqwest::Method::GET, &self.blob_url())
             .await?;
@@ -877,8 +946,7 @@ impl StateBackend for AzureBlobBackend {
                     return Ok(None);
                 }
 
-                let state: ProvisioningState = serde_json::from_str(&content)?;
-                Ok(Some(state))
+                Ok(Some(content))
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => {
@@ -889,6 +957,16 @@ impl StateBackend for AzureBlobBackend {
                 )))
             }
         }
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -952,6 +1030,7 @@ impl StateBackend for AzureBlobBackend {
                 storage_account: self.storage_account.clone(),
                 container: self.container.clone(),
                 blob_name: self.blob_name.clone(),
+                endpoint_override: self.endpoint_override.clone(),
                 client: self.client.clone(),
                 timeout: self.timeout,
                 lease_id: Arc::clone(&self.lease_id),
@@ -968,6 +1047,7 @@ struct AzureBlobLeaseLock {
     storage_account: String,
     container: String,
     blob_name: String,
+    endpoint_override: Option<String>,
     client: reqwest::Client,
     timeout: Duration,
     lease_id: Arc<RwLock<Option<String>>>,
@@ -976,10 +1056,19 @@ struct AzureBlobLeaseLock {
 #[cfg(feature = "azure")]
 impl AzureBlobLeaseLock {
     fn blob_url(&self) -> String {
-        format!(
-            "https://{}.blob.core.windows.net/{}/{}",
-            self.storage_account, self.container, self.blob_name
-        )
+        if let Some(ref endpoint) = self.endpoint_override {
+            format!(
+                "{}/{}/{}",
+                endpoint.trim_end_matches('/'),
+                self.container,
+                self.blob_name
+            )
+        } else {
+            format!(
+                "https://{}.blob.core.windows.net/{}/{}",
+                self.storage_account, self.container, self.blob_name
+            )
+        }
     }
 
     fn get_sas_suffix(&self) -> String {
@@ -1268,7 +1357,7 @@ impl StateBackend for ConsulBackend {
         "consul"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         let response = self
             .build_request(reqwest::Method::GET, &self.kv_url())
             .query(&[("raw", "true")])
@@ -1291,8 +1380,7 @@ impl StateBackend for ConsulBackend {
                     return Ok(None);
                 }
 
-                let state: ProvisioningState = serde_json::from_str(&content)?;
-                Ok(Some(state))
+                Ok(Some(content))
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => Err(ProvisioningError::StatePersistenceError(format!(
@@ -1300,6 +1388,16 @@ impl StateBackend for ConsulBackend {
                 status
             ))),
         }
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -1682,7 +1780,7 @@ impl StateBackend for HttpBackend {
         "http"
     }
 
-    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
         let response = self
             .build_request(reqwest::Method::GET, &self.address)
             .send()
@@ -1704,8 +1802,7 @@ impl StateBackend for HttpBackend {
                     return Ok(None);
                 }
 
-                let state: ProvisioningState = serde_json::from_str(&content)?;
-                Ok(Some(state))
+                Ok(Some(content))
             }
             status if status == reqwest::StatusCode::NOT_FOUND => Ok(None),
             status => Err(ProvisioningError::StatePersistenceError(format!(
@@ -1713,6 +1810,16 @@ impl StateBackend for HttpBackend {
                 status
             ))),
         }
+    }
+
+    async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -2004,6 +2111,26 @@ pub enum BackendConfig {
 }
 
 impl BackendConfig {
+    /// Load a backend configuration from a JSON or YAML file
+    pub fn from_path(path: impl AsRef<Path>) -> ProvisioningResult<Self> {
+        let path = path.as_ref();
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!(
+                "Failed to read backend config: {}",
+                e
+            ))
+        })?;
+
+        match path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("json")
+        {
+            "yaml" | "yml" => serde_yaml::from_str(&content).map_err(ProvisioningError::from),
+            _ => serde_json::from_str(&content).map_err(ProvisioningError::from),
+        }
+    }
+
     /// Create a backend from this configuration
     pub async fn create_backend(&self) -> ProvisioningResult<Box<dyn StateBackend>> {
         match self {
@@ -2141,8 +2268,24 @@ impl StateBackend for MemoryBackend {
         "memory"
     }
 
+    async fn load_raw(&self) -> ProvisioningResult<Option<String>> {
+        let state = self.state.read();
+        if let Some(state) = state.as_ref() {
+            let content = serde_json::to_string_pretty(state)?;
+            Ok(Some(content))
+        } else {
+            Ok(None)
+        }
+    }
+
     async fn load(&self) -> ProvisioningResult<Option<ProvisioningState>> {
-        Ok(self.state.read().clone())
+        let content = match self.load_raw().await? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
+
+        let state = ProvisioningState::from_json_str(&content)?;
+        Ok(Some(state))
     }
 
     async fn save(&self, state: &ProvisioningState) -> ProvisioningResult<()> {
@@ -2172,8 +2315,11 @@ impl StateBackend for MemoryBackend {
 mod tests {
     use super::*;
     use crate::provisioning::state::{ResourceId, ResourceState};
+    use crate::provisioning::state_lock::LockInfo;
     use tempfile::TempDir;
     use tokio::time::Duration;
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn create_test_state() -> ProvisioningState {
         let mut state = ProvisioningState::new();
@@ -2523,5 +2669,341 @@ mod tests {
             }
             _ => panic!("Expected Azure config"),
         }
+    }
+
+    #[test]
+    fn test_backend_config_from_path_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("backend.json");
+        let config = BackendConfig::Local {
+            path: PathBuf::from("state.json"),
+        };
+        std::fs::write(&path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+        let loaded = BackendConfig::from_path(&path).unwrap();
+        match loaded {
+            BackendConfig::Local { path } => {
+                assert_eq!(path, PathBuf::from("state.json"));
+            }
+            _ => panic!("Expected local backend"),
+        }
+    }
+
+    #[test]
+    fn test_backend_config_from_path_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("backend.yaml");
+        let yaml = r#"
+type: local
+path: state.json
+"#;
+        std::fs::write(&path, yaml).unwrap();
+
+        let loaded = BackendConfig::from_path(&path).unwrap();
+        match loaded {
+            BackendConfig::Local { path } => {
+                assert_eq!(path, PathBuf::from("state.json"));
+            }
+            _ => panic!("Expected local backend"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_http_backend_load_save_exists_delete() {
+        let server = MockServer::start().await;
+        let state = create_test_state();
+        let body = serde_json::to_string_pretty(&state).unwrap();
+
+        Mock::given(method("GET"))
+            .and(path("/state"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body.clone()))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/state"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("HEAD"))
+            .and(path("/state"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/state"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let backend = HttpBackend::new(format!("{}/state", server.uri()));
+        let loaded = backend.load().await.unwrap().unwrap();
+        assert_eq!(loaded.resources.len(), 1);
+
+        let raw = backend.load_raw().await.unwrap().unwrap();
+        assert!(raw.contains("aws_vpc"));
+
+        backend.save(&state).await.unwrap();
+        assert!(backend.exists().await.unwrap());
+        backend.delete().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_http_lock_backend() {
+        let server = MockServer::start().await;
+        let lock_info = LockInfo::new("apply");
+
+        Mock::given(method("PUT"))
+            .and(path("/lock"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/lock"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(serde_json::to_string(&lock_info).unwrap()),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/unlock"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let backend = HttpBackend::new(format!("{}/state", server.uri()))
+            .with_lock_address(format!("{}/lock", server.uri()))
+            .with_unlock_address(format!("{}/unlock", server.uri()));
+
+        let lock_backend = backend.lock_backend().unwrap();
+        assert!(lock_backend
+            .acquire(&lock_info, Duration::from_secs(1))
+            .await
+            .unwrap());
+
+        let fetched = lock_backend.get_lock().await.unwrap().unwrap();
+        assert_eq!(fetched.operation, lock_info.operation);
+
+        assert!(lock_backend.release(&lock_info.id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_consul_backend_load_save_exists_delete() {
+        let server = MockServer::start().await;
+        let state = create_test_state();
+        let body = serde_json::to_string_pretty(&state).unwrap();
+
+        Mock::given(method("GET"))
+            .and(path("/v1/kv/rustible/state"))
+            .and(query_param("raw", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body.clone()))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/v1/kv/rustible/state"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("true"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/kv/rustible/state"))
+            .and(query_param("keys", ""))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/v1/kv/rustible/state"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let backend = ConsulBackend::new("rustible/state".to_string())
+            .with_address(server.uri());
+
+        let loaded = backend.load().await.unwrap().unwrap();
+        assert_eq!(loaded.resources.len(), 1);
+        backend.save(&state).await.unwrap();
+        assert!(backend.exists().await.unwrap());
+        backend.delete().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_consul_lock_backend() {
+        let server = MockServer::start().await;
+        let lock_info = LockInfo::new("apply");
+
+        Mock::given(method("PUT"))
+            .and(path("/v1/session/create"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"ID":"session-123"}"#),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/v1/kv/rustible/state/.lock"))
+            .and(query_param("acquire", "session-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("true"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/kv/rustible/state/.lock"))
+            .and(query_param("raw", "true"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(serde_json::to_string(&lock_info).unwrap()),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/v1/kv/rustible/state/.lock"))
+            .and(query_param("release", "session-123"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/v1/session/destroy/session-123"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/v1/kv/rustible/state/.lock"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let backend = ConsulBackend::new("rustible/state".to_string())
+            .with_address(server.uri());
+        let lock_backend = backend.lock_backend().unwrap();
+
+        assert!(lock_backend
+            .acquire(&lock_info, Duration::from_secs(5))
+            .await
+            .unwrap());
+        let fetched = lock_backend.get_lock().await.unwrap().unwrap();
+        assert_eq!(fetched.operation, lock_info.operation);
+        assert!(lock_backend.release(&lock_info.id).await.unwrap());
+        lock_backend.force_unlock(&lock_info.id).await.unwrap();
+    }
+
+    #[cfg(feature = "gcp")]
+    #[tokio::test]
+    async fn test_gcs_backend_load_save_exists_delete() {
+        let server = MockServer::start().await;
+        let state = create_test_state();
+        let body = serde_json::to_string_pretty(&state).unwrap();
+        let encoded_key = urlencoding::encode("test/state.json");
+
+        Mock::given(method("GET"))
+            .and(path(format!("/storage/v1/b/test-bucket/o/{}", encoded_key)))
+            .and(query_param("alt", "media"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body.clone()))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/upload/storage/v1/b/test-bucket/o"))
+            .and(query_param("uploadType", "media"))
+            .and(query_param("name", encoded_key.as_ref()))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/storage/v1/b/test-bucket/o/{}", encoded_key)))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path(format!("/storage/v1/b/test-bucket/o/{}", encoded_key)))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        let backend = GcsBackend::new("test-bucket".to_string(), "test/state.json".to_string())
+            .with_base_url(server.uri())
+            .with_access_token("token");
+
+        let loaded = backend.load().await.unwrap().unwrap();
+        assert_eq!(loaded.resources.len(), 1);
+        backend.save(&state).await.unwrap();
+        assert!(backend.exists().await.unwrap());
+        backend.delete().await.unwrap();
+    }
+
+    #[cfg(feature = "azure")]
+    #[tokio::test]
+    async fn test_azure_backend_load_save_exists_delete() {
+        let server = MockServer::start().await;
+        let state = create_test_state();
+        let body = serde_json::to_string_pretty(&state).unwrap();
+
+        std::env::set_var("AZURE_STORAGE_SAS_TOKEN", "sig=TEST");
+
+        Mock::given(method("GET"))
+            .and(path("/container/state.json"))
+            .and(query_param("sig", "TEST"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body.clone()))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/container/state.json"))
+            .and(query_param("sig", "TEST"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("HEAD"))
+            .and(path("/container/state.json"))
+            .and(query_param("sig", "TEST"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/container/state.json"))
+            .and(query_param("sig", "TEST"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let backend = AzureBlobBackend::new(
+            "account".to_string(),
+            "container".to_string(),
+            "state.json".to_string(),
+        )
+        .with_endpoint(server.uri());
+
+        let loaded = backend.load().await.unwrap().unwrap();
+        assert_eq!(loaded.resources.len(), 1);
+        backend.save(&state).await.unwrap();
+        assert!(backend.exists().await.unwrap());
+        backend.delete().await.unwrap();
+
+        std::env::remove_var("AZURE_STORAGE_SAS_TOKEN");
+    }
+
+    #[cfg(feature = "aws")]
+    #[tokio::test]
+    #[ignore]
+    async fn test_s3_backend_load_save_exists_delete() {
+        let bucket = match std::env::var("RUSTIBLE_TEST_S3_BUCKET") {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let key = std::env::var("RUSTIBLE_TEST_S3_KEY")
+            .unwrap_or_else(|_| "rustible/test-state.json".to_string());
+        let region = std::env::var("AWS_REGION")
+            .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
+            .unwrap_or_else(|_| "us-east-1".to_string());
+
+        let backend = S3Backend::new(bucket, key, region, false, None)
+            .await
+            .unwrap();
+
+        let mut state = create_test_state();
+        state.prepare_for_save();
+        backend.save(&state).await.unwrap();
+
+        assert!(backend.exists().await.unwrap());
+        let loaded = backend.load().await.unwrap().unwrap();
+        assert_eq!(loaded.resources.len(), state.resources.len());
+
+        backend.delete().await.unwrap();
     }
 }

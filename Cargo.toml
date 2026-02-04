@@ -8,7 +8,16 @@ local = []
 docker = ["dep:bollard"]
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 # AWS cloud modules (EC2, S3, VPC, etc.) - requires optional AWS SDK
-aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-s3", "dep:aws-sdk-iam"]
+aws = [
+  "dep:aws-config",
+  "dep:aws-sdk-ec2",
+  "dep:aws-sdk-s3",
+  "dep:aws-sdk-iam",
+  "dep:aws-sdk-autoscaling",
+  "dep:aws-sdk-elasticloadbalancingv2",
+  "dep:aws-sdk-rds",
+  "dep:aws-sdk-dynamodb",
+]
 # Azure cloud modules (VMs, Resource Groups, Networking) - stub implementation
 azure = []
 # GCP cloud modules (Compute Engine, Networking) - stub implementation
@@ -183,6 +192,10 @@ aws-config = { version = "1.1", optional = true }
 aws-sdk-ec2 = { version = "1.15", optional = true }
 aws-sdk-s3 = { version = "1.15", optional = true }
 aws-sdk-iam = { version = "1.15", optional = true }
+aws-sdk-autoscaling = { version = "1.15", optional = true }
+aws-sdk-elasticloadbalancingv2 = { version = "1.15", optional = true }
+aws-sdk-rds = { version = "1.15", optional = true }
+aws-sdk-dynamodb = { version = "1.15", optional = true }
 
 # Hostname resolution
 hostname = "0.4"

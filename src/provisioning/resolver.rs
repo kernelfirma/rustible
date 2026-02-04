@@ -20,6 +20,7 @@
 //! # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //! use rustible::prelude::*;
 //! use rustible::provisioning::resolver::{TemplateResolver, ResolverContext};
+//! use serde_json::json;
 //!
 //! let resolver = TemplateResolver::new();
 //! let mut ctx = ResolverContext::new();

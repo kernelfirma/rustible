@@ -62,20 +62,21 @@
 //! ```
 //!
 //! ```rust,no_run
-//! use rustible::prelude::*;
-//! use rustible::provisioning::{ProvisioningExecutor, InfrastructureConfig};
+//! use rustible::provisioning::{
+//!     InfrastructureConfig, ProvisioningExecutor, ProvisioningResult,
+//! };
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> ProvisioningResult<()> {
 //!     let config = InfrastructureConfig::from_file("infrastructure.rustible.yml").await?;
-//!     let executor = ProvisioningExecutor::new(config)?;
+//!     let executor = ProvisioningExecutor::new(config).await?;
 //!
 //!     // Generate execution plan
 //!     let plan = executor.plan().await?;
 //!     println!("{}", plan.summary());
 //!
 //!     // Apply changes
-//!     let result = executor.apply().await?;
+//!     let _result = executor.apply(&plan).await?;
 //!     Ok(())
 //! }
 //! ```
