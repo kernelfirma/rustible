@@ -413,6 +413,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("!", "history expansion !"),
         ("\\", "shell escaping \\"),
         ("$", "variable expansion $"),
+        ("#", "shell comment #"),
     ];
 
     for (pattern, description) in dangerous_patterns {
@@ -1915,6 +1916,14 @@ mod tests {
         // Extended checks
         assert!(validate_command_args("bash;echo").is_err());
         assert!(validate_command_args("cmd&").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_args_rejects_hash() {
+        // This test asserts that validation FAILS when a hash is present.
+        // Currently, without the fix, this test would fail (because it returns Ok).
+        // The goal is to make this test pass by fixing the code to return Err.
+        assert!(validate_command_args("bash -c 'echo pwned' #").is_err());
     }
 
     #[test]

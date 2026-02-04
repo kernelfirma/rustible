@@ -31,7 +31,7 @@
 ## 2024-05-27 - Path Traversal in Systemd Unit Module
 **Vulnerability:** The `systemd_unit` module accepted arbitrary paths for `unit_path` without validation, allowing creation of files outside intended directories via `..` (e.g., `/etc/systemd/system/../../tmp/evil.service`).
 **Learning:** Relying on `Path::join` without inspecting components allows directory traversal if user input contains `..`. System modules often run with elevated privileges, making filesystem boundaries critical.
-**Prevention:** Validate all file paths from user input. Enforce absolute paths where required and explicitly reject paths containing `ParentDir` (`..`) components to prevent directory traversal.
+**Prevention:** Validate all file paths from user input. Enforce absolute paths where required and explicitly reject paths containing `ParentDir` (`..`) components or absolute paths.
 
 ## 2024-05-28 - ZipSlip/Path Traversal in Unarchive Module
 **Vulnerability:** The `unarchive` module was vulnerable to a path traversal attack (ZipSlip) when extracting tar archives. Specifically, it joined the destination directory with the archive entry path without validation before checking for file existence (for the `keep_newer` feature). This allowed an attacker to probe for the existence and modification time of arbitrary files on the system by crafting a tarball with entries like `../etc/passwd`.
@@ -66,3 +66,8 @@
 **Vulnerability:** The `validate_command_args` function used a blacklist approach that missed several dangerous shell metacharacters (`*`, `?`, `{`, `}`, `(`, `)`, `[`, `]`, `\`, `!`). This could allow attackers to bypass validation and inject commands or arguments (e.g., via brace expansion `{echo,pwn}` or globbing) in modules like `script` and `service`.
 **Learning:** Blacklists are inherently fragile for security validation because it is difficult to anticipate all possible dangerous inputs. Shell expansion rules are complex and vary by shell.
 **Prevention:** The blacklist in `validate_command_args` was strengthened to include these missing characters. Where possible, avoid constructing shell commands from untrusted strings; prefer passing arguments arrays to `std::process::Command` directly.
+
+## 2025-06-01 - Command Injection via Comments
+**Vulnerability:** The `validate_command_args` utility did not blacklist the `#` character. This allowed an attacker to inject command arguments (e.g., in `ScriptModule`'s `executable` parameter) that included a shell comment, effectively neutralizing subsequent parts of the constructed command string (such as the target script path or arguments) and allowing the injected executable to run with arbitrary arguments or as a standalone command.
+**Learning:** In shell command construction, even seemingly benign characters like `#` can be weaponized to alter control flow (by truncating execution). Validation must account for all shell metacharacters, including those that don't execute commands directly but modify how the shell parses the line.
+**Prevention:** Added `#` to the blacklist in `validate_command_args`. When constructing shell commands, consider all shell metacharacters including comments.
