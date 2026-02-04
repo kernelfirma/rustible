@@ -479,9 +479,9 @@ impl ProvisionerArgs {
             .hostname(context.host.clone())
             .port(context.port)
             .user(context.user.clone())
-            .timeout(context.connection_info.timeout)
-            .retries(context.connection_info.retries)
-            .retry_delay(context.connection_info.retry_delay);
+            .timeout(context.connection_info.timeout);
+        host_config.retries = Some(context.connection_info.retries);
+        host_config.retry_delay = Some(context.connection_info.retry_delay);
 
         if let Some(ref key) = context.connection_info.private_key {
             host_config.identity_file = Some(key.clone());
