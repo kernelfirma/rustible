@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use rustible::template::TemplateEngine;
 
 fn render(engine: &TemplateEngine, template: &str, vars: &HashMap<String, JsonValue>) -> String {
-    engine.render(template, vars).expect("render should succeed")
+    engine
+        .render(template, vars)
+        .expect("render should succeed")
 }
 
 #[test]
@@ -108,7 +110,9 @@ fn test_template_and_expression_cache_stats() {
     let (_, expr_count_before) = engine.cache_stats();
     let mut expr_vars = IndexMap::new();
     expr_vars.insert("name".to_string(), json!("cache"));
-    assert!(engine.evaluate_condition("name == 'cache'", &expr_vars).unwrap());
+    assert!(engine
+        .evaluate_condition("name == 'cache'", &expr_vars)
+        .unwrap());
     let (template_count, expr_count) = engine.cache_stats();
 
     assert!(template_count >= 1);

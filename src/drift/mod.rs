@@ -3,12 +3,12 @@
 //! This module provides comprehensive drift detection capabilities to identify
 //! when actual system state diverges from desired configuration state.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
-use crate::connection::{Connection, CommandResult};
+use crate::connection::{CommandResult, Connection};
 
 /// Drift detection configuration
 #[derive(Debug, Clone)]
@@ -65,10 +65,7 @@ impl DriftConfig {
             check_services: true,
             check_users: false,
             check_permissions: false,
-            ignore_patterns: vec![
-                "/var/log/*".to_string(),
-                "/tmp/*".to_string(),
-            ],
+            ignore_patterns: vec!["/var/log/*".to_string(), "/tmp/*".to_string()],
         }
     }
 }
@@ -145,7 +142,7 @@ impl DriftItem {
     ) -> Self {
         let host_string = host.into();
         let id = format!("{}-{}", host_string, uuid::Uuid::new_v4());
-        
+
         Self {
             id,
             host: host_string,
@@ -260,7 +257,7 @@ impl HostDriftReport {
         if self.low_count > 0 {
             parts.push(format!("{} low", self.low_count));
         }
-        
+
         if parts.is_empty() {
             "No drift detected".to_string()
         } else {
@@ -306,12 +303,12 @@ impl DriftReport {
             self.hosts_with_drift += 1;
         }
         self.total_drifts += host_report.total_count;
-        
+
         self.summary.critical += host_report.critical_count;
         self.summary.high += host_report.high_count;
         self.summary.medium += host_report.medium_count;
         self.summary.low += host_report.low_count;
-        
+
         self.hosts.push(host_report);
     }
 
@@ -326,13 +323,16 @@ impl DriftReport {
             "Drift Report - {}\n",
             self.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
         );
-        output.push_str(&format!("Hosts checked: {}/{}\n", self.hosts_with_drift, self.total_hosts));
+        output.push_str(&format!(
+            "Hosts checked: {}/{}\n",
+            self.hosts_with_drift, self.total_hosts
+        ));
         output.push_str(&format!("Total drifts: {}\n", self.total_drifts));
         output.push_str(&format!("  Critical: {}\n", self.summary.critical));
         output.push_str(&format!("  High: {}\n", self.summary.high));
         output.push_str(&format!("  Medium: {}\n", self.summary.medium));
         output.push_str(&format!("  Low: {}\n", self.summary.low));
-        
+
         output
     }
 }
@@ -847,15 +847,9 @@ fn parse_package_state(result: &CommandResult) -> (bool, Option<String>) {
 fn parse_service_state(output: &str) -> (bool, bool) {
     let parts: Vec<&str> = output.split("---").collect();
 
-    let active = parts
-        .first()
-        .map(|s| s.trim() == "active")
-        .unwrap_or(false);
+    let active = parts.first().map(|s| s.trim() == "active").unwrap_or(false);
 
-    let enabled = parts
-        .get(1)
-        .map(|s| s.trim() == "enabled")
-        .unwrap_or(false);
+    let enabled = parts.get(1).map(|s| s.trim() == "enabled").unwrap_or(false);
 
     (active, enabled)
 }
@@ -935,11 +929,7 @@ mod tests {
             Ok(())
         }
 
-        async fn download(
-            &self,
-            _remote_path: &Path,
-            _local_path: &Path,
-        ) -> ConnectionResult<()> {
+        async fn download(&self, _remote_path: &Path, _local_path: &Path) -> ConnectionResult<()> {
             Ok(())
         }
 
@@ -1090,10 +1080,8 @@ mod tests {
 
     #[test]
     fn test_parse_package_state_rpm_not_installed() {
-        let result = CommandResult::success(
-            "package nginx is not installed".to_string(),
-            String::new(),
-        );
+        let result =
+            CommandResult::success("package nginx is not installed".to_string(), String::new());
         let (installed, _) = parse_package_state(&result);
         assert!(!installed);
     }

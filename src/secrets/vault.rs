@@ -324,14 +324,9 @@ impl HttpVaultClient {
                 });
 
                 let client = reqwest::Client::new();
-                let response = client
-                    .post(&url)
-                    .json(&body)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        SecretError::Connection(format!("AppRole auth request failed: {}", e))
-                    })?;
+                let response = client.post(&url).json(&body).send().await.map_err(|e| {
+                    SecretError::Connection(format!("AppRole auth request failed: {}", e))
+                })?;
 
                 if !response.status().is_success() {
                     let status = response.status();
@@ -342,13 +337,12 @@ impl HttpVaultClient {
                     )));
                 }
 
-                let vault_resp: VaultLoginResponse =
-                    response.json().await.map_err(|e| {
-                        SecretError::Authentication(format!(
-                            "Failed to parse AppRole auth response: {}",
-                            e
-                        ))
-                    })?;
+                let vault_resp: VaultLoginResponse = response.json().await.map_err(|e| {
+                    SecretError::Authentication(format!(
+                        "Failed to parse AppRole auth response: {}",
+                        e
+                    ))
+                })?;
 
                 let token = vault_resp
                     .auth
@@ -385,17 +379,9 @@ impl HttpVaultClient {
                 });
 
                 let client = reqwest::Client::new();
-                let response = client
-                    .post(&url)
-                    .json(&body)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        SecretError::Connection(format!(
-                            "Kubernetes auth request failed: {}",
-                            e
-                        ))
-                    })?;
+                let response = client.post(&url).json(&body).send().await.map_err(|e| {
+                    SecretError::Connection(format!("Kubernetes auth request failed: {}", e))
+                })?;
 
                 if !response.status().is_success() {
                     let status = response.status();
@@ -406,13 +392,12 @@ impl HttpVaultClient {
                     )));
                 }
 
-                let vault_resp: VaultLoginResponse =
-                    response.json().await.map_err(|e| {
-                        SecretError::Authentication(format!(
-                            "Failed to parse Kubernetes auth response: {}",
-                            e
-                        ))
-                    })?;
+                let vault_resp: VaultLoginResponse = response.json().await.map_err(|e| {
+                    SecretError::Authentication(format!(
+                        "Failed to parse Kubernetes auth response: {}",
+                        e
+                    ))
+                })?;
 
                 let token = vault_resp
                     .auth
@@ -546,7 +531,10 @@ impl<C: VaultClient> VaultProvider<C> {
         if let Some(key) = key {
             // Return only the specified key
             let value = data.get(key).ok_or_else(|| {
-                SecretError::NotFound(format!("Key '{}' not found in secret '{}'", key, secret_path))
+                SecretError::NotFound(format!(
+                    "Key '{}' not found in secret '{}'",
+                    key, secret_path
+                ))
             })?;
             let mut filtered = HashMap::new();
             filtered.insert(key.to_string(), value.clone());

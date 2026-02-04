@@ -583,7 +583,9 @@ impl VaultArgs {
                         continue;
                     }
 
-                    let spinner = ctx.output.create_spinner(&format!("Rekeying {}...", file.display()));
+                    let spinner = ctx
+                        .output
+                        .create_spinner(&format!("Rekeying {}...", file.display()));
 
                     // We need to handle the Result inside the spinner block to ensure clear
                     let res = (|| -> Result<()> {
@@ -599,7 +601,13 @@ impl VaultArgs {
 
                     match res {
                         Ok(_) => ctx.output.info(&format!("Rekeyed: {}", file.display())),
-                        Err(e) => return Err(anyhow::anyhow!("Failed to rekey {}: {}", file.display(), e)),
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to rekey {}: {}",
+                                file.display(),
+                                e
+                            ))
+                        }
                     }
                 }
 
@@ -664,32 +672,27 @@ impl VaultArgs {
                 // Generate a random 64-character password using hex encoding (32 random bytes = 64 hex chars)
                 let mut random_bytes = [0u8; 32];
                 OsRng.fill_bytes(&mut random_bytes);
-                let password: String = random_bytes
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect();
+                let password: String = random_bytes.iter().map(|b| format!("{:02x}", b)).collect();
 
                 // Write the password file
-                fs::write(&args.password_file, &password)
-                    .with_context(|| {
-                        format!(
-                            "Failed to write password file: {}",
-                            args.password_file.display()
-                        )
-                    })?;
+                fs::write(&args.password_file, &password).with_context(|| {
+                    format!(
+                        "Failed to write password file: {}",
+                        args.password_file.display()
+                    )
+                })?;
 
                 // Set permissions to 0600 (owner read/write only)
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
                     let perms = std::fs::Permissions::from_mode(0o600);
-                    fs::set_permissions(&args.password_file, perms)
-                        .with_context(|| {
-                            format!(
-                                "Failed to set permissions on: {}",
-                                args.password_file.display()
-                            )
-                        })?;
+                    fs::set_permissions(&args.password_file, perms).with_context(|| {
+                        format!(
+                            "Failed to set permissions on: {}",
+                            args.password_file.display()
+                        )
+                    })?;
                 }
 
                 ctx.output.info(&format!(
@@ -719,7 +722,8 @@ impl VaultArgs {
 
                 match result {
                     Ok(_) => {
-                        ctx.output.info("Vault password is correct. Decryption successful.");
+                        ctx.output
+                            .info("Vault password is correct. Decryption successful.");
                         Ok(0)
                     }
                     Err(_) => {

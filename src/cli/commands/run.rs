@@ -108,8 +108,8 @@ pub struct RunArgs {
 impl RunArgs {
     /// Execute the run command using the executor as the single runtime
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
-        use rustible::executor::{Executor, ExecutorConfig, ExecutionStrategy, Playbook};
         use rustible::executor::runtime::RuntimeContext;
+        use rustible::executor::{ExecutionStrategy, Executor, ExecutorConfig, Playbook};
         use rustible::inventory::Inventory;
 
         let start_time = Instant::now();
@@ -140,7 +140,8 @@ impl RunArgs {
         let playbook = match Playbook::load(&self.playbook) {
             Ok(pb) => pb,
             Err(e) => {
-                ctx.output.error(&format!("Failed to parse playbook: {}", e));
+                ctx.output
+                    .error(&format!("Failed to parse playbook: {}", e));
                 return Ok(1);
             }
         };
@@ -151,21 +152,26 @@ impl RunArgs {
             if inv_path.exists() {
                 match Inventory::load(inv_path) {
                     Ok(inventory) => {
-                        ctx.output.debug(&format!("Loaded inventory from: {}", inv_path.display()));
+                        ctx.output
+                            .debug(&format!("Loaded inventory from: {}", inv_path.display()));
                         RuntimeContext::from_inventory(&inventory)
                     }
                     Err(e) => {
-                        ctx.output.warning(&format!("Failed to load inventory: {}", e));
+                        ctx.output
+                            .warning(&format!("Failed to load inventory: {}", e));
                         RuntimeContext::new()
                     }
                 }
             } else {
-                ctx.output.warning(&format!("Inventory file not found: {}", inv_path.display()));
+                ctx.output
+                    .warning(&format!("Inventory file not found: {}", inv_path.display()));
                 RuntimeContext::new()
             }
         } else {
-            ctx.output.warning("No inventory specified, using localhost");
-            ctx.output.hint("Use -i <inventory_file> to specify an inventory");
+            ctx.output
+                .warning("No inventory specified, using localhost");
+            ctx.output
+                .hint("Use -i <inventory_file> to specify an inventory");
             // Create runtime with localhost only
             let mut runtime = RuntimeContext::new();
             runtime.add_host("localhost".to_string(), Some("all"));
@@ -193,7 +199,8 @@ impl RunArgs {
         // Plan mode - use legacy show_plan for now as per issue #48:
         // "Plan mode is implemented on top of executor or clearly separated as non-executing"
         if self.plan {
-            ctx.output.plan("WARNING: Running in PLAN MODE - showing execution plan only");
+            ctx.output
+                .plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
             let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
             if let Some(plays) = playbook_yaml.as_sequence() {
@@ -202,13 +209,15 @@ impl RunArgs {
                 self.show_plan(ctx, plays, &extra_vars_for_plan).await?;
             }
             let duration = start_time.elapsed();
-            ctx.output.info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
+            ctx.output
+                .info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
             return Ok(0);
         }
 
         // Check mode notice
         if ctx.check_mode {
-            ctx.output.warning("Running in CHECK MODE - no changes will be made");
+            ctx.output
+                .warning("Running in CHECK MODE - no changes will be made");
         }
 
         // Build executor configuration from CLI args
@@ -246,15 +255,14 @@ impl RunArgs {
             if let Some(ref dir) = self.checkpoint_dir {
                 recovery_config.enable_checkpoints = true;
                 recovery_config.checkpoint_config.checkpoint_dir = dir.clone();
-                ctx.output.info(&format!(
-                    "Checkpointing enabled: {}",
-                    dir.display()
-                ));
+                ctx.output
+                    .info(&format!("Checkpointing enabled: {}", dir.display()));
             }
 
             if self.auto_rollback {
                 recovery_config.enable_transactions = true;
-                ctx.output.info("Auto-rollback enabled with transaction tracking");
+                ctx.output
+                    .info("Auto-rollback enabled with transaction tracking");
             }
 
             let recovery_manager = std::sync::Arc::new(RecoveryManager::new(recovery_config));
@@ -262,11 +270,13 @@ impl RunArgs {
         }
 
         // Run playbook using executor
-        ctx.output.info(&format!("Running playbook: {}", playbook.name));
+        ctx.output
+            .info(&format!("Running playbook: {}", playbook.name));
         let results = match executor.run_playbook(&playbook).await {
             Ok(results) => results,
             Err(e) => {
-                ctx.output.error(&format!("Playbook execution failed: {}", e));
+                ctx.output
+                    .error(&format!("Playbook execution failed: {}", e));
                 return Ok(2);
             }
         };
@@ -942,8 +952,12 @@ impl RunArgs {
                 }
                 Err(e) => {
                     for host in &hosts {
-                        ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()), None);
+                        ctx.output.task_result(
+                            host,
+                            TaskStatus::Failed,
+                            Some(&e.to_string()),
+                            None,
+                        );
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                     return Err(anyhow::anyhow!("Failed to gather facts: {}", e));
@@ -1184,7 +1198,8 @@ impl RunArgs {
                     } else {
                         TaskStatus::Ok
                     };
-                    ctx.output.task_result(host, status, message.as_deref(), None);
+                    ctx.output
+                        .task_result(host, status, message.as_deref(), None);
                     stats.lock().await.record(host, status);
                 }
                 Err(e) => {
@@ -1203,8 +1218,12 @@ impl RunArgs {
                         );
                         stats.lock().await.record(host, TaskStatus::Ignored);
                     } else {
-                        ctx.output
-                            .task_result(host, TaskStatus::Failed, Some(&e.to_string()), None);
+                        ctx.output.task_result(
+                            host,
+                            TaskStatus::Failed,
+                            Some(&e.to_string()),
+                            None,
+                        );
                         stats.lock().await.record(host, TaskStatus::Failed);
                     }
                 }

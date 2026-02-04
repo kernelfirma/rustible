@@ -434,11 +434,23 @@ mod mysql_tests {
     #[test]
     fn test_mysql_ssl_mode_alternatives() {
         // Test alternative spellings
-        assert_eq!(MysqlSslMode::from_str("disable"), Some(MysqlSslMode::Disabled));
-        assert_eq!(MysqlSslMode::from_str("false"), Some(MysqlSslMode::Disabled));
+        assert_eq!(
+            MysqlSslMode::from_str("disable"),
+            Some(MysqlSslMode::Disabled)
+        );
+        assert_eq!(
+            MysqlSslMode::from_str("false"),
+            Some(MysqlSslMode::Disabled)
+        );
         assert_eq!(MysqlSslMode::from_str("no"), Some(MysqlSslMode::Disabled));
-        assert_eq!(MysqlSslMode::from_str("prefer"), Some(MysqlSslMode::Preferred));
-        assert_eq!(MysqlSslMode::from_str("require"), Some(MysqlSslMode::Required));
+        assert_eq!(
+            MysqlSslMode::from_str("prefer"),
+            Some(MysqlSslMode::Preferred)
+        );
+        assert_eq!(
+            MysqlSslMode::from_str("require"),
+            Some(MysqlSslMode::Required)
+        );
         assert_eq!(MysqlSslMode::from_str("true"), Some(MysqlSslMode::Required));
         assert_eq!(MysqlSslMode::from_str("yes"), Some(MysqlSslMode::Required));
     }
@@ -600,20 +612,20 @@ mod ansible_parity_tests {
     fn test_postgresql_db_ansible_params_documented() {
         // Key parameters from Ansible's postgresql_db:
         let ansible_params = vec![
-            "name",          // Database name
-            "state",         // present, absent, dump, restore
-            "owner",         // Database owner
-            "encoding",      // Character encoding
-            "lc_collate",    // Collation
-            "lc_ctype",      // Character classification
-            "template",      // Template database
-            "tablespace",    // Default tablespace
-            "conn_limit",    // Connection limit
-            "login_host",    // Connection host
-            "login_port",    // Connection port
-            "login_user",    // Login user
+            "name",           // Database name
+            "state",          // present, absent, dump, restore
+            "owner",          // Database owner
+            "encoding",       // Character encoding
+            "lc_collate",     // Collation
+            "lc_ctype",       // Character classification
+            "template",       // Template database
+            "tablespace",     // Default tablespace
+            "conn_limit",     // Connection limit
+            "login_host",     // Connection host
+            "login_port",     // Connection port
+            "login_user",     // Login user
             "login_password", // Login password
-            "ssl_mode",      // SSL mode
+            "ssl_mode",       // SSL mode
             "maintenance_db", // Maintenance database
         ];
 

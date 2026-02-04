@@ -3,8 +3,8 @@
 //! Run with: cargo run --example rich_error_demo
 
 use rustible::diagnostics::{
-    connection_error, missing_required_arg_error, module_not_found_error,
-    template_syntax_error, undefined_variable_error, yaml_syntax_error, RichDiagnostic, Span,
+    connection_error, missing_required_arg_error, module_not_found_error, template_syntax_error,
+    undefined_variable_error, yaml_syntax_error, RichDiagnostic, Span,
 };
 
 fn main() {

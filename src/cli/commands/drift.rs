@@ -227,10 +227,7 @@ fn yaml_to_module_params(args: &serde_yaml::Value) -> ModuleParams {
         }
         serde_yaml::Value::String(s) => {
             // String shorthand: treat as the "name" parameter (e.g. "package: nginx")
-            params.insert(
-                "name".to_string(),
-                serde_json::Value::String(s.clone()),
-            );
+            params.insert("name".to_string(), serde_json::Value::String(s.clone()));
         }
         serde_yaml::Value::Null => {}
         other => {
@@ -412,7 +409,11 @@ impl DriftArgs {
             .cloned()
             .expect("inventory checked in execute()");
         let inventory = Inventory::load(&inventory_path).map_err(|e| {
-            anyhow::anyhow!("Failed to load inventory from {}: {}", inventory_path.display(), e)
+            anyhow::anyhow!(
+                "Failed to load inventory from {}: {}",
+                inventory_path.display(),
+                e
+            )
         })?;
 
         let mut findings = Vec::new();

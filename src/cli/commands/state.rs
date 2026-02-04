@@ -111,12 +111,13 @@ impl StateArgs {
         match &self.command {
             StateCommand::List { state_dir, format } => {
                 ctx.output.banner("STATE LIST");
-                let state_path = state_dir.canonicalize().unwrap_or_else(|_| state_dir.clone());
+                let state_path = state_dir
+                    .canonicalize()
+                    .unwrap_or_else(|_| state_dir.clone());
 
                 if !state_path.exists() {
-                    ctx.output.info(
-                        "No state directory found. Run a playbook first to generate state.",
-                    );
+                    ctx.output
+                        .info("No state directory found. Run a playbook first to generate state.");
                     return Ok(0);
                 }
 
@@ -215,8 +216,7 @@ impl StateArgs {
                         }
                     }
 
-                    ctx.output
-                        .info(&format!("Pulled {} state file(s).", count));
+                    ctx.output.info(&format!("Pulled {} state file(s).", count));
                 } else {
                     ctx.output
                         .error("Unsupported backend. Supported: file://, s3://, http://");
@@ -254,8 +254,7 @@ impl StateArgs {
                         }
                     }
 
-                    ctx.output
-                        .info(&format!("Pushed {} state file(s).", count));
+                    ctx.output.info(&format!("Pushed {} state file(s).", count));
                 } else {
                     ctx.output
                         .error("Unsupported backend. Supported: file://, s3://, http://");
@@ -306,8 +305,7 @@ impl StateArgs {
                         for entry in entries.flatten() {
                             let path = entry.path();
                             if path.extension().map_or(false, |ext| ext == "lock") {
-                                let name =
-                                    path.file_stem().unwrap_or_default().to_string_lossy();
+                                let name = path.file_stem().unwrap_or_default().to_string_lossy();
                                 if let Ok(content) = std::fs::read_to_string(&path) {
                                     println!("  Lock: {} - {}", name, content.trim());
                                 } else {
@@ -326,17 +324,12 @@ impl StateArgs {
                     Ok(0)
                 }
 
-                LockCommand::Release {
-                    lock_id,
-                    state_dir,
-                } => {
+                LockCommand::Release { lock_id, state_dir } => {
                     ctx.output.banner("STATE LOCK RELEASE");
-                    let lock_file =
-                        state_dir.join("locks").join(format!("{}.lock", lock_id));
+                    let lock_file = state_dir.join("locks").join(format!("{}.lock", lock_id));
 
                     if !lock_file.exists() {
-                        ctx.output
-                            .error(&format!("Lock '{}' not found.", lock_id));
+                        ctx.output.error(&format!("Lock '{}' not found.", lock_id));
                         return Ok(1);
                     }
 

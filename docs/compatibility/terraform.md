@@ -20,6 +20,8 @@ cargo build --release --features provisioning
 cargo build --release --features full-provisioning
 ```
 
+Rustible can also import Terraform outputs via `vars_files` entries (local, HTTP, or S3) and use Terraform state for dynamic inventory with resource mappings and caching.
+
 ---
 
 ## Feature Status

@@ -141,8 +141,10 @@ fn test_cached_expression_not_significantly_slower_than_uncached() {
     // Warm cache for cached engine
     cached_engine.evaluate_condition(expression, &vars).unwrap();
 
-    let cached_elapsed = measure_expression(&cached_engine, expression, &vars, EXPRESSION_ITERATIONS);
-    let uncached_elapsed = measure_expression(&uncached_engine, expression, &vars, EXPRESSION_ITERATIONS);
+    let cached_elapsed =
+        measure_expression(&cached_engine, expression, &vars, EXPRESSION_ITERATIONS);
+    let uncached_elapsed =
+        measure_expression(&uncached_engine, expression, &vars, EXPRESSION_ITERATIONS);
 
     let ratio = cached_elapsed.as_secs_f64() / uncached_elapsed.as_secs_f64();
     assert!(

@@ -112,6 +112,14 @@ where
 
 use crate::executor::task::{Handler, Task};
 use crate::executor::{ExecutorError, ExecutorResult};
+use crate::vars::terraform::TerraformVarsSource;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VarsFileSpec {
+    Path(String),
+    Terraform { terraform: TerraformVarsSource },
+}
 
 /// A complete playbook containing multiple plays
 #[derive(Debug, Clone, Default)]
@@ -123,7 +131,7 @@ pub struct Playbook {
     /// Global variables for the playbook
     pub vars: IndexMap<String, JsonValue>,
     /// Var files to include
-    pub vars_files: Vec<String>,
+    pub vars_files: Vec<VarsFileSpec>,
     /// Plays in this playbook
     pub plays: Vec<Play>,
 }
@@ -229,7 +237,7 @@ pub struct PlayDefinition {
     pub vars: IndexMap<String, JsonValue>,
     /// Variable files to include
     #[serde(default)]
-    pub vars_files: Vec<String>,
+    pub vars_files: Vec<VarsFileSpec>,
     /// Roles to include
     #[serde(default, deserialize_with = "deserialize_seq_or_null")]
     pub roles: Vec<RoleDefinition>,
@@ -572,7 +580,9 @@ pub struct Play {
     /// Play variables
     pub vars: IndexMap<String, JsonValue>,
     /// Variable files to include
-    pub vars_files: Vec<String>,
+    pub vars_files: Vec<VarsFileSpec>,
+    /// Base directory for resolving vars_files
+    pub playbook_dir: Option<PathBuf>,
     /// Roles to execute
     pub roles: Vec<Role>,
     /// Pre-tasks
@@ -612,6 +622,7 @@ impl Play {
             remote_user: None,
             vars: IndexMap::new(),
             vars_files: Vec::new(),
+            playbook_dir: None,
             roles: Vec::new(),
             pre_tasks: Vec::new(),
             tasks: Vec::new(),
@@ -633,6 +644,7 @@ impl Play {
         playbook_path: Option<&PathBuf>,
     ) -> ExecutorResult<Self> {
         let mut play = Play::new(&def.name, &def.hosts);
+        play.playbook_dir = playbook_path.and_then(|p| p.parent().map(PathBuf::from));
 
         play.gather_facts = def.gather_facts;
         play.r#become = def.r#become;

@@ -308,10 +308,7 @@ fn bench_repeated_renders(c: &mut Criterion) {
 // Criterion Groups
 // ============================================================================
 
-criterion_group!(
-    cache_benches,
-    bench_cache_cold_vs_warm,
-);
+criterion_group!(cache_benches, bench_cache_cold_vs_warm,);
 
 criterion_group!(
     lookup_benches,
@@ -327,8 +324,4 @@ criterion_group!(
     bench_repeated_renders,
 );
 
-criterion_main!(
-    cache_benches,
-    lookup_benches,
-    render_benches,
-);
+criterion_main!(cache_benches, lookup_benches, render_benches,);

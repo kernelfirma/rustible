@@ -136,7 +136,11 @@ impl SbomGenerator {
     }
 
     /// Generate an SBOM from a list of provider components
-    pub fn generate(&self, components: Vec<SbomComponent>, dependencies: Vec<SbomDependency>) -> Sbom {
+    pub fn generate(
+        &self,
+        components: Vec<SbomComponent>,
+        dependencies: Vec<SbomDependency>,
+    ) -> Sbom {
         let timestamp = chrono::Utc::now().to_rfc3339();
         let serial = format!("urn:uuid:{}", uuid::Uuid::new_v4());
 
@@ -173,8 +177,7 @@ impl SbomGenerator {
     pub fn write_json(&self, sbom: &Sbom, path: &Path) -> Result<(), SbomError> {
         let json = serde_json::to_string_pretty(sbom)
             .map_err(|e| SbomError::SerializationError(e.to_string()))?;
-        std::fs::write(path, json)
-            .map_err(|e| SbomError::IoError(e.to_string()))?;
+        std::fs::write(path, json).map_err(|e| SbomError::IoError(e.to_string()))?;
         Ok(())
     }
 
@@ -187,7 +190,9 @@ impl SbomGenerator {
         let mut matches = Vec::new();
         for component in &sbom.components {
             for entry in &revocation_list.entries {
-                if component.name == entry.name && version_in_range(&component.version, &entry.version_range) {
+                if component.name == entry.name
+                    && version_in_range(&component.version, &entry.version_range)
+                {
                     matches.push(RevocationMatch {
                         component: component.clone(),
                         revocation: entry.clone(),

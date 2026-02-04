@@ -16,7 +16,9 @@ use rustible::modules::facts::gather_facts_via_connection;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 
-fn to_index_map(facts: std::collections::HashMap<String, JsonValue>) -> IndexMap<String, JsonValue> {
+fn to_index_map(
+    facts: std::collections::HashMap<String, JsonValue>,
+) -> IndexMap<String, JsonValue> {
     facts.into_iter().collect()
 }
 
@@ -68,5 +70,8 @@ async fn test_native_remote_facts_expose_ansible_prefixed_vars() {
         }
     }
 
-    assert!(checked > 0, "Expected at least one candidate fact to validate");
+    assert!(
+        checked > 0,
+        "Expected at least one candidate fact to validate"
+    );
 }

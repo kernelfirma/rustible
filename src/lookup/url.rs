@@ -323,15 +323,15 @@ mod tests {
         let lookup = UrlLookup::new();
         assert!(lookup.validate_url("https://example.com").is_ok());
         assert!(lookup.validate_url("http://localhost:8080/api").is_ok());
-        assert!(lookup.validate_url("https://api.example.com/v1?key=val").is_ok());
+        assert!(lookup
+            .validate_url("https://api.example.com/v1?key=val")
+            .is_ok());
     }
 
     #[test]
     fn test_url_lookup_header_parsing_multiple() {
         let lookup = UrlLookup::new();
-        let headers = lookup
-            .parse_headers("Accept:text/html,X-Foo:bar")
-            .unwrap();
+        let headers = lookup.parse_headers("Accept:text/html,X-Foo:bar").unwrap();
         assert_eq!(headers.len(), 2);
         assert_eq!(headers[0].0, "Accept");
         assert_eq!(headers[0].1, "text/html");

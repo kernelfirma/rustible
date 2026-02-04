@@ -8,8 +8,8 @@ pub mod fleet;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
-pub mod provision;
 pub mod provider;
+pub mod provision;
 pub mod provisioner;
 pub mod run;
 pub mod state;
@@ -297,12 +297,14 @@ mod tests {
 
     #[test]
     fn test_parse_extra_vars_value_with_spaces() {
-        let cli =
-            Cli::try_parse_from(["rustible", "-e", "message=hello world", "run", "play.yml"])
-                .unwrap();
+        let cli = Cli::try_parse_from(["rustible", "-e", "message=hello world", "run", "play.yml"])
+            .unwrap();
         let ctx = CommandContext::new(&cli, Config::default());
         let vars = ctx.parse_extra_vars().unwrap();
 
-        assert_eq!(vars.get("message").and_then(|v| v.as_str()), Some("hello world"));
+        assert_eq!(
+            vars.get("message").and_then(|v| v.as_str()),
+            Some("hello world")
+        );
     }
 }

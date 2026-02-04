@@ -12,7 +12,9 @@
 #![cfg(feature = "provisioning")]
 
 use rustible::provisioning::config::{InfrastructureConfig, ReferenceType};
-use rustible::provisioning::resolver::{PathContext, ProvisionerContext, ResolverContext, TerraformContext};
+use rustible::provisioning::resolver::{
+    PathContext, ProvisionerContext, ResolverContext, TerraformContext,
+};
 use rustible::provisioning::state::{ProvisioningState, ResourceId, ResourceState};
 use serde_json::json;
 use std::path::PathBuf;
@@ -63,7 +65,10 @@ variables:
     // TF_VAR takes precedence
     assert_eq!(ctx.variables.get("region"), Some(&json!("us-east-1")));
     // Non-overridden variable unchanged
-    assert_eq!(ctx.variables.get("environment"), Some(&json!("development")));
+    assert_eq!(
+        ctx.variables.get("environment"),
+        Some(&json!("development"))
+    );
 }
 
 #[test]
@@ -111,8 +116,14 @@ fn test_tf_var_underscore_handling() {
 
     ctx.load_tf_var_environment(&env_vars);
 
-    assert_eq!(ctx.variables.get("vpc_cidr_block"), Some(&json!("10.0.0.0/16")));
-    assert_eq!(ctx.variables.get("db_instance_class"), Some(&json!("db.t3.micro")));
+    assert_eq!(
+        ctx.variables.get("vpc_cidr_block"),
+        Some(&json!("10.0.0.0/16"))
+    );
+    assert_eq!(
+        ctx.variables.get("db_instance_class"),
+        Some(&json!("db.t3.micro"))
+    );
 }
 
 #[test]
@@ -158,7 +169,9 @@ fn test_self_context_basic_attributes() {
     // self.arn
     assert_eq!(
         self_ctx.get("arn"),
-        Some(&json!("arn:aws:ec2:us-east-1:123456789:instance/i-1234567890abcdef0"))
+        Some(&json!(
+            "arn:aws:ec2:us-east-1:123456789:instance/i-1234567890abcdef0"
+        ))
     );
 }
 
@@ -234,7 +247,9 @@ fn test_self_reference_in_template() {
 
     // self.* should be recognized as a reference type
     assert_eq!(refs.len(), 1);
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::SelfAttribute { attribute } if attribute == "id")));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::SelfAttribute { attribute } if attribute == "id")));
 }
 
 #[test]
@@ -299,7 +314,10 @@ fn test_path_context_in_resolver() {
     ));
 
     // Access via resolver context
-    assert_eq!(ctx.get_value("path.module"), Some(json!("/modules/network")));
+    assert_eq!(
+        ctx.get_value("path.module"),
+        Some(json!("/modules/network"))
+    );
     assert_eq!(ctx.get_value("path.root"), Some(json!("/root")));
     assert_eq!(ctx.get_value("path.cwd"), Some(json!("/cwd")));
 }
@@ -311,7 +329,9 @@ fn test_path_reference_in_template() {
     let refs = config.extract_all_references("{{ path.module }}/scripts/init.sh");
 
     assert_eq!(refs.len(), 1);
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Path { path_type } if path_type == "module")));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Path { path_type } if path_type == "module")));
 }
 
 #[test]
@@ -350,9 +370,7 @@ fn test_terraform_workspace_custom() {
 #[test]
 fn test_terraform_workspace_from_env() {
     // TF_WORKSPACE environment variable
-    let tf_ctx = TerraformContext::from_environment(&[
-        ("TF_WORKSPACE", "staging"),
-    ]);
+    let tf_ctx = TerraformContext::from_environment(&[("TF_WORKSPACE", "staging")]);
 
     assert_eq!(tf_ctx.workspace(), "staging");
 }
@@ -363,7 +381,10 @@ fn test_terraform_context_in_resolver() {
 
     ctx.set_terraform_context(TerraformContext::with_workspace("production"));
 
-    assert_eq!(ctx.get_value("terraform.workspace"), Some(json!("production")));
+    assert_eq!(
+        ctx.get_value("terraform.workspace"),
+        Some(json!("production"))
+    );
 }
 
 #[test]
@@ -373,7 +394,9 @@ fn test_terraform_workspace_reference() {
     let refs = config.extract_all_references("{{ terraform.workspace }}");
 
     assert_eq!(refs.len(), 1);
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Terraform { attribute } if attribute == "workspace")));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Terraform { attribute } if attribute == "workspace")));
 }
 
 // ============================================================================
@@ -385,9 +408,7 @@ fn test_provisioner_context_full_integration() {
     let mut ctx = ResolverContext::new();
 
     // Set up all context types
-    ctx.load_tf_var_environment(&[
-        ("TF_VAR_region", "us-east-1"),
-    ]);
+    ctx.load_tf_var_environment(&[("TF_VAR_region", "us-east-1")]);
 
     ctx.set_path_context(PathContext::new(
         PathBuf::from("/project/modules/app"),
@@ -399,8 +420,14 @@ fn test_provisioner_context_full_integration() {
 
     // Verify all values accessible
     assert_eq!(ctx.get_value("variables.region"), Some(json!("us-east-1")));
-    assert_eq!(ctx.get_value("path.module"), Some(json!("/project/modules/app")));
-    assert_eq!(ctx.get_value("terraform.workspace"), Some(json!("production")));
+    assert_eq!(
+        ctx.get_value("path.module"),
+        Some(json!("/project/modules/app"))
+    );
+    assert_eq!(
+        ctx.get_value("terraform.workspace"),
+        Some(json!("production"))
+    );
 }
 
 #[test]
@@ -421,21 +448,25 @@ fn test_provisioner_environment_variables() {
     // Standard provisioner environment variables
     assert_eq!(env_vars.get("SELF_ID"), Some(&"i-123".to_string()));
     assert_eq!(env_vars.get("SELF_PUBLIC_IP"), Some(&"1.2.3.4".to_string()));
-    assert_eq!(env_vars.get("SELF_PRIVATE_IP"), Some(&"10.0.1.5".to_string()));
+    assert_eq!(
+        env_vars.get("SELF_PRIVATE_IP"),
+        Some(&"10.0.1.5".to_string())
+    );
 }
 
 #[test]
 fn test_provisioner_working_dir() {
-    let prov_ctx = ProvisionerContext::new()
-        .with_working_dir(PathBuf::from("/tmp/provisioner"));
+    let prov_ctx = ProvisionerContext::new().with_working_dir(PathBuf::from("/tmp/provisioner"));
 
-    assert_eq!(prov_ctx.working_dir(), Some(PathBuf::from("/tmp/provisioner")).as_ref());
+    assert_eq!(
+        prov_ctx.working_dir(),
+        Some(PathBuf::from("/tmp/provisioner")).as_ref()
+    );
 }
 
 #[test]
 fn test_provisioner_interpreter() {
-    let prov_ctx = ProvisionerContext::new()
-        .with_interpreter(vec!["/bin/bash", "-c"]);
+    let prov_ctx = ProvisionerContext::new().with_interpreter(vec!["/bin/bash", "-c"]);
 
     assert_eq!(prov_ctx.interpreter(), &["/bin/bash", "-c"]);
 }
@@ -503,7 +534,9 @@ resources:
     let refs = config.extract_all_references(workspace_tag);
 
     assert_eq!(refs.len(), 1);
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Terraform { .. })));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Terraform { .. })));
 }
 
 // ============================================================================
@@ -522,8 +555,14 @@ fn test_local_exec_command_parsing() {
 
     let local_exec = provisioner_config.get("local-exec").unwrap();
 
-    assert_eq!(local_exec.get("command").unwrap().as_str(), Some("echo 'Hello World'"));
-    assert_eq!(local_exec.get("working_dir").unwrap().as_str(), Some("/tmp"));
+    assert_eq!(
+        local_exec.get("command").unwrap().as_str(),
+        Some("echo 'Hello World'")
+    );
+    assert_eq!(
+        local_exec.get("working_dir").unwrap().as_str(),
+        Some("/tmp")
+    );
     assert_eq!(
         local_exec.get("interpreter").unwrap().as_array().unwrap(),
         &vec![json!("/bin/bash"), json!("-c")]
@@ -660,8 +699,14 @@ fn test_file_provisioner_source_destination() {
 
     let file_prov = provisioner_config.get("file").unwrap();
 
-    assert_eq!(file_prov.get("source").unwrap().as_str(), Some("files/app.conf"));
-    assert_eq!(file_prov.get("destination").unwrap().as_str(), Some("/etc/app/config.conf"));
+    assert_eq!(
+        file_prov.get("source").unwrap().as_str(),
+        Some("files/app.conf")
+    );
+    assert_eq!(
+        file_prov.get("destination").unwrap().as_str(),
+        Some("/etc/app/config.conf")
+    );
 }
 
 #[test]
@@ -732,7 +777,10 @@ fn test_connection_bastion_host() {
 
     let connection = connection_config.get("connection").unwrap();
 
-    assert_eq!(connection.get("bastion_host").unwrap().as_str(), Some("bastion.example.com"));
+    assert_eq!(
+        connection.get("bastion_host").unwrap().as_str(),
+        Some("bastion.example.com")
+    );
 }
 
 // ============================================================================
@@ -744,7 +792,8 @@ fn test_resolve_template_with_all_context_types() {
     let mut ctx = ResolverContext::new();
 
     // Set up comprehensive context
-    ctx.variables.insert("region".to_string(), json!("us-east-1"));
+    ctx.variables
+        .insert("region".to_string(), json!("us-east-1"));
     ctx.locals.insert("app_name".to_string(), json!("myapp"));
 
     ctx.resources.insert(
@@ -782,11 +831,19 @@ fn test_template_with_mixed_references() {
     let refs = config.extract_all_references(template);
 
     // Should extract all reference types
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Variable { .. })));
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Resource { .. })));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Variable { .. })));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Resource { .. })));
     assert!(refs.iter().any(|r| matches!(r, ReferenceType::Path { .. })));
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::Terraform { .. })));
-    assert!(refs.iter().any(|r| matches!(r, ReferenceType::SelfAttribute { .. })));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::Terraform { .. })));
+    assert!(refs
+        .iter()
+        .any(|r| matches!(r, ReferenceType::SelfAttribute { .. })));
 }
 
 // ============================================================================
@@ -802,7 +859,10 @@ fn test_invalid_tf_var_json() {
     ctx.load_tf_var_environment(&env_vars);
 
     // Should be stored as string, not cause error
-    assert_eq!(ctx.variables.get("invalid"), Some(&json!("{not valid json}")));
+    assert_eq!(
+        ctx.variables.get("invalid"),
+        Some(&json!("{not valid json}"))
+    );
 }
 
 #[test]
@@ -823,9 +883,7 @@ fn test_missing_self_attribute() {
 
 #[test]
 fn test_empty_workspace_defaults_to_default() {
-    let tf_ctx = TerraformContext::from_environment(&[
-        ("TF_WORKSPACE", ""),
-    ]);
+    let tf_ctx = TerraformContext::from_environment(&[("TF_WORKSPACE", "")]);
 
     // Empty workspace should default to "default"
     assert_eq!(tf_ctx.workspace(), "default");
@@ -847,7 +905,10 @@ fn test_tf_var_special_characters() {
 
     ctx.load_tf_var_environment(&env_vars);
 
-    assert_eq!(ctx.variables.get("special"), Some(&json!("value with spaces")));
+    assert_eq!(
+        ctx.variables.get("special"),
+        Some(&json!("value with spaces"))
+    );
     assert_eq!(ctx.variables.get("newline"), Some(&json!("line1\nline2")));
 }
 

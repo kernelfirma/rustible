@@ -57,15 +57,28 @@ async fn main() -> Result<()> {
         Commands::Validate(args) => validate_playbook(&args.playbook, &mut ctx).await?,
         Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
         Commands::Drift(args) => args.execute(&mut ctx).await?,
-        Commands::Lock(args) => { args.execute().await?; 0 },
+        Commands::Lock(args) => {
+            args.execute().await?;
+            0
+        }
         Commands::Provisioner(args) => {
             let result = args.execute().await?;
-            if result.success { 0 } else { 1 }
+            if result.success {
+                0
+            } else {
+                1
+            }
         }
         Commands::Provider(args) => cli::commands::provider::execute(args, &ctx).await?,
         Commands::State(args) => args.execute(&mut ctx).await?,
-        Commands::Explain(_args) => { ctx.output.error("Not yet implemented"); 1 }
-        Commands::Agent(_args) => { ctx.output.error("Not yet implemented"); 1 }
+        Commands::Explain(_args) => {
+            ctx.output.error("Not yet implemented");
+            1
+        }
+        Commands::Agent(_args) => {
+            ctx.output.error("Not yet implemented");
+            1
+        }
         Commands::Fleet(args) => args.execute(&mut ctx).await?,
     };
 

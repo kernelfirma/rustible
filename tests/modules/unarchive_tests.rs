@@ -501,7 +501,11 @@ fn test_unarchive_with_mode() {
     let meta = fs::metadata(dest.join("file.txt")).unwrap();
     let mode = meta.permissions().mode() & 0o7777;
     // File should have been extracted with some readable permission
-    assert!(mode > 0, "Extracted file should have non-zero permissions, got {:o}", mode);
+    assert!(
+        mode > 0,
+        "Extracted file should have non-zero permissions, got {:o}",
+        mode
+    );
 }
 
 // ============================================================================

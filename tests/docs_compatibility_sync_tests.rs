@@ -1699,10 +1699,7 @@ mod cargo_feature_tests {
         }
     }
 
-    fn resolve_feature_dependencies(
-        features: &toml::value::Table,
-        root: &str,
-    ) -> HashSet<String> {
+    fn resolve_feature_dependencies(features: &toml::value::Table, root: &str) -> HashSet<String> {
         let mut resolved = HashSet::new();
         let mut stack = vec![root.to_string()];
 
@@ -1732,8 +1729,7 @@ mod cargo_feature_tests {
 
     fn extract_documented_features() -> HashSet<String> {
         let doc_path = "docs/compatibility/ansible.md";
-        let content = fs::read_to_string(doc_path)
-            .expect("Failed to read compatibility doc");
+        let content = fs::read_to_string(doc_path).expect("Failed to read compatibility doc");
 
         let mut features = HashSet::new();
         let mut in_feature_table = false;
@@ -1772,7 +1768,10 @@ mod cargo_feature_tests {
     #[test]
     fn test_cargo_toml_has_features_section() {
         let features = extract_cargo_features();
-        assert!(!features.is_empty(), "Cargo.toml should have features defined");
+        assert!(
+            !features.is_empty(),
+            "Cargo.toml should have features defined"
+        );
     }
 
     #[test]

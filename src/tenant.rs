@@ -262,9 +262,18 @@ mod tests {
     #[test]
     fn test_tenant_dirs() {
         let ctx = TenantContext::new(test_config());
-        assert_eq!(ctx.state_dir(), PathBuf::from("/opt/rustible/tenants/tenant-1/state"));
-        assert_eq!(ctx.secrets_dir(), PathBuf::from("/opt/rustible/tenants/tenant-1/secrets"));
-        assert_eq!(ctx.log_dir(), PathBuf::from("/opt/rustible/tenants/tenant-1/logs"));
+        assert_eq!(
+            ctx.state_dir(),
+            PathBuf::from("/opt/rustible/tenants/tenant-1/state")
+        );
+        assert_eq!(
+            ctx.secrets_dir(),
+            PathBuf::from("/opt/rustible/tenants/tenant-1/secrets")
+        );
+        assert_eq!(
+            ctx.log_dir(),
+            PathBuf::from("/opt/rustible/tenants/tenant-1/logs")
+        );
     }
 
     #[test]

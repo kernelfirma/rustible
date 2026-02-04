@@ -54,11 +54,14 @@
 use super::config::{sanitize_group_name, PluginConfig, PluginConfigError};
 use super::{DynamicInventoryPlugin, PluginOption, PluginOptionType};
 use crate::inventory::{Group, Host, Inventory, InventoryError, InventoryResult};
+use crate::template::TemplateEngine;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
 
 /// State backend configuration
 #[derive(Debug, Clone)]
@@ -412,6 +415,12 @@ pub struct TerraformHost {
     pub attributes: HashMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone)]
+struct CachedState {
+    state: TerraformState,
+    fetched_at: Instant,
+}
+
 impl TerraformHost {
     /// Get the best hostname based on preferences
     pub fn hostname(&self, preferences: &[String]) -> Option<String> {
@@ -515,16 +524,21 @@ impl TerraformHost {
 pub struct TerraformPlugin {
     config: PluginConfig,
     state_backend: StateBackend,
+    resource_mappings: HashMap<String, ResourceMapping>,
+    cached_state: RwLock<Option<CachedState>>,
 }
 
 impl TerraformPlugin {
     /// Create a new Terraform plugin with configuration
     pub fn new(config: PluginConfig) -> Result<Self, PluginConfigError> {
         let state_backend = Self::parse_backend(&config)?;
+        let resource_mappings = Self::parse_resource_mappings(&config)?;
 
         Ok(Self {
             config,
             state_backend,
+            resource_mappings,
+            cached_state: RwLock::new(None),
         })
     }
 
@@ -566,6 +580,10 @@ impl TerraformPlugin {
                 })?;
                 Ok(StateBackend::Http { address })
             }
+            "gcs" | "azure" | "consul" => Err(PluginConfigError::Invalid(format!(
+                "Terraform backend '{}' is not yet supported by the inventory plugin",
+                backend_type
+            ))),
             _ => {
                 // Default to local backend
                 let path = config
@@ -578,6 +596,35 @@ impl TerraformPlugin {
                 })
             }
         }
+    }
+
+    fn parse_resource_mappings(
+        config: &PluginConfig,
+    ) -> Result<HashMap<String, ResourceMapping>, PluginConfigError> {
+        let Some(value) = config.extra.get("resource_mappings") else {
+            return Ok(HashMap::new());
+        };
+
+        serde_yaml::from_value(value.clone()).map_err(PluginConfigError::Yaml)
+    }
+
+    fn cache_ttl(&self) -> Option<Duration> {
+        if self.config.cache_ttl > 0 {
+            return Some(Duration::from_secs(self.config.cache_ttl));
+        }
+
+        if let Some(cache_cfg) = self
+            .config
+            .extra
+            .get("cache")
+            .and_then(|value| serde_yaml::from_value::<CacheConfig>(value.clone()).ok())
+        {
+            if cache_cfg.enabled && cache_cfg.ttl > 0 {
+                return Some(Duration::from_secs(cache_cfg.ttl));
+            }
+        }
+
+        None
     }
 
     /// Get hostname preferences
@@ -606,7 +653,21 @@ impl TerraformPlugin {
 
     /// Load state from configured backend
     async fn load_state(&self) -> InventoryResult<TerraformState> {
-        match &self.state_backend {
+        if let Some(ttl) = self.cache_ttl() {
+            let cache = self.cached_state.read().map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Failed to acquire terraform cache lock: {}",
+                    e
+                ))
+            })?;
+            if let Some(cached) = cache.as_ref() {
+                if cached.fetched_at.elapsed() < ttl {
+                    return Ok(cached.state.clone());
+                }
+            }
+        }
+
+        let state = match &self.state_backend {
             StateBackend::Local { path } => self.load_local_state(path).await,
             StateBackend::S3 {
                 bucket,
@@ -614,7 +675,22 @@ impl TerraformPlugin {
                 region,
             } => self.load_s3_state(bucket, key, region).await,
             StateBackend::Http { address } => self.load_http_state(address).await,
+        }?;
+
+        if self.cache_ttl().is_some() {
+            let mut cache = self.cached_state.write().map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Failed to acquire terraform cache lock: {}",
+                    e
+                ))
+            })?;
+            *cache = Some(CachedState {
+                state: state.clone(),
+                fetched_at: Instant::now(),
+            });
         }
+
+        Ok(state)
     }
 
     /// Load state from local file
@@ -645,54 +721,77 @@ impl TerraformPlugin {
             key
         );
 
-        // Note: A full implementation would use aws-sdk-s3
-        // For now, we try to use AWS CLI as a fallback
-        let output = std::process::Command::new("aws")
-            .args(["s3", "cp", &format!("s3://{}/{}", bucket, key), "-"])
-            .env("AWS_DEFAULT_REGION", region)
-            .output()
-            .map_err(|e| {
+        #[cfg(feature = "aws")]
+        {
+            use aws_types::region::Region;
+
+            let config = aws_config::from_env()
+                .region(Region::new(region.to_string()))
+                .load()
+                .await;
+            let client = aws_sdk_s3::Client::new(&config);
+            let response = client
+                .get_object()
+                .bucket(bucket)
+                .key(key)
+                .send()
+                .await
+                .map_err(|e| {
+                    InventoryError::DynamicInventoryFailed(format!(
+                        "Failed to fetch terraform state from S3: {}",
+                        e
+                    ))
+                })?;
+
+            let data = response.body.collect().await.map_err(|e| {
                 InventoryError::DynamicInventoryFailed(format!(
-                    "Failed to fetch state from S3 (is AWS CLI installed?): {}",
+                    "Failed to read terraform state from S3: {}",
+                    e
+                ))
+            })?;
+            let content = String::from_utf8(data.into_bytes().to_vec()).map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Terraform state from S3 is not valid UTF-8: {}",
                     e
                 ))
             })?;
 
-        if !output.status.success() {
-            return Err(InventoryError::DynamicInventoryFailed(format!(
-                "AWS CLI failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            )));
+            self.parse_state_json(&content)
         }
 
-        let content = String::from_utf8_lossy(&output.stdout);
-        self.parse_state_json(&content)
+        #[cfg(not(feature = "aws"))]
+        {
+            Err(InventoryError::DynamicInventoryFailed(
+                "S3 backend requires the 'aws' feature".to_string(),
+            ))
+        }
     }
 
     /// Load state from HTTP backend
     async fn load_http_state(&self, address: &str) -> InventoryResult<TerraformState> {
         tracing::info!("Terraform plugin: Loading state from {}", address);
 
-        // Note: A full implementation would use reqwest
-        // For now, we try to use curl as a fallback
-        let output = std::process::Command::new("curl")
-            .args(["-s", "-f", address])
-            .output()
-            .map_err(|e| {
-                InventoryError::DynamicInventoryFailed(format!(
-                    "Failed to fetch state from HTTP (is curl installed?): {}",
-                    e
-                ))
-            })?;
+        let response = reqwest::get(address).await.map_err(|e| {
+            InventoryError::DynamicInventoryFailed(format!(
+                "Failed to fetch terraform state from HTTP: {}",
+                e
+            ))
+        })?;
 
-        if !output.status.success() {
+        if !response.status().is_success() {
             return Err(InventoryError::DynamicInventoryFailed(format!(
                 "HTTP request failed: {}",
-                String::from_utf8_lossy(&output.stderr)
+                response.status()
             )));
         }
 
-        let content = String::from_utf8_lossy(&output.stdout);
+        let content = response.text().await.map_err(|e| {
+            InventoryError::DynamicInventoryFailed(format!(
+                "Failed to read terraform state from HTTP: {}",
+                e
+            ))
+        })?;
+
         self.parse_state_json(&content)
     }
 
@@ -815,7 +914,39 @@ impl TerraformPlugin {
                 })
             }
 
-            _ => None,
+            _ => {
+                if self.resource_mappings.contains_key(&resource.resource_type) {
+                    let id = get_string_attr(attrs, "id")
+                        .or_else(|| Some(format!("{}_{}", resource.name, index)))?;
+                    let name = get_string_attr(attrs, "name")
+                        .or_else(|| Some(format!("{}_{}", resource.name, index)))
+                        .unwrap_or_else(|| id.clone());
+                    let private_ip = get_string_attr(attrs, "private_ip")
+                        .or_else(|| get_string_attr(attrs, "private_ip_address"));
+                    let public_ip = get_string_attr(attrs, "public_ip")
+                        .or_else(|| get_string_attr(attrs, "public_ip_address"));
+
+                    let mut tags = extract_tags(attrs);
+                    let labels = extract_labels(attrs);
+                    for (k, v) in labels {
+                        tags.entry(k).or_insert(v);
+                    }
+
+                    Some(TerraformHost {
+                        id,
+                        name,
+                        resource_type: resource.resource_type.clone(),
+                        resource_name: resource.name.clone(),
+                        provider: provider.to_string(),
+                        private_ip,
+                        public_ip,
+                        tags,
+                        attributes: attrs.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -909,7 +1040,7 @@ impl TerraformPlugin {
             if let Some(value) = self.resolve_compose_expression(expr, tf_host) {
                 inv_host.ansible_host = Some(value);
             }
-        } else {
+        } else if inv_host.ansible_host.is_none() {
             // Default: use private IP
             if let Some(ref ip) = tf_host.private_ip {
                 inv_host.ansible_host = Some(ip.clone());
@@ -930,7 +1061,7 @@ impl TerraformPlugin {
             if let Some(value) = self.resolve_compose_expression(expr, tf_host) {
                 inv_host.connection.ssh.user = Some(value);
             }
-        } else {
+        } else if inv_host.connection.ssh.user.is_none() {
             // Default user based on provider
             let user = match tf_host.provider.as_str() {
                 "aws" => "ec2-user",
@@ -951,23 +1082,245 @@ impl TerraformPlugin {
 
     /// Resolve a compose expression to a value
     fn resolve_compose_expression(&self, expr: &str, host: &TerraformHost) -> Option<String> {
-        match expr {
-            "private_ip" | "private_ip_address" => host.private_ip.clone(),
-            "public_ip" | "public_ip_address" => host.public_ip.clone(),
-            "name" | "instance_name" => Some(host.name.clone()),
-            "id" | "instance_id" => Some(host.id.clone()),
-            "resource_type" => Some(host.resource_type.clone()),
-            "resource_name" => Some(host.resource_name.clone()),
-            "provider" => Some(host.provider.clone()),
-            s if s.starts_with("tags.") => {
-                let tag_name = &s[5..];
-                host.tags.get(tag_name).cloned()
+        if expr.contains("{{") || expr.contains("{%") {
+            return self.render_template(expr, host);
+        }
+
+        if let Some(value) = self.resolve_attribute_string(host, expr) {
+            return Some(value);
+        }
+
+        Some(expr.to_string())
+    }
+
+    fn build_template_vars(&self, host: &TerraformHost) -> HashMap<String, serde_json::Value> {
+        let mut vars = HashMap::new();
+        vars.insert("id".to_string(), serde_json::Value::String(host.id.clone()));
+        vars.insert(
+            "name".to_string(),
+            serde_json::Value::String(host.name.clone()),
+        );
+        vars.insert(
+            "resource_type".to_string(),
+            serde_json::Value::String(host.resource_type.clone()),
+        );
+        vars.insert(
+            "resource_name".to_string(),
+            serde_json::Value::String(host.resource_name.clone()),
+        );
+        vars.insert(
+            "provider".to_string(),
+            serde_json::Value::String(host.provider.clone()),
+        );
+        if let Some(ref ip) = host.private_ip {
+            vars.insert(
+                "private_ip".to_string(),
+                serde_json::Value::String(ip.clone()),
+            );
+        }
+        if let Some(ref ip) = host.public_ip {
+            vars.insert(
+                "public_ip".to_string(),
+                serde_json::Value::String(ip.clone()),
+            );
+        }
+        vars.insert(
+            "tags".to_string(),
+            serde_json::to_value(&host.tags).unwrap_or(serde_json::Value::Null),
+        );
+        vars.insert(
+            "attributes".to_string(),
+            serde_json::to_value(&host.attributes).unwrap_or(serde_json::Value::Null),
+        );
+        vars
+    }
+
+    fn render_template(&self, template: &str, host: &TerraformHost) -> Option<String> {
+        let engine = TemplateEngine::new();
+        let vars = self.build_template_vars(host);
+        match engine.render(template, &vars) {
+            Ok(value) => Some(value),
+            Err(e) => {
+                if self.config.strict {
+                    tracing::warn!("Terraform plugin: template error: {}", e);
+                    return None;
+                }
+                tracing::debug!("Terraform plugin: template error ignored: {}", e);
+                None
             }
-            s if s.starts_with("tag:") => {
-                let tag_name = &s[4..];
-                host.tags.get(tag_name).cloned()
+        }
+    }
+
+    fn resolve_attribute_value(
+        &self,
+        host: &TerraformHost,
+        path: &str,
+    ) -> Option<serde_json::Value> {
+        match path {
+            "private_ip" | "private_ip_address" => {
+                return host.private_ip.clone().map(serde_json::Value::String)
             }
-            _ => Some(expr.to_string()), // Literal value
+            "public_ip" | "public_ip_address" => {
+                return host.public_ip.clone().map(serde_json::Value::String)
+            }
+            "name" | "instance_name" | "vm_name" => {
+                return Some(serde_json::Value::String(host.name.clone()))
+            }
+            "id" | "instance_id" => return Some(serde_json::Value::String(host.id.clone())),
+            "resource_type" => return Some(serde_json::Value::String(host.resource_type.clone())),
+            "resource_name" => return Some(serde_json::Value::String(host.resource_name.clone())),
+            "provider" => return Some(serde_json::Value::String(host.provider.clone())),
+            _ => {}
+        }
+
+        if let Some(tag) = path.strip_prefix("tags.") {
+            return host.tags.get(tag).cloned().map(serde_json::Value::String);
+        }
+
+        if let Some(tag) = path.strip_prefix("tag:") {
+            return host.tags.get(tag).cloned().map(serde_json::Value::String);
+        }
+
+        let path = path.strip_prefix("attributes.").unwrap_or(path);
+        let mut map = serde_json::Map::new();
+        for (key, value) in &host.attributes {
+            map.insert(key.clone(), value.clone());
+        }
+        let root = serde_json::Value::Object(map);
+        resolve_json_path(&root, path)
+    }
+
+    fn resolve_attribute_string(&self, host: &TerraformHost, path: &str) -> Option<String> {
+        let value = self.resolve_attribute_value(host, path)?;
+        match value {
+            serde_json::Value::String(s) => Some(s),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            serde_json::Value::Bool(b) => Some(b.to_string()),
+            _ => None,
+        }
+    }
+
+    fn resolve_expression_value(
+        &self,
+        expr: &str,
+        host: &TerraformHost,
+    ) -> Option<serde_yaml::Value> {
+        if expr.contains("{{") || expr.contains("{%") {
+            return self
+                .render_template(expr, host)
+                .map(serde_yaml::Value::String);
+        }
+
+        if let Some(value) = self.resolve_attribute_value(host, expr) {
+            return Some(json_to_yaml(&value));
+        }
+
+        Some(serde_yaml::Value::String(expr.to_string()))
+    }
+
+    fn resolve_mapping_hostname(
+        &self,
+        host: &TerraformHost,
+        mapping: &ResourceMapping,
+    ) -> Option<String> {
+        mapping
+            .hostname_attribute
+            .as_deref()
+            .and_then(|attr| self.resolve_attribute_string(host, attr))
+    }
+
+    fn resolve_mapping_address(
+        &self,
+        host: &TerraformHost,
+        mapping: &ResourceMapping,
+    ) -> Option<String> {
+        if let Some(ref attr) = mapping.address_attribute {
+            if let Some(value) = self.resolve_attribute_string(host, attr) {
+                return Some(value);
+            }
+        }
+
+        if let Some(ref attr) = mapping.fallback_address {
+            if let Some(value) = self.resolve_attribute_string(host, attr) {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    fn apply_resource_mapping(
+        &self,
+        inv_host: &mut Host,
+        tf_host: &TerraformHost,
+        mapping: &ResourceMapping,
+        groups: &mut Vec<String>,
+    ) {
+        if let Some(address) = self.resolve_mapping_address(tf_host, mapping) {
+            inv_host.ansible_host = Some(address);
+        }
+
+        for rule in &mapping.group_by {
+            if let Some(value) = self.resolve_attribute_string(tf_host, &rule.attribute) {
+                let prefix = rule.prefix.clone().unwrap_or_default();
+                let group_name = if prefix.is_empty() {
+                    sanitize_group_name(&value)
+                } else {
+                    format!(
+                        "{}_{}",
+                        sanitize_group_name(&prefix),
+                        sanitize_group_name(&value)
+                    )
+                };
+
+                if !group_name.is_empty() {
+                    groups.push(group_name);
+                }
+            }
+        }
+
+        for (key, expr) in &mapping.host_vars {
+            if let Some(value) = self.resolve_expression_value(expr, tf_host) {
+                match key.as_str() {
+                    "ansible_user" => {
+                        if let serde_yaml::Value::String(user) = &value {
+                            inv_host.connection.ssh.user = Some(user.clone());
+                        }
+                    }
+                    "ansible_port" => {
+                        if let serde_yaml::Value::Number(num) = &value {
+                            if let Some(port) = num.as_u64().and_then(|v| u16::try_from(v).ok()) {
+                                inv_host.connection.ssh.port = port;
+                            }
+                        } else if let serde_yaml::Value::String(port_str) = &value {
+                            if let Ok(port) = port_str.parse::<u16>() {
+                                inv_host.connection.ssh.port = port;
+                            }
+                        }
+                    }
+                    "ansible_host" => {
+                        if let serde_yaml::Value::String(host) = &value {
+                            inv_host.ansible_host = Some(host.clone());
+                        }
+                    }
+                    "ansible_connection" => {
+                        if let serde_yaml::Value::String(conn) = &value {
+                            inv_host.set_var(key, value.clone());
+                            inv_host.connection.connection = match conn.as_str() {
+                                "local" => crate::inventory::ConnectionType::Local,
+                                "docker" => crate::inventory::ConnectionType::Docker,
+                                "podman" => crate::inventory::ConnectionType::Podman,
+                                "winrm" => crate::inventory::ConnectionType::Winrm,
+                                _ => crate::inventory::ConnectionType::Ssh,
+                            };
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+
+                inv_host.set_var(key, value);
+            }
         }
     }
 
@@ -1007,8 +1360,14 @@ impl TerraformPlugin {
                 continue;
             }
 
+            let mapping = self.resource_mappings.get(&tf_host.resource_type);
+
             // Determine hostname
-            let Some(hostname) = tf_host.hostname(&hostname_prefs) else {
+            let hostname = mapping
+                .and_then(|map| self.resolve_mapping_hostname(tf_host, map))
+                .or_else(|| tf_host.hostname(&hostname_prefs));
+
+            let Some(hostname) = hostname else {
                 tracing::warn!(
                     "Terraform plugin: Could not determine hostname for resource {}/{}",
                     tf_host.resource_type,
@@ -1025,11 +1384,18 @@ impl TerraformPlugin {
                 host.set_var(&key, value);
             }
 
+            // Get groups for this host
+            let mut groups = self.get_host_groups(tf_host);
+
+            if let Some(map) = mapping {
+                self.apply_resource_mapping(&mut host, tf_host, map, &mut groups);
+            }
+
             // Apply compose configuration
             self.apply_compose(&mut host, tf_host);
 
-            // Get groups for this host
-            let groups = self.get_host_groups(tf_host);
+            groups.sort();
+            groups.dedup();
 
             // Add host to groups
             for group_name in &groups {
@@ -1103,7 +1469,13 @@ impl DynamicInventoryPlugin for TerraformPlugin {
     }
 
     async fn refresh(&self) -> InventoryResult<()> {
-        // No caching implemented yet
+        let mut cache = self.cached_state.write().map_err(|e| {
+            InventoryError::DynamicInventoryFailed(format!(
+                "Failed to acquire terraform cache lock: {}",
+                e
+            ))
+        })?;
+        *cache = None;
         Ok(())
     }
 
@@ -1138,6 +1510,14 @@ impl DynamicInventoryPlugin for TerraformPlugin {
                 "Hostname preferences in order (tag:Name, name, private_ip)",
             ),
             PluginOption {
+                name: "resource_mappings".to_string(),
+                description: "Resource-specific hostname/address/group/vars mappings".to_string(),
+                required: false,
+                default: None,
+                option_type: PluginOptionType::Dict,
+                env_var: None,
+            },
+            PluginOption {
                 name: "filters".to_string(),
                 description: "Resource filters (resource_type, provider, tags)".to_string(),
                 required: false,
@@ -1156,6 +1536,14 @@ impl DynamicInventoryPlugin for TerraformPlugin {
             PluginOption {
                 name: "compose".to_string(),
                 description: "Set host variables (ansible_host, ansible_user, etc.)".to_string(),
+                required: false,
+                default: None,
+                option_type: PluginOptionType::Dict,
+                env_var: None,
+            },
+            PluginOption {
+                name: "cache".to_string(),
+                description: "Cache configuration (enabled, ttl)".to_string(),
                 required: false,
                 default: None,
                 option_type: PluginOptionType::Dict,
@@ -1293,6 +1681,24 @@ fn extract_gcp_network_ips(
     }
 
     (private_ip, public_ip)
+}
+
+/// Resolve a dotted path within a JSON value
+fn resolve_json_path(value: &serde_json::Value, path: &str) -> Option<serde_json::Value> {
+    let mut current = value;
+    for part in path.split('.') {
+        match current {
+            serde_json::Value::Object(map) => {
+                current = map.get(part)?;
+            }
+            serde_json::Value::Array(arr) => {
+                let idx: usize = part.parse().ok()?;
+                current = arr.get(idx)?;
+            }
+            _ => return None,
+        }
+    }
+    Some(current.clone())
 }
 
 /// Convert JSON value to YAML value
@@ -2315,10 +2721,7 @@ mod tests {
     fn test_terraform_plugin_config() {
         let config = TerraformPluginConfig::default();
         assert_eq!(config.backend, TerraformBackendType::Local);
-        assert_eq!(
-            config.state_path,
-            Some(PathBuf::from("terraform.tfstate"))
-        );
+        assert_eq!(config.state_path, Some(PathBuf::from("terraform.tfstate")));
         assert!(config.export_outputs);
         assert!(config.resource_mappings.is_empty());
 
@@ -2353,6 +2756,37 @@ mod tests {
         assert_eq!(mapping.group_by.len(), 1);
         assert_eq!(mapping.group_by[0].attribute, "tags.Environment");
         assert_eq!(mapping.group_by[0].prefix, Some("env".to_string()));
+    }
+
+    #[test]
+    fn test_resource_mapping_applied_to_inventory() {
+        let mut config = PluginConfig::new("terraform");
+        let mapping_yaml = r#"
+aws_instance:
+  hostname_attribute: tags.Name
+  address_attribute: public_ip
+  group_by:
+    - attribute: tags.Environment
+      prefix: env
+  host_vars:
+    instance_id: id
+"#;
+        let mapping_value: serde_yaml::Value = serde_yaml::from_str(mapping_yaml).unwrap();
+        config
+            .extra
+            .insert("resource_mappings".to_string(), mapping_value);
+
+        let plugin = TerraformPlugin::new(config).unwrap();
+
+        let mut state = create_test_state();
+        state.resources.push(create_aws_instance_resource());
+
+        let inventory = plugin.state_to_inventory(state).unwrap();
+        let host = inventory.get_host("web-server-01").unwrap();
+
+        assert_eq!(host.ansible_host.as_deref(), Some("54.123.45.67"));
+        assert!(host.vars.contains_key("instance_id"));
+        assert!(inventory.get_group("env_production").is_some());
     }
 
     // Test 34: LocalBackend

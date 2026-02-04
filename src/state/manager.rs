@@ -5,12 +5,12 @@
 
 use crate::error::{Error as RustibleError, Result};
 use crate::state::storage::{StateBackend, StateFile};
+use blake3::Hash;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use blake3::Hash;
 
 /// Represents the lifecycle state of a resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,9 +158,15 @@ impl StateManager {
 
     pub async fn initialize(&self) -> Result<()> {
         // Use a fixed key for the state file for now, similar to default behavior
-        if let Some(state_file) = self.backend.retrieve_state("default").await.map_err(|e| RustibleError::Internal(format!("State error: {}", e)))? {
-            let data: StateData = serde_json::from_value(state_file.data)
-                .map_err(|e| RustibleError::Internal(format!("Failed to deserialize state data: {}", e)))?;
+        if let Some(state_file) = self
+            .backend
+            .retrieve_state("default")
+            .await
+            .map_err(|e| RustibleError::Internal(format!("State error: {}", e)))?
+        {
+            let data: StateData = serde_json::from_value(state_file.data).map_err(|e| {
+                RustibleError::Internal(format!("Failed to deserialize state data: {}", e))
+            })?;
 
             let mut resources = self.resources.write().await;
             *resources = data.resources;
@@ -198,7 +204,8 @@ impl StateManager {
                     resource.state,
                     "State updated".to_string(),
                     resource.config_hash.clone(),
-                )).await?;
+                ))
+                .await?;
             }
         } else {
             self.record_transition(StateTransition::new(
@@ -207,7 +214,8 @@ impl StateManager {
                 resource.state,
                 "Resource created".to_string(),
                 resource.config_hash.clone(),
-            )).await?;
+            ))
+            .await?;
         }
 
         Ok(())
@@ -242,11 +250,15 @@ impl StateManager {
                 new_state,
                 reason.to_string(),
                 resource.config_hash.clone(),
-            )).await?;
+            ))
+            .await?;
 
             Ok(())
         } else {
-            Err(RustibleError::Internal(format!("Resource not found: {}", id)))
+            Err(RustibleError::Internal(format!(
+                "Resource not found: {}",
+                id
+            )))
         }
     }
 
@@ -286,7 +298,10 @@ impl StateManager {
         let mut state_file = StateFile::new(serde_json::to_value(data).unwrap());
         state_file.serial = *version;
 
-        self.backend.store_state("default", &state_file).await.map_err(|e| RustibleError::Internal(format!("State error: {}", e)))?;
+        self.backend
+            .store_state("default", &state_file)
+            .await
+            .map_err(|e| RustibleError::Internal(format!("State error: {}", e)))?;
 
         tracing::info!("State persisted, version {}", version);
 

@@ -140,7 +140,10 @@ fn test_docker_container_execute() {
     let err = result.unwrap_err();
     let err_msg = format!("{}", err);
     assert!(
-        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("docker")
+            || err_msg.contains("Docker")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention docker or runtime issue, got: {}",
         err_msg
     );
@@ -197,7 +200,10 @@ fn test_docker_image_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("docker")
+            || err_msg.contains("Docker")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention docker or runtime issue, got: {}",
         err_msg
     );
@@ -254,7 +260,10 @@ fn test_docker_network_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("docker")
+            || err_msg.contains("Docker")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention docker or runtime issue, got: {}",
         err_msg
     );
@@ -311,7 +320,10 @@ fn test_docker_volume_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("docker")
+            || err_msg.contains("Docker")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention docker or runtime issue, got: {}",
         err_msg
     );
@@ -360,7 +372,10 @@ fn test_docker_compose_validate_empty_params() {
 fn test_docker_compose_execute() {
     let module = DockerComposeModule;
     let mut params = create_params();
-    params.insert("project_src".to_string(), serde_json::json!("/tmp/test-compose"));
+    params.insert(
+        "project_src".to_string(),
+        serde_json::json!("/tmp/test-compose"),
+    );
     let context = rustible::modules::ModuleContext::new().with_check_mode(true);
 
     let result = module.execute(&params, &context);
@@ -371,7 +386,10 @@ fn test_docker_compose_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("runtime") || err_msg.contains("docker") || err_msg.contains("Docker") || err_msg.contains("Unsupported"),
+        err_msg.contains("runtime")
+            || err_msg.contains("docker")
+            || err_msg.contains("Docker")
+            || err_msg.contains("Unsupported"),
         "Error should mention runtime or docker issue, got: {}",
         err_msg
     );
@@ -429,7 +447,10 @@ fn test_k8s_namespace_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("Kubernetes")
+            || err_msg.contains("kubernetes")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention Kubernetes or runtime issue, got: {}",
         err_msg
     );
@@ -497,7 +518,10 @@ fn test_k8s_deployment_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("Kubernetes")
+            || err_msg.contains("kubernetes")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention Kubernetes or runtime issue, got: {}",
         err_msg
     );
@@ -554,7 +578,10 @@ fn test_k8s_service_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("Kubernetes")
+            || err_msg.contains("kubernetes")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention Kubernetes or runtime issue, got: {}",
         err_msg
     );
@@ -615,7 +642,10 @@ fn test_k8s_configmap_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("Kubernetes")
+            || err_msg.contains("kubernetes")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention Kubernetes or runtime issue, got: {}",
         err_msg
     );
@@ -676,7 +706,10 @@ fn test_k8s_secret_execute() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("Kubernetes") || err_msg.contains("kubernetes") || err_msg.contains("runtime") || err_msg.contains("Unsupported"),
+        err_msg.contains("Kubernetes")
+            || err_msg.contains("kubernetes")
+            || err_msg.contains("runtime")
+            || err_msg.contains("Unsupported"),
         "Error should mention Kubernetes or runtime issue, got: {}",
         err_msg
     );
