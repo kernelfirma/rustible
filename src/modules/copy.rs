@@ -63,11 +63,37 @@ impl CopyModule {
             return Ok(true);
         }
 
-        // Compare checksums
-        let src_checksum = get_file_checksum(src)?;
-        let dest_checksum = get_file_checksum(dest)?;
+        // Compare content directly using buffered readers to avoid
+        // reading entire files into memory and computing checksums.
+        // This fails fast on first difference.
+        let mut f1 = std::io::BufReader::new(fs::File::open(src)?);
+        let mut f2 = std::io::BufReader::new(fs::File::open(dest)?);
 
-        Ok(src_checksum != dest_checksum)
+        let mut buf1 = [0; 8192];
+        let mut buf2 = [0; 8192];
+
+        loop {
+            let n1 = f1.read(&mut buf1)?;
+            if n1 == 0 {
+                // EOF reached on src. Since sizes are equal, dest should also be at EOF.
+                return Ok(false);
+            }
+
+            // Read corresponding chunk from dest
+            let mut n2_total = 0;
+            while n2_total < n1 {
+                let n2 = f2.read(&mut buf2[n2_total..n1])?;
+                if n2 == 0 {
+                    // Unexpected EOF on dest (sizes were same, but file changed?)
+                    return Ok(true);
+                }
+                n2_total += n2;
+            }
+
+            if buf1[..n1] != buf2[..n1] {
+                return Ok(true);
+            }
+        }
     }
 
     fn copy_content(content: &str, dest: &Path) -> ModuleResult<()> {
@@ -939,5 +965,38 @@ mod tests {
         let backup_path = temp.path().join("test.txt~");
         assert!(backup_path.exists());
         assert_eq!(fs::read_to_string(&backup_path).unwrap(), "Old content");
+    }
+
+    #[test]
+    fn test_files_differ_impl() {
+        let temp = TempDir::new().unwrap();
+        let file1 = temp.path().join("file1");
+        let file2 = temp.path().join("file2");
+
+        // Case 1: Identical files
+        fs::write(&file1, "content").unwrap();
+        fs::write(&file2, "content").unwrap();
+        assert!(!CopyModule::files_differ(&file1, &file2).unwrap());
+
+        // Case 2: Different sizes
+        fs::write(&file2, "content_longer").unwrap();
+        assert!(CopyModule::files_differ(&file1, &file2).unwrap());
+
+        // Case 3: Same size, different content
+        fs::write(&file1, "aaaa").unwrap();
+        fs::write(&file2, "bbbb").unwrap();
+        assert!(CopyModule::files_differ(&file1, &file2).unwrap());
+
+        // Case 4: Large identical files (larger than buffer)
+        let large_content = vec![b'x'; 20000];
+        fs::write(&file1, &large_content).unwrap();
+        fs::write(&file2, &large_content).unwrap();
+        assert!(!CopyModule::files_differ(&file1, &file2).unwrap());
+
+        // Case 5: Large different files (diff at end)
+        let mut large_content2 = large_content.clone();
+        large_content2[19999] = b'y';
+        fs::write(&file2, &large_content2).unwrap();
+        assert!(CopyModule::files_differ(&file1, &file2).unwrap());
     }
 }
