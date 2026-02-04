@@ -307,6 +307,14 @@ impl TemplateEngine {
         self.render_cached(template, context)
     }
 
+    /// Render a template string with any Serializable context
+    ///
+    /// This allows rendering with custom structs or optimized context wrappers
+    /// without converting to serde_json::Value first.
+    pub fn render_serialize<S: serde::Serialize>(&self, template: &str, vars: &S) -> Result<String> {
+        self.render_cached(template, vars)
+    }
+
     /// Render a JSON value, templating any strings within it
     ///
     /// Recursively templates all string values in the JSON structure.

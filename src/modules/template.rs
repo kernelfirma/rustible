@@ -10,46 +10,80 @@ use super::{
 use crate::connection::TransferOptions;
 use crate::template::TEMPLATE_ENGINE;
 use crate::utils::shell_escape;
+use serde::ser::{Serialize, Serializer, SerializeMap};
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Context wrapper that merges vars, facts, and extra_vars without cloning
+struct MergedContext<'a> {
+    vars: &'a HashMap<String, serde_json::Value>,
+    facts: &'a HashMap<String, serde_json::Value>,
+    extra_vars: Option<&'a serde_json::Value>,
+}
+
+impl<'a> Serialize for MergedContext<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Use BTreeSet for deterministic order of keys
+        let mut keys: BTreeSet<&str> = BTreeSet::new();
+
+        if let Some(serde_json::Value::Object(obj)) = self.extra_vars {
+            keys.extend(obj.keys().map(|s| s.as_str()));
+        }
+
+        // Always include ansible_facts key
+        keys.insert("ansible_facts");
+
+        // Add facts keys
+        keys.extend(self.facts.keys().map(|s| s.as_str()));
+
+        // Add vars keys
+        keys.extend(self.vars.keys().map(|s| s.as_str()));
+
+        let mut map = serializer.serialize_map(Some(keys.len()))?;
+
+        for key in keys {
+            // Priority 1: Extra vars
+            if let Some(serde_json::Value::Object(obj)) = self.extra_vars {
+                if let Some(val) = obj.get(key) {
+                    map.serialize_entry(key, val)?;
+                    continue;
+                }
+            }
+
+            // Priority 2: Facts
+            if key == "ansible_facts" {
+                // Special case: the ansible_facts key itself maps to the whole facts map
+                map.serialize_entry(key, self.facts)?;
+                continue;
+            }
+
+            if let Some(val) = self.facts.get(key) {
+                map.serialize_entry(key, val)?;
+                continue;
+            }
+
+            // Priority 3: Vars
+            if let Some(val) = self.vars.get(key) {
+                map.serialize_entry(key, val)?;
+                continue;
+            }
+        }
+
+        map.end()
+    }
+}
+
 /// Module for rendering templates
 pub struct TemplateModule;
 
 impl TemplateModule {
-    fn build_context(
-        context: &ModuleContext,
-        extra_vars: Option<&serde_json::Value>,
-    ) -> serde_json::Value {
-        let mut ctx_map = serde_json::Map::new();
-
-        // Add variables
-        for (key, value) in &context.vars {
-            ctx_map.insert(key.clone(), value.clone());
-        }
-
-        // Add facts
-        ctx_map.insert(
-            "ansible_facts".to_string(),
-            serde_json::json!(&context.facts),
-        );
-        for (key, value) in &context.facts {
-            ctx_map.insert(key.clone(), value.clone());
-        }
-
-        // Add extra variables if provided
-        if let Some(serde_json::Value::Object(vars)) = extra_vars {
-            for (key, value) in vars {
-                ctx_map.insert(key.clone(), value.clone());
-            }
-        }
-
-        serde_json::Value::Object(ctx_map)
-    }
-
     #[allow(clippy::too_many_arguments)]
     async fn execute_remote(
         conn: Arc<dyn crate::connection::Connection + Send + Sync>,
@@ -183,16 +217,6 @@ impl TemplateModule {
         }
 
         Ok(output)
-    }
-
-    fn render_template(
-        template_content: &str,
-        context: &serde_json::Value,
-    ) -> ModuleResult<String> {
-        // Use the shared global TemplateEngine
-        TEMPLATE_ENGINE
-            .render_with_json(template_content, context)
-            .map_err(|e| ModuleError::TemplateError(format!("Failed to render template: {}", e)))
     }
 
     fn create_backup(dest: &Path, backup_suffix: &str) -> ModuleResult<Option<String>> {
@@ -414,9 +438,17 @@ impl Module for TemplateModule {
         };
         let _src_path = Path::new(&src_name);
 
-        // Build context and render
-        let ctx = Self::build_context(context, extra_vars);
-        let rendered = Self::render_template(&template_content, &ctx)?;
+        // Build context and render using zero-allocation strategy
+        let ctx = MergedContext {
+            vars: &context.vars,
+            facts: &context.facts,
+            extra_vars,
+        };
+
+        // Use render_serialize to avoid cloning context into intermediate Value
+        let rendered = TEMPLATE_ENGINE
+            .render_serialize(&template_content, &ctx)
+            .map_err(|e| ModuleError::TemplateError(format!("Failed to render template: {}", e)))?;
 
         // Check if we have a connection for remote execution
         if let Some(ref conn) = context.connection {
