@@ -276,10 +276,11 @@ impl PostgresqlUserModule {
             "SELECT 1 FROM pg_roles WHERE rolname = '{}'",
             config.name.replace('\'', "''")
         );
+        // Use shell_escape to prevent command injection
         let cmd = format!(
-            "psql {} -tAc \"{}\"",
+            "psql {} -tAc {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            query
+            shell_escape(&query)
         );
 
         let (success, stdout, _) =
@@ -302,10 +303,11 @@ impl PostgresqlUserModule {
             config.name.replace('\'', "''")
         );
 
+        // Use shell_escape to prevent command injection
         let cmd = format!(
-            "psql {} -tAF '|' -c \"{}\"",
+            "psql {} -tAF '|' -c {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            query
+            shell_escape(&query)
         );
 
         let (success, stdout, _) =
@@ -328,10 +330,11 @@ impl PostgresqlUserModule {
              WHERE u.rolname = '{}'",
             config.name.replace('\'', "''")
         );
+        // Use shell_escape to prevent command injection
         let groups_cmd = format!(
-            "psql {} -tAc \"{}\"",
+            "psql {} -tAc {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            groups_query
+            shell_escape(&groups_query)
         );
 
         let (_, groups_stdout, _) = Self::execute_command(
@@ -396,10 +399,11 @@ impl PostgresqlUserModule {
             options.join(" ")
         );
 
+        // Use shell_escape to prevent command injection
         let cmd = format!(
-            "psql {} -c \"{}\"",
+            "psql {} -c {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            create_sql
+            shell_escape(&create_sql)
         );
 
         let (success, _, stderr) =
@@ -489,10 +493,11 @@ impl PostgresqlUserModule {
                 shell_escape(&config.name),
                 alterations.join(" ")
             );
+            // Use shell_escape to prevent command injection
             let cmd = format!(
-                "psql {} -c \"{}\"",
+                "psql {} -c {}",
                 config.conn.build_psql_args(&config.conn.maintenance_db),
-                alter_sql
+                shell_escape(&alter_sql)
             );
 
             let (success, _, stderr) =
@@ -517,10 +522,11 @@ impl PostgresqlUserModule {
                     shell_escape(&config.name),
                     password.replace('\'', "''")
                 );
+                // Use shell_escape to prevent command injection
                 let cmd = format!(
-                    "psql {} -c \"{}\"",
+                    "psql {} -c {}",
                     config.conn.build_psql_args(&config.conn.maintenance_db),
-                    pwd_sql
+                    shell_escape(&pwd_sql)
                 );
 
                 let (success, _, stderr) =
@@ -560,10 +566,11 @@ impl PostgresqlUserModule {
             shell_escape(group),
             shell_escape(&config.name)
         );
+        // Use shell_escape to prevent command injection
         let cmd = format!(
-            "psql {} -c \"{}\"",
+            "psql {} -c {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            grant_sql
+            shell_escape(&grant_sql)
         );
 
         let (success, _, stderr) =
@@ -586,10 +593,11 @@ impl PostgresqlUserModule {
         context: &ModuleContext,
     ) -> ModuleResult<()> {
         let drop_sql = format!("DROP ROLE IF EXISTS {}", shell_escape(&config.name));
+        // Use shell_escape to prevent command injection
         let cmd = format!(
-            "psql {} -c \"{}\"",
+            "psql {} -c {}",
             config.conn.build_psql_args(&config.conn.maintenance_db),
-            drop_sql
+            shell_escape(&drop_sql)
         );
 
         let (success, _, stderr) =
@@ -795,5 +803,130 @@ mod tests {
         assert_eq!(module.name(), "postgresql_user");
         assert_eq!(module.classification(), ModuleClassification::RemoteCommand);
         assert_eq!(module.required_params(), &["name"]);
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use crate::connection::{CommandResult, Connection, ExecuteOptions, FileStat, TransferOptions};
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use std::path::Path;
+    use std::sync::{Arc, Mutex};
+
+    struct MockConnection {
+        commands: Mutex<Vec<String>>,
+    }
+
+    impl MockConnection {
+        fn new() -> Self {
+            Self {
+                commands: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Connection for MockConnection {
+        fn identifier(&self) -> &str {
+            "mock"
+        }
+        async fn is_alive(&self) -> bool {
+            true
+        }
+
+        async fn execute(
+            &self,
+            command: &str,
+            _options: Option<ExecuteOptions>,
+        ) -> crate::connection::ConnectionResult<CommandResult> {
+            self.commands.lock().unwrap().push(command.to_string());
+            Ok(CommandResult::success("0".to_string(), "".to_string()))
+        }
+
+        async fn upload(
+            &self,
+            _local: &Path,
+            _remote: &Path,
+            _opts: Option<TransferOptions>,
+        ) -> crate::connection::ConnectionResult<()> {
+            Ok(())
+        }
+        async fn upload_content(
+            &self,
+            _content: &[u8],
+            _remote: &Path,
+            _opts: Option<TransferOptions>,
+        ) -> crate::connection::ConnectionResult<()> {
+            Ok(())
+        }
+        async fn download(
+            &self,
+            _remote: &Path,
+            _local: &Path,
+        ) -> crate::connection::ConnectionResult<()> {
+            Ok(())
+        }
+        async fn download_content(
+            &self,
+            _remote: &Path,
+        ) -> crate::connection::ConnectionResult<Vec<u8>> {
+            Ok(vec![])
+        }
+        async fn path_exists(&self, _path: &Path) -> crate::connection::ConnectionResult<bool> {
+            Ok(false)
+        }
+        async fn is_directory(&self, _path: &Path) -> crate::connection::ConnectionResult<bool> {
+            Ok(false)
+        }
+        async fn stat(&self, _path: &Path) -> crate::connection::ConnectionResult<FileStat> {
+            unimplemented!()
+        }
+        async fn close(&self) -> crate::connection::ConnectionResult<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_postgres_user_injection() {
+        let module = PostgresqlUserModule;
+        let conn = Arc::new(MockConnection::new());
+
+        let context = ModuleContext::builder()
+            .connection(conn.clone())
+            .build()
+            .unwrap();
+
+        let mut params = HashMap::new();
+        // Malicious name attempting to break out of "..." in shell
+        let malicious_name = "user\"; touch /tmp/pwned; echo \"";
+        params.insert("name".to_string(), serde_json::json!(malicious_name));
+
+        let _ = module.execute(&params, &context);
+
+        let commands = conn.commands.lock().unwrap();
+        let mut found_injection = false;
+        for cmd in commands.iter() {
+            // Check if the command uses double quotes for the query argument (which allows injection)
+            // Vulnerable: ... -tAc "SELECT ..."
+            // Fixed: ... -tAc 'SELECT ...'
+            if cmd.contains(" -c \"") || cmd.contains(" -tAc \"") {
+                found_injection = true;
+            }
+
+            // Also verify that it IS quoted safely (starts with ')
+            if !cmd.contains(" -c '") && !cmd.contains(" -tAc '") {
+                // If it's not double quoted AND not single quoted, it might be unquoted (also dangerous if spaces)
+                // But shell_escape should quote it.
+                // Note: we can't assert strict failure here because shell_escape might use other quoting (though unlikely).
+                // But we definitely want to ensure NO double quotes wrapping the query.
+            }
+        }
+
+        assert!(
+            !found_injection,
+            "Command injection vulnerability detected! Query argument is wrapped in double quotes."
+        );
     }
 }
