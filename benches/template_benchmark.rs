@@ -10,6 +10,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use once_cell::sync::Lazy;
+use rustible::template::TemplateEngine;
 use std::collections::HashMap;
 use tera::{Context as TeraContext, Tera};
 
@@ -885,8 +886,55 @@ fn bench_template_memory_patterns(c: &mut Criterion) {
 }
 
 // ============================================================================
+// Filter Optimization Benchmarks
+// ============================================================================
+
+fn bench_filter_join_opt(c: &mut Criterion) {
+    let mut group = c.benchmark_group("filter_join_optimization");
+
+    let engine = TemplateEngine::new();
+    let mut vars = HashMap::new();
+
+    let list: Vec<String> = (0..1000).map(|i| format!("item_{}", i)).collect();
+    vars.insert("list".to_string(), serde_json::to_value(list).unwrap());
+
+    // Pre-compile template
+    let template = "{{ list | join(',') }}";
+
+    group.bench_function("join_1000_items", |b| {
+        b.iter(|| engine.render(black_box(template), black_box(&vars)).unwrap())
+    });
+
+    group.finish();
+}
+
+fn bench_filter_title_opt(c: &mut Criterion) {
+    let mut group = c.benchmark_group("filter_title_optimization");
+
+    let engine = TemplateEngine::new();
+    let mut vars = HashMap::new();
+
+    let text = "hello world ".repeat(1000);
+    vars.insert("text".to_string(), serde_json::to_value(text).unwrap());
+
+    let template = "{{ text | title }}";
+
+    group.bench_function("title_2000_words", |b| {
+        b.iter(|| engine.render(black_box(template), black_box(&vars)).unwrap())
+    });
+
+    group.finish();
+}
+
+// ============================================================================
 // Criterion Groups and Main
 // ============================================================================
+
+criterion_group!(
+    optimization_benches,
+    bench_filter_join_opt,
+    bench_filter_title_opt,
+);
 
 criterion_group!(
     parsing_benches,
@@ -940,4 +988,5 @@ criterion_main!(
     detection_benches,
     comparison_benches,
     memory_benches,
+    optimization_benches,
 );

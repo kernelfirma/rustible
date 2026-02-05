@@ -531,20 +531,28 @@ fn filter_capitalize(value: &str) -> String {
 }
 
 fn filter_title(value: &str) -> String {
-    value
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c
-                    .to_uppercase()
-                    .chain(chars.map(|c| c.to_lowercase().next().unwrap_or(c)))
-                    .collect(),
+    let mut result = String::with_capacity(value.len());
+    let mut first_word = true;
+
+    for word in value.split_whitespace() {
+        if !first_word {
+            result.push(' ');
+        }
+        first_word = false;
+
+        let mut chars = word.chars();
+        if let Some(c) = chars.next() {
+            for uc in c.to_uppercase() {
+                result.push(uc);
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+            for c in chars {
+                for lc in c.to_lowercase() {
+                    result.push(lc);
+                }
+            }
+        }
+    }
+    result
 }
 
 fn filter_trim(value: &str) -> String {
@@ -600,11 +608,17 @@ fn filter_split(value: &str, sep: Option<&str>) -> Vec<String> {
 
 fn filter_join(value: Vec<MiniJinjaValue>, sep: Option<&str>) -> String {
     let sep = sep.unwrap_or("");
-    value
-        .iter()
-        .map(|v| v.to_string())
-        .collect::<Vec<_>>()
-        .join(sep)
+    let mut result = String::new();
+    for (i, v) in value.iter().enumerate() {
+        if i > 0 {
+            result.push_str(sep);
+        }
+        use std::fmt::Write;
+        // Optimization: Write directly to string buffer to avoid allocating
+        // intermediate Strings and Vec<String>
+        write!(result, "{}", v).unwrap();
+    }
+    result
 }
 
 fn filter_int(value: MiniJinjaValue) -> i64 {
