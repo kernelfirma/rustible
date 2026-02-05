@@ -111,7 +111,7 @@ impl InteractiveSession {
             .collect();
 
         let selection = Select::with_theme(&self.theme)
-            .with_prompt("Select a playbook")
+            .with_prompt("📖 Select a playbook")
             .items(&items)
             .default(0)
             .interact_on(&self.term)?;
@@ -123,7 +123,7 @@ impl InteractiveSession {
     pub fn select_inventory(&self, inventories: &[PathBuf]) -> Result<Option<PathBuf>> {
         if inventories.is_empty() {
             let custom: String = Input::with_theme(&self.theme)
-                .with_prompt("Enter inventory path (or 'localhost' for local)")
+                .with_prompt("✏️  Enter inventory path (or 'localhost' for local)")
                 .default("localhost".to_string())
                 .interact_on(&self.term)?;
 
@@ -141,7 +141,7 @@ impl InteractiveSession {
         items.push("🏠 Use localhost (no inventory)".to_string());
 
         let selection = Select::with_theme(&self.theme)
-            .with_prompt("Select inventory")
+            .with_prompt("📋 Select inventory")
             .items(&items)
             .default(0)
             .interact_on(&self.term)?;
@@ -152,7 +152,7 @@ impl InteractiveSession {
 
         if selection == items.len() - 2 {
             let custom: String = Input::with_theme(&self.theme)
-                .with_prompt("Enter inventory path")
+                .with_prompt("✏️  Enter inventory path")
                 .interact_on(&self.term)?;
             return Ok(Some(PathBuf::from(custom)));
         }
@@ -167,7 +167,7 @@ impl InteractiveSession {
         }
 
         let use_tags = Confirm::with_theme(&self.theme)
-            .with_prompt("Filter by tags?")
+            .with_prompt("🏷️  Filter by tags?")
             .default(false)
             .interact_on(&self.term)?;
 
@@ -178,7 +178,7 @@ impl InteractiveSession {
         let items: Vec<String> = available_tags.iter().map(|t| format!("🏷️ {}", t)).collect();
 
         let selections = MultiSelect::with_theme(&self.theme)
-            .with_prompt("Select tags to run (space to select, enter to confirm)")
+            .with_prompt("🏷️  Select tags to run (space to select, enter to confirm)")
             .items(&items)
             .interact_on(&self.term)?;
 
@@ -191,7 +191,7 @@ impl InteractiveSession {
     /// Prompt for extra variables
     pub fn get_extra_vars(&self) -> Result<Vec<String>> {
         let add_vars = Confirm::with_theme(&self.theme)
-            .with_prompt("Add extra variables?")
+            .with_prompt("➕ Add extra variables?")
             .default(false)
             .interact_on(&self.term)?;
 
@@ -203,7 +203,7 @@ impl InteractiveSession {
 
         loop {
             let var: String = Input::with_theme(&self.theme)
-                .with_prompt("Enter variable (key=value, or empty to finish)")
+                .with_prompt("✏️  Enter variable (key=value, or empty to finish)")
                 .allow_empty(true)
                 .interact_on(&self.term)?;
 
@@ -224,12 +224,12 @@ impl InteractiveSession {
     /// Prompt for run options
     pub fn get_run_options(&self) -> Result<RunOptions> {
         let check_mode = Confirm::with_theme(&self.theme)
-            .with_prompt("Run in check mode (dry-run)?")
+            .with_prompt("🔍 Run in check mode (dry-run)?")
             .default(false)
             .interact_on(&self.term)?;
 
         let diff_mode = Confirm::with_theme(&self.theme)
-            .with_prompt("Show diffs?")
+            .with_prompt("📝 Show diffs?")
             .default(false)
             .interact_on(&self.term)?;
 
@@ -242,13 +242,13 @@ impl InteractiveSession {
         ];
 
         let verbosity = Select::with_theme(&self.theme)
-            .with_prompt("Verbosity level")
+            .with_prompt("🔊 Verbose level")
             .items(&verbosity_items)
             .default(0)
             .interact_on(&self.term)? as u8;
 
         let limit: String = Input::with_theme(&self.theme)
-            .with_prompt("Limit to hosts (pattern, or empty for all)")
+            .with_prompt("🎯 Limit to hosts (pattern, or empty for all)")
             .allow_empty(true)
             .interact_on(&self.term)?;
 
@@ -274,7 +274,7 @@ impl InteractiveSession {
         ];
 
         let selection = Select::with_theme(&self.theme)
-            .with_prompt("Vault operation")
+            .with_prompt("🔐 Vault operation")
             .items(&items)
             .default(0)
             .interact_on(&self.term)?;
