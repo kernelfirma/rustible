@@ -68,6 +68,10 @@ impl CommandModule {
                 // reasonably well for both cmd.exe and PowerShell, whereas POSIX
                 // single quotes fail completely on cmd.exe.
                 "cmd".to_string()
+            } else if os_family == "unknown" {
+                return Err(ModuleError::InvalidParameter(
+                    "Cannot determine shell type (os_family unknown). Please specify 'shell_type' (e.g., 'cmd', 'powershell', 'posix') or ensure facts are gathered.".to_string(),
+                ));
             } else {
                 "posix".to_string()
             }
@@ -640,5 +644,35 @@ mod tests {
         // Should default to posix escaping (single quotes where needed)
         // 'echo' is safe so it's not quoted. 'hello & calc.exe' is quoted.
         assert_eq!(cmd, "echo 'hello & calc.exe'");
+    }
+}
+
+#[cfg(test)]
+mod security_repro {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_error_on_unknown_os() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "argv".to_string(),
+            serde_json::json!(["echo", "hello & calc.exe"]),
+        );
+
+        // Context with no facts (unknown OS)
+        let context = ModuleContext::default();
+
+        let result = module.get_command_string(&params, &context);
+
+        // Verify that we now error out instead of defaulting to dangerous POSIX escaping
+        assert!(result.is_err());
+        match result {
+            Err(ModuleError::InvalidParameter(msg)) => {
+                assert!(msg.contains("Cannot determine shell type"));
+            }
+            _ => panic!("Expected InvalidParameter error"),
+        }
     }
 }
