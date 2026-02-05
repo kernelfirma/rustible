@@ -1,6 +1,6 @@
 # Terraform Integration Compatibility
 
-> **Last Updated:** 2026-02-03
+> **Last Updated:** 2026-02-05
 > **Rustible Version:** 0.1.x
 > **Status:** Experimental (Feature-gated)
 
@@ -29,9 +29,11 @@ Rustible can also import Terraform outputs via `vars_files` entries (local, HTTP
 | Capability | Terraform | Rustible | Status |
 |------------|-----------|----------|--------|
 | Plan mode preview | Yes | Yes | Stable |
-| State management | Yes | Yes | Beta |
-| Drift detection | Yes | Planned | v0.3 |
-| Remote state backends | Yes | Yes | Beta |
+| State management | Yes | Yes | Stable |
+| Drift detection | Yes | Yes | Stable |
+| Remote state backends | Yes | Yes | Stable |
+| State locking | Yes | Yes | Stable |
+| Terraform state import | Yes | Yes | Stable |
 | Lockfiles | Yes | Planned | v1.0 |
 | Checkpoints/rollback | No | Planned | v1.0 |
 
@@ -73,83 +75,125 @@ Apply this plan? [y/N]
 
 Requires `--features aws` or `--features provisioning`.
 
-### Implemented Resources
+### Implemented Resources (18 total)
 
-| Resource Type | Terraform | Rustible | Notes |
-|---------------|-----------|----------|-------|
-| `aws_instance` | Yes | Yes | EC2 instances |
-| `aws_s3_bucket` | Yes | Partial | Basic bucket operations |
-| `aws_vpc` | Yes | Partial | Basic VPC |
-| `aws_subnet` | Yes | Partial | Basic subnet |
-| `aws_security_group` | Yes | Partial | Basic SG |
+| Resource Type | Terraform Equivalent | Status | Notes |
+|---------------|---------------------|--------|-------|
+| `aws_autoscaling_group` | `aws_autoscaling_group` | Implemented | Auto Scaling Groups with launch templates |
+| `aws_db_subnet_group` | `aws_db_subnet_group` | Implemented | RDS DB Subnet Groups |
+| `aws_ebs_volume` | `aws_ebs_volume` | Implemented | EBS volumes with encryption support |
+| `aws_eip` | `aws_eip` | Implemented | Elastic IPs with VPC association |
+| `aws_iam_policy` | `aws_iam_policy` | Implemented | IAM policies with JSON documents |
+| `aws_iam_role` | `aws_iam_role` | Implemented | IAM roles with assume role policies |
+| `aws_instance` | `aws_instance` | Implemented | EC2 instances with full config |
+| `aws_internet_gateway` | `aws_internet_gateway` | Implemented | Internet Gateways |
+| `aws_launch_template` | `aws_launch_template` | Implemented | EC2 Launch Templates |
+| `aws_lb` | `aws_lb` | Implemented | ALB/NLB/GWLB load balancers |
+| `aws_nat_gateway` | `aws_nat_gateway` | Implemented | NAT Gateways |
+| `aws_rds_instance` | `aws_db_instance` | Implemented | RDS instances (MySQL, PostgreSQL, etc.) |
+| `aws_route_table` | `aws_route_table` | Implemented | Route tables with associations |
+| `aws_s3_bucket` | `aws_s3_bucket` | Implemented | S3 buckets with versioning, encryption |
+| `aws_security_group` | `aws_security_group` | Implemented | Security groups with inline rules |
+| `aws_security_group_rule` | `aws_security_group_rule` | Implemented | Standalone security group rules |
+| `aws_subnet` | `aws_subnet` | Implemented | VPC subnets |
+| `aws_vpc` | `aws_vpc` | Implemented | Virtual Private Clouds |
 
-### Planned Resources (v0.2-v1.0)
+### Planned Resources
 
-| Resource Type | Priority | Target |
-|---------------|----------|--------|
-| `aws_security_group_rule` | High | v0.2 |
-| `aws_iam_role` | High | v0.2 |
-| `aws_iam_policy` | High | v0.2 |
-| `aws_ebs_volume` | Medium | v0.2 |
-| `aws_db_subnet_group` | Medium | v0.2 |
-| `aws_rds_instance` | Medium | v0.2 |
-| `aws_lb` | Medium | v0.2 |
-| `aws_launch_template` | Low | v0.3 |
-| `aws_autoscaling_group` | Low | v0.3 |
+| Resource Type | Priority | Notes |
+|---------------|----------|-------|
+| `aws_lambda_function` | High | Lambda functions |
+| `aws_sqs_queue` | Medium | SQS queues |
+| `aws_sns_topic` | Medium | SNS topics |
+| `aws_dynamodb_table` | Medium | DynamoDB tables |
+| `aws_ecs_cluster` | Medium | ECS clusters |
+| `aws_eks_cluster` | Low | EKS clusters |
 
 ---
 
 ## State Management
 
-### Current State (v0.1)
-
-- Local or remote provisioning state backends
-- Optional state locking for collaborative workflows
-- Terraform state import into Rustible state
-
-State lifecycle commands:
+### State Commands
 
 ```bash
-rustible provision init
-rustible provision migrate
-rustible provision import-terraform --tfstate terraform.tfstate
+# Initialize state with backend configuration
+rustible state init --backend s3 --bucket my-bucket --key state.json --region us-east-1
+
+# Migrate state between backends
+rustible state migrate --from local --to s3 --from-path ./state.json --to-path s3://bucket/key
+
+# Import Terraform state
+rustible state import-terraform --tfstate terraform.tfstate --output .rustible/state.json
+
+# List states
+rustible state list
+
+# Show state details
+rustible state show <name>
+
+# Manage locks
+rustible state lock list
+rustible state lock release <lock-id>
 ```
 
-### Planned State Features
+### Remote Backends
 
-| Feature | Status | Target |
-|---------|--------|--------|
-| State manifests | In Progress | v0.2 |
-| Drift detection | Planned | v0.3 |
-| S3 remote backend | Implemented | v0.2 |
-| GCS remote backend | Implemented | v0.2 |
-| Azure Blob backend | Implemented | v0.2 |
-| Consul backend | Implemented | v0.2 |
-| State locking | Implemented | v0.2 |
-| Lockfile support | Planned | v1.0 |
+| Backend | Status | Locking | Notes |
+|---------|--------|---------|-------|
+| Local | Stable | File-based | Default backend |
+| S3 | Stable | DynamoDB | Full AWS integration |
+| GCS | Stable | None | Google Cloud Storage |
+| Azure Blob | Stable | Lease-based | Azure Blob Storage |
+| Consul | Stable | Session-based | HashiCorp Consul KV |
+| HTTP | Stable | HTTP Lock/Unlock | Terraform Cloud compatible |
 
 ### State File Location
 
 ```
 ./.rustible/provisioning.state.json
-./.rustible/provisioning.backend.json
+./.rustible/backend.json
+```
+
+---
+
+## Drift Detection
+
+Rustible supports drift detection to compare desired state against actual cloud resources:
+
+```bash
+rustible drift --playbook site.yml --inventory production.yml
+```
+
+Output:
+```
+╭─────────────────────────────────────────────────────────────────────────╮
+│                            DRIFT DETECTION                              │
+╰─────────────────────────────────────────────────────────────────────────╯
+
+Host: web1.example.com
+  ~ /etc/nginx/nginx.conf
+      worker_connections: 1024 → 2048
+
+  + /etc/nginx/conf.d/site.conf (missing)
+
+  - /etc/nginx/conf.d/old.conf (extra file)
+
+Summary: 1 modified, 1 missing, 1 extra
 ```
 
 ---
 
 ## Provider Ecosystem
 
-Rustible is building a provider ecosystem similar to Terraform's model.
-
 ### Current Status
 
-| Provider | Status | Notes |
-|----------|--------|-------|
-| AWS | Partial | Core EC2/S3 resources |
-| Azure | Stub | Experimental |
-| GCP | Stub | Experimental |
-| Kubernetes | Stable | Full support |
-| Docker | Stable | Full support |
+| Provider | Resources | Status | Notes |
+|----------|-----------|--------|-------|
+| AWS | 18 | Stable | Core EC2, S3, IAM, RDS, ELB, ASG |
+| Azure | 0 | Stub | Provisioning not yet implemented |
+| GCP | 0 | Stub | Provisioning not yet implemented |
+| Kubernetes | N/A | Stable | Module-based (not provisioning) |
+| Docker | N/A | Stable | Module-based (not provisioning) |
 
 ### Provider SDK (Planned)
 
@@ -170,15 +214,28 @@ See [architecture/provider-ecosystem.md](../architecture/provider-ecosystem.md) 
 | Primary use case | Infrastructure provisioning | Config management + provisioning |
 | Language | HCL | YAML (Ansible-compatible) |
 | State tracking | Central to design | Optional feature |
-| Configuration drift | Full support | Planned |
-| Provider ecosystem | Extensive (1000+) | Growing (~10) |
+| Configuration drift | Full support | Supported |
+| Provider ecosystem | Extensive (1000+) | Growing (~18 AWS resources) |
 | Execution model | Graph-based | Task-based with DAG support |
-| Secret management | External (Vault) | Built-in vault |
+| Secret management | External (Vault) | Built-in vault integration |
 | Learning curve | Moderate | Low (Ansible knowledge transfers) |
 
 ---
 
 ## Migration from Terraform
+
+### Importing Terraform State
+
+```bash
+# Import existing Terraform state into Rustible
+rustible state import-terraform --tfstate terraform.tfstate
+
+# The import preserves:
+# - Resource attributes
+# - Dependencies
+# - Outputs
+# - Lineage and serial numbers
+```
 
 ### When to Use Rustible vs Terraform
 
@@ -215,11 +272,10 @@ Rustible can complement Terraform:
 
 ## Limitations
 
-1. **Provider Coverage**: Far fewer providers than Terraform
-2. **State Maturity**: State management is still evolving
-3. **HCL Support**: No HCL parsing (YAML only)
-4. **Import**: Cannot import existing Terraform state
-5. **Modules**: No Terraform module compatibility
+1. **Provider Coverage**: Fewer providers than Terraform (AWS only for provisioning)
+2. **HCL Support**: No HCL parsing (YAML only)
+3. **Modules**: No Terraform module compatibility
+4. **Azure/GCP Provisioning**: Not yet implemented (planned)
 
 ---
 
@@ -228,8 +284,8 @@ Rustible can complement Terraform:
 | Version | Features |
 |---------|----------|
 | v0.1 | Plan mode, basic AWS resources |
-| v0.2 | Remote state backends, more AWS resources |
-| v0.3 | Drift detection, state locking |
+| v0.2 | ✅ Remote state backends, 18 AWS resources, drift detection, state locking |
+| v0.3 | Azure/GCP provisioning baseline |
 | v1.0 | Lockfiles, checkpoints, provider registry |
 
 ---
