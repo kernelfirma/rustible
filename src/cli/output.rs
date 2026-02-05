@@ -850,6 +850,179 @@ impl OutputFormatter {
         }
     }
 
+    /// Print a plan header (Terraform-style)
+    pub fn plan_header(&self, title: &str) {
+        if self.json_mode {
+            return;
+        }
+
+        println!();
+        if self.use_color {
+            println!(
+                "{}",
+                "─".repeat(78).bright_black()
+            );
+            println!("{}", title.bright_white().bold());
+            println!(
+                "{}",
+                "─".repeat(78).bright_black()
+            );
+        } else {
+            println!("{}", "─".repeat(78));
+            println!("{}", title);
+            println!("{}", "─".repeat(78));
+        }
+        println!();
+    }
+
+    /// Print a resource change in Terraform style (+, ~, -, -/+)
+    ///
+    /// `action` should be one of: "create", "update", "delete", "replace"
+    pub fn plan_resource_change(
+        &self,
+        action: &str,
+        resource_type: &str,
+        resource_name: &str,
+        details: Option<&str>,
+    ) {
+        if self.json_mode {
+            let change = serde_json::json!({
+                "type": "resource_change",
+                "action": action,
+                "resource_type": resource_type,
+                "resource_name": resource_name,
+                "details": details
+            });
+            println!("{}", serde_json::to_string(&change).unwrap());
+            return;
+        }
+
+        let (symbol, color) = match action {
+            "create" => ("+", colored::Color::Green),
+            "update" | "change" => ("~", colored::Color::Yellow),
+            "delete" | "destroy" => ("-", colored::Color::Red),
+            "replace" => ("-/+", colored::Color::Cyan),
+            _ => ("?", colored::Color::White),
+        };
+
+        let resource_id = format!("{}.{}", resource_type, resource_name);
+
+        if self.use_color {
+            println!(
+                "  {} {}",
+                symbol.color(color).bold(),
+                resource_id.color(color)
+            );
+        } else {
+            println!("  {} {}", symbol, resource_id);
+        }
+
+        if let Some(detail) = details {
+            if self.use_color {
+                println!("      {}", detail.bright_black());
+            } else {
+                println!("      {}", detail);
+            }
+        }
+    }
+
+    /// Print a field-level change within a resource
+    pub fn plan_field_change(
+        &self,
+        field: &str,
+        old_value: Option<&str>,
+        new_value: Option<&str>,
+        forces_replacement: bool,
+    ) {
+        if self.json_mode {
+            return;
+        }
+
+        let old_str = old_value.unwrap_or("(not set)");
+        let new_str = new_value.unwrap_or("(not set)");
+
+        let force_marker = if forces_replacement { " # forces replacement" } else { "" };
+
+        if self.use_color {
+            let arrow = "→".bright_black();
+            println!(
+                "      {} = {} {} {}{}",
+                field.white(),
+                old_str.red(),
+                arrow,
+                new_str.green(),
+                force_marker.yellow()
+            );
+        } else {
+            println!(
+                "      {} = {} -> {}{}",
+                field, old_str, new_str, force_marker
+            );
+        }
+    }
+
+    /// Print a plan summary (Terraform-style)
+    pub fn plan_summary(&self, to_add: usize, to_change: usize, to_destroy: usize) {
+        if self.json_mode {
+            let summary = serde_json::json!({
+                "type": "plan_summary",
+                "to_add": to_add,
+                "to_change": to_change,
+                "to_destroy": to_destroy
+            });
+            println!("{}", serde_json::to_string(&summary).unwrap());
+            return;
+        }
+
+        println!();
+        if self.use_color {
+            println!(
+                "{}",
+                "─".repeat(78).bright_black()
+            );
+
+            let total = to_add + to_change + to_destroy;
+            if total == 0 {
+                println!(
+                    "{}",
+                    "No changes. Your infrastructure matches the configuration.".green()
+                );
+            } else {
+                println!(
+                    "Plan: {} to add, {} to change, {} to destroy.",
+                    to_add.to_string().green().bold(),
+                    to_change.to_string().yellow().bold(),
+                    to_destroy.to_string().red().bold()
+                );
+            }
+        } else {
+            println!("{}", "-".repeat(78));
+
+            let total = to_add + to_change + to_destroy;
+            if total == 0 {
+                println!("No changes. Your infrastructure matches the configuration.");
+            } else {
+                println!(
+                    "Plan: {} to add, {} to change, {} to destroy.",
+                    to_add, to_change, to_destroy
+                );
+            }
+        }
+    }
+
+    /// Print a plan note/hint
+    pub fn plan_note(&self, message: &str) {
+        if self.json_mode {
+            return;
+        }
+
+        if self.use_color {
+            println!("\n{}", message.bright_black().italic());
+        } else {
+            println!("\n{}", message);
+        }
+    }
+
     /// Flush stdout
     pub fn flush(&self) {
         let _ = io::stdout().flush();
@@ -1085,5 +1258,38 @@ mod tests {
         let msg_long = "A very long message that takes up most of the space";
         let banner_long = format_banner(msg_long, width);
         assert_eq!(measure_text_width(&banner_long), 60);
+    }
+
+    #[test]
+    fn test_plan_output_methods_no_panic() {
+        // Test that plan output methods don't panic in non-JSON mode
+        let formatter = OutputFormatter::new(false, false, 1);
+
+        // These should not panic and should produce no errors
+        formatter.plan_header("Test Plan");
+        formatter.plan_resource_change("create", "file", "/tmp/test", None);
+        formatter.plan_resource_change("update", "package", "nginx", Some("version changed"));
+        formatter.plan_resource_change("delete", "service", "old-service", None);
+        formatter.plan_resource_change("replace", "user", "admin", None);
+        formatter.plan_field_change("mode", Some("0644"), Some("0755"), false);
+        formatter.plan_field_change("owner", None, Some("root"), true);
+        formatter.plan_summary(2, 1, 1);
+        formatter.plan_note("This is a test note");
+    }
+
+    #[test]
+    fn test_plan_output_json_mode() {
+        // We can't easily capture output in JSON mode without more infrastructure,
+        // but we can at least verify the methods don't panic
+        let formatter = OutputFormatter::new(false, true, 1);
+
+        // Test resource change JSON output
+        formatter.plan_resource_change("create", "file", "/tmp/test", Some("test details"));
+        formatter.plan_summary(1, 2, 3);
+
+        // Methods that don't output in JSON mode should also not panic
+        formatter.plan_header("Test");
+        formatter.plan_field_change("test", Some("old"), Some("new"), false);
+        formatter.plan_note("Note");
     }
 }

@@ -711,105 +711,138 @@ impl DriftArgs {
         Ok(("unknown".to_string(), serde_yaml::Value::Null))
     }
 
-    /// Print the drift report
+    /// Print the drift report in Terraform-style format
     fn print_report(&self, ctx: &CommandContext, report: &DriftReport) {
-        ctx.output.section("DRIFT SUMMARY");
+        // Header with metadata
+        ctx.output.plan_header("Drift Detection Report");
 
         ctx.output.info(&format!("Playbook: {}", report.playbook));
         ctx.output.info(&format!(
-            "Hosts checked: {}",
+            "Hosts: {}",
             report.hosts_checked.join(", ")
         ));
         ctx.output.info(&format!(
-            "Checked at: {}",
+            "Timestamp: {}",
             report.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
         ));
 
-        println!();
-
-        // Summary table
-        ctx.output.info(&format!(
-            "Total Resources: {}",
-            report.summary.total_resources
-        ));
-
-        if report.summary.in_sync > 0 {
-            ctx.output
-                .info(&format!("  In Sync: {}", report.summary.in_sync));
-        }
-        if report.summary.drifted > 0 {
-            ctx.output
-                .warning(&format!("  Drifted: {}", report.summary.drifted));
-        }
-        if report.summary.missing > 0 {
-            ctx.output
-                .error(&format!("  Missing: {}", report.summary.missing));
-        }
-        if report.summary.extra > 0 {
-            ctx.output
-                .warning(&format!("  Extra: {}", report.summary.extra));
-        }
-        if report.summary.unknown > 0 {
-            ctx.output
-                .debug(&format!("  Unknown: {}", report.summary.unknown));
+        // Group findings by host for better organization
+        let mut findings_by_host: HashMap<String, Vec<&DriftFinding>> = HashMap::new();
+        for finding in &report.findings {
+            findings_by_host
+                .entry(finding.host.clone())
+                .or_default()
+                .push(finding);
         }
 
-        println!();
+        // Print resource changes if there are any drifted/missing resources
+        if report.summary.drifted > 0 || report.summary.missing > 0 || report.summary.extra > 0 {
+            println!();
+            ctx.output.info("Rustible will perform the following actions to remediate drift:");
+            println!();
 
-        // Detailed findings
-        if !report.findings.is_empty() && (report.summary.drifted > 0 || report.summary.missing > 0)
-        {
-            ctx.output.section("DRIFT DETAILS");
+            // Sort hosts for consistent output
+            let mut hosts: Vec<_> = findings_by_host.keys().collect();
+            hosts.sort();
 
-            for finding in &report.findings {
-                match finding.status {
-                    DriftStatus::Drifted => {
-                        ctx.output.warning(&format!(
-                            "~ {} [{}] on {}",
-                            finding.resource, finding.resource_type, finding.host
-                        ));
-                    }
-                    DriftStatus::Missing => {
-                        ctx.output.error(&format!(
-                            "- {} [{}] on {}",
-                            finding.resource, finding.resource_type, finding.host
-                        ));
-                    }
-                    DriftStatus::Extra => {
-                        ctx.output.warning(&format!(
-                            "+ {} [{}] on {}",
-                            finding.resource, finding.resource_type, finding.host
-                        ));
-                    }
-                    _ => {}
+            for host in hosts {
+                let findings = &findings_by_host[host];
+
+                // Filter out in-sync findings unless show_all is enabled
+                let relevant_findings: Vec<_> = if self.show_all {
+                    findings.iter().copied().collect()
+                } else {
+                    findings
+                        .iter()
+                        .filter(|f| f.status != DriftStatus::InSync)
+                        .copied()
+                        .collect()
+                };
+
+                if relevant_findings.is_empty() {
+                    continue;
                 }
 
-                if self.detailed {
-                    ctx.output.info(&format!("    {}", finding.description));
-                    if let Some(ref diff) = finding.diff {
-                        for field_diff in &diff.changed_fields {
-                            ctx.output.debug(&format!(
-                                "      {}: {} -> {}",
-                                field_diff.field, field_diff.current, field_diff.desired
-                            ));
+                // Print host header
+                ctx.output.info(&format!("# {} ({})", host, relevant_findings.len()));
+                println!();
+
+                for finding in relevant_findings {
+                    let action = match finding.status {
+                        DriftStatus::Drifted => "update",
+                        DriftStatus::Missing => "create",
+                        DriftStatus::Extra => "delete",
+                        DriftStatus::InSync => continue,
+                        DriftStatus::Unknown => continue,
+                    };
+
+                    ctx.output.plan_resource_change(
+                        action,
+                        &finding.resource_type,
+                        &finding.resource,
+                        if self.detailed {
+                            Some(&finding.description)
+                        } else {
+                            None
+                        },
+                    );
+
+                    // Show field-level diffs if detailed mode is enabled
+                    if self.detailed {
+                        if let Some(ref diff) = finding.diff {
+                            for field_diff in &diff.changed_fields {
+                                ctx.output.plan_field_change(
+                                    &field_diff.field,
+                                    if field_diff.current.is_empty() {
+                                        None
+                                    } else {
+                                        Some(&field_diff.current)
+                                    },
+                                    if field_diff.desired.is_empty() {
+                                        None
+                                    } else {
+                                        Some(&field_diff.desired)
+                                    },
+                                    false,
+                                );
+                            }
                         }
                     }
+
+                    println!();
                 }
             }
         }
 
-        // Final status
-        println!();
-        if report.summary.drifted == 0 && report.summary.missing == 0 {
-            ctx.output
-                .success("No drift detected. System is in sync with desired state.");
-        } else {
-            ctx.output.warning(&format!(
-                "Drift detected: {} drifted, {} missing resources",
-                report.summary.drifted, report.summary.missing
-            ));
-            ctx.output
-                .hint("Run with --remediate to generate a fix playbook");
+        // Print Terraform-style summary
+        ctx.output.plan_summary(
+            report.summary.missing,  // to_add (missing resources need to be created)
+            report.summary.drifted,  // to_change (drifted resources need updates)
+            report.summary.extra,    // to_destroy (extra resources should be removed)
+        );
+
+        // Additional statistics
+        if report.summary.in_sync > 0 || report.summary.unknown > 0 {
+            println!();
+            if report.summary.in_sync > 0 {
+                ctx.output.info(&format!(
+                    "{} resource(s) in sync (no changes needed)",
+                    report.summary.in_sync
+                ));
+            }
+            if report.summary.unknown > 0 {
+                ctx.output.debug(&format!(
+                    "{} resource(s) with unknown status (could not determine drift)",
+                    report.summary.unknown
+                ));
+            }
+        }
+
+        // Action hint
+        if report.summary.drifted > 0 || report.summary.missing > 0 {
+            ctx.output.plan_note(
+                "Note: Run with --remediate to generate a playbook that fixes the drift.",
+            );
         }
     }
 
