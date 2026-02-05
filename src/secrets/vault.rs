@@ -63,6 +63,24 @@ struct VaultLoginAuth {
     client_token: String,
 }
 
+/// Vault secret response envelope for get operations.
+#[derive(Debug, Deserialize)]
+struct VaultSecretResponse {
+    data: HashMap<String, serde_json::Value>,
+}
+
+/// Vault list response envelope.
+#[derive(Debug, Deserialize)]
+struct VaultListResponse {
+    data: Option<VaultListData>,
+}
+
+/// Data block for list responses.
+#[derive(Debug, Deserialize)]
+struct VaultListData {
+    keys: Option<Vec<String>>,
+}
+
 // ============================================================================
 // Constants - AWX/Tower API Compatibility (Issue #87)
 // ============================================================================
@@ -425,45 +443,274 @@ impl HttpVaultClient {
 #[async_trait]
 impl VaultClient for HttpVaultClient {
     async fn get_secret(&self, path: &str) -> SecretResult<HashMap<String, String>> {
-        let _token = self.get_token()?;
-        // TODO: Implement HTTP request to Vault
-        // For now, return a placeholder error
-        Err(SecretError::NotFound(format!(
-            "Secret retrieval not yet implemented for path: {}",
-            path
-        )))
+        let token = self.get_token()?;
+        let url = format!(
+            "{}/v1/{}",
+            self.config.address.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
+
+        let client = reqwest::Client::new();
+        let mut request = client.get(&url).header("X-Vault-Token", token);
+
+        // Add namespace header if configured
+        if let Some(ref namespace) = self.config.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
+        let response = request.send().await.map_err(|e| {
+            SecretError::Connection(format!("Failed to connect to Vault: {}", e))
+        })?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Err(SecretError::NotFound(format!("Secret not found: {}", path)));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SecretError::Authorization(format!(
+                "Permission denied for path: {}",
+                path
+            )));
+        }
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(SecretError::backend(
+                format!("Vault request failed: {}", body_text),
+                Some(status.as_u16()),
+            ));
+        }
+
+        let vault_response: VaultSecretResponse = response.json().await.map_err(|e| {
+            SecretError::Serialization(format!("Failed to parse Vault response: {}", e))
+        })?;
+
+        // Handle both KV v1 and KV v2 response formats
+        let data = if let Some(inner_data) = vault_response.data.get("data") {
+            // KV v2: data is nested under {"data": {"data": {...}}}
+            if let Some(obj) = inner_data.as_object() {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            } else {
+                HashMap::new()
+            }
+        } else {
+            // KV v1: data is directly at {"data": {...}}
+            vault_response
+                .data
+                .iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        };
+
+        Ok(data)
     }
 
     async fn list_secrets(&self, path: &str) -> SecretResult<Vec<String>> {
-        let _token = self.get_token()?;
-        // TODO: Implement HTTP request to Vault
-        Err(SecretError::NotFound(format!(
-            "Secret listing not yet implemented for path: {}",
-            path
-        )))
+        let token = self.get_token()?;
+
+        // For listing, use metadata path for KV v2 or direct path for KV v1
+        let list_path = if path.contains("/data/") {
+            path.replace("/data/", "/metadata/")
+        } else {
+            path.to_string()
+        };
+
+        let url = format!(
+            "{}/v1/{}",
+            self.config.address.trim_end_matches('/'),
+            list_path.trim_start_matches('/')
+        );
+
+        let client = reqwest::Client::new();
+        let mut request = client
+            .request(reqwest::Method::from_bytes(b"LIST").unwrap_or(reqwest::Method::GET), &url)
+            .header("X-Vault-Token", token);
+
+        // Fallback: use GET with list=true query param
+        let url_with_list = format!("{}?list=true", url);
+        let mut request_fallback = client
+            .get(&url_with_list)
+            .header("X-Vault-Token", token);
+
+        if let Some(ref namespace) = self.config.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+            request_fallback = request_fallback.header("X-Vault-Namespace", namespace);
+        }
+
+        // Try LIST method first, fall back to GET with list=true
+        let response = match request.send().await {
+            Ok(resp) if resp.status().is_success() => resp,
+            _ => request_fallback.send().await.map_err(|e| {
+                SecretError::Connection(format!("Failed to list secrets: {}", e))
+            })?,
+        };
+
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(vec![]); // Empty list for non-existent paths
+        }
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(SecretError::backend(
+                format!("Vault list request failed: {}", body_text),
+                Some(status.as_u16()),
+            ));
+        }
+
+        let vault_response: VaultListResponse = response.json().await.map_err(|e| {
+            SecretError::Serialization(format!("Failed to parse Vault list response: {}", e))
+        })?;
+
+        Ok(vault_response
+            .data
+            .and_then(|d| d.keys)
+            .unwrap_or_default())
     }
 
-    async fn put_secret(&self, path: &str, _data: HashMap<String, String>) -> SecretResult<()> {
-        let _token = self.get_token()?;
-        // TODO: Implement HTTP request to Vault
-        Err(SecretError::NotFound(format!(
-            "Secret write not yet implemented for path: {}",
-            path
-        )))
+    async fn put_secret(&self, path: &str, data: HashMap<String, String>) -> SecretResult<()> {
+        let token = self.get_token()?;
+        let url = format!(
+            "{}/v1/{}",
+            self.config.address.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
+
+        // Determine if this is KV v2 (path contains /data/)
+        let body = if path.contains("/data/") {
+            // KV v2: wrap data in {"data": {...}}
+            serde_json::json!({ "data": data })
+        } else {
+            // KV v1: send data directly
+            serde_json::to_value(&data).map_err(|e| {
+                SecretError::Serialization(format!("Failed to serialize secret data: {}", e))
+            })?
+        };
+
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(&url)
+            .header("X-Vault-Token", token)
+            .json(&body);
+
+        if let Some(ref namespace) = self.config.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
+        let response = request.send().await.map_err(|e| {
+            SecretError::Connection(format!("Failed to write secret: {}", e))
+        })?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SecretError::Authorization(format!(
+                "Permission denied for path: {}",
+                path
+            )));
+        }
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(SecretError::backend(
+                format!("Vault write request failed: {}", body_text),
+                Some(status.as_u16()),
+            ));
+        }
+
+        Ok(())
     }
 
     async fn delete_secret(&self, path: &str) -> SecretResult<()> {
-        let _token = self.get_token()?;
-        // TODO: Implement HTTP request to Vault
-        Err(SecretError::NotFound(format!(
-            "Secret delete not yet implemented for path: {}",
-            path
-        )))
+        let token = self.get_token()?;
+
+        // For KV v2, use metadata path for permanent deletion
+        let delete_path = if path.contains("/data/") {
+            path.replace("/data/", "/metadata/")
+        } else {
+            path.to_string()
+        };
+
+        let url = format!(
+            "{}/v1/{}",
+            self.config.address.trim_end_matches('/'),
+            delete_path.trim_start_matches('/')
+        );
+
+        let client = reqwest::Client::new();
+        let mut request = client.delete(&url).header("X-Vault-Token", token);
+
+        if let Some(ref namespace) = self.config.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
+        let response = request.send().await.map_err(|e| {
+            SecretError::Connection(format!("Failed to delete secret: {}", e))
+        })?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            // Already deleted or never existed
+            return Ok(());
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SecretError::Authorization(format!(
+                "Permission denied for path: {}",
+                path
+            )));
+        }
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(SecretError::backend(
+                format!("Vault delete request failed: {}", body_text),
+                Some(status.as_u16()),
+            ));
+        }
+
+        Ok(())
     }
 
     async fn health_check(&self) -> SecretResult<bool> {
-        // TODO: Implement health check via /v1/sys/health
-        Ok(false)
+        let url = format!(
+            "{}/v1/sys/health",
+            self.config.address.trim_end_matches('/')
+        );
+
+        let client = reqwest::Client::new();
+        let mut request = client.get(&url);
+
+        if let Some(ref namespace) = self.config.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
+        let response = match request.send().await {
+            Ok(resp) => resp,
+            Err(e) => {
+                return Err(SecretError::Connection(format!(
+                    "Failed to reach Vault health endpoint: {}",
+                    e
+                )));
+            }
+        };
+
+        // Vault health endpoint returns:
+        // - 200: initialized, unsealed, active
+        // - 429: unsealed, standby
+        // - 472: disaster recovery secondary, active
+        // - 473: performance standby
+        // - 501: not initialized
+        // - 503: sealed
+        let status = response.status();
+        match status.as_u16() {
+            200 | 429 | 472 | 473 => Ok(true),
+            501 => Err(SecretError::Configuration("Vault is not initialized".into())),
+            503 => Err(SecretError::Sealed("Vault is sealed".into())),
+            _ => {
+                let body_text = response.text().await.unwrap_or_default();
+                Err(SecretError::backend(
+                    format!("Vault health check failed: {}", body_text),
+                    Some(status.as_u16()),
+                ))
+            }
+        }
     }
 }
 
@@ -688,11 +935,184 @@ mod tests {
         }
     }
 
-    // Async tests would require tokio test runtime
-    // #[tokio::test]
-    // async fn test_http_vault_client_authentication_error() {
-    //     let config = VaultConfig::new("http://localhost:8200");
-    //     let result = HttpVaultClient::new(config).await;
-    //     assert!(result.is_err());
-    // }
+    // Mock client for testing VaultClient trait
+    struct MockVaultClient {
+        secrets: std::sync::Mutex<HashMap<String, HashMap<String, String>>>,
+    }
+
+    impl MockVaultClient {
+        fn new() -> Self {
+            Self {
+                secrets: std::sync::Mutex::new(HashMap::new()),
+            }
+        }
+
+        fn with_secret(self, path: &str, data: HashMap<String, String>) -> Self {
+            self.secrets.lock().unwrap().insert(path.to_string(), data);
+            self
+        }
+    }
+
+    #[async_trait]
+    impl VaultClient for MockVaultClient {
+        async fn get_secret(&self, path: &str) -> SecretResult<HashMap<String, String>> {
+            self.secrets
+                .lock()
+                .unwrap()
+                .get(path)
+                .cloned()
+                .ok_or_else(|| SecretError::NotFound(path.to_string()))
+        }
+
+        async fn list_secrets(&self, _path: &str) -> SecretResult<Vec<String>> {
+            Ok(self.secrets.lock().unwrap().keys().cloned().collect())
+        }
+
+        async fn put_secret(
+            &self,
+            path: &str,
+            data: HashMap<String, String>,
+        ) -> SecretResult<()> {
+            self.secrets.lock().unwrap().insert(path.to_string(), data);
+            Ok(())
+        }
+
+        async fn delete_secret(&self, path: &str) -> SecretResult<()> {
+            self.secrets.lock().unwrap().remove(path);
+            Ok(())
+        }
+
+        async fn health_check(&self) -> SecretResult<bool> {
+            Ok(true)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_get_secret() {
+        let mut data = HashMap::new();
+        data.insert("username".to_string(), "admin".to_string());
+        data.insert("password".to_string(), "secret123".to_string());
+
+        let mock = MockVaultClient::new().with_secret("secret/data/myapp", data);
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        let secret = provider.get_secret("secret/data/myapp").await.unwrap();
+        assert_eq!(secret.get_string("username").unwrap(), "admin");
+        assert_eq!(secret.get_string("password").unwrap(), "secret123");
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_get_secret_with_key() {
+        let mut data = HashMap::new();
+        data.insert("username".to_string(), "admin".to_string());
+        data.insert("password".to_string(), "secret123".to_string());
+
+        let mock = MockVaultClient::new().with_secret("secret/data/myapp", data);
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        let secret = provider
+            .get_secret("secret/data/myapp#password")
+            .await
+            .unwrap();
+        assert!(secret.contains_key("password"));
+        assert!(!secret.contains_key("username"));
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_not_found() {
+        let mock = MockVaultClient::new();
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        let result = provider.get_secret("secret/data/nonexistent").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SecretError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_put_and_get() {
+        let mock = MockVaultClient::new();
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        let mut data = HashMap::new();
+        data.insert("api_key".to_string(), "sk-12345".to_string());
+
+        provider
+            .put_secret("secret/data/api", data)
+            .await
+            .unwrap();
+
+        let secret = provider.get_secret("secret/data/api").await.unwrap();
+        assert_eq!(secret.get_string("api_key").unwrap(), "sk-12345");
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_delete() {
+        let mut data = HashMap::new();
+        data.insert("key".to_string(), "value".to_string());
+
+        let mock = MockVaultClient::new().with_secret("secret/data/temp", data);
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        // Verify secret exists
+        assert!(provider.get_secret("secret/data/temp").await.is_ok());
+
+        // Delete it
+        provider.delete_secret("secret/data/temp").await.unwrap();
+
+        // Verify it's gone
+        assert!(provider.get_secret("secret/data/temp").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_health_check() {
+        let mock = MockVaultClient::new();
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        assert!(provider.health_check().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_vault_provider_list() {
+        let mut data1 = HashMap::new();
+        data1.insert("key".to_string(), "value1".to_string());
+        let mut data2 = HashMap::new();
+        data2.insert("key".to_string(), "value2".to_string());
+
+        let mock = MockVaultClient::new()
+            .with_secret("secret/data/app1", data1)
+            .with_secret("secret/data/app2", data2);
+
+        let config = VaultConfig::new("http://localhost:8200");
+        let provider = VaultProvider::with_client(config, mock);
+
+        let keys = provider.list("secret/metadata/").await.unwrap();
+        assert_eq!(keys.len(), 2);
+    }
+
+    #[test]
+    fn test_vault_secret_response_parsing() {
+        // Test KV v2 format
+        let kv2_response = r#"{"data": {"data": {"username": "admin", "password": "secret"}, "metadata": {"version": 1}}}"#;
+        let parsed: VaultSecretResponse = serde_json::from_str(kv2_response).unwrap();
+        assert!(parsed.data.contains_key("data"));
+
+        // Test KV v1 format
+        let kv1_response = r#"{"data": {"username": "admin", "password": "secret"}}"#;
+        let parsed: VaultSecretResponse = serde_json::from_str(kv1_response).unwrap();
+        assert!(parsed.data.contains_key("username"));
+    }
+
+    #[test]
+    fn test_vault_list_response_parsing() {
+        let response = r#"{"data": {"keys": ["app1", "app2", "app3"]}}"#;
+        let parsed: VaultListResponse = serde_json::from_str(response).unwrap();
+        let keys = parsed.data.unwrap().keys.unwrap();
+        assert_eq!(keys, vec!["app1", "app2", "app3"]);
+    }
 }
