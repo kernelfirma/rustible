@@ -489,6 +489,7 @@ mod tests {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -506,6 +507,7 @@ mod tests {
             "argv".to_string(),
             serde_json::json!(["echo", "hello", "world"]),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -519,6 +521,7 @@ mod tests {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("_raw_params".to_string(), serde_json::json!("echo hello"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -546,6 +549,7 @@ mod tests {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("cmd".to_string(), serde_json::json!("rm -rf /"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.check(&params, &context).unwrap();
@@ -559,6 +563,7 @@ mod tests {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("cmd".to_string(), serde_json::json!("false"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context);

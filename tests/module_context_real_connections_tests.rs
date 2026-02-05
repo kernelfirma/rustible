@@ -23,6 +23,7 @@ fn test_command_module_with_local_connection() {
 
     let mut params: ModuleParams = HashMap::new();
     params.insert("cmd".to_string(), json!("echo hello"));
+    params.insert("shell_type".to_string(), json!("posix"));
 
     let module = CommandModule;
     let result = module
@@ -45,6 +46,7 @@ fn test_command_module_check_mode_with_connection() {
 
     let mut params: ModuleParams = HashMap::new();
     params.insert("cmd".to_string(), json!("echo hello"));
+    params.insert("shell_type".to_string(), json!("posix"));
 
     let module = CommandModule;
     let result = module

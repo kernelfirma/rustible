@@ -116,6 +116,7 @@ fn test_registry_execute_with_check_mode() {
 
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default().with_check_mode(true);
     let result = registry.execute("command", &params, &context).unwrap();
@@ -607,6 +608,7 @@ fn test_command_basic_execution() {
     let module = CommandModule;
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -626,6 +628,7 @@ fn test_command_with_argv() {
         "argv".to_string(),
         serde_json::json!(["echo", "hello", "world"]),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -639,6 +642,7 @@ fn test_command_check_mode() {
     let module = CommandModule;
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("dangerous command"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default().with_check_mode(true);
     let result = module.check(&params, &context).unwrap();
@@ -683,6 +687,7 @@ fn test_command_failure() {
     let module = CommandModule;
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("false"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context);
@@ -2075,6 +2080,7 @@ fn test_registry_full_workflow() {
     // Execute a simple command
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("echo test"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = registry.execute("command", &params, &context).unwrap();
@@ -2217,6 +2223,7 @@ fn test_command_with_chdir() {
         "chdir".to_string(),
         serde_json::json!(temp.path().to_str().unwrap()),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -2237,6 +2244,7 @@ fn test_command_with_environment_variables() {
         "env".to_string(),
         serde_json::json!({"TEST_VAR": "hello_from_env"}),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -2257,6 +2265,7 @@ fn test_command_creates_when_file_does_not_exist() {
         "creates".to_string(),
         serde_json::json!(nonexistent.to_str().unwrap()),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -2279,6 +2288,7 @@ fn test_command_removes_when_file_exists() {
         "removes".to_string(),
         serde_json::json!(existing.to_str().unwrap()),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -2294,6 +2304,7 @@ fn test_command_with_work_dir_from_context() {
     let module = CommandModule;
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("pwd"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let mut context = ModuleContext::default();
     context.work_dir = Some(temp.path().to_str().unwrap().to_string());
@@ -2380,6 +2391,7 @@ async fn test_command_remote_execution() {
 
     let mut params = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     // Create context with connection
     let context = ModuleContext::default().with_connection(mock.clone());

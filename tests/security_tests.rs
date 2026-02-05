@@ -330,6 +330,7 @@ mod input_sanitization {
             "cmd".to_string(),
             serde_json::json!("echo hello; rm -rf /tmp/test"),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -355,6 +356,7 @@ mod input_sanitization {
             "argv".to_string(),
             serde_json::json!(["echo", "$(whoami)", "; rm -rf /"]),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -811,12 +813,14 @@ mod security_properties {
         let mut params1: ModuleParams = HashMap::new();
         params1.insert("cmd".to_string(), serde_json::json!("echo first"));
         params1.insert("env".to_string(), serde_json::json!({"SECRET": "value1"}));
+        params1.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let result1 = module.execute(&params1, &context).unwrap();
 
         // Second execution without that env
         let mut params2: ModuleParams = HashMap::new();
         params2.insert("cmd".to_string(), serde_json::json!("echo second"));
+        params2.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let result2 = module.execute(&params2, &context).unwrap();
 
@@ -2372,6 +2376,7 @@ mod shell_command_injection {
             "argv".to_string(),
             serde_json::json!(["echo", "hello; rm -rf /"]),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -2393,6 +2398,7 @@ mod shell_command_injection {
             "argv".to_string(),
             serde_json::json!(["echo", "it's a \"test\""]),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -2410,6 +2416,7 @@ mod shell_command_injection {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("argv".to_string(), serde_json::json!(["echo", "`whoami`"]));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -2429,6 +2436,7 @@ mod shell_command_injection {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("argv".to_string(), serde_json::json!(["echo", "$(whoami)"]));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();
@@ -2532,6 +2540,7 @@ mod shell_command_injection {
             "env".to_string(),
             serde_json::json!({"MY_TEST_VAR": "test_value"}),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         let result = module.execute(&params, &context).unwrap();

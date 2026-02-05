@@ -52,6 +52,7 @@ fn test_command_echo() {
     let module = CommandModule;
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -69,6 +70,7 @@ fn test_command_with_argv() {
         "argv".to_string(),
         serde_json::json!(["echo", "hello", "world"]),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -85,6 +87,7 @@ fn test_command_with_argv_special_chars() {
         "argv".to_string(),
         serde_json::json!(["echo", "hello; world"]),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -103,6 +106,7 @@ fn test_command_check_mode() {
     let module = CommandModule;
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("rm -rf /"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default().with_check_mode(true);
     let result = module.check(&params, &context).unwrap();
@@ -122,6 +126,7 @@ fn test_command_check_mode_no_execution() {
         "argv".to_string(),
         serde_json::json!(["touch", test_file.to_str().unwrap()]),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default().with_check_mode(true);
     let _ = module.execute(&params, &context).unwrap();
@@ -160,6 +165,7 @@ fn test_command_creates_not_exists() {
         "creates".to_string(),
         serde_json::json!(nonexistent.to_str().unwrap()),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -197,6 +203,7 @@ fn test_command_fails() {
     let module = CommandModule;
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("false"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context);
@@ -293,6 +300,7 @@ fn test_command_with_chdir() {
         "chdir".to_string(),
         serde_json::json!(temp.path().to_str().unwrap()),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -321,6 +329,7 @@ fn test_command_with_env() {
         "env".to_string(),
         serde_json::json!({"TEST_VAR": "test_value"}),
     );
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -401,6 +410,7 @@ fn test_command_output_capture() {
     // This uses shell-like redirection which won't work with command module
     // Instead test simpler output
     params.insert("cmd".to_string(), serde_json::json!("echo output"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();
@@ -414,6 +424,7 @@ fn test_command_exit_code_capture() {
     let module = CommandModule;
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("cmd".to_string(), serde_json::json!("true"));
+    params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
     let context = ModuleContext::default();
     let result = module.execute(&params, &context).unwrap();

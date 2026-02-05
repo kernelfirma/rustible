@@ -132,7 +132,10 @@ async fn test_check_mode_with_diff() {
 #[test]
 fn test_command_module_check_mode() {
     let module = CommandModule;
-    let params = make_params(vec![("cmd", serde_json::json!("echo hello"))]);
+    let params = make_params(vec![
+        ("cmd", serde_json::json!("echo hello")),
+        ("shell_type", serde_json::json!("posix")),
+    ]);
     let context = check_mode_context();
 
     let result = module.check(&params, &context).unwrap();

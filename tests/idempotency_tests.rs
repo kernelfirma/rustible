@@ -973,6 +973,7 @@ mod command_module {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
         assert_non_idempotent(&module, &params, &context);
@@ -993,6 +994,7 @@ mod command_module {
             "creates".to_string(),
             serde_json::json!(marker.to_str().unwrap()),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
 
@@ -1051,6 +1053,7 @@ mod command_module {
             "removes".to_string(),
             serde_json::json!(target.to_str().unwrap()),
         );
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
 
@@ -1498,6 +1501,7 @@ mod known_issues {
         let module = CommandModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("cmd".to_string(), serde_json::json!("true"));
+        params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
         let context = ModuleContext::default();
 
