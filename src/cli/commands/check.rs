@@ -3,7 +3,7 @@
 //! This module implements the `check` subcommand for running playbooks in dry-run mode.
 
 use super::{CommandContext, Runnable};
-use crate::cli::commands::run::RunArgs;
+use crate::cli::commands::run::{BundleFormat, RunArgs};
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
@@ -84,6 +84,8 @@ impl CheckArgs {
             private_key: self.private_key.clone(),
             ssh_common_args: None,
             plan: false,
+            output_bundle: None,
+            output_bundle_format: BundleFormat::Jsonl,
             auto_rollback: false,
             forward_agent: false,
             checkpoint_dir: None,

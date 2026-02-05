@@ -411,8 +411,12 @@ async fn run_playbook_job(
             ExecutionEvent::PlayStart(name) => {
                 format!("PLAY [{}] ***", name)
             }
-            ExecutionEvent::TaskStart(name) => {
-                format!("TASK [{}] ***", name)
+            ExecutionEvent::TaskStart { task, host } => {
+                if let Some(host) = host {
+                    format!("TASK [{}] on {} ***", task, host)
+                } else {
+                    format!("TASK [{}] ***", task)
+                }
             }
             ExecutionEvent::HostTaskComplete(host, _task, result) => {
                 let status_str = match result.status {

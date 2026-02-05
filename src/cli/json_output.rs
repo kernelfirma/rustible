@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 
 /// JSON output mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -22,14 +22,21 @@ pub enum JsonOutputMode {
 pub struct JsonOutput {
     mode: JsonOutputMode,
     buffer: Vec<JsonEvent>,
+    writer: Box<dyn Write + Send>,
 }
 
 impl JsonOutput {
     /// Create a new JSON output writer
     pub fn new(mode: JsonOutputMode) -> Self {
+        Self::new_with_writer(mode, Box::new(BufWriter::new(io::stdout())))
+    }
+
+    /// Create a new JSON output writer with a custom destination.
+    pub fn new_with_writer(mode: JsonOutputMode, writer: Box<dyn Write + Send>) -> Self {
         Self {
             mode,
             buffer: Vec::new(),
+            writer,
         }
     }
 
@@ -39,7 +46,8 @@ impl JsonOutput {
             JsonOutputMode::Lines => {
                 // Write immediately for streaming
                 if let Ok(json) = serde_json::to_string(&event) {
-                    println!("{}", json);
+                    let _ = writeln!(self.writer, "{}", json);
+                    let _ = self.writer.flush();
                 }
             }
             _ => {
@@ -50,7 +58,7 @@ impl JsonOutput {
     }
 
     /// Flush the buffered output
-    pub fn flush(&self) -> io::Result<()> {
+    pub fn flush(&mut self) -> io::Result<()> {
         if self.mode == JsonOutputMode::Lines {
             // Already written
             return Ok(());
@@ -63,10 +71,12 @@ impl JsonOutput {
         };
 
         if let Ok(output) = json {
-            println!("{}", output);
+            self.writer.write_all(output.as_bytes())?;
+            self.writer.write_all(b"\n")?;
+            self.writer.flush()?;
         }
 
-        io::stdout().flush()
+        Ok(())
     }
 
     /// Create a playbook result

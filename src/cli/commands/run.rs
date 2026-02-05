@@ -3,15 +3,21 @@
 //! This module implements the `run` subcommand for executing Ansible-like playbooks.
 
 use super::{CommandContext, Runnable};
-use crate::cli::output::{RecapStats, TaskStatus};
+use crate::cli::json_output::{timestamp, JsonDiffOutput, JsonEvent, JsonOutput, JsonOutputMode};
+use crate::cli::output::{HostStats, RecapStats, TaskStatus};
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use indexmap::IndexMap;
 use regex::Regex;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 /// Arguments for the run command
 #[derive(Parser, Debug, Clone)]
@@ -76,6 +82,14 @@ pub struct RunArgs {
     #[arg(long)]
     pub plan: bool,
 
+    /// Write a structured execution bundle (events + summary) to a directory
+    #[arg(long, value_name = "DIR")]
+    pub output_bundle: Option<PathBuf>,
+
+    /// Output format for execution bundle events (jsonl or json)
+    #[arg(long, value_enum, default_value = "jsonl")]
+    pub output_bundle_format: BundleFormat,
+
     /// Automatically rollback changes on playbook failure
     #[arg(long)]
     pub auto_rollback: bool,
@@ -105,6 +119,334 @@ pub struct RunArgs {
     pub distribution_strategy: String,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum BundleFormat {
+    /// JSON Lines (one JSON object per line)
+    Jsonl,
+    /// JSON array (pretty printed)
+    Json,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BundleMode {
+    Run,
+    Check,
+    Plan,
+}
+
+struct OutputBundle {
+    run_id: String,
+    mode: BundleMode,
+    dir: PathBuf,
+    events_path: PathBuf,
+    summary_path: PathBuf,
+    plan_path: Option<PathBuf>,
+    events: JsonOutput,
+    format: BundleFormat,
+    start_instant: Instant,
+    start_timestamp: String,
+    current_play: Option<String>,
+    play_start: Option<Instant>,
+    task_start_times: HashMap<String, Instant>,
+    has_failures: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RunTotals {
+    ok: u32,
+    changed: u32,
+    failed: u32,
+    unreachable: u32,
+    skipped: u32,
+    rescued: u32,
+    ignored: u32,
+    total_tasks: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct RunSummary {
+    run_id: String,
+    mode: String,
+    playbook: String,
+    start_time: String,
+    end_time: String,
+    duration_ms: u64,
+    success: bool,
+    totals: RunTotals,
+    hosts: HashMap<String, HostStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plan: Option<Vec<String>>,
+}
+
+impl OutputBundle {
+    fn new(
+        dir: PathBuf,
+        mode: BundleMode,
+        playbook: &str,
+        format: BundleFormat,
+        start_timestamp: String,
+    ) -> Result<Self> {
+        std::fs::create_dir_all(&dir)?;
+        let run_id = Uuid::new_v4().to_string();
+        let events_path = match format {
+            BundleFormat::Jsonl => dir.join(format!("events-{}.jsonl", run_id)),
+            BundleFormat::Json => dir.join(format!("events-{}.json", run_id)),
+        };
+        let summary_path = dir.join(format!("summary-{}.json", run_id));
+        let plan_path = if matches!(mode, BundleMode::Plan) {
+            Some(dir.join(format!("plan-{}.txt", run_id)))
+        } else {
+            None
+        };
+        let events_file = File::create(&events_path)?;
+        let writer: Box<dyn std::io::Write + Send> = Box::new(BufWriter::new(events_file));
+        let events_mode = match format {
+            BundleFormat::Jsonl => JsonOutputMode::Lines,
+            BundleFormat::Json => JsonOutputMode::Pretty,
+        };
+        let mut events = JsonOutput::new_with_writer(events_mode, writer);
+        let start_instant = Instant::now();
+
+        events.write_event(JsonEvent::PlaybookStart {
+            playbook: playbook.to_string(),
+            timestamp: start_timestamp.clone(),
+        });
+
+        Ok(Self {
+            run_id,
+            mode,
+            dir,
+            events_path,
+            summary_path,
+            plan_path,
+            events,
+            format,
+            start_instant,
+            start_timestamp,
+            current_play: None,
+            play_start: None,
+            task_start_times: HashMap::new(),
+            has_failures: false,
+        })
+    }
+
+    fn emit(&mut self, event: JsonEvent) {
+        self.events.write_event(event);
+    }
+
+    fn write_plan(&mut self, lines: &[String]) -> Result<()> {
+        if let Some(path) = &self.plan_path {
+            let mut file = BufWriter::new(File::create(path)?);
+            for line in lines {
+                writeln!(file, "{}", line)?;
+            }
+            file.flush()?;
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self, summary: &RunSummary) -> Result<()> {
+        let summary_file = File::create(&self.summary_path)?;
+        serde_json::to_writer_pretty(summary_file, summary)?;
+        self.events.flush()?;
+        Ok(())
+    }
+
+    fn mode_label(&self) -> &'static str {
+        match self.mode {
+            BundleMode::Run => "run",
+            BundleMode::Check => "check",
+            BundleMode::Plan => "plan",
+        }
+    }
+}
+
+fn compute_totals(stats: &RecapStats) -> RunTotals {
+    let mut totals = RunTotals {
+        ok: 0,
+        changed: 0,
+        failed: 0,
+        unreachable: 0,
+        skipped: 0,
+        rescued: 0,
+        ignored: 0,
+        total_tasks: 0,
+    };
+
+    for host_stats in stats.hosts.values() {
+        totals.ok += host_stats.ok;
+        totals.changed += host_stats.changed;
+        totals.failed += host_stats.failed;
+        totals.unreachable += host_stats.unreachable;
+        totals.skipped += host_stats.skipped;
+        totals.rescued += host_stats.rescued;
+        totals.ignored += host_stats.ignored;
+    }
+
+    totals.total_tasks = totals.ok
+        + totals.changed
+        + totals.failed
+        + totals.unreachable
+        + totals.skipped
+        + totals.rescued
+        + totals.ignored;
+
+    totals
+}
+
+fn emit_plan_line(
+    ctx: &mut CommandContext,
+    plan_lines: &mut Option<&mut Vec<String>>,
+    line: impl Into<String>,
+) {
+    let line = line.into();
+    if let Some(lines) = plan_lines.as_deref_mut() {
+        lines.push(line.clone());
+    }
+    ctx.output.plan(&line);
+}
+
+fn executor_status_str(status: rustible::executor::task::TaskStatus) -> &'static str {
+    use rustible::executor::task::TaskStatus as ExecStatus;
+    match status {
+        ExecStatus::Ok => "ok",
+        ExecStatus::Changed => "changed",
+        ExecStatus::Failed => "failed",
+        ExecStatus::Skipped => "skipped",
+        ExecStatus::Unreachable => "unreachable",
+    }
+}
+
+fn executor_diff_to_json(diff: &rustible::executor::task::TaskDiff) -> JsonDiffOutput {
+    JsonDiffOutput {
+        before: diff.before.clone().unwrap_or_default(),
+        after: diff.after.clone().unwrap_or_default(),
+        before_header: diff.before_header.clone().unwrap_or_default(),
+        after_header: diff.after_header.clone().unwrap_or_default(),
+    }
+}
+
+fn handle_execution_event(
+    bundle: &Arc<std::sync::Mutex<OutputBundle>>,
+    event: rustible::executor::ExecutionEvent,
+) {
+    let mut bundle = match bundle.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    match event {
+        rustible::executor::ExecutionEvent::PlaybookStart(_) => {}
+        rustible::executor::ExecutionEvent::PlayStart(name) => {
+            if let (Some(prev_name), Some(prev_start)) =
+                (bundle.current_play.take(), bundle.play_start.take())
+            {
+                let duration_ms = prev_start.elapsed().as_millis() as u64;
+                bundle.emit(JsonEvent::PlayEnd {
+                    name: prev_name,
+                    timestamp: timestamp(),
+                    duration_ms,
+                });
+            }
+
+            bundle.current_play = Some(name.clone());
+            bundle.play_start = Some(Instant::now());
+            bundle.emit(JsonEvent::PlayStart {
+                name,
+                hosts: Vec::new(),
+                timestamp: timestamp(),
+            });
+        }
+        rustible::executor::ExecutionEvent::TaskStart { task, host } => {
+            let key = if let Some(ref host) = host {
+                format!("{}::{}", host, task)
+            } else {
+                task.clone()
+            };
+            bundle.task_start_times.insert(key, Instant::now());
+            bundle.emit(JsonEvent::TaskStart {
+                name: task,
+                module: "unknown".to_string(),
+                timestamp: timestamp(),
+            });
+        }
+        rustible::executor::ExecutionEvent::HostTaskComplete(host, task_name, result) => {
+            let key = format!("{}::{}", host, task_name);
+            let duration_ms = bundle
+                .task_start_times
+                .get(&key)
+                .map(|start| start.elapsed().as_millis() as u64)
+                .unwrap_or(0);
+
+            let status_str = executor_status_str(result.status).to_string();
+            let diff = result.diff.as_ref().map(executor_diff_to_json);
+
+            if matches!(
+                result.status,
+                rustible::executor::task::TaskStatus::Failed
+                    | rustible::executor::task::TaskStatus::Unreachable
+            ) {
+                bundle.has_failures = true;
+            }
+
+            bundle.emit(JsonEvent::TaskResult {
+                task: task_name.clone(),
+                host: host.clone(),
+                status: status_str.clone(),
+                changed: result.changed,
+                message: result.msg.clone(),
+                diff,
+                timestamp: timestamp(),
+                duration_ms,
+            });
+
+            if matches!(
+                result.status,
+                rustible::executor::task::TaskStatus::Failed
+                    | rustible::executor::task::TaskStatus::Unreachable
+            ) {
+                bundle.emit(JsonEvent::Error {
+                    message: result
+                        .msg
+                        .clone()
+                        .unwrap_or_else(|| "task failed".to_string()),
+                    task: Some(task_name),
+                    host: Some(host),
+                    timestamp: timestamp(),
+                });
+            }
+        }
+        rustible::executor::ExecutionEvent::PlaybookFinish(name) => {
+            if let (Some(prev_name), Some(prev_start)) =
+                (bundle.current_play.take(), bundle.play_start.take())
+            {
+                let duration_ms = prev_start.elapsed().as_millis() as u64;
+                bundle.emit(JsonEvent::PlayEnd {
+                    name: prev_name,
+                    timestamp: timestamp(),
+                    duration_ms,
+                });
+            }
+
+            let duration_ms = bundle.start_instant.elapsed().as_millis() as u64;
+            let success = !bundle.has_failures;
+            bundle.emit(JsonEvent::PlaybookEnd {
+                playbook: name,
+                timestamp: timestamp(),
+                duration_ms,
+                success,
+            });
+        }
+        rustible::executor::ExecutionEvent::Log(message) => {
+            bundle.emit(JsonEvent::Debug {
+                message,
+                verbosity: 0,
+                timestamp: timestamp(),
+            });
+        }
+    }
+}
+
 impl RunArgs {
     /// Execute the run command using the executor as the single runtime
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
@@ -113,6 +455,14 @@ impl RunArgs {
         use rustible::inventory::Inventory;
 
         let start_time = Instant::now();
+        let start_timestamp = timestamp();
+        let mode = if self.plan {
+            BundleMode::Plan
+        } else if ctx.check_mode {
+            BundleMode::Check
+        } else {
+            BundleMode::Run
+        };
 
         // Initialize progress bars
         ctx.output.init_progress();
@@ -144,6 +494,21 @@ impl RunArgs {
                     .error(&format!("Failed to parse playbook: {}", e));
                 return Ok(1);
             }
+        };
+
+        let output_bundle = match &self.output_bundle {
+            Some(dir) => {
+                ctx.output
+                    .info(&format!("Writing execution bundle to {}", dir.display()));
+                Some(Arc::new(std::sync::Mutex::new(OutputBundle::new(
+                    dir.clone(),
+                    mode,
+                    &playbook.name,
+                    self.output_bundle_format,
+                    start_timestamp.clone(),
+                )?)))
+            }
+            None => None,
         };
 
         // Get inventory path and load inventory
@@ -203,14 +568,54 @@ impl RunArgs {
                 .plan("WARNING: Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
             let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
+            let mut plan_lines: Vec<String> = Vec::new();
             if let Some(plays) = playbook_yaml.as_sequence() {
                 let extra_vars_for_plan: std::collections::HashMap<String, serde_yaml::Value> =
                     ctx.parse_extra_vars()?;
-                self.show_plan(ctx, plays, &extra_vars_for_plan).await?;
+                self.show_plan(ctx, plays, &extra_vars_for_plan, Some(&mut plan_lines))
+                    .await?;
             }
             let duration = start_time.elapsed();
             ctx.output
                 .info(&format!("Plan completed in {:.2}s", duration.as_secs_f64()));
+
+            if let Some(bundle) = output_bundle.as_ref() {
+                let mut bundle = bundle.lock().expect("output bundle lock poisoned");
+                if !plan_lines.is_empty() {
+                    bundle.write_plan(&plan_lines)?;
+                }
+                let end_timestamp = timestamp();
+                bundle.emit(JsonEvent::PlaybookEnd {
+                    playbook: playbook.name.clone(),
+                    timestamp: end_timestamp.clone(),
+                    duration_ms: duration.as_millis() as u64,
+                    success: true,
+                });
+
+                let summary = RunSummary {
+                    run_id: bundle.run_id.clone(),
+                    mode: bundle.mode_label().to_string(),
+                    playbook: playbook.name.clone(),
+                    start_time: bundle.start_timestamp.clone(),
+                    end_time: end_timestamp,
+                    duration_ms: duration.as_millis() as u64,
+                    success: true,
+                    totals: RunTotals {
+                        ok: 0,
+                        changed: 0,
+                        failed: 0,
+                        unreachable: 0,
+                        skipped: 0,
+                        rescued: 0,
+                        ignored: 0,
+                        total_tasks: 0,
+                    },
+                    hosts: HashMap::new(),
+                    plan: if plan_lines.is_empty() { None } else { Some(plan_lines) },
+                };
+
+                bundle.finish(&summary)?;
+            }
             return Ok(0);
         }
 
@@ -269,6 +674,13 @@ impl RunArgs {
             executor = executor.with_recovery_manager(recovery_manager);
         }
 
+        if let Some(bundle) = output_bundle.as_ref() {
+            let bundle = Arc::clone(bundle);
+            let callback: rustible::executor::EventCallback =
+                Arc::new(move |event| handle_execution_event(&bundle, event));
+            executor = executor.with_event_callback(callback);
+        }
+
         // Run playbook using executor
         ctx.output
             .info(&format!("Running playbook: {}", playbook.name));
@@ -277,6 +689,46 @@ impl RunArgs {
             Err(e) => {
                 ctx.output
                     .error(&format!("Playbook execution failed: {}", e));
+
+                if let Some(bundle) = output_bundle.as_ref() {
+                    let mut bundle = bundle.lock().expect("output bundle lock poisoned");
+                    let end_timestamp = timestamp();
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    bundle.emit(JsonEvent::Error {
+                        message: e.to_string(),
+                        task: None,
+                        host: None,
+                        timestamp: end_timestamp.clone(),
+                    });
+                    bundle.emit(JsonEvent::PlaybookEnd {
+                        playbook: playbook.name.clone(),
+                        timestamp: end_timestamp.clone(),
+                        duration_ms,
+                        success: false,
+                    });
+                    let summary = RunSummary {
+                        run_id: bundle.run_id.clone(),
+                        mode: bundle.mode_label().to_string(),
+                        playbook: playbook.name.clone(),
+                        start_time: bundle.start_timestamp.clone(),
+                        end_time: end_timestamp,
+                        duration_ms,
+                        success: false,
+                        totals: RunTotals {
+                            ok: 0,
+                            changed: 0,
+                            failed: 0,
+                            unreachable: 0,
+                            skipped: 0,
+                            rescued: 0,
+                            ignored: 0,
+                            total_tasks: 0,
+                        },
+                        hosts: HashMap::new(),
+                        plan: None,
+                    };
+                    bundle.finish(&summary)?;
+                }
                 return Ok(2);
             }
         };
@@ -285,7 +737,6 @@ impl RunArgs {
         ctx.close_connections().await;
 
         // Convert executor results to RecapStats
-        use crate::cli::output::HostStats;
         let mut stats = RecapStats::new();
         let mut has_failures = false;
 
@@ -316,6 +767,25 @@ impl RunArgs {
             duration.as_secs_f64()
         ));
 
+        if let Some(bundle) = output_bundle.as_ref() {
+            let mut bundle = bundle.lock().expect("output bundle lock poisoned");
+            let end_timestamp = timestamp();
+            let totals = compute_totals(&stats);
+            let summary = RunSummary {
+                run_id: bundle.run_id.clone(),
+                mode: bundle.mode_label().to_string(),
+                playbook: playbook.name.clone(),
+                start_time: bundle.start_timestamp.clone(),
+                end_time: end_timestamp,
+                duration_ms: duration.as_millis() as u64,
+                success: !has_failures,
+                totals,
+                hosts: stats.hosts.clone(),
+                plan: None,
+            };
+            bundle.finish(&summary)?;
+        }
+
         // Return exit code
         if has_failures {
             Ok(2)
@@ -330,10 +800,18 @@ impl RunArgs {
         ctx: &mut CommandContext,
         plays: &[serde_yaml::Value],
         extra_vars: &std::collections::HashMap<String, serde_yaml::Value>,
+        mut plan_lines: Option<&mut Vec<String>>,
     ) -> Result<()> {
         ctx.output.section("EXECUTION PLAN");
-        ctx.output
-            .plan("Rustible will perform the following actions:\n");
+        if let Some(lines) = plan_lines.as_deref_mut() {
+            lines.push("EXECUTION PLAN".to_string());
+        }
+
+        emit_plan_line(
+            ctx,
+            &mut plan_lines,
+            "Rustible will perform the following actions:\n",
+        );
 
         for (play_idx, play) in plays.iter().enumerate() {
             let play_name = play
@@ -354,20 +832,28 @@ impl RunArgs {
             }
 
             // Print play header similar to terraform plan
-            ctx.output.plan(&format!(
+            emit_plan_line(
+                ctx,
+                &mut plan_lines,
+                format!(
                 "{}[Play {}/{}] {} {}",
                 if play_idx > 0 { "\n" } else { "" },
                 play_idx + 1,
                 plays.len(),
                 "*".to_string(),
                 play_name
-            ));
-            ctx.output.plan(&format!(
+                ),
+            );
+            emit_plan_line(
+                ctx,
+                &mut plan_lines,
+                format!(
                 "  Hosts: {} ({} host{})",
                 hosts_pattern,
                 hosts.len(),
                 if hosts.len() == 1 { "" } else { "s" }
-            ));
+                ),
+            );
 
             // Collect play variables
             let mut vars: IndexMap<String, serde_yaml::Value> = IndexMap::new();
@@ -442,20 +928,25 @@ impl RunArgs {
                 pre_tasks.len() + role_task_count + tasks.len() + post_tasks.len();
 
             if total_play_tasks == 0 {
-                ctx.output.plan("  No tasks to execute");
+                emit_plan_line(ctx, &mut plan_lines, "  No tasks to execute");
                 continue;
             }
 
-            ctx.output.plan(&format!(
+            emit_plan_line(
+                ctx,
+                &mut plan_lines,
+                format!(
                 "  Tasks: {} task{}",
                 total_play_tasks,
                 if total_play_tasks == 1 { "" } else { "s" }
-            ));
+                ),
+            );
 
             let mut task_num = 0;
 
             // Helper closure to show a task
             let show_task = |ctx: &mut CommandContext,
+                             plan_lines: &mut Option<&mut Vec<String>>,
                              task: &serde_yaml::Value,
                              task_num: usize,
                              total: usize,
@@ -473,24 +964,27 @@ impl RunArgs {
 
                 let (module, args) = me.detect_module(task);
 
-                ctx.output.plan(&format!(
+                emit_plan_line(
+                    ctx,
+                    plan_lines,
+                    format!(
                     "\n  {} Task {}/{}: {}",
                     ">".to_string(),
                     task_num,
                     total,
                     task_name
-                ));
-                ctx.output.plan(&format!("    Module: {}", module));
+                    ),
+                );
+                emit_plan_line(ctx, plan_lines, format!("    Module: {}", module));
 
                 for host in hosts {
                     let action_desc = me.get_action_description(module, args, vars);
-                    ctx.output
-                        .plan(&format!("      [{}] {}", host, action_desc));
+                    emit_plan_line(ctx, plan_lines, format!("      [{}] {}", host, action_desc));
                 }
 
                 if let Some(when) = task.get("when") {
                     let condition = when.as_str().unwrap_or("<complex condition>");
-                    ctx.output.plan(&format!("    When: {}", condition));
+                    emit_plan_line(ctx, plan_lines, format!("    When: {}", condition));
                 }
 
                 if let Some(notify) = task.get("notify") {
@@ -502,8 +996,7 @@ impl RunArgs {
                         vec![]
                     };
                     if !handlers.is_empty() {
-                        ctx.output
-                            .plan(&format!("    Notify: {}", handlers.join(", ")));
+                        emit_plan_line(ctx, plan_lines, format!("    Notify: {}", handlers.join(", ")));
                     }
                 }
             };
@@ -511,7 +1004,7 @@ impl RunArgs {
             // Show pre_tasks
             for task in &pre_tasks {
                 task_num += 1;
-                show_task(ctx, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
             }
 
             // Show role tasks
@@ -540,6 +1033,7 @@ impl RunArgs {
                                 task_num += 1;
                                 show_task(
                                     ctx,
+                                    &mut plan_lines,
                                     task,
                                     task_num,
                                     total_play_tasks,
@@ -556,17 +1050,20 @@ impl RunArgs {
             // Show tasks
             for task in &tasks {
                 task_num += 1;
-                show_task(ctx, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
             }
 
             // Show post_tasks
             for task in &post_tasks {
                 task_num += 1;
-                show_task(ctx, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
             }
         }
 
         ctx.output.section("\nPLAN SUMMARY");
+        if let Some(lines) = plan_lines.as_deref_mut() {
+            lines.push("PLAN SUMMARY".to_string());
+        }
 
         // Count total tasks and hosts
         let mut total_tasks = 0;
@@ -644,16 +1141,23 @@ impl RunArgs {
             }
         }
 
-        ctx.output.plan(&format!(
+        emit_plan_line(
+            ctx,
+            &mut plan_lines,
+            format!(
             "Plan: {} task{} across {} host{}",
             total_tasks,
             if total_tasks == 1 { "" } else { "s" },
             total_hosts.len(),
             if total_hosts.len() == 1 { "" } else { "s" }
-        ));
+            ),
+        );
 
-        ctx.output
-            .plan("\nTo execute this plan, run the same command without --plan");
+        emit_plan_line(
+            ctx,
+            &mut plan_lines,
+            "\nTo execute this plan, run the same command without --plan",
+        );
 
         Ok(())
     }
@@ -1660,6 +2164,27 @@ mod tests {
     fn test_run_args_plan_flag() {
         let args = RunArgs::try_parse_from(["run", "playbook.yml", "--plan"]).unwrap();
         assert!(args.plan);
+    }
+
+    #[test]
+    fn test_run_args_output_bundle() {
+        let args =
+            RunArgs::try_parse_from(["run", "playbook.yml", "--output-bundle", "bundle"]).unwrap();
+        assert_eq!(args.output_bundle, Some(PathBuf::from("bundle")));
+    }
+
+    #[test]
+    fn test_run_args_output_bundle_format() {
+        let args = RunArgs::try_parse_from([
+            "run",
+            "playbook.yml",
+            "--output-bundle",
+            "bundle",
+            "--output-bundle-format",
+            "json",
+        ])
+        .unwrap();
+        assert!(matches!(args.output_bundle_format, BundleFormat::Json));
     }
 
     #[test]

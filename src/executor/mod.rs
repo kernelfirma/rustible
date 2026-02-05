@@ -201,6 +201,26 @@ impl From<crate::error::Error> for ExecutorError {
 /// A type alias for `Result<T, ExecutorError>` used throughout the executor module.
 pub type ExecutorResult<T> = Result<T, ExecutorError>;
 
+/// Events emitted during playbook execution.
+#[derive(Debug, Clone)]
+pub enum ExecutionEvent {
+    /// Playbook execution started
+    PlaybookStart(String),
+    /// Play execution started
+    PlayStart(String),
+    /// Task execution started
+    TaskStart { task: String, host: Option<String> },
+    /// Task completed on a host
+    HostTaskComplete(String, String, TaskResult), // host, task_name, result
+    /// Playbook execution finished
+    PlaybookFinish(String),
+    /// Generic log message
+    Log(String),
+}
+
+/// Callback function for execution events.
+pub type EventCallback = Arc<dyn Fn(ExecutionEvent) + Send + Sync>;
+
 /// Configuration options for the playbook executor.
 ///
 /// Controls how playbooks are executed, including parallelism, execution strategy,
@@ -460,6 +480,8 @@ pub struct Executor {
     changed_tasks: Arc<Mutex<Vec<crate::state::TaskStateRecord>>>,
     /// Batch processor for coalescing loop operations
     batch_processor: Arc<BatchProcessor>,
+    /// Optional event callback for execution telemetry
+    event_callback: Option<EventCallback>,
 }
 
 impl Executor {
@@ -478,6 +500,7 @@ impl Executor {
             module_registry: Arc::new(ModuleRegistry::default()),
             changed_tasks: Arc::new(Mutex::new(Vec::new())),
             batch_processor: Arc::new(BatchProcessor::new(BatchConfig::default())),
+            event_callback: None,
         }
     }
 
@@ -496,6 +519,7 @@ impl Executor {
             module_registry: Arc::new(ModuleRegistry::default()),
             changed_tasks: Arc::new(Mutex::new(Vec::new())),
             batch_processor: Arc::new(BatchProcessor::new(BatchConfig::default())),
+            event_callback: None,
         }
     }
 
@@ -509,6 +533,18 @@ impl Executor {
     pub fn with_connection_factory(mut self, factory: ConnectionFactory) -> Self {
         self.connection_factory = Some(Arc::new(factory));
         self
+    }
+
+    /// Set the event callback for this executor.
+    pub fn with_event_callback(mut self, callback: EventCallback) -> Self {
+        self.event_callback = Some(callback);
+        self
+    }
+
+    fn emit_event(&self, event: ExecutionEvent) {
+        if let Some(cb) = &self.event_callback {
+            cb(event);
+        }
     }
 
     /// Known reversible modules that can be automatically rolled back
@@ -583,6 +619,7 @@ impl Executor {
         &self,
         playbook: &Playbook,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        self.emit_event(ExecutionEvent::PlaybookStart(playbook.name.clone()));
         info!("Starting playbook: {}", playbook.name);
 
         let tx_id = if let Some(rm) = &self.recovery_manager {
@@ -661,6 +698,7 @@ impl Executor {
             self.execute_system_rollback().await;
         }
 
+        self.emit_event(ExecutionEvent::PlaybookFinish(playbook.name.clone()));
         result
     }
 
@@ -671,6 +709,7 @@ impl Executor {
         play: &Play,
         tx_id: Option<TransactionId>,
     ) -> ExecutorResult<HashMap<String, HostResult>> {
+        self.emit_event(ExecutionEvent::PlayStart(play.name.clone()));
         info!("Starting play: {}", play.name);
 
         let vars_from_files = self.load_vars_files(play).await?;
@@ -1047,6 +1086,11 @@ impl Executor {
                     break;
                 }
 
+                self.emit_event(ExecutionEvent::TaskStart {
+                    task: task.name.clone(),
+                    host: Some(host.clone()),
+                });
+
                 let mut ctx = ExecutionContext::new(host.clone())
                     .with_check_mode(self.config.check_mode)
                     .with_diff_mode(self.config.diff_mode)
@@ -1069,6 +1113,16 @@ impl Executor {
                         self.config.pipelining,
                     )
                     .await;
+
+                let event_result = match &task_result {
+                    Ok(result) => result.clone(),
+                    Err(e) => TaskResult::failed(e.to_string()),
+                };
+                self.emit_event(ExecutionEvent::HostTaskComplete(
+                    host.clone(),
+                    task.name.clone(),
+                    event_result,
+                ));
 
                 if let Some(rm) = &self.recovery_manager {
                     if let Some(tid) = tx_id.as_ref() {
@@ -1149,6 +1203,7 @@ impl Executor {
         let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
         let results = Arc::new(Mutex::new(HashMap::with_capacity(hosts.len())));
 
+        let event_callback = self.event_callback.clone();
         let handles: Vec<_> = hosts
             .iter()
             .map(|host| {
@@ -1167,6 +1222,7 @@ impl Executor {
                 let batch_processor = Arc::clone(&self.batch_processor);
                 let pipelining = self.config.pipelining;
                 let tx_id = tx_id.clone();
+                let event_callback = event_callback.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1196,6 +1252,13 @@ impl Executor {
                             break;
                         }
 
+                        if let Some(cb) = &event_callback {
+                            cb(ExecutionEvent::TaskStart {
+                                task: task.name.clone(),
+                                host: Some(host.clone()),
+                            });
+                        }
+
                         let mut ctx = ExecutionContext::new(host.clone())
                             .with_check_mode(check_mode)
                             .with_diff_mode(diff_mode)
@@ -1218,6 +1281,18 @@ impl Executor {
                                 pipelining,
                             )
                             .await;
+
+                        if let Some(cb) = &event_callback {
+                            let event_result = match &task_result {
+                                Ok(result) => result.clone(),
+                                Err(e) => TaskResult::failed(e.to_string()),
+                            };
+                            cb(ExecutionEvent::HostTaskComplete(
+                                host.clone(),
+                                task.name.clone(),
+                                event_result,
+                            ));
+                        }
 
                         if let Some(rm) = &recovery_manager {
                             if let Some(tid) = tx_id.as_ref() {
@@ -1432,6 +1507,7 @@ impl Executor {
     ) -> ExecutorResult<HashMap<String, TaskResult>> {
         debug!("Running task '{}' on {} hosts", task.name, hosts.len());
 
+
         // Set task-level vars (including block vars merged during parsing) on runtime
         if !task.vars.is_empty() {
             let mut rt = self.runtime.write().await;
@@ -1445,6 +1521,11 @@ impl Executor {
 
             // Get connection for host
             let host_connection = self.get_connection_for_host(host).await;
+
+            self.emit_event(ExecutionEvent::TaskStart {
+                task: task.name.clone(),
+                host: Some(host.clone()),
+            });
 
             let mut ctx = ExecutionContext::new(host.clone())
                 .with_check_mode(self.config.check_mode)
@@ -1472,19 +1553,24 @@ impl Executor {
             let mut results = HashMap::with_capacity(1);
             match result {
                 Ok(task_result) => {
+                    self.emit_event(ExecutionEvent::HostTaskComplete(
+                        host.clone(),
+                        task.name.clone(),
+                        task_result.clone(),
+                    ));
                     results.insert(host.clone(), task_result);
                 }
                 Err(e) => {
                     error!("Task failed on host {}: {}", host, e);
+                    let failed_result = TaskResult::failed(e.to_string());
+                    self.emit_event(ExecutionEvent::HostTaskComplete(
+                        host.clone(),
+                        task.name.clone(),
+                        failed_result.clone(),
+                    ));
                     results.insert(
                         host.clone(),
-                        TaskResult {
-                            status: TaskStatus::Failed,
-                            changed: false,
-                            msg: Some(e.to_string()),
-                            result: None,
-                            diff: None,
-                        },
+                        failed_result,
                     );
                 }
             }
@@ -1545,6 +1631,7 @@ impl Executor {
         // OPTIMIZATION: For small host counts, share task via Arc instead of cloning per host
         let task_arc = Arc::new(task.clone());
         let results = Arc::new(Mutex::new(HashMap::with_capacity(hosts.len())));
+        let event_callback = self.event_callback.clone();
 
         let handles: Vec<_> = hosts
             .iter()
@@ -1561,6 +1648,7 @@ impl Executor {
                 let module_registry = Arc::clone(&self.module_registry);
                 let batch_processor = Arc::clone(&self.batch_processor);
                 let pipelining = self.config.pipelining;
+                let event_callback = event_callback.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
@@ -1577,6 +1665,13 @@ impl Executor {
                     } else {
                         None
                     };
+
+                    if let Some(cb) = &event_callback {
+                        cb(ExecutionEvent::TaskStart {
+                            task: task.name.clone(),
+                            host: Some(host.clone()),
+                        });
+                    }
 
                     let mut ctx = ExecutionContext::new(host.clone())
                         .with_check_mode(check_mode)
@@ -1600,6 +1695,18 @@ impl Executor {
                             pipelining,
                         )
                         .await;
+
+                    if let Some(cb) = &event_callback {
+                        let event_result = match &result {
+                            Ok(task_result) => task_result.clone(),
+                            Err(e) => TaskResult::failed(e.to_string()),
+                        };
+                        cb(ExecutionEvent::HostTaskComplete(
+                            host.clone(),
+                            task.name.clone(),
+                            event_result,
+                        ));
+                    }
 
                     match result {
                         Ok(task_result) => {

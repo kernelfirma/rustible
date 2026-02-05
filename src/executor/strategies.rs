@@ -49,7 +49,10 @@ impl Executor {
 
         for (task_index, task) in tasks.iter().enumerate() {
             if let Some(cb) = &self.event_callback {
-                cb(ExecutionEvent::TaskStart(task.name.clone()));
+                cb(ExecutionEvent::TaskStart {
+                    task: task.name.clone(),
+                    host: None,
+                });
             }
 
             // Determine which hosts should run this task based on block state
