@@ -62,9 +62,13 @@ impl Executor {
                     .get(host)
                     .map(|r| (r.failed, r.unreachable))
                     .unwrap_or((false, false));
-                let host_blocks = block_states
-                    .get_mut(host)
-                    .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                let host_blocks = match block_states.get_mut(host) {
+                    Some(blocks) => blocks,
+                    None => {
+                        error!("Missing block state for host {}, skipping", host);
+                        continue;
+                    }
+                };
                 if !host_failed && !host_unreachable {
                     ensure_block_states_for_task(task, host_blocks);
                 }
@@ -81,9 +85,13 @@ impl Executor {
                 }
                 for host in hosts {
                     if let Some(host_result) = results.get_mut(host) {
-                        let host_blocks = block_states
-                            .get_mut(host)
-                            .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                        let host_blocks = match block_states.get_mut(host) {
+                            Some(blocks) => blocks,
+                            None => {
+                                error!("Missing block state for host {}, skipping", host);
+                                continue;
+                            }
+                        };
                         finalize_blocks_for_task_index(
                             host_result,
                             task,
@@ -115,9 +123,10 @@ impl Executor {
                 );
 
                 if let Some(host_result) = results.get_mut(&host) {
-                    let host_blocks = block_states
-                        .get_mut(&host)
-                        .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                    let Some(host_blocks) = block_states.get_mut(&host) else {
+                        error!("Missing block state for host {}, skipping result update", host);
+                        continue;
+                    };
                     update_host_result_for_task(
                         host_result,
                         task,
@@ -130,9 +139,10 @@ impl Executor {
 
             for host in hosts {
                 if let Some(host_result) = results.get_mut(host) {
-                    let host_blocks = block_states
-                        .get_mut(host)
-                        .unwrap_or_else(|| panic!("Missing block state for host {}", host));
+                    let Some(host_blocks) = block_states.get_mut(host) else {
+                        error!("Missing block state for host {}, skipping finalization", host);
+                        continue;
+                    };
                     finalize_blocks_for_task_index(
                         host_result,
                         task,

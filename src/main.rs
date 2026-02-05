@@ -35,10 +35,9 @@ async fn main() -> Result<()> {
     }
 
     // Load configuration
+    // Always log config errors to stderr so users know their config wasn't loaded
     let config = Config::load(cli.config.as_ref()).unwrap_or_else(|e| {
-        if cli.verbosity() >= 1 {
-            eprintln!("Warning: Failed to load config: {}", e);
-        }
+        eprintln!("Warning: Failed to load config: {}. Using defaults.", e);
         Config::default()
     });
 

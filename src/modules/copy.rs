@@ -282,7 +282,10 @@ impl CopyModule {
                 }
 
                 // Update permissions via chmod command
-                let chmod_cmd = format!("chmod {:o} {}", mode.unwrap(), final_dest.display());
+                // Use shell_escape to prevent command injection via malicious file paths
+                let path_str = final_dest.to_string_lossy();
+                let escaped_path = shell_escape(&path_str);
+                let chmod_cmd = format!("chmod {:o} {}", mode.unwrap(), escaped_path);
                 connection.execute(&chmod_cmd, None).await.map_err(|e| {
                     ModuleError::ExecutionFailed(format!("Failed to set permissions: {}", e))
                 })?;
@@ -535,7 +538,9 @@ impl CopyModule {
             if final_dest.exists() {
                 let mut existing = String::new();
                 fs::File::open(&final_dest)?.read_to_string(&mut existing)?;
-                existing != source_content.as_ref().unwrap().as_str()
+                // Use as_deref() for safe access - source_content is guaranteed to be Some here
+                // because we're in the else branch of resolved_src check
+                existing != source_content.as_deref().unwrap_or("")
             } else {
                 true
             }
