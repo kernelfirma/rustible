@@ -1,10 +1,22 @@
 //! State management command
 //!
 //! This module implements the `state` subcommand for managing state.
+//!
+//! ## Commands
+//!
+//! - `init` - Initialize state with backend configuration
+//! - `migrate` - Migrate state between backends
+//! - `import-terraform` - Import Terraform state into Rustible format
+//! - `list` - List available states
+//! - `show` - Show state details
+//! - `pull` - Pull remote state to local
+//! - `push` - Push local state to remote
+//! - `rm` - Remove a state entry
+//! - `lock` - Manage state locks
 
 use super::CommandContext;
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 /// Arguments for the state command
@@ -15,9 +27,121 @@ pub struct StateArgs {
     pub command: StateCommand,
 }
 
+/// Backend type for state storage
+#[derive(Debug, Clone, ValueEnum)]
+pub enum BackendType {
+    /// Local file-based storage
+    Local,
+    /// AWS S3 with optional DynamoDB locking
+    S3,
+    /// Google Cloud Storage
+    Gcs,
+    /// Azure Blob Storage
+    Azure,
+    /// HashiCorp Consul KV
+    Consul,
+    /// HTTP backend (Terraform Cloud compatible)
+    Http,
+}
+
+impl std::fmt::Display for BackendType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BackendType::Local => write!(f, "local"),
+            BackendType::S3 => write!(f, "s3"),
+            BackendType::Gcs => write!(f, "gcs"),
+            BackendType::Azure => write!(f, "azure"),
+            BackendType::Consul => write!(f, "consul"),
+            BackendType::Http => write!(f, "http"),
+        }
+    }
+}
+
 /// State subcommands
 #[derive(Subcommand, Debug, Clone)]
 pub enum StateCommand {
+    /// Initialize state with backend configuration
+    Init {
+        /// Backend type
+        #[arg(long, value_enum, default_value = "local")]
+        backend: BackendType,
+
+        /// State file path (for local backend)
+        #[arg(long, default_value = ".rustible/provisioning.state.json")]
+        path: PathBuf,
+
+        /// S3 bucket name (for s3 backend)
+        #[arg(long)]
+        bucket: Option<String>,
+
+        /// Object key/path within bucket (for s3/gcs/azure backends)
+        #[arg(long)]
+        key: Option<String>,
+
+        /// AWS region (for s3 backend)
+        #[arg(long)]
+        region: Option<String>,
+
+        /// DynamoDB table for locking (for s3 backend)
+        #[arg(long)]
+        dynamodb_table: Option<String>,
+
+        /// Storage account name (for azure backend)
+        #[arg(long)]
+        storage_account: Option<String>,
+
+        /// Container name (for azure backend)
+        #[arg(long)]
+        container: Option<String>,
+
+        /// Consul/HTTP address
+        #[arg(long)]
+        address: Option<String>,
+
+        /// Force reconfiguration if already initialized
+        #[arg(long)]
+        reconfigure: bool,
+    },
+
+    /// Migrate state from one backend to another
+    Migrate {
+        /// Source backend type
+        #[arg(long, value_enum)]
+        from: BackendType,
+
+        /// Destination backend type
+        #[arg(long, value_enum)]
+        to: BackendType,
+
+        /// Source path/URL
+        #[arg(long)]
+        from_path: String,
+
+        /// Destination path/URL
+        #[arg(long)]
+        to_path: String,
+
+        /// Skip confirmation
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Import Terraform state into Rustible format
+    #[command(name = "import-terraform")]
+    ImportTerraform {
+        /// Path to Terraform state file (terraform.tfstate)
+        #[arg(long)]
+        tfstate: PathBuf,
+
+        /// Output path for Rustible state
+        #[arg(long, default_value = ".rustible/provisioning.state.json")]
+        output: PathBuf,
+
+        /// Overwrite existing state
+        #[arg(long)]
+        force: bool,
+    },
+
     /// List available states
     List {
         /// State directory path
@@ -109,6 +233,318 @@ impl StateArgs {
     /// Execute the state command
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
         match &self.command {
+            StateCommand::Init {
+                backend,
+                path,
+                bucket,
+                key,
+                region,
+                dynamodb_table,
+                storage_account,
+                container,
+                address,
+                reconfigure,
+            } => {
+                ctx.output.banner("STATE INIT");
+
+                // Check if state config already exists
+                let config_path = PathBuf::from(".rustible/backend.json");
+                if config_path.exists() && !reconfigure {
+                    ctx.output.warning(
+                        "Backend already configured. Use --reconfigure to overwrite.",
+                    );
+                    return Ok(1);
+                }
+
+                // Create config directory
+                std::fs::create_dir_all(".rustible")?;
+
+                // Build backend configuration
+                let backend_config = match backend {
+                    BackendType::Local => {
+                        ctx.output.info(&format!("Initializing local backend at {:?}", path));
+                        serde_json::json!({
+                            "type": "local",
+                            "path": path.to_string_lossy()
+                        })
+                    }
+                    BackendType::S3 => {
+                        let bucket = bucket.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("--bucket is required for S3 backend")
+                        })?;
+                        let key = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+                        let region = region.as_ref().map(|r| r.as_str()).unwrap_or("us-east-1");
+
+                        ctx.output.info(&format!(
+                            "Initializing S3 backend: s3://{}/{}",
+                            bucket, key
+                        ));
+
+                        let mut config = serde_json::json!({
+                            "type": "s3",
+                            "bucket": bucket,
+                            "key": key,
+                            "region": region,
+                            "encrypt": true
+                        });
+
+                        if let Some(table) = dynamodb_table {
+                            config["dynamodb_table"] = serde_json::json!(table);
+                            ctx.output.info(&format!("  DynamoDB locking enabled: {}", table));
+                        }
+
+                        config
+                    }
+                    BackendType::Gcs => {
+                        let bucket = bucket.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("--bucket is required for GCS backend")
+                        })?;
+                        let key = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+
+                        ctx.output.info(&format!(
+                            "Initializing GCS backend: gs://{}/{}",
+                            bucket, key
+                        ));
+
+                        serde_json::json!({
+                            "type": "gcs",
+                            "bucket": bucket,
+                            "key": key
+                        })
+                    }
+                    BackendType::Azure => {
+                        let storage_account = storage_account.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("--storage-account is required for Azure backend")
+                        })?;
+                        let container = container.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("--container is required for Azure backend")
+                        })?;
+                        let blob_name = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+
+                        ctx.output.info(&format!(
+                            "Initializing Azure backend: {}/{}/{}",
+                            storage_account, container, blob_name
+                        ));
+
+                        serde_json::json!({
+                            "type": "azurerm",
+                            "storage_account_name": storage_account,
+                            "container_name": container,
+                            "key": blob_name
+                        })
+                    }
+                    BackendType::Consul => {
+                        let addr = address.as_ref().map(|a| a.as_str())
+                            .unwrap_or("http://127.0.0.1:8500");
+                        let path = key.as_ref().map(|k| k.as_str()).unwrap_or("rustible/state");
+
+                        ctx.output.info(&format!(
+                            "Initializing Consul backend: {}/v1/kv/{}",
+                            addr, path
+                        ));
+
+                        serde_json::json!({
+                            "type": "consul",
+                            "address": addr,
+                            "path": path
+                        })
+                    }
+                    BackendType::Http => {
+                        let addr = address.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("--address is required for HTTP backend")
+                        })?;
+
+                        ctx.output.info(&format!(
+                            "Initializing HTTP backend: {}",
+                            addr
+                        ));
+
+                        serde_json::json!({
+                            "type": "http",
+                            "address": addr
+                        })
+                    }
+                };
+
+                // Write config
+                let config_content = serde_json::to_string_pretty(&backend_config)?;
+                std::fs::write(&config_path, &config_content)?;
+
+                ctx.output.info(&format!("Backend configuration saved to {:?}", config_path));
+                ctx.output.info("");
+                ctx.output.info("Successfully configured the backend!");
+                ctx.output.info("You may now begin working with Rustible provisioning.");
+
+                Ok(0)
+            }
+
+            StateCommand::Migrate {
+                from,
+                to,
+                from_path,
+                to_path,
+                force,
+            } => {
+                ctx.output.banner("STATE MIGRATE");
+                ctx.output.info(&format!("Migrating state from {} to {}", from, to));
+                ctx.output.info(&format!("  Source: {}", from_path));
+                ctx.output.info(&format!("  Destination: {}", to_path));
+
+                if !force {
+                    ctx.output.warning(
+                        "This will copy state data. Use --force to confirm.",
+                    );
+                    return Ok(1);
+                }
+
+                // Load source state
+                let source_content = match from {
+                    BackendType::Local => {
+                        let path = PathBuf::from(from_path);
+                        if !path.exists() {
+                            ctx.output.error(&format!("Source state not found: {:?}", path));
+                            return Ok(1);
+                        }
+                        std::fs::read_to_string(&path)?
+                    }
+                    _ => {
+                        ctx.output.error(&format!(
+                            "Migration from {} backend requires async support. Use pull/push commands.",
+                            from
+                        ));
+                        return Ok(1);
+                    }
+                };
+
+                // Parse state to validate
+                let state: serde_json::Value = serde_json::from_str(&source_content)?;
+
+                // Save to destination
+                match to {
+                    BackendType::Local => {
+                        let path = PathBuf::from(to_path);
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        let content = serde_json::to_string_pretty(&state)?;
+                        std::fs::write(&path, content)?;
+                        ctx.output.info(&format!("State migrated to {:?}", path));
+                    }
+                    _ => {
+                        ctx.output.error(&format!(
+                            "Migration to {} backend requires async support. Use pull/push commands.",
+                            to
+                        ));
+                        return Ok(1);
+                    }
+                }
+
+                ctx.output.info("Migration completed successfully.");
+                Ok(0)
+            }
+
+            StateCommand::ImportTerraform {
+                tfstate,
+                output,
+                force,
+            } => {
+                ctx.output.banner("IMPORT TERRAFORM STATE");
+                ctx.output.info(&format!("Importing from: {:?}", tfstate));
+                ctx.output.info(&format!("Output to: {:?}", output));
+
+                // Check source exists
+                if !tfstate.exists() {
+                    ctx.output.error(&format!("Terraform state file not found: {:?}", tfstate));
+                    return Ok(1);
+                }
+
+                // Check destination doesn't exist (unless force)
+                if output.exists() && !force {
+                    ctx.output.warning(
+                        "Output file already exists. Use --force to overwrite.",
+                    );
+                    return Ok(1);
+                }
+
+                // Read Terraform state
+                let tf_content = std::fs::read_to_string(tfstate)?;
+                let tf_state: serde_json::Value = serde_json::from_str(&tf_content)?;
+
+                // Validate it's a Terraform state file
+                if tf_state.get("version").is_none() {
+                    ctx.output.error("Invalid Terraform state file: missing version field");
+                    return Ok(1);
+                }
+
+                let tf_version = tf_state.get("terraform_version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let serial = tf_state.get("serial")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+
+                ctx.output.info(&format!("  Terraform version: {}", tf_version));
+                ctx.output.info(&format!("  State serial: {}", serial));
+
+                // Import using the provisioning module (feature-gated)
+                #[cfg(feature = "provisioning")]
+                {
+                    use rustible::provisioning::state::ProvisioningState;
+
+                    let rustible_state = ProvisioningState::import_from_terraform(&tf_state)
+                        .map_err(|e| anyhow::anyhow!("Failed to import state: {}", e))?;
+
+                    // Report what was imported
+                    ctx.output.info(&format!("  Resources imported: {}", rustible_state.resource_count()));
+                    ctx.output.info(&format!("  Outputs imported: {}", rustible_state.outputs.len()));
+
+                    // Create output directory if needed
+                    if let Some(parent) = output.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+
+                    // Save Rustible state
+                    let content = serde_json::to_string_pretty(&rustible_state)?;
+                    std::fs::write(output, content)?;
+
+                    ctx.output.info("");
+                    ctx.output.info("Successfully imported Terraform state!");
+                    ctx.output.info("You can now use 'rustible provision plan' to see the current state.");
+                }
+
+                #[cfg(not(feature = "provisioning"))]
+                {
+                    // Fallback: simple JSON-to-JSON conversion for basic import
+                    let resources = tf_state.get("resources")
+                        .and_then(|r| r.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                    let outputs = tf_state.get("outputs")
+                        .and_then(|o| o.as_object())
+                        .map(|o| o.len())
+                        .unwrap_or(0);
+
+                    ctx.output.info(&format!("  Resources found: {}", resources));
+                    ctx.output.info(&format!("  Outputs found: {}", outputs));
+
+                    // Create output directory if needed
+                    if let Some(parent) = output.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+
+                    // Convert to Rustible state format
+                    let rustible_state = convert_terraform_state(&tf_state);
+                    let content = serde_json::to_string_pretty(&rustible_state)?;
+                    std::fs::write(output, content)?;
+
+                    ctx.output.info("");
+                    ctx.output.info("Successfully imported Terraform state!");
+                    ctx.output.info("Note: Enable 'provisioning' feature for full state management.");
+                }
+
+                Ok(0)
+            }
+
             StateCommand::List { state_dir, format } => {
                 ctx.output.banner("STATE LIST");
                 let state_path = state_dir
@@ -340,4 +776,131 @@ impl StateArgs {
             },
         }
     }
+}
+
+/// Convert Terraform state JSON to Rustible state format
+///
+/// This is a simplified conversion that works without the full provisioning feature.
+/// For full state management capabilities, enable the 'provisioning' feature.
+#[cfg(not(feature = "provisioning"))]
+fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    let mut resources: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut outputs: HashMap<String, serde_json::Value> = HashMap::new();
+
+    // Extract lineage and serial
+    let lineage = tf_state.get("lineage")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let serial = tf_state.get("serial")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    // Convert resources
+    if let Some(tf_resources) = tf_state.get("resources").and_then(|r| r.as_array()) {
+        for resource in tf_resources {
+            let resource_type = resource.get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let name = resource.get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let mode = resource.get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("managed");
+            let provider = resource.get("provider")
+                .and_then(|v| v.as_str())
+                .map(|p| {
+                    // Extract provider name from full provider path
+                    p.split('/').last().unwrap_or(p)
+                        .trim_start_matches("provider[\"")
+                        .trim_end_matches("\"]")
+                        .split('.')
+                        .last()
+                        .unwrap_or("unknown")
+                })
+                .or_else(|| resource_type.split('_').next())
+                .unwrap_or("unknown")
+                .to_string();
+
+            // Process instances
+            if let Some(instances) = resource.get("instances").and_then(|i| i.as_array()) {
+                for (idx, instance) in instances.iter().enumerate() {
+                    let attributes = instance.get("attributes")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+                    let cloud_id = attributes.get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    // Handle index key for count/for_each
+                    let index = instance.get("index_key").cloned();
+
+                    let resource_key = format!("{}.{}", resource_type, name);
+
+                    resources.insert(resource_key.clone(), serde_json::json!({
+                        "id": {
+                            "resource_type": resource_type,
+                            "name": name
+                        },
+                        "cloud_id": cloud_id,
+                        "resource_type": resource_type,
+                        "provider": provider,
+                        "config": {},
+                        "attributes": attributes,
+                        "dependencies": [],
+                        "dependents": [],
+                        "created_at": Utc::now().to_rfc3339(),
+                        "updated_at": Utc::now().to_rfc3339(),
+                        "metadata": {},
+                        "tainted": false,
+                        "index": index,
+                        "mode": mode
+                    }));
+                }
+            }
+        }
+    }
+
+    // Convert outputs
+    if let Some(tf_outputs) = tf_state.get("outputs").and_then(|o| o.as_object()) {
+        for (name, output) in tf_outputs {
+            let value = output.get("value").cloned().unwrap_or(serde_json::Value::Null);
+            let sensitive = output.get("sensitive")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let output_type = output.get("type").cloned();
+
+            outputs.insert(name.clone(), serde_json::json!({
+                "value": value,
+                "sensitive": sensitive,
+                "type": output_type,
+                "description": null
+            }));
+        }
+    }
+
+    // Build Rustible state
+    serde_json::json!({
+        "version": 1,
+        "serial": serial,
+        "lineage": lineage,
+        "resources": resources,
+        "outputs": outputs,
+        "history": [{
+            "timestamp": Utc::now().to_rfc3339(),
+            "change_type": "StateImported",
+            "operation": "import-terraform",
+            "resources_affected": [],
+            "description": "Imported from Terraform state"
+        }],
+        "metadata": {
+            "imported_from": "terraform",
+            "imported_at": Utc::now().to_rfc3339()
+        }
+    })
 }
