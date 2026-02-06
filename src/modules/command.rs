@@ -7,8 +7,9 @@
 //! execution via async connections (SSH, Docker, etc.).
 
 use super::{
-    validate_env_var_name, validate_path_param, Module, ModuleClassification, ModuleContext,
-    ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
+    validate_command_args, validate_env_var_name, validate_path_param, Module,
+    ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
 use crate::utils::{cmd_escape, powershell_escape, shell_escape};
@@ -461,6 +462,14 @@ impl Module for CommandModule {
                 "Either 'cmd' or 'argv' must be provided".to_string(),
             ));
         }
+
+        if let Some(cmd) = params.get_string("cmd")? {
+            validate_command_args(&cmd)?;
+        }
+        if let Some(cmd) = params.get_string("_raw_params")? {
+            validate_command_args(&cmd)?;
+        }
+
         Ok(())
     }
 
@@ -679,5 +688,21 @@ mod security_repro {
             }
             _ => panic!("Expected InvalidParameter error"),
         }
+    }
+}
+
+#[cfg(test)]
+mod security_check {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_command_module_rejects_shell_injection() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("cmd".to_string(), serde_json::json!("ls | grep vulnerable"));
+
+        // After fix: This should return Err because validate_command_args is called
+        assert!(module.validate_params(&params).is_err());
     }
 }
