@@ -826,24 +826,20 @@ fn filter_to_json(value: MiniJinjaValue) -> std::result::Result<String, minijinj
 fn filter_to_nice_json(
     value: MiniJinjaValue,
     indent: Option<usize>,
+    kwargs: Kwargs,
 ) -> std::result::Result<String, minijinja::Error> {
-    let indent = indent.unwrap_or(4);
-    if indent == 4 {
-        serde_json::to_string_pretty(&value).map_err(|e| {
-            minijinja::Error::new(
-                ErrorKind::InvalidOperation,
-                format!("JSON serialization failed: {}", e),
-            )
-        })
+    // Handle both positional and keyword arguments for indent
+    let indent = if let Ok(i) = kwargs.get("indent") {
+        i
     } else {
-        let json = serde_json::to_value(&value).map_err(|e| {
-            minijinja::Error::new(
-                ErrorKind::InvalidOperation,
-                format!("JSON serialization failed: {}", e),
-            )
-        })?;
-        format_json_with_indent(&json, indent)
-    }
+        indent.unwrap_or(4)
+    };
+
+    // Use optimized direct serialization for all cases.
+    // This avoids:
+    // 1. serde_json::to_value() intermediate allocation (massive performance win)
+    // 2. serde_json::to_string_pretty() using hardcoded 2 spaces instead of requested 4
+    format_json_with_indent(&value, indent)
 }
 
 fn filter_from_json(value: &str) -> std::result::Result<MiniJinjaValue, minijinja::Error> {
@@ -904,12 +900,10 @@ fn filter_from_yaml_all(value: &str) -> std::result::Result<Vec<MiniJinjaValue>,
     Ok(docs)
 }
 
-fn format_json_with_indent(
-    value: &serde_json::Value,
+fn format_json_with_indent<T: serde::Serialize>(
+    value: &T,
     indent: usize,
 ) -> std::result::Result<String, minijinja::Error> {
-    use serde::Serialize;
-
     let mut buf = Vec::new();
     let indent_bytes = vec![b' '; indent];
     let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
@@ -1701,5 +1695,37 @@ mod tests {
         // These always return false
         assert!(!engine.evaluate_condition("x is callable", &vars).unwrap());
         assert!(!engine.evaluate_condition("x is escaped", &vars).unwrap());
+    }
+
+    #[test]
+    fn test_filter_to_nice_json() {
+        let engine = TemplateEngine::new();
+        let mut vars = HashMap::new();
+        vars.insert(
+            "data".to_string(),
+            serde_json::json!({
+                "a": 1,
+                "b": [2, 3]
+            }),
+        );
+
+        // Test default indent (should be 4)
+        let result_default = engine
+            .render("{{ data | to_nice_json }}", &vars)
+            .unwrap();
+
+        assert!(result_default.contains(r#""a": 1"#));
+        assert!(result_default.contains(r#""b": ["#));
+        // Check indentation is 4 spaces
+        assert!(result_default.contains("\n    \"a\""));
+
+        // Test custom indent
+        let result_custom = engine
+            .render("{{ data | to_nice_json(indent=2) }}", &vars)
+            .unwrap();
+
+        assert!(result_custom.contains(r#""a": 1"#));
+        // Check indentation is 2 spaces
+        assert!(result_custom.contains("\n  \"a\""));
     }
 }
