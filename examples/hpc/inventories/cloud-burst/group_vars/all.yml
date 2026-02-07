@@ -1,0 +1,66 @@
+---
+timezone: UTC
+
+chrony_servers:
+  - 169.254.169.123
+
+hpc_packages_common:
+  - vim
+  - curl
+  - wget
+  - htop
+  - tmux
+  - git
+  - rsync
+  - net-tools
+  - lsof
+  - strace
+
+hpc_sysctl:
+  net.core.rmem_max: 16777216
+  net.core.wmem_max: 16777216
+  net.core.rmem_default: 1048576
+  net.core.wmem_default: 1048576
+  vm.swappiness: 10
+  vm.dirty_ratio: 40
+  vm.dirty_background_ratio: 10
+  kernel.pid_max: 4194304
+
+hpc_limits:
+  - domain: "*"
+    type: soft
+    item: memlock
+    value: unlimited
+  - domain: "*"
+    type: hard
+    item: memlock
+    value: unlimited
+  - domain: "*"
+    type: soft
+    item: nofile
+    value: 65536
+  - domain: "*"
+    type: hard
+    item: nofile
+    value: 65536
+
+munge_key_path: /etc/munge/munge.key
+munge_user: munge
+munge_group: munge
+munge_uid: 1001
+munge_gid: 1001
+
+slurm_user: slurm
+slurm_group: slurm
+slurm_uid: 1002
+slurm_gid: 1002
+slurm_version: "23.11"
+slurm_cluster_name: "{{ cluster_name }}"
+slurm_controller_host: controller01
+slurm_conf_dir: /etc/slurm
+slurm_spool_dir: /var/spool/slurm
+slurm_log_dir: /var/log/slurm
+
+vpn_enabled: true
+vpn_interface: wg0
+vpn_network: 10.100.0.0/24

@@ -1,0 +1,12 @@
+---
+slurm_conf_dir: /etc/slurm
+slurm_spool_dir: /var/spool/slurm
+slurm_log_dir: /var/log/slurm
+slurm_user: slurm
+slurm_group: slurm
+slurm_uid: 1002
+slurm_gid: 1002
+
+slurm_compute_packages:
+  - slurm-slurmd
+  - slurm-client

@@ -1,0 +1,9 @@
+---
+- name: Restart slurmctld
+  service:
+    name: slurmctld
+    state: restarted
+
+- name: Reconfigure slurm
+  command: scontrol reconfigure
+  changed_when: false

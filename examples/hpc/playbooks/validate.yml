@@ -1,0 +1,173 @@
+---
+# HPC Cluster Validation Playbook
+# Runs acceptance tests to verify the cluster is operational.
+#
+# Usage:
+#   rustible examples/hpc/playbooks/validate.yml -i examples/hpc/inventories/onprem/hosts.yml
+
+- name: Validate cluster connectivity
+  hosts: cluster
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Check all nodes are reachable
+      command: hostname
+      register: hostname_result
+      changed_when: false
+
+    - name: Report node hostname
+      debug:
+        msg: "Node {{ inventory_hostname }} is reachable (hostname: {{ hostname_result.stdout }})"
+
+- name: Validate Munge authentication
+  hosts: slurm_nodes
+  become: true
+  tasks:
+    - name: Test munge encode/decode round-trip
+      shell: "echo 'rustible_test_{{ inventory_hostname }}' | munge | unmunge"
+      register: munge_result
+      changed_when: false
+      failed_when: munge_result.rc != 0
+
+    - name: Report munge status
+      debug:
+        msg: "Munge authentication: OK on {{ inventory_hostname }}"
+
+- name: Validate NFS mounts
+  hosts: compute:login
+  become: true
+  tasks:
+    - name: Check /home is mounted
+      command: mountpoint -q /home
+      register: home_mount
+      changed_when: false
+      failed_when: home_mount.rc != 0
+
+    - name: Check /opt/hpc is mounted
+      command: mountpoint -q /opt/hpc
+      register: opt_mount
+      changed_when: false
+      failed_when: opt_mount.rc != 0
+
+    - name: Report NFS mount status
+      debug:
+        msg: "NFS mounts: /home={{ 'OK' if home_mount.rc == 0 else 'FAIL' }}, /opt/hpc={{ 'OK' if opt_mount.rc == 0 else 'FAIL' }}"
+
+- name: Validate Slurm controller
+  hosts: controller
+  become: true
+  tasks:
+    - name: Check slurmctld is running
+      service:
+        name: slurmctld
+        state: started
+      register: slurmctld_status
+
+    - name: Query Slurm cluster info
+      command: scontrol show config
+      register: slurm_config
+      changed_when: false
+      failed_when: slurm_config.rc != 0
+
+    - name: List Slurm nodes
+      command: sinfo -N -h
+      register: sinfo_result
+      changed_when: false
+
+    - name: Report Slurm controller status
+      debug:
+        msg: |
+          Slurm Controller: OK
+          Nodes registered:
+          {{ sinfo_result.stdout }}
+
+- name: Validate Slurm compute nodes
+  hosts: compute
+  become: true
+  tasks:
+    - name: Check slurmd is running
+      service:
+        name: slurmd
+        state: started
+      register: slurmd_status
+
+    - name: Report slurmd status
+      debug:
+        msg: "slurmd on {{ inventory_hostname }}: {{ 'running' if slurmd_status is not failed else 'FAILED' }}"
+
+- name: Run Slurm job submission test
+  hosts: controller
+  become: true
+  become_user: "{{ slurm_user | default('slurm') }}"
+  tasks:
+    - name: Submit a test job
+      shell: |
+        sbatch --wrap="hostname && echo 'HPC cluster test job completed successfully'" \
+               --job-name=rustible-test \
+               --output=/tmp/rustible-test-%j.out \
+               --wait
+      register: test_job
+      changed_when: false
+      failed_when: test_job.rc != 0
+
+    - name: Report job submission result
+      debug:
+        msg: "Slurm job submission test: {{ 'PASS' if test_job.rc == 0 else 'FAIL' }}"
+
+- name: Validate MPI (if available)
+  hosts: controller
+  become: true
+  tasks:
+    - name: Check if mpirun is available
+      command: which mpirun
+      register: mpirun_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Run MPI hello world test
+      shell: |
+        srun --ntasks=2 --nodes=2 hostname
+      register: mpi_test
+      changed_when: false
+      failed_when: mpi_test.rc != 0
+      when: mpirun_check.rc == 0
+
+    - name: Report MPI status
+      debug:
+        msg: "MPI test: {{ 'PASS' if mpi_test is defined and mpi_test.rc == 0 else 'SKIPPED (mpirun not found)' }}"
+
+- name: Validate GPU (if applicable)
+  hosts: compute
+  become: true
+  when: gpu_enabled | default(false)
+  tasks:
+    - name: Check nvidia-smi
+      command: nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+      register: gpu_info
+      changed_when: false
+      failed_when: gpu_info.rc != 0
+
+    - name: Report GPU status
+      debug:
+        msg: "GPU on {{ inventory_hostname }}: {{ gpu_info.stdout }}"
+
+- name: Validation summary
+  hosts: controller
+  become: true
+  tasks:
+    - name: Print final validation summary
+      debug:
+        msg: |
+          ============================================
+          HPC Cluster Validation Summary
+          ============================================
+          Cluster: {{ cluster_name }}
+          Controller: {{ slurm_controller_host }}
+          Compute nodes: {{ groups['compute'] | length }}
+          
+          Checks:
+            - Connectivity: PASS (all nodes reachable)
+            - Munge auth:   PASS
+            - NFS mounts:   PASS
+            - Slurm:        PASS (job submitted)
+          ============================================

@@ -1,0 +1,9 @@
+---
+nfs_exports:
+  - path: /home
+    options: "*(rw,sync,no_subtree_check,no_root_squash)"
+  - path: /opt/hpc
+    options: "*(rw,sync,no_subtree_check,no_root_squash)"
+
+nfs_server_packages:
+  - nfs-utils

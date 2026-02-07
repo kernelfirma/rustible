@@ -1,0 +1,16 @@
+---
+slurm_partition: batch
+slurm_cpus: "{{ ansible_processor_vcpus | default(8) }}"
+slurm_memory: "{{ ansible_memtotal_mb | default(16384) }}"
+slurm_state: UNKNOWN
+
+build_packages:
+  - gcc
+  - g++
+  - gfortran
+  - make
+  - cmake
+  - autoconf
+  - automake
+  - libtool
+  - pkg-config

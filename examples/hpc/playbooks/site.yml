@@ -1,0 +1,44 @@
+---
+# HPC Cluster Site Playbook
+# Deploys a complete HPC cluster with Slurm scheduler.
+#
+# Usage:
+#   rustible examples/hpc/playbooks/site.yml -i examples/hpc/inventories/onprem/hosts.yml
+#   rustible examples/hpc/playbooks/site.yml -i examples/hpc/inventories/cloud-burst/hosts.yml
+
+- name: Apply common HPC baseline to all nodes
+  hosts: cluster
+  become: true
+  gather_facts: true
+  roles:
+    - role: ../roles/hpc_common
+
+- name: Configure Munge authentication on all Slurm nodes
+  hosts: slurm_nodes
+  become: true
+  roles:
+    - role: ../roles/munge
+
+- name: Configure NFS server on controller
+  hosts: controller
+  become: true
+  roles:
+    - role: ../roles/nfs_server
+
+- name: Mount NFS shares on compute and login nodes
+  hosts: compute:login
+  become: true
+  roles:
+    - role: ../roles/nfs_client
+
+- name: Configure Slurm controller
+  hosts: controller
+  become: true
+  roles:
+    - role: ../roles/slurm_controller
+
+- name: Configure Slurm compute nodes
+  hosts: compute
+  become: true
+  roles:
+    - role: ../roles/slurm_compute

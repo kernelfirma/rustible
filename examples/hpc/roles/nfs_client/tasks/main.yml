@@ -1,0 +1,24 @@
+---
+- name: Install NFS client packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ nfs_client_packages }}"
+
+- name: Create NFS mount points
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ nfs_mounts }}"
+
+- name: Mount NFS shares
+  mount:
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop: "{{ nfs_mounts }}"

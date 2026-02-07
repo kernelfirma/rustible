@@ -1,0 +1,11 @@
+---
+munge_key_path: /etc/munge/munge.key
+munge_user: munge
+munge_group: munge
+munge_uid: 1001
+munge_gid: 1001
+munge_log_dir: /var/log/munge
+munge_run_dir: /run/munge
+munge_packages:
+  - munge
+  - munge-libs

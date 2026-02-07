@@ -1,0 +1,13 @@
+---
+nfs_mounts:
+  - src: "{{ nfs_server }}:/home"
+    path: /home
+    fstype: nfs
+    opts: "rw,hard,intr,nfsvers=4"
+  - src: "{{ nfs_server }}:/opt/hpc"
+    path: /opt/hpc
+    fstype: nfs
+    opts: "rw,hard,intr,nfsvers=4"
+
+nfs_client_packages:
+  - nfs-utils
