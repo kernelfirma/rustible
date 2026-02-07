@@ -1,0 +1,14 @@
+---
+slurm_dbd_enabled: true
+slurm_accounting_storage: slurmdbd
+
+cloud_burst_config:
+  max_nodes: 20
+  idle_timeout_minutes: 15
+  instance_types:
+    compute: c5.2xlarge
+    gpu: p3.2xlarge
+  region: us-east-1
+  subnet_id: "{{ aws_subnet_id | default('subnet-PLACEHOLDER') }}"
+  security_group_id: "{{ aws_sg_id | default('sg-PLACEHOLDER') }}"
+  ami_id: "{{ aws_ami_id | default('ami-PLACEHOLDER') }}"

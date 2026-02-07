@@ -1,0 +1,4 @@
+---
+- name: Reload NFS exports
+  command: exportfs -ra
+  changed_when: false

@@ -1,0 +1,53 @@
+---
+- name: Set timezone
+  command: "timedatectl set-timezone {{ timezone }}"
+  changed_when: false
+
+- name: Install common HPC packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ hpc_packages_common }}"
+
+- name: Configure sysctl parameters
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop: "{{ hpc_sysctl | dict2items }}"
+  when: hpc_sysctl | length > 0
+
+- name: Configure system limits
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: "{{ item.domain }}  {{ item.type }}  {{ item.item }}  {{ item.value }}"
+    regexp: "^{{ item.domain }}\\s+{{ item.type }}\\s+{{ item.item }}"
+    state: present
+  loop: "{{ hpc_limits }}"
+  when: hpc_limits | length > 0
+
+- name: Create HPC directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ hpc_directories }}"
+
+- name: Configure chrony time synchronization
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+  when: chrony_servers is defined
+
+- name: Enable and start chronyd
+  service:
+    name: chronyd
+    state: started
+    enabled: true

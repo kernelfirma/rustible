@@ -1,0 +1,5 @@
+---
+- name: Remount NFS shares
+  command: "mount -o remount {{ item.path }}"
+  loop: "{{ nfs_mounts }}"
+  changed_when: false

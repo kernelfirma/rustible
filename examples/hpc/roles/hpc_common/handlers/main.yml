@@ -1,0 +1,9 @@
+---
+- name: Restart chrony
+  service:
+    name: chronyd
+    state: restarted
+
+- name: Reload sysctl
+  command: sysctl --system
+  changed_when: false

@@ -1,0 +1,24 @@
+---
+timezone: UTC
+chrony_servers:
+  - 0.pool.ntp.org
+
+hpc_packages_common:
+  - vim
+  - curl
+  - wget
+  - htop
+  - git
+
+hpc_sysctl: {}
+hpc_limits: []
+
+hpc_directories:
+  - path: /opt/hpc
+    owner: root
+    group: root
+    mode: "0755"
+  - path: /scratch
+    owner: root
+    group: root
+    mode: "1777"

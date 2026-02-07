@@ -1,0 +1,51 @@
+# Managed by Rustible - do not edit manually
+# Cluster: {{ slurm_cluster_name }}
+
+ClusterName={{ slurm_cluster_name }}
+SlurmctldHost={{ slurm_controller_host }}
+
+SlurmUser={{ slurm_user }}
+SlurmdUser=root
+SlurmctldPort=6817
+SlurmdPort=6818
+
+AuthType=auth/munge
+CryptoType=crypto/munge
+
+SlurmctldPidFile={{ slurm_pid_dir | default('/run/slurm') }}/slurmctld.pid
+SlurmdPidFile={{ slurm_pid_dir | default('/run/slurm') }}/slurmd.pid
+SlurmctldLogFile={{ slurm_log_dir }}/slurmctld.log
+SlurmdLogFile={{ slurm_log_dir }}/slurmd.log
+
+StateSaveLocation={{ slurm_spool_dir }}/ctld
+SlurmdSpoolDir={{ slurm_spool_dir }}/d
+
+SwitchType=switch/none
+MpiDefault=none
+ProctrackType=proctrack/cgroup
+TaskPlugin=task/cgroup,task/affinity
+
+ReturnToService=2
+InactiveLimit=0
+KillWait=30
+MinJobAge=300
+Waittime=0
+
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+
+AccountingStorageType=accounting_storage/{{ slurm_accounting_storage | default('none') }}
+JobCompType=jobcomp/none
+JobAcctGatherType=jobacct_gather/cgroup
+
+# Partitions
+{% for host in groups.get('compute', []) %}
+NodeName={{ host }} CPUs={{ hostvars[host].get('slurm_cpus', 8) }} RealMemory={{ hostvars[host].get('slurm_memory', 16384) }} State={{ hostvars[host].get('slurm_state', 'UNKNOWN') }}{% if hostvars[host].get('gpu_enabled', false) %} Gres=gpu:{{ hostvars[host].get('gpu_count', 1) }}{% endif %}
+
+{% endfor %}
+
+PartitionName=batch Nodes={% for host in groups.get('compute', []) %}{% if not hostvars[host].get('gpu_enabled', false) %}{{ host }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %} Default=YES MaxTime=INFINITE State=UP
+{% if groups.get('compute', []) | selectattr('gpu_enabled', 'defined') | list | length > 0 %}
+PartitionName=gpu Nodes={% for host in groups.get('compute', []) %}{% if hostvars[host].get('gpu_enabled', false) %}{{ host }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %} MaxTime=INFINITE State=UP
+{% endif %}

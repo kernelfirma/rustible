@@ -1,0 +1,58 @@
+---
+- name: Create slurm group
+  group:
+    name: "{{ slurm_group }}"
+    gid: "{{ slurm_gid }}"
+    state: present
+
+- name: Create slurm user
+  user:
+    name: "{{ slurm_user }}"
+    uid: "{{ slurm_uid }}"
+    group: "{{ slurm_group }}"
+    home: /var/lib/slurm
+    shell: /sbin/nologin
+    system: true
+    state: present
+
+- name: Install Slurm compute packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ slurm_compute_packages }}"
+
+- name: Create Slurm directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ slurm_user }}"
+    group: "{{ slurm_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ slurm_conf_dir }}", mode: "0755" }
+    - { path: "{{ slurm_spool_dir }}/d", mode: "0755" }
+    - { path: "{{ slurm_log_dir }}", mode: "0755" }
+
+- name: Deploy slurm.conf
+  template:
+    src: slurm.conf.j2
+    dest: "{{ slurm_conf_dir }}/slurm.conf"
+    owner: "{{ slurm_user }}"
+    group: "{{ slurm_group }}"
+    mode: "0644"
+  notify: Restart slurmd
+
+- name: Deploy cgroup.conf
+  template:
+    src: cgroup.conf.j2
+    dest: "{{ slurm_conf_dir }}/cgroup.conf"
+    owner: "{{ slurm_user }}"
+    group: "{{ slurm_group }}"
+    mode: "0644"
+  notify: Restart slurmd
+
+- name: Enable and start slurmd
+  service:
+    name: slurmd
+    state: started
+    enabled: true

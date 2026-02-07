@@ -1,0 +1,55 @@
+---
+- name: Create munge group
+  group:
+    name: "{{ munge_group }}"
+    gid: "{{ munge_gid }}"
+    state: present
+
+- name: Create munge user
+  user:
+    name: "{{ munge_user }}"
+    uid: "{{ munge_uid }}"
+    group: "{{ munge_group }}"
+    home: /var/lib/munge
+    shell: /sbin/nologin
+    system: true
+    state: present
+
+- name: Install munge packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ munge_packages }}"
+
+- name: Create munge directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ munge_user }}"
+    group: "{{ munge_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/munge, mode: "0700" }
+    - { path: "{{ munge_log_dir }}", mode: "0700" }
+    - { path: /var/lib/munge, mode: "0711" }
+
+- name: Distribute munge key
+  copy:
+    src: munge.key
+    dest: "{{ munge_key_path }}"
+    owner: "{{ munge_user }}"
+    group: "{{ munge_group }}"
+    mode: "0400"
+  notify: Restart munge
+
+- name: Enable and start munge service
+  service:
+    name: munge
+    state: started
+    enabled: true
+
+- name: Validate munge authentication
+  shell: "echo 'munge_test' | munge | unmunge"
+  register: munge_test
+  changed_when: false
+  failed_when: munge_test.rc != 0

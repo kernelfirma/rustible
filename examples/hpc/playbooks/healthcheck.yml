@@ -1,0 +1,53 @@
+---
+# HPC Cluster Health Check
+# Lightweight check suitable for periodic monitoring.
+#
+# Usage:
+#   rustible examples/hpc/playbooks/healthcheck.yml -i examples/hpc/inventories/onprem/hosts.yml
+
+- name: Quick health check - all nodes
+  hosts: cluster
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Ping node
+      command: "true"
+      changed_when: false
+
+- name: Health check - Slurm services
+  hosts: controller
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check slurmctld is running
+      command: systemctl is-active slurmctld
+      register: slurmctld_check
+      changed_when: false
+      failed_when: slurmctld_check.rc != 0
+
+    - name: Check for drained nodes
+      shell: "sinfo -h -t drain -o '%n %E' || true"
+      register: drained_nodes
+      changed_when: false
+
+    - name: Warn about drained nodes
+      debug:
+        msg: "WARNING: Drained nodes detected: {{ drained_nodes.stdout }}"
+      when: drained_nodes.stdout | length > 0
+
+- name: Health check - compute daemons
+  hosts: compute
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check slurmd is running
+      command: systemctl is-active slurmd
+      register: slurmd_check
+      changed_when: false
+      failed_when: slurmd_check.rc != 0
+
+    - name: Check munge is running
+      command: systemctl is-active munge
+      register: munge_check
+      changed_when: false
+      failed_when: munge_check.rc != 0

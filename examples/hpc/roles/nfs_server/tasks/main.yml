@@ -1,0 +1,30 @@
+---
+- name: Install NFS server packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ nfs_server_packages }}"
+
+- name: Create export directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ nfs_exports }}"
+
+- name: Configure NFS exports
+  template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NFS exports
+
+- name: Enable and start NFS server
+  service:
+    name: nfs-server
+    state: started
+    enabled: true

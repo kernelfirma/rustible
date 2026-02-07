@@ -1,0 +1,3 @@
+---
+slurm_dbd_enabled: true
+slurm_accounting_storage: slurmdbd
