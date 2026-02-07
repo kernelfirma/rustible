@@ -32,6 +32,20 @@ reqwest = []
 experimental = []
 # Distributed execution support
 distributed = []
+# HPC (High Performance Computing) modules
+hpc = ["slurm", "gpu"]
+# Slurm workload manager modules
+slurm = []
+# GPU management modules (NVIDIA, ROCm)
+gpu = []
+# InfiniBand / RDMA / OFED support
+ofed = []
+# Parallel filesystem clients (Lustre, BeeGFS)
+parallel_fs = []
+# OpenStack cloud provider
+openstack = []
+# Bare-metal BMC management via Redfish/IPMI
+redfish = []
 # Background warmup of lazy-initialized components
 startup-warmup = []
 # REST API server
@@ -39,13 +53,15 @@ api = ["dep:axum", "dep:tower-http", "dep:jsonwebtoken", "dep:futures-util"]
 # Infrastructure provisioning (Terraform-like) - requires AWS SDK
 provisioning = ["aws"]
 # Full feature set with ssh2 backend
-full = ["russh", "local", "ssh2-backend", "docker", "kubernetes"]
+full = ["russh", "local", "ssh2-backend", "docker", "kubernetes", "hpc"]
 # Full feature set with all cloud providers
 full-cloud = ["full", "aws", "azure", "gcp"]
 # Full feature set with AWS (requires additional compile time)
 full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
+# Full feature set with all HPC support
+full-hpc = ["full", "hpc", "ofed", "parallel_fs"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 

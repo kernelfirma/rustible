@@ -25,6 +25,7 @@ pub mod firewalld;
 pub mod git;
 pub mod group;
 pub mod hostname;
+pub mod hpc;
 pub mod include_vars;
 pub mod k8s;
 pub mod known_hosts;
@@ -720,6 +721,8 @@ pub enum ModuleCategory {
     Security,
     /// Windows-specific modules
     Windows,
+    /// HPC (High Performance Computing) modules
+    Hpc,
 }
 
 impl fmt::Display for ModuleCategory {
@@ -738,6 +741,7 @@ impl fmt::Display for ModuleCategory {
             ModuleCategory::Facts => write!(f, "facts"),
             ModuleCategory::Security => write!(f, "security"),
             ModuleCategory::Windows => write!(f, "windows"),
+            ModuleCategory::Hpc => write!(f, "hpc"),
         }
     }
 }
@@ -1654,6 +1658,45 @@ impl ModuleRegistry {
                 cloud::GcpComputeFirewallModule,
                 cloud::GcpComputeNetworkModule,
                 cloud::GcpServiceAccountModule,
+            ],
+        );
+
+        // HPC modules (always register baseline; feature-gated modules below)
+        register_modules!(registry,
+            Hpc: [
+                hpc::HpcBaselineModule,
+                hpc::LmodModule,
+                hpc::MpiModule,
+            ],
+        );
+
+        #[cfg(feature = "slurm")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::SlurmConfigModule,
+                hpc::SlurmOpsModule,
+            ],
+        );
+
+        #[cfg(feature = "gpu")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::NvidiaGpuModule,
+            ],
+        );
+
+        #[cfg(feature = "ofed")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::RdmaStackModule,
+            ],
+        );
+
+        #[cfg(feature = "parallel_fs")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::LustreClientModule,
+                hpc::BeegfsClientModule,
             ],
         );
 
