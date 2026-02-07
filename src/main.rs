@@ -135,7 +135,7 @@ async fn init_project(
         let dir_path = path.join(dir);
         if !dir_path.exists() {
             fs::create_dir_all(&dir_path)?;
-            ctx.output.info(&format!("Created: {}/", dir));
+            ctx.output.created(&format!("{}/", dir));
         }
     }
 
@@ -157,7 +157,7 @@ all:
     let inventory_path = path.join("inventory/hosts.yml");
     if !inventory_path.exists() {
         fs::write(&inventory_path, inventory_content)?;
-        ctx.output.info("Created: inventory/hosts.yml");
+        ctx.output.created("inventory/hosts.yml");
     }
 
     // Create sample playbook based on template
@@ -268,7 +268,7 @@ all:
     let playbook_path = path.join("playbooks/site.yml");
     if !playbook_path.exists() {
         fs::write(&playbook_path, playbook_content)?;
-        ctx.output.info("Created: playbooks/site.yml");
+        ctx.output.created("playbooks/site.yml");
     }
 
     // Create config file
@@ -306,7 +306,7 @@ log_timestamp = true
     let config_path = path.join("rustible.cfg");
     if !config_path.exists() {
         fs::write(&config_path, config_content)?;
-        ctx.output.info("Created: rustible.cfg");
+        ctx.output.created("rustible.cfg");
     }
 
     // Create .gitignore
@@ -330,13 +330,13 @@ Thumbs.db
     let gitignore_path = path.join(".gitignore");
     if !gitignore_path.exists() {
         fs::write(&gitignore_path, gitignore_content)?;
-        ctx.output.info("Created: .gitignore");
+        ctx.output.created(".gitignore");
     }
 
     ctx.output.section("Project initialized successfully!");
     ctx.output.info(&format!("Template: '{}'", template));
     ctx.output
-        .info("Run 'rustible run playbooks/site.yml' to test your setup.");
+        .hint("Run 'rustible run playbooks/site.yml' to test your setup.");
 
     Ok(0)
 }
@@ -478,7 +478,7 @@ async fn validate_playbook(playbook: &std::path::Path, ctx: &mut CommandContext)
 
                 if errors == 0 && warnings == 0 {
                     ctx.output
-                        .info("Playbook syntax is valid. No issues found.");
+                        .success("Playbook syntax is valid. No issues found.");
                     Ok(0)
                 } else if errors == 0 {
                     ctx.output
