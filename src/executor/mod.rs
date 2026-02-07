@@ -1507,7 +1507,6 @@ impl Executor {
     ) -> ExecutorResult<HashMap<String, TaskResult>> {
         debug!("Running task '{}' on {} hosts", task.name, hosts.len());
 
-
         // Set task-level vars (including block vars merged during parsing) on runtime
         if !task.vars.is_empty() {
             let mut rt = self.runtime.write().await;
@@ -1568,10 +1567,7 @@ impl Executor {
                         task.name.clone(),
                         failed_result.clone(),
                     ));
-                    results.insert(
-                        host.clone(),
-                        failed_result,
-                    );
+                    results.insert(host.clone(), failed_result);
                 }
             }
             if let Some(rm) = &self.recovery_manager {

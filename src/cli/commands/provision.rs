@@ -280,7 +280,9 @@ fn project_root_for_config(config_file: &Path) -> PathBuf {
 
 #[cfg(feature = "provisioning")]
 fn default_state_path(project_root: &Path) -> PathBuf {
-    project_root.join(".rustible").join("provisioning.state.json")
+    project_root
+        .join(".rustible")
+        .join("provisioning.state.json")
 }
 
 #[cfg(feature = "provisioning")]
@@ -841,8 +843,10 @@ impl ImportTerraformArgs {
 
         let tf_state_json = if let Some(tfstate_path) = &self.tfstate {
             if !tfstate_path.exists() {
-                ctx.output
-                    .error(&format!("Terraform state not found: {}", tfstate_path.display()));
+                ctx.output.error(&format!(
+                    "Terraform state not found: {}",
+                    tfstate_path.display()
+                ));
                 return Ok(1);
             }
             std::fs::read_to_string(tfstate_path)?
@@ -871,10 +875,8 @@ impl ImportTerraformArgs {
         save_state(&backend_config, &state_path, &mut state).await?;
 
         ctx.output.section("Import Successful");
-        ctx.output.info(&format!(
-            "Imported {} resources.",
-            state.resource_count()
-        ));
+        ctx.output
+            .info(&format!("Imported {} resources.", state.resource_count()));
         ctx.output
             .info(&format!("Outputs: {}", state.outputs.len()));
 
@@ -1021,15 +1023,18 @@ outputs: {}
             ctx.output
                 .info(&format!("Created: {}", backend_config_path.display()));
         } else {
-            ctx.output
-                .info(&format!("Backend config exists: {}", backend_config_path.display()));
+            ctx.output.info(&format!(
+                "Backend config exists: {}",
+                backend_config_path.display()
+            ));
         }
 
         if backend_source_provided || matches!(backend_config, BackendConfig::Local { .. }) {
             match backend_config.create_backend().await {
                 Ok(backend) => {
                     if backend.exists().await? {
-                        ctx.output.info("State already exists; skipping initialization.");
+                        ctx.output
+                            .info("State already exists; skipping initialization.");
                     } else {
                         let mut state = ProvisioningState::new();
                         state.prepare_for_save();
@@ -1038,10 +1043,8 @@ outputs: {}
                     }
                 }
                 Err(err) => {
-                    ctx.output.warning(&format!(
-                        "Skipping backend initialization: {}",
-                        err
-                    ));
+                    ctx.output
+                        .warning(&format!("Skipping backend initialization: {}", err));
                 }
             }
         } else {
@@ -1651,12 +1654,9 @@ mod tests {
 
     #[test]
     fn test_import_terraform_args_with_tfstate() {
-        let cli = TestImportTerraformCli::try_parse_from([
-            "test",
-            "--tfstate",
-            "terraform.tfstate",
-        ])
-        .unwrap();
+        let cli =
+            TestImportTerraformCli::try_parse_from(["test", "--tfstate", "terraform.tfstate"])
+                .unwrap();
         assert_eq!(cli.args.tfstate, Some(PathBuf::from("terraform.tfstate")));
     }
 
@@ -1767,9 +1767,13 @@ mod tests {
 
     #[test]
     fn test_provision_commands_import_terraform() {
-        let cli =
-            TestProvisionCli::try_parse_from(["rustible", "import-terraform", "--tfstate", "state.tfstate"])
-                .unwrap();
+        let cli = TestProvisionCli::try_parse_from([
+            "rustible",
+            "import-terraform",
+            "--tfstate",
+            "state.tfstate",
+        ])
+        .unwrap();
         assert!(matches!(cli.command, ProvisionCommands::ImportTerraform(_)));
     }
 

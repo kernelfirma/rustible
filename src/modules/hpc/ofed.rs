@@ -2,9 +2,7 @@
 //!
 //! Manages RDMA userland packages and kernel module configuration.
 
-use crate::modules::{
-    Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult,
-};
+use crate::modules::{Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult};
 
 pub struct RdmaStackModule;
 
@@ -26,8 +24,10 @@ impl Module for RdmaStackModule {
             return Ok(ModuleOutput::ok("Would configure RDMA stack"));
         }
 
-        Ok(ModuleOutput::ok("RDMA stack configuration: stub - not yet implemented")
-            .with_data("status", serde_json::json!("stub")))
+        Ok(
+            ModuleOutput::ok("RDMA stack configuration: stub - not yet implemented")
+                .with_data("status", serde_json::json!("stub")),
+        )
     }
 
     fn required_params(&self) -> &[&'static str] {

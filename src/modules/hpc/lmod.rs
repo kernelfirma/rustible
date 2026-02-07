@@ -2,9 +2,7 @@
 //!
 //! Manages Lmod installation and module path configuration.
 
-use crate::modules::{
-    Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult,
-};
+use crate::modules::{Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult};
 
 pub struct LmodModule;
 
@@ -26,8 +24,10 @@ impl Module for LmodModule {
             return Ok(ModuleOutput::ok("Would configure Lmod"));
         }
 
-        Ok(ModuleOutput::ok("Lmod configuration: stub - not yet implemented")
-            .with_data("status", serde_json::json!("stub")))
+        Ok(
+            ModuleOutput::ok("Lmod configuration: stub - not yet implemented")
+                .with_data("status", serde_json::json!("stub")),
+        )
     }
 
     fn required_params(&self) -> &[&'static str] {

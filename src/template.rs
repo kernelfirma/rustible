@@ -310,7 +310,11 @@ impl TemplateEngine {
     ///
     /// This allows rendering with custom structs or optimized context wrappers
     /// without converting to serde_json::Value first.
-    pub fn render_serialize<S: serde::Serialize>(&self, template: &str, vars: &S) -> Result<String> {
+    pub fn render_serialize<S: serde::Serialize>(
+        &self,
+        template: &str,
+        vars: &S,
+    ) -> Result<String> {
         self.render_cached(template, vars)
     }
 
@@ -1710,9 +1714,7 @@ mod tests {
         );
 
         // Test default indent (should be 4)
-        let result_default = engine
-            .render("{{ data | to_nice_json }}", &vars)
-            .unwrap();
+        let result_default = engine.render("{{ data | to_nice_json }}", &vars).unwrap();
 
         assert!(result_default.contains(r#""a": 1"#));
         assert!(result_default.contains(r#""b": ["#));

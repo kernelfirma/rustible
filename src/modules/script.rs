@@ -640,7 +640,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(" ");
 
-             format!(
+            format!(
                 "{} {} {}",
                 safe_exec,
                 shell_escape(&remote_path),
@@ -650,7 +650,7 @@ mod tests {
                     .join(" ")
             )
         } else {
-             String::new()
+            String::new()
         };
 
         // Injection should be neutralized (comment stripped, parts escaped)
