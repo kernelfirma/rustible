@@ -7,6 +7,7 @@ use console::measure_text_width;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::io::{self, Write};
+use once_cell::sync::Lazy;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -32,15 +33,23 @@ pub enum TaskStatus {
 
 impl TaskStatus {
     /// Get the colored string representation
-    pub fn colored_string(&self) -> String {
+    pub fn colored_string(&self) -> &'static str {
+        static OK: Lazy<String> = Lazy::new(|| "✔ ok".green().to_string());
+        static CHANGED: Lazy<String> = Lazy::new(|| "✎ changed".yellow().to_string());
+        static SKIPPED: Lazy<String> = Lazy::new(|| "↷ skipping".cyan().to_string());
+        static FAILED: Lazy<String> = Lazy::new(|| "✖ failed".red().bold().to_string());
+        static UNREACHABLE: Lazy<String> = Lazy::new(|| "✘ unreachable".red().bold().to_string());
+        static RESCUED: Lazy<String> = Lazy::new(|| "✚ rescued".magenta().to_string());
+        static IGNORED: Lazy<String> = Lazy::new(|| "⊘ ignored".blue().to_string());
+
         match self {
-            TaskStatus::Ok => "✔ ok".green().to_string(),
-            TaskStatus::Changed => "✎ changed".yellow().to_string(),
-            TaskStatus::Skipped => "↷ skipping".cyan().to_string(),
-            TaskStatus::Failed => "✖ failed".red().bold().to_string(),
-            TaskStatus::Unreachable => "✘ unreachable".red().bold().to_string(),
-            TaskStatus::Rescued => "✚ rescued".magenta().to_string(),
-            TaskStatus::Ignored => "⊘ ignored".blue().to_string(),
+            TaskStatus::Ok => &OK,
+            TaskStatus::Changed => &CHANGED,
+            TaskStatus::Skipped => &SKIPPED,
+            TaskStatus::Failed => &FAILED,
+            TaskStatus::Unreachable => &UNREACHABLE,
+            TaskStatus::Rescued => &RESCUED,
+            TaskStatus::Ignored => &IGNORED,
         }
     }
 
@@ -203,7 +212,7 @@ impl OutputFormatter {
         let status_str = if self.use_color {
             status.colored_string()
         } else {
-            status.as_str().to_string()
+            status.as_str()
         };
 
         // Calculate padding for alignment (longest status is "unreachable" = 11 chars)
@@ -1153,8 +1162,19 @@ fn format_duration(duration: Duration) -> String {
             format!("{}m {}s", mins, secs)
         }
     } else if total_secs > 0 {
-        let s = format!("{}.{:03}", total_secs, millis);
-        format!("{}s", s.trim_end_matches('0').trim_end_matches('.'))
+        use std::fmt::Write;
+        let mut s = String::with_capacity(16);
+        write!(s, "{}.{:03}", total_secs, millis).unwrap();
+        // Remove trailing zeros
+        while s.ends_with('0') {
+            s.pop();
+        }
+        // Remove trailing dot
+        if s.ends_with('.') {
+            s.pop();
+        }
+        s.push('s');
+        s
     } else if millis > 0 {
         format!("{}ms", millis)
     } else {
