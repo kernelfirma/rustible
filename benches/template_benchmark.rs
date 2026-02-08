@@ -902,7 +902,11 @@ fn bench_filter_join_opt(c: &mut Criterion) {
     let template = "{{ list | join(',') }}";
 
     group.bench_function("join_1000_items", |b| {
-        b.iter(|| engine.render(black_box(template), black_box(&vars)).unwrap())
+        b.iter(|| {
+            engine
+                .render(black_box(template), black_box(&vars))
+                .unwrap()
+        })
     });
 
     group.finish();
@@ -920,7 +924,11 @@ fn bench_filter_title_opt(c: &mut Criterion) {
     let template = "{{ text | title }}";
 
     group.bench_function("title_2000_words", |b| {
-        b.iter(|| engine.render(black_box(template), black_box(&vars)).unwrap())
+        b.iter(|| {
+            engine
+                .render(black_box(template), black_box(&vars))
+                .unwrap()
+        })
     });
 
     group.finish();

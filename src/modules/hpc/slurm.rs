@@ -4,9 +4,7 @@
 //! - `slurm_config`: Manage slurm.conf, cgroup.conf, gres.conf
 //! - `slurm_ops`: Cluster operations (reconfigure, drain, resume)
 
-use crate::modules::{
-    Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-};
+use crate::modules::{Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult, ParamExt};
 
 pub struct SlurmConfigModule;
 
@@ -28,8 +26,10 @@ impl Module for SlurmConfigModule {
             return Ok(ModuleOutput::ok("Would configure Slurm"));
         }
 
-        Ok(ModuleOutput::ok("Slurm configuration: stub - not yet implemented")
-            .with_data("status", serde_json::json!("stub")))
+        Ok(
+            ModuleOutput::ok("Slurm configuration: stub - not yet implemented")
+                .with_data("status", serde_json::json!("stub")),
+        )
     }
 
     fn required_params(&self) -> &[&'static str] {
@@ -56,12 +56,18 @@ impl Module for SlurmOpsModule {
         let action = params.get_string("action")?.unwrap_or_default();
 
         if context.check_mode {
-            return Ok(ModuleOutput::ok(format!("Would perform Slurm action: {}", action)));
+            return Ok(ModuleOutput::ok(format!(
+                "Would perform Slurm action: {}",
+                action
+            )));
         }
 
-        Ok(ModuleOutput::ok(format!("Slurm ops '{}': stub - not yet implemented", action))
-            .with_data("status", serde_json::json!("stub"))
-            .with_data("action", serde_json::json!(action)))
+        Ok(ModuleOutput::ok(format!(
+            "Slurm ops '{}': stub - not yet implemented",
+            action
+        ))
+        .with_data("status", serde_json::json!("stub"))
+        .with_data("action", serde_json::json!(action)))
     }
 
     fn required_params(&self) -> &[&'static str] {

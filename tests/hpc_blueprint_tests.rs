@@ -59,8 +59,7 @@ fn test_healthcheck_playbook_exists() {
 
 #[test]
 fn test_onprem_inventory_parses_as_valid_yaml() {
-    let content =
-        std::fs::read_to_string("examples/hpc/inventories/onprem/hosts.yml").unwrap();
+    let content = std::fs::read_to_string("examples/hpc/inventories/onprem/hosts.yml").unwrap();
     let value: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
     assert!(value.is_mapping(), "Inventory must be a YAML mapping");
 
@@ -99,8 +98,7 @@ fn test_cloud_burst_inventory_parses_as_valid_yaml() {
 
 #[test]
 fn test_onprem_has_expected_host_count() {
-    let content =
-        std::fs::read_to_string("examples/hpc/inventories/onprem/hosts.yml").unwrap();
+    let content = std::fs::read_to_string("examples/hpc/inventories/onprem/hosts.yml").unwrap();
     let value: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
     let all = value.get("all").unwrap();
     let children = all.get("children").unwrap();
@@ -170,7 +168,10 @@ fn test_all_group_vars_parse_as_valid_yaml() {
         for entry in std::fs::read_dir(dir_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "yml" || e == "yaml") {
+            if path
+                .extension()
+                .map_or(false, |e| e == "yml" || e == "yaml")
+            {
                 let content = std::fs::read_to_string(&path).unwrap();
                 let _: serde_yaml::Value = serde_yaml::from_str(&content).unwrap_or_else(|e| {
                     panic!("Failed to parse {}: {}", path.display(), e);
