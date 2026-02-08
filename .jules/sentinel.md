@@ -71,3 +71,8 @@
 **Vulnerability:** The `validate_command_args` utility did not blacklist the `#` character. This allowed an attacker to inject command arguments (e.g., in `ScriptModule`'s `executable` parameter) that included a shell comment, effectively neutralizing subsequent parts of the constructed command string (such as the target script path or arguments) and allowing the injected executable to run with arbitrary arguments or as a standalone command.
 **Learning:** In shell command construction, even seemingly benign characters like `#` can be weaponized to alter control flow (by truncating execution). Validation must account for all shell metacharacters, including those that don't execute commands directly but modify how the shell parses the line.
 **Prevention:** Added `#` to the blacklist in `validate_command_args`. When constructing shell commands, consider all shell metacharacters including comments.
+
+## 2024-05-22 - [Preventing Credential Leakage in HTTP Clients]
+**Vulnerability:** The `UriModule` manually added the `Authorization` header to requests. `reqwest` (and other HTTP clients) forwards manually set headers to redirected URLs, potentially leaking credentials to third-party domains if a redirect occurs.
+**Learning:** Manual header management for sensitive data bypasses built-in safety mechanisms of HTTP client libraries.
+**Prevention:** Always use the library's specific methods for authentication (e.g., `.basic_auth()`, `.bearer_auth()`) instead of manually setting the header. These methods signal the library to handle the header securely, including stripping it on cross-domain redirects.

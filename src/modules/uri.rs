@@ -117,6 +117,14 @@ impl BodyFormat {
     }
 }
 
+/// Authentication configuration for the request
+#[derive(Debug, Clone)]
+enum RequestAuth {
+    None,
+    Basic(String, Option<String>), // username, password
+    Bearer(String),                // token
+}
+
 /// OAuth2 token response structure
 #[derive(Debug, Deserialize)]
 struct OAuth2TokenResponse {
@@ -251,7 +259,7 @@ impl UriModule {
         headers: &HashMap<String, String>,
         body: Option<&Value>,
         body_format: &BodyFormat,
-        auth_header: Option<String>,
+        auth: RequestAuth,
         retries: u32,
         retry_delay_secs: u64,
     ) -> ModuleResult<Response> {
@@ -272,9 +280,16 @@ impl UriModule {
                 request = request.header(key.as_str(), value.as_str());
             }
 
-            // Add authentication header
-            if let Some(ref auth) = auth_header {
-                request = request.header(header::AUTHORIZATION, auth.as_str());
+            // Add authentication using reqwest methods
+            // This ensures credentials are stripped on cross-domain redirects
+            match &auth {
+                RequestAuth::None => {}
+                RequestAuth::Basic(user, pass) => {
+                    request = request.basic_auth(user, pass.as_deref());
+                }
+                RequestAuth::Bearer(token) => {
+                    request = request.bearer_auth(token);
+                }
             }
 
             // Add body if present
@@ -473,25 +488,20 @@ impl UriModule {
         // Parse HTTP method
         let http_method = Self::parse_method(&method)?;
 
-        // Build authentication header
-        let auth_header = match auth_type {
-            AuthType::None => None,
+        // Build authentication config
+        let auth_config = match auth_type {
+            AuthType::None => RequestAuth::None,
             AuthType::Basic => {
                 let user = auth_user.ok_or_else(|| {
                     ModuleError::MissingParameter("auth_user required for basic auth".to_string())
                 })?;
-                let pass = auth_password.unwrap_or_default();
-                let credentials = base64::Engine::encode(
-                    &base64::engine::general_purpose::STANDARD,
-                    format!("{}:{}", user, pass),
-                );
-                Some(format!("Basic {}", credentials))
+                RequestAuth::Basic(user, auth_password)
             }
             AuthType::Bearer => {
                 let token = auth_token.ok_or_else(|| {
                     ModuleError::MissingParameter("auth_token required for bearer auth".to_string())
                 })?;
-                Some(format!("Bearer {}", token))
+                RequestAuth::Bearer(token)
             }
             AuthType::OAuth2ClientCredentials => {
                 let token_url = oauth2_token_url.ok_or_else(|| {
@@ -519,7 +529,7 @@ impl UriModule {
                 )
                 .await?;
 
-                Some(format!("Bearer {}", token))
+                RequestAuth::Bearer(token)
             }
         };
 
@@ -531,7 +541,7 @@ impl UriModule {
             &headers,
             body.as_ref(),
             &body_format,
-            auth_header,
+            auth_config,
             retries,
             retry_delay_secs,
         )
