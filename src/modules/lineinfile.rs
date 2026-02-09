@@ -248,26 +248,24 @@ impl LineinfileModule {
         Ok(lines.len() != original_len)
     }
 
-    fn apply_backrefs(line: &str, regexp: &Regex, original: &str) -> String {
+    fn apply_backrefs<'a>(line: &'a str, regexp: &Regex, original: &str) -> Cow<'a, str> {
         static BACKREF_RE: Lazy<Regex> =
             Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
 
         if let Some(captures) = regexp.captures(original) {
-            BACKREF_RE
-                .replace_all(line, |caps: &regex::Captures| {
-                    let n = caps[1].parse::<usize>().unwrap_or(0);
-                    if let Some(m) = captures.get(n) {
-                        m.as_str().to_string()
-                    } else {
-                        // If group doesn't exist, keep the backref as-is (e.g., \99)
-                        // This matches current behavior where out-of-bound backrefs are ignored
-                        // (though the old implementation would just not match them in the loop)
-                        caps[0].to_string()
-                    }
-                })
-                .to_string()
+            BACKREF_RE.replace_all(line, |caps: &regex::Captures| {
+                let n = caps[1].parse::<usize>().unwrap_or(0);
+                if let Some(m) = captures.get(n) {
+                    m.as_str().to_string()
+                } else {
+                    // If group doesn't exist, keep the backref as-is (e.g., \99)
+                    // This matches current behavior where out-of-bound backrefs are ignored
+                    // (though the old implementation would just not match them in the loop)
+                    caps[0].to_string()
+                }
+            })
         } else {
-            line.to_string()
+            Cow::Borrowed(line)
         }
     }
 
@@ -368,10 +366,10 @@ impl LineinfileModule {
                                             )));
                                         }
                                     } else {
-                                        line_str.clone()
+                                        Cow::Borrowed(line_str.as_str())
                                     }
                                 } else {
-                                    line_str.clone()
+                                    Cow::Borrowed(line_str.as_str())
                                 };
 
                                 Self::ensure_line_present(
@@ -544,10 +542,10 @@ impl LineinfileModule {
                             )));
                         }
                     } else {
-                        line_str.clone()
+                        Cow::Borrowed(line_str.as_str())
                     }
                 } else {
-                    line_str.clone()
+                    Cow::Borrowed(line_str.as_str())
                 };
 
                 Self::ensure_line_present(
