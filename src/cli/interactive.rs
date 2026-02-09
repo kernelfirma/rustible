@@ -202,6 +202,14 @@ impl InteractiveSession {
         let mut vars = Vec::new();
 
         loop {
+            if !vars.is_empty() {
+                println!("{}", "Current variables:".dimmed());
+                for var in &vars {
+                    println!("  {} {}", "•".green(), var);
+                }
+                println!();
+            }
+
             let var: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter variable (key=value, or empty to finish)")
                 .allow_empty(true)
@@ -212,6 +220,7 @@ impl InteractiveSession {
             }
 
             if var.contains('=') || var.starts_with('@') {
+                println!("{} Added '{}'", "✔".green(), var);
                 vars.push(var);
             } else {
                 println!("{}", "Invalid format. Use key=value or @file.yml".yellow());

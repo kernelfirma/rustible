@@ -37,3 +37,7 @@
 ## 2026-03-05 - [Consistent Interactive Prompts]
 **Learning:** Inconsistent usage of UI themes (like `dialoguer`'s `ColorfulTheme`) and missing semantic icons in password prompts breaks the visual consistency of the CLI. Using standard themes and icons (e.g., 🔐 for secrets) makes the tool feel more polished and trustworthy.
 **Action:** Always use `ColorfulTheme::default()` for `dialoguer` prompts and include appropriate semantic emojis in prompt text to match the rest of the application.
+
+## 2026-06-14 - [Interactive Input Feedback]
+**Learning:** When asking users for multiple inputs in a loop (like variables or tags), they often lose track of what they've already entered. Providing a running list of entered items and immediate success feedback ("✔ Added...") significantly reduces cognitive load and increases confidence.
+**Action:** In `dialoguer` loops, always print the current state of accumulated items before prompting for the next one.
