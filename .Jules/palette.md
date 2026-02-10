@@ -37,3 +37,7 @@
 ## 2026-03-05 - [Consistent Interactive Prompts]
 **Learning:** Inconsistent usage of UI themes (like `dialoguer`'s `ColorfulTheme`) and missing semantic icons in password prompts breaks the visual consistency of the CLI. Using standard themes and icons (e.g., 🔐 for secrets) makes the tool feel more polished and trustworthy.
 **Action:** Always use `ColorfulTheme::default()` for `dialoguer` prompts and include appropriate semantic emojis in prompt text to match the rest of the application.
+
+## 2024-03-22 - [Hybrid Output Strategies]
+**Learning:** Commands that support both human-readable text and machine-readable JSON often fail to produce valid JSON if they print text incrementally during execution. Interleaved text breaks the JSON structure.
+**Action:** For commands supporting `--output json`, collect all data into a structured object first, then decide whether to print it as JSON or iterate over it for formatted text output. Avoid immediate `println!` during data gathering.
