@@ -248,7 +248,7 @@ impl LineinfileModule {
         Ok(lines.len() != original_len)
     }
 
-    fn apply_backrefs(line: &str, regexp: &Regex, original: &str) -> String {
+    fn apply_backrefs<'a>(line: &'a str, regexp: &Regex, original: &'a str) -> Cow<'a, str> {
         static BACKREF_RE: Lazy<Regex> =
             Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
 
@@ -257,17 +257,14 @@ impl LineinfileModule {
                 .replace_all(line, |caps: &regex::Captures| {
                     let n = caps[1].parse::<usize>().unwrap_or(0);
                     if let Some(m) = captures.get(n) {
-                        m.as_str().to_string()
+                        Cow::Borrowed(m.as_str())
                     } else {
-                        // If group doesn't exist, keep the backref as-is (e.g., \99)
-                        // This matches current behavior where out-of-bound backrefs are ignored
-                        // (though the old implementation would just not match them in the loop)
-                        caps[0].to_string()
+                        // Fallback: allocate String to avoid lifetime issues with caps reference
+                        Cow::Owned(caps.get(0).map_or("", |m| m.as_str()).to_string())
                     }
                 })
-                .to_string()
         } else {
-            line.to_string()
+            Cow::Borrowed(line)
         }
     }
 
@@ -359,7 +356,12 @@ impl LineinfileModule {
                                         // Find the matching line and apply backrefs
                                         let matching_line = lines.iter().find(|l| re.is_match(l));
                                         if let Some(orig) = matching_line {
-                                            Self::apply_backrefs(line_str, re, orig)
+                                            match orig {
+                                                Cow::Borrowed(s) => Self::apply_backrefs(line_str, re, s),
+                                                Cow::Owned(s) => Cow::Owned(
+                                                    Self::apply_backrefs(line_str, re, s).into_owned(),
+                                                ),
+                                            }
                                         } else {
                                             // No match - line won't be added when using backrefs
                                             return Ok(ModuleOutput::ok(format!(
@@ -368,10 +370,10 @@ impl LineinfileModule {
                                             )));
                                         }
                                     } else {
-                                        line_str.clone()
+                                        Cow::Borrowed(line_str.as_str())
                                     }
                                 } else {
-                                    line_str.clone()
+                                    Cow::Borrowed(line_str.as_str())
                                 };
 
                                 Self::ensure_line_present(
@@ -535,7 +537,12 @@ impl LineinfileModule {
                         // Find the matching line and apply backrefs
                         let matching_line = lines.iter().find(|l| re.is_match(l));
                         if let Some(orig) = matching_line {
-                            Self::apply_backrefs(line_str, re, orig)
+                            match orig {
+                                Cow::Borrowed(s) => Self::apply_backrefs(line_str, re, s),
+                                Cow::Owned(s) => Cow::Owned(
+                                    Self::apply_backrefs(line_str, re, s).into_owned(),
+                                ),
+                            }
                         } else {
                             // No match - line won't be added when using backrefs
                             return Ok(ModuleOutput::ok(format!(
@@ -544,10 +551,10 @@ impl LineinfileModule {
                             )));
                         }
                     } else {
-                        line_str.clone()
+                        Cow::Borrowed(line_str.as_str())
                     }
                 } else {
-                    line_str.clone()
+                    Cow::Borrowed(line_str.as_str())
                 };
 
                 Self::ensure_line_present(
