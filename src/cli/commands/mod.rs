@@ -2,6 +2,7 @@
 //!
 //! This module contains all the subcommand implementations.
 
+pub mod audit;
 pub mod check;
 pub mod drift;
 pub mod fleet;

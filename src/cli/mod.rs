@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Audit log operations (verify, status)
+    #[command(name = "audit")]
+    Audit(commands::audit::AuditArgs),
 }
 
 /// Arguments for agent command
