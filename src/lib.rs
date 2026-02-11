@@ -883,6 +883,14 @@ pub mod native;
 /// state, secrets, and inventory between tenants in shared environments.
 pub mod tenant;
 
+/// Failure-injection and chaos testing infrastructure.
+///
+/// Provides fault injection, chaos layers for connections, and reliability
+/// scorecards with regression gates. This is test infrastructure gated behind
+/// the `hpc` feature flag.
+#[cfg(feature = "hpc")]
+pub mod chaos;
+
 /// Agent mode for persistent target execution.
 ///
 /// This module provides an agent that can be deployed to target hosts for
