@@ -913,6 +913,13 @@ pub mod agent;
 /// Migration and compatibility tools for importing from external tools.
 pub mod migration;
 
+/// Event bus for reactive automation.
+pub mod eventbus;
+
+/// Chaos testing infrastructure.
+#[cfg(feature = "hpc")]
+pub mod chaos;
+
 // ============================================================================
 // Version Information
 // ============================================================================

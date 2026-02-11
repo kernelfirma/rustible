@@ -158,6 +158,30 @@ pub enum Commands {
     #[cfg(feature = "provisioning")]
     #[command(name = "migrate")]
     Migrate(commands::migrate::MigrateArgs),
+
+    /// Immutable audit log management
+    #[command(name = "audit")]
+    Audit(commands::audit::AuditArgs),
+
+    /// Enterprise RBAC authorization
+    #[command(name = "rbac")]
+    Rbac(commands::rbac::RbacArgs),
+
+    /// Artifact signing and verification
+    #[command(name = "sign")]
+    Sign(commands::sign::SignArgs),
+
+    /// Policy pack management
+    #[command(name = "policy")]
+    Policy(commands::policy::PolicyArgs),
+
+    /// Incident forensics bundle export
+    #[command(name = "forensics")]
+    Forensics(commands::forensics::ForensicsArgs),
+
+    /// Event bus and reactive automation
+    #[command(name = "event")]
+    Event(commands::event::EventArgs),
 }
 
 /// Arguments for agent command

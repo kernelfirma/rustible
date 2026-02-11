@@ -9,6 +9,12 @@ pub mod report;
 #[cfg(feature = "provisioning")]
 pub mod terraform;
 
+pub mod ansible;
+#[cfg(feature = "hpc")]
+pub mod xcat;
+#[cfg(feature = "hpc")]
+pub mod warewulf;
+
 pub use error::{MigrationError, MigrationResult};
 pub use report::{
     DiagnosticCategory, FindingStatus, MigrationDiagnostic, MigrationFinding, MigrationOutcome,

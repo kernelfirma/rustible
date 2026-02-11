@@ -3,6 +3,10 @@
 //! This module provides comprehensive benchmarking infrastructure to measure
 //! and track Rustible's performance against Ansible and across different scenarios.
 
+pub mod scenarios;
+pub mod results;
+pub mod environment;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

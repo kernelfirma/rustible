@@ -75,6 +75,8 @@ pub mod rate_limit;
 pub mod secret;
 pub mod template;
 pub mod validation;
+pub mod rbac;
+pub mod signing;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

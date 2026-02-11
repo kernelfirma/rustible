@@ -39,6 +39,7 @@ pub mod rich_errors;
 mod state_dump;
 mod step_executor;
 mod tracer;
+pub mod forensics;
 
 pub use breakpoint::{Breakpoint, BreakpointCondition, BreakpointManager, BreakpointType};
 pub use config::{DebugConfig, DebugConfigBuilder, DebugMode};
