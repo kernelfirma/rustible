@@ -854,6 +854,8 @@ fn parse_service_state(output: &str) -> (bool, bool) {
     (active, enabled)
 }
 
+pub mod history;
+
 impl Default for DriftDetector {
     fn default() -> Self {
         Self::new(DriftConfig::default())
