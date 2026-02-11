@@ -6,14 +6,14 @@
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
-use ssh2::{Session, Sftp};
+use ssh2::{CheckResult, Session, Sftp};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::security::BecomeValidator;
 
@@ -128,6 +128,118 @@ impl SshConnection {
         })
     }
 
+    /// Perform host key verification
+    fn verify_host_key(
+        session: &Session,
+        host: &str,
+        port: u16,
+        host_config: &HostConfig,
+    ) -> ConnectionResult<()> {
+        // Determine strict host key checking setting
+        // If strict_host_key_checking is:
+        // - Some(true): reject unknown hosts
+        // - Some(false): accept unknown hosts
+        // - None: default to accepting unknown hosts (to match russh implementation)
+        let strict_checking = host_config.strict_host_key_checking.unwrap_or(false);
+
+        // Determine known_hosts file path
+        let known_hosts_path = ssh_common::user_known_hosts_path(host_config)
+            .or_else(|| dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts")));
+
+        let mut known_hosts = session.known_hosts().map_err(|e| {
+            ConnectionError::ConnectionFailed(format!("Failed to initialize known_hosts: {}", e))
+        })?;
+
+        // Load known_hosts file if it exists
+        if let Some(path) = &known_hosts_path {
+            if path.exists() {
+                known_hosts
+                    .read_file(path, ssh2::KnownHostFileKind::OpenSSH)
+                    .map_err(|e| {
+                        ConnectionError::ConnectionFailed(format!(
+                            "Failed to read known_hosts file: {}",
+                            e
+                        ))
+                    })?;
+            }
+        }
+
+        // Get remote host key
+        let (key, key_type) = session.host_key().ok_or_else(|| {
+            ConnectionError::ConnectionFailed("Failed to retrieve remote host key".to_string())
+        })?;
+
+        // Check key against known_hosts
+        match known_hosts.check_port(host, port as u16, key) {
+            CheckResult::Match => {
+                debug!(host = %host, "Host key verified against known_hosts");
+                Ok(())
+            }
+            CheckResult::NotFound => {
+                if strict_checking {
+                    Err(ConnectionError::ConnectionFailed(format!(
+                        "Host key for '[{}]:{}' not found in known_hosts and strict checking is enabled",
+                        host, port
+                    )))
+                } else {
+                    debug!(
+                        host = %host,
+                        "Host key not found, adding to known_hosts (strict checking disabled)"
+                    );
+
+                    if let Some(path) = &known_hosts_path {
+                        // Format the key for known_hosts file
+                        use base64::Engine;
+                        let key_base64 = base64::engine::general_purpose::STANDARD.encode(key);
+                        let key_type_str = match key_type {
+                             ssh2::HostKeyType::Rsa => "ssh-rsa",
+                             ssh2::HostKeyType::Dss => "ssh-dss",
+                            ssh2::HostKeyType::Ecdsa256 => "ecdsa-sha2-nistp256",
+                            ssh2::HostKeyType::Ecdsa384 => "ecdsa-sha2-nistp384",
+                            ssh2::HostKeyType::Ecdsa521 => "ecdsa-sha2-nistp521",
+                            ssh2::HostKeyType::Ed25519 => "ssh-ed25519",
+                            _ => "unknown-key-type",
+                        };
+
+                        let host_str = if port == 22 {
+                            host.to_string()
+                        } else {
+                            format!("[{}]:{}", host, port)
+                        };
+
+                        let entry = format!("{} {} {}\n", host_str, key_type_str, key_base64);
+
+                        // Append to file
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent).ok();
+                        }
+
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(path)
+                        {
+                            if let Err(e) = file.write_all(entry.as_bytes()) {
+                                warn!("Failed to write to known_hosts: {}", e);
+                            }
+                        } else {
+                            warn!("Failed to open known_hosts for writing");
+                        }
+                    }
+
+                    Ok(())
+                }
+            }
+            CheckResult::Mismatch => Err(ConnectionError::ConnectionFailed(format!(
+                "HOST KEY VERIFICATION FAILED: Host key for '[{}]:{}' does not match the one in known_hosts! POSSIBLE MITM ATTACK.",
+                host, port
+            ))),
+            CheckResult::Failure => Err(ConnectionError::ConnectionFailed(
+                "Host key check failed (internal error)".to_string(),
+            )),
+        }
+    }
+
     /// Perform the actual connection
     fn do_connect(
         host: &str,
@@ -171,6 +283,11 @@ impl SshConnection {
         session.handshake().map_err(|e| {
             ConnectionError::ConnectionFailed(format!("SSH handshake failed: {}", e))
         })?;
+
+        // Verify host key
+        if global_config.defaults.verify_host_key {
+            Self::verify_host_key(&session, host, port, host_config)?;
+        }
 
         // Authenticate
         Self::authenticate(&session, user, host_config, global_config)?;
@@ -663,6 +780,7 @@ impl Connection for SshConnection {
             // Write to remote file
             let mode = options.mode.unwrap_or(0o644);
             // Use open_mode to set permissions atomically at creation time
+            // This prevents the race condition where file is created with 644 and then chmodded
             let mut remote_file = sftp
                 .open_mode(
                     &remote_path,
