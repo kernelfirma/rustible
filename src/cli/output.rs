@@ -5,9 +5,9 @@
 use colored::Colorize;
 use console::measure_text_width;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use once_cell::sync::Lazy;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 

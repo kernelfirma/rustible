@@ -253,16 +253,15 @@ impl LineinfileModule {
             Lazy::new(|| Regex::new(r"\\(\d+)").expect("Invalid regex"));
 
         if let Some(captures) = regexp.captures(original) {
-            BACKREF_RE
-                .replace_all(line, |caps: &regex::Captures| {
-                    let n = caps[1].parse::<usize>().unwrap_or(0);
-                    if let Some(m) = captures.get(n) {
-                        Cow::Borrowed(m.as_str())
-                    } else {
-                        // Fallback: allocate String to avoid lifetime issues with caps reference
-                        Cow::Owned(caps.get(0).map_or("", |m| m.as_str()).to_string())
-                    }
-                })
+            BACKREF_RE.replace_all(line, |caps: &regex::Captures| {
+                let n = caps[1].parse::<usize>().unwrap_or(0);
+                if let Some(m) = captures.get(n) {
+                    Cow::Borrowed(m.as_str())
+                } else {
+                    // Fallback: allocate String to avoid lifetime issues with caps reference
+                    Cow::Owned(caps.get(0).map_or("", |m| m.as_str()).to_string())
+                }
+            })
         } else {
             Cow::Borrowed(line)
         }
@@ -357,9 +356,12 @@ impl LineinfileModule {
                                         let matching_line = lines.iter().find(|l| re.is_match(l));
                                         if let Some(orig) = matching_line {
                                             match orig {
-                                                Cow::Borrowed(s) => Self::apply_backrefs(line_str, re, s),
+                                                Cow::Borrowed(s) => {
+                                                    Self::apply_backrefs(line_str, re, s)
+                                                }
                                                 Cow::Owned(s) => Cow::Owned(
-                                                    Self::apply_backrefs(line_str, re, s).into_owned(),
+                                                    Self::apply_backrefs(line_str, re, s)
+                                                        .into_owned(),
                                                 ),
                                             }
                                         } else {
@@ -539,9 +541,9 @@ impl LineinfileModule {
                         if let Some(orig) = matching_line {
                             match orig {
                                 Cow::Borrowed(s) => Self::apply_backrefs(line_str, re, s),
-                                Cow::Owned(s) => Cow::Owned(
-                                    Self::apply_backrefs(line_str, re, s).into_owned(),
-                                ),
+                                Cow::Owned(s) => {
+                                    Cow::Owned(Self::apply_backrefs(line_str, re, s).into_owned())
+                                }
                             }
                         } else {
                             // No match - line won't be added when using backrefs

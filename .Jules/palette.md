@@ -44,3 +44,7 @@
 ## 2024-03-22 - [Hybrid Output Strategies]
 **Learning:** Commands that support both human-readable text and machine-readable JSON often fail to produce valid JSON if they print text incrementally during execution. Interleaved text breaks the JSON structure.
 **Action:** For commands supporting `--output json`, collect all data into a structured object first, then decide whether to print it as JSON or iterate over it for formatted text output. Avoid immediate `println!` during data gathering.
+
+## 2024-03-24 - [Clean Interactive Loops]
+**Learning:** Reprinting a growing list of items in an interactive loop (like adding variables) without clearing the previous iteration's output causes "scroll spam" that clutters the terminal and pushes context off-screen.
+**Action:** Use `term.clear_last_lines(n)` to refresh the list in-place, creating a stable TUI-like experience even within a simple CLI loop. Ensure output streams (stdout vs stderr) are consistent to make clearing work reliably.
