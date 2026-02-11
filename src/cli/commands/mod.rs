@@ -5,6 +5,7 @@
 pub mod check;
 pub mod drift;
 pub mod fleet;
+pub mod forensics;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;

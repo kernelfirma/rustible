@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Export or verify incident forensics bundles
+    #[command(name = "forensics")]
+    Forensics(commands::forensics::ForensicsArgs),
 }
 
 /// Arguments for agent command
