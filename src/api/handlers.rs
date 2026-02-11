@@ -248,7 +248,19 @@ pub async fn list_playbooks(
 fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
     let playbook_path = Path::new(playbook);
 
-    // Helper to validate if a path is within allowed search paths
+    // Reject path traversal components in the user-supplied playbook name
+    // before using it in any filesystem operations. This prevents path
+    // traversal attacks (e.g. "../../etc/passwd") regardless of whether the
+    // path is absolute or relative.
+    for component in playbook_path.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err(ApiError::Forbidden(
+                "Path traversal (\"..\" components) not allowed in playbook path".to_string(),
+            ));
+        }
+    }
+
+    // Helper to validate if an existing path is within allowed search paths
     let validate_path = |path: &Path| -> ApiResult<()> {
         let canonical_path = path
             .canonicalize()
@@ -268,7 +280,7 @@ fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
         )))
     };
 
-    // If it's an absolute path, check if it exists and is allowed
+    // If it's an absolute path, validate it is within allowed search paths
     if playbook_path.is_absolute() {
         if playbook_path.exists() {
             validate_path(playbook_path)?;
