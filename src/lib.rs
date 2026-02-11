@@ -907,6 +907,16 @@ pub mod tenant;
 pub mod agent;
 
 // ============================================================================
+// Migration Framework
+// ============================================================================
+
+/// Migration framework for importing infrastructure from external tools.
+///
+/// Provides structured parsers and mappers for converting configuration
+/// data from other systems (xCAT, Warewulf, etc.) into Rustible inventory.
+pub mod migration;
+
+// ============================================================================
 // Version Information
 // ============================================================================
 

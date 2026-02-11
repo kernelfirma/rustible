@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Migrate infrastructure data from external tools
+    #[command(name = "migrate")]
+    Migrate(commands::migrate::MigrateArgs),
 }
 
 /// Arguments for agent command
