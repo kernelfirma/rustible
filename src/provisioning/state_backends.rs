@@ -1512,21 +1512,21 @@ impl ConsulSessionLock {
         ))
     }
 
-    fn build_request(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
+    fn build_request(&self, method: reqwest::Method, url: &str) -> ProvisioningResult<reqwest::RequestBuilder> {
+        self.ensure_secure_address()?;
         let mut request = self.client.request(method, url).timeout(self.timeout);
 
         if let Some(ref token) = self.token {
             request = request.header("X-Consul-Token", token);
         }
 
-        request
+        Ok(request)
     }
 }
 
 #[async_trait]
 impl LockBackend for ConsulSessionLock {
     async fn acquire(&self, info: &LockInfo, timeout: Duration) -> ProvisioningResult<bool> {
-        self.ensure_secure_address()?;
         // Create a session for locking
         let session_config = serde_json::json!({
             "Name": format!("rustible-lock-{}", info.operation),
@@ -1539,7 +1539,7 @@ impl LockBackend for ConsulSessionLock {
             .build_request(
                 reqwest::Method::PUT,
                 &format!("{}/create", self.session_url()),
-            )
+            )?
             .json(&session_config)
             .send()
             .await
@@ -1571,7 +1571,7 @@ impl LockBackend for ConsulSessionLock {
         let lock_url = format!("{}/.lock?acquire={}", self.kv_url(), session_id);
 
         let response = self
-            .build_request(reqwest::Method::PUT, &lock_url)
+            .build_request(reqwest::Method::PUT, &lock_url)?
             .body(lock_info_json)
             .send()
             .await
@@ -1581,13 +1581,12 @@ impl LockBackend for ConsulSessionLock {
 
         if !response.status().is_success() {
             // Clean up session
-            let _ = self
-                .build_request(
-                    reqwest::Method::PUT,
-                    &format!("{}/destroy/{}", self.session_url(), session_id),
-                )
-                .send()
-                .await;
+            if let Ok(req) = self.build_request(
+                reqwest::Method::PUT,
+                &format!("{}/destroy/{}", self.session_url(), session_id),
+            ) {
+                let _ = req.send().await;
+            }
             return Ok(false);
         }
 
@@ -1598,19 +1597,17 @@ impl LockBackend for ConsulSessionLock {
         }
 
         // Clean up session
-        let _ = self
-            .build_request(
-                reqwest::Method::PUT,
-                &format!("{}/destroy/{}", self.session_url(), session_id),
-            )
-            .send()
-            .await;
+        if let Ok(req) = self.build_request(
+            reqwest::Method::PUT,
+            &format!("{}/destroy/{}", self.session_url(), session_id),
+        ) {
+            let _ = req.send().await;
+        }
 
         Ok(false)
     }
 
     async fn release(&self, _lock_id: &str) -> ProvisioningResult<bool> {
-        self.ensure_secure_address()?;
         let session_id = match self.session_id.read().clone() {
             Some(id) => id,
             None => return Ok(false),
@@ -1619,7 +1616,7 @@ impl LockBackend for ConsulSessionLock {
         // Release lock
         let lock_url = format!("{}/.lock?release={}", self.kv_url(), session_id);
         let _ = self
-            .build_request(reqwest::Method::PUT, &lock_url)
+            .build_request(reqwest::Method::PUT, &lock_url)?
             .send()
             .await;
 
@@ -1628,7 +1625,7 @@ impl LockBackend for ConsulSessionLock {
             .build_request(
                 reqwest::Method::PUT,
                 &format!("{}/destroy/{}", self.session_url(), session_id),
-            )
+            )?
             .send()
             .await
             .map_err(|e| {
@@ -1644,7 +1641,7 @@ impl LockBackend for ConsulSessionLock {
         let lock_url = format!("{}/.lock?raw=true", self.kv_url());
 
         let response = self
-            .build_request(reqwest::Method::GET, &lock_url)
+            .build_request(reqwest::Method::GET, &lock_url)?
             .send()
             .await
             .map_err(|e| {
@@ -1678,7 +1675,7 @@ impl LockBackend for ConsulSessionLock {
         // Delete the lock key
         let lock_url = format!("{}/.lock", self.kv_url());
         let response = self
-            .build_request(reqwest::Method::DELETE, &lock_url)
+            .build_request(reqwest::Method::DELETE, &lock_url)?
             .send()
             .await
             .map_err(|e| {
