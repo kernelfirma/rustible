@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Sign artifacts, verify signatures, and manage signing keys
+    #[command(name = "sign")]
+    Sign(commands::sign::SignArgs),
 }
 
 /// Arguments for agent command

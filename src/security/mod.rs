@@ -73,6 +73,7 @@ pub mod password_cache;
 pub mod path;
 pub mod rate_limit;
 pub mod secret;
+pub mod signing;
 pub mod template;
 pub mod validation;
 

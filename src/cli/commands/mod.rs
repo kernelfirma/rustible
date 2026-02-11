@@ -12,6 +12,7 @@ pub mod provider;
 pub mod provision;
 pub mod provisioner;
 pub mod run;
+pub mod sign;
 pub mod state;
 pub mod vault;
 
