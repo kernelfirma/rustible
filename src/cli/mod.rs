@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Manage and evaluate policy packs
+    #[command(name = "policy")]
+    Policy(commands::policy::PolicyArgs),
 }
 
 /// Arguments for agent command

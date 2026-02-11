@@ -4,6 +4,8 @@
 //! against Open Policy Agent (OPA) rules or built-in declarative rules
 //! before execution.
 
+pub mod pack;
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -8,6 +8,7 @@ pub mod fleet;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
+pub mod policy;
 pub mod provider;
 pub mod provision;
 pub mod provisioner;
