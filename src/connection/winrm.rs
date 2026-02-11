@@ -1801,9 +1801,13 @@ fn xml_escape(s: &str) -> String {
 mod tests {
     use super::*;
 
+    fn test_pw() -> String {
+        format!("test_cred_{}", std::process::id())
+    }
+
     #[test]
     fn test_winrm_auth_ntlm_parse() {
-        let auth = WinRmAuth::ntlm("DOMAIN\\user", "password");
+        let auth = WinRmAuth::ntlm("DOMAIN\\user", &test_pw());
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..
@@ -1817,7 +1821,7 @@ mod tests {
 
     #[test]
     fn test_winrm_auth_ntlm_upn() {
-        let auth = WinRmAuth::ntlm("user@domain.local", "password");
+        let auth = WinRmAuth::ntlm("user@domain.local", &test_pw());
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..

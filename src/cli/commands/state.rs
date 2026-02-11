@@ -329,14 +329,9 @@ impl StateArgs {
                             .map(|k| k.as_str())
                             .unwrap_or("terraform.tfstate");
 
-                        let redacted_account = if storage_account.len() > 4 {
-                            format!("{}***", &storage_account[..4])
-                        } else {
-                            "***".to_string()
-                        };
                         ctx.output.info(&format!(
-                            "Initializing Azure backend: {}/{}/{}",
-                            redacted_account, container, blob_name
+                            "Initializing Azure backend: [redacted]/{}/{}",
+                            container, blob_name
                         ));
 
                         serde_json::json!({
