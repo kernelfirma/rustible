@@ -418,9 +418,8 @@ impl VarStore {
                 merged.insert(key.to_string(), value.clone());
             }
             HashBehaviour::Merge => {
-                if let Some(existing) = merged.get(key) {
-                    let new_value = deep_merge(existing, value);
-                    merged.insert(key.to_string(), new_value);
+                if let Some(existing) = merged.get_mut(key) {
+                    deep_merge_in_place(existing, value);
                 } else {
                     merged.insert(key.to_string(), value.clone());
                 }
@@ -539,20 +538,27 @@ impl<'a> VarScope<'a> {
 
 /// Deep merge two YAML values
 pub fn deep_merge(base: &serde_yaml::Value, overlay: &serde_yaml::Value) -> serde_yaml::Value {
+    let mut merged = base.clone();
+    deep_merge_in_place(&mut merged, overlay);
+    merged
+}
+
+/// Deep merge two YAML values in place
+pub fn deep_merge_in_place(base: &mut serde_yaml::Value, overlay: &serde_yaml::Value) {
     match (base, overlay) {
         (serde_yaml::Value::Mapping(base_map), serde_yaml::Value::Mapping(overlay_map)) => {
-            let mut merged = base_map.clone();
             for (key, value) in overlay_map {
-                if let Some(base_value) = base_map.get(key) {
-                    merged.insert(key.clone(), deep_merge(base_value, value));
+                if let Some(base_value) = base_map.get_mut(key) {
+                    deep_merge_in_place(base_value, value);
                 } else {
-                    merged.insert(key.clone(), value.clone());
+                    base_map.insert(key.clone(), value.clone());
                 }
             }
-            serde_yaml::Value::Mapping(merged)
         }
-        // For non-mappings, overlay wins
-        (_, overlay) => overlay.clone(),
+        (base_val, overlay_val) => {
+            // For non-mappings, overlay wins
+            *base_val = overlay_val.clone();
+        }
     }
 }
 
@@ -1009,6 +1015,49 @@ mod tests {
         );
         assert_eq!(
             resolve::resolve_path(&merged, "b.e"),
+            Some(&serde_yaml::Value::Number(5.into())) // Added
+        );
+    }
+
+    #[test]
+    fn test_deep_merge_in_place() {
+        let mut base = serde_yaml::from_str::<serde_yaml::Value>(
+            r#"
+            a: 1
+            b:
+              c: 2
+              d: 3
+            "#,
+        )
+        .unwrap();
+
+        let overlay = serde_yaml::from_str::<serde_yaml::Value>(
+            r#"
+            b:
+              c: 4
+              e: 5
+            f: 6
+            "#,
+        )
+        .unwrap();
+
+        deep_merge_in_place(&mut base, &overlay);
+
+        // Check values
+        assert_eq!(
+            resolve::resolve_path(&base, "a"),
+            Some(&serde_yaml::Value::Number(1.into()))
+        );
+        assert_eq!(
+            resolve::resolve_path(&base, "b.c"),
+            Some(&serde_yaml::Value::Number(4.into())) // Overwritten
+        );
+        assert_eq!(
+            resolve::resolve_path(&base, "b.d"),
+            Some(&serde_yaml::Value::Number(3.into())) // Preserved
+        );
+        assert_eq!(
+            resolve::resolve_path(&base, "b.e"),
             Some(&serde_yaml::Value::Number(5.into())) // Added
         );
     }
