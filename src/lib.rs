@@ -883,6 +883,17 @@ pub mod native;
 /// state, secrets, and inventory between tenants in shared environments.
 pub mod tenant;
 
+// ============================================================================
+// Migration Framework
+// ============================================================================
+
+/// Migration framework for importing configuration from external systems.
+///
+/// Provides structured importers for HPC cluster management tools such as
+/// Warewulf and xCAT, mapping their node profiles and inventory data into
+/// Rustible's inventory format with full diagnostic reporting.
+pub mod migration;
+
 /// Agent mode for persistent target execution.
 ///
 /// This module provides an agent that can be deployed to target hosts for
