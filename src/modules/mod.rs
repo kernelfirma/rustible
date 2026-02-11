@@ -1665,6 +1665,11 @@ impl ModuleRegistry {
         register_modules!(registry,
             Hpc: [
                 hpc::HpcBaselineModule,
+                hpc::MungeModule,
+                hpc::NfsServerModule,
+                hpc::NfsClientModule,
+                hpc::HpcHealthcheckModule,
+                hpc::HpcFactsModule,
                 hpc::LmodModule,
                 hpc::MpiModule,
             ],

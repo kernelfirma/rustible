@@ -4,6 +4,10 @@
 //! cluster environments. Modules are organized by subsystem:
 //!
 //! - **common**: Cluster baseline configuration (limits, sysctl, directories)
+//! - **munge**: MUNGE authentication (Slurm prerequisite)
+//! - **nfs**: NFS server and client management
+//! - **healthcheck**: HPC node health validation
+//! - **facts**: HPC-specific fact gathering (CPU, NUMA, GPU, IB)
 //! - **slurm**: Slurm workload manager (controller, compute, operations)
 //! - **lmod**: Lmod / Environment Modules software management
 //! - **mpi**: MPI library configuration (OpenMPI, Intel MPI)
@@ -42,24 +46,32 @@
 //! - Missing prerequisites → `ModuleError::ExecutionFailed` with install hint
 
 pub mod common;
+pub mod facts;
 #[cfg(feature = "parallel_fs")]
 pub mod fs;
 #[cfg(feature = "gpu")]
 pub mod gpu;
+pub mod healthcheck;
 pub mod lmod;
 pub mod mpi;
+pub mod munge;
+pub mod nfs;
 #[cfg(feature = "ofed")]
 pub mod ofed;
 #[cfg(feature = "slurm")]
 pub mod slurm;
 
 pub use common::HpcBaselineModule;
+pub use facts::HpcFactsModule;
 #[cfg(feature = "parallel_fs")]
 pub use fs::{BeegfsClientModule, LustreClientModule};
 #[cfg(feature = "gpu")]
 pub use gpu::NvidiaGpuModule;
+pub use healthcheck::HpcHealthcheckModule;
 pub use lmod::LmodModule;
 pub use mpi::MpiModule;
+pub use munge::MungeModule;
+pub use nfs::{NfsClientModule, NfsServerModule};
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
 #[cfg(feature = "slurm")]
