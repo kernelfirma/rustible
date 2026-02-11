@@ -96,6 +96,9 @@ pub mod register;
 /// Task throttling with rate limits and concurrency control.
 pub mod throttle;
 
+/// Per-host task execution metrics and failure summaries.
+pub mod host_metrics;
+
 /// Work-stealing scheduler for optimal load balancing.
 pub mod work_stealing;
 
@@ -108,6 +111,7 @@ pub use dependency::{
     DependencyError, DependencyGraph as AdvancedDependencyGraph, DependencyKind, DependencyNode,
 };
 pub use fact_pipeline::{FactPipeline, FactPipelineConfig, FactResult};
+pub use host_metrics::{FailureSummary, HostTaskMetrics, MetricsCollector};
 pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
 pub use pipeline::{ExecutionPipeline, PipelineConfig, TaskOptimizationHints};
 pub use playbook::{Play, Playbook};
