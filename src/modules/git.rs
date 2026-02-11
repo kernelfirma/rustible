@@ -1155,7 +1155,10 @@ mod tests {
         // This should FAIL validation
         let result = module.validate_params(&params);
         assert!(result.is_err(), "Repo starting with - should be rejected");
-        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with '-'"));
 
         // Test remote starting with -
         let mut params: ModuleParams = HashMap::new();
@@ -1164,11 +1167,17 @@ mod tests {
             serde_json::json!("https://github.com/test/repo"),
         );
         params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
-        params.insert("remote".to_string(), serde_json::json!("--upload-pack=touch /tmp/pwned"));
+        params.insert(
+            "remote".to_string(),
+            serde_json::json!("--upload-pack=touch /tmp/pwned"),
+        );
 
         // This should FAIL validation
         let result = module.validate_params(&params);
         assert!(result.is_err(), "Remote starting with - should be rejected");
-        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with '-'"));
     }
 }

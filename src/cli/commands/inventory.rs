@@ -498,74 +498,74 @@ impl ListTasksArgs {
                 };
 
                 // Helper to process a list of tasks
-                let mut process_task_list = |
-                    tasks_val: Option<&serde_yaml::Value>,
-                    target_list: &mut Vec<TaskListing>,
-                    count_tasks: bool
-                | {
-                    if let Some(tasks) = tasks_val.and_then(|t| t.as_sequence()) {
-                        for task in tasks {
-                            // Get task tags for filtering
-                            let task_tags: Vec<String> = task
-                                .get("tags")
-                                .and_then(|t| {
-                                    if let Some(s) = t.as_str() {
-                                        Some(vec![s.to_string()])
-                                    } else {
-                                        t.as_sequence().map(|seq| {
-                                            seq.iter()
-                                                .filter_map(|v| v.as_str().map(String::from))
-                                                .collect()
-                                        })
+                let mut process_task_list =
+                    |tasks_val: Option<&serde_yaml::Value>,
+                     target_list: &mut Vec<TaskListing>,
+                     count_tasks: bool| {
+                        if let Some(tasks) = tasks_val.and_then(|t| t.as_sequence()) {
+                            for task in tasks {
+                                // Get task tags for filtering
+                                let task_tags: Vec<String> = task
+                                    .get("tags")
+                                    .and_then(|t| {
+                                        if let Some(s) = t.as_str() {
+                                            Some(vec![s.to_string()])
+                                        } else {
+                                            t.as_sequence().map(|seq| {
+                                                seq.iter()
+                                                    .filter_map(|v| v.as_str().map(String::from))
+                                                    .collect()
+                                            })
+                                        }
+                                    })
+                                    .unwrap_or_default();
+
+                                // Check skip_tags filter first - skip if any skip_tag matches
+                                if !self.skip_tags.is_empty() {
+                                    let should_skip =
+                                        self.skip_tags.iter().any(|t| task_tags.contains(t));
+                                    if should_skip {
+                                        continue;
                                     }
-                                })
-                                .unwrap_or_default();
-
-                            // Check skip_tags filter first - skip if any skip_tag matches
-                            if !self.skip_tags.is_empty() {
-                                let should_skip = self.skip_tags.iter().any(|t| task_tags.contains(t));
-                                if should_skip {
-                                    continue;
                                 }
-                            }
 
-                            // Check tags filter - only include if tags match
-                            if !self.tags.is_empty() {
-                                let matches = self.tags.iter().any(|t| task_tags.contains(t));
-                                if !matches {
-                                    continue;
+                                // Check tags filter - only include if tags match
+                                if !self.tags.is_empty() {
+                                    let matches = self.tags.iter().any(|t| task_tags.contains(t));
+                                    if !matches {
+                                        continue;
+                                    }
                                 }
+
+                                if count_tasks {
+                                    total_task_count += 1;
+                                }
+
+                                let task_name = task
+                                    .get("name")
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or("Unnamed task")
+                                    .to_string();
+
+                                let module = detect_module(task).to_string();
+
+                                let tags = if !task_tags.is_empty() {
+                                    Some(task_tags)
+                                } else {
+                                    None
+                                };
+
+                                let when = task.get("when").map(|w| format_value(w));
+
+                                target_list.push(TaskListing {
+                                    name: task_name,
+                                    module,
+                                    tags,
+                                    when,
+                                });
                             }
-
-                            if count_tasks {
-                                total_task_count += 1;
-                            }
-
-                            let task_name = task
-                                .get("name")
-                                .and_then(|n| n.as_str())
-                                .unwrap_or("Unnamed task")
-                                .to_string();
-
-                            let module = detect_module(task).to_string();
-
-                            let tags = if !task_tags.is_empty() {
-                                Some(task_tags)
-                            } else {
-                                None
-                            };
-
-                            let when = task.get("when").map(|w| format_value(w));
-
-                            target_list.push(TaskListing {
-                                name: task_name,
-                                module,
-                                tags,
-                                when,
-                            });
                         }
-                    }
-                };
+                    };
 
                 // Process all task lists
                 process_task_list(play.get("tasks"), &mut play_listing.tasks, true);
@@ -582,12 +582,14 @@ impl ListTasksArgs {
         if ctx.output.is_json() {
             println!("{}", serde_json::to_string_pretty(&play_listings)?);
         } else {
-            ctx.output.section(&format!("Tasks in playbook: {}", self.playbook.display()));
+            ctx.output
+                .section(&format!("Tasks in playbook: {}", self.playbook.display()));
 
             for (i, play) in play_listings.iter().enumerate() {
                 // Colored header: Play #1: Play Name
                 // We construct the string first to handle the formatting properly
-                println!("\n{} {}: {}",
+                println!(
+                    "\n{} {}: {}",
                     "Play".blue().bold(),
                     format!("#{}", i + 1).blue().bold(),
                     play.name.blue().bold()
@@ -606,7 +608,8 @@ impl ListTasksArgs {
                             //      When: ...
 
                             let module_str = format!("[{}]", task.module).cyan().dimmed();
-                            println!("    {:>3}. {} {}",
+                            println!(
+                                "    {:>3}. {} {}",
                                 (j + 1).to_string().bold(),
                                 task.name.white(),
                                 module_str
@@ -614,7 +617,11 @@ impl ListTasksArgs {
 
                             if self.detailed {
                                 if let Some(tags) = &task.tags {
-                                    println!("       {}: {}", "Tags".yellow(), format!("{:?}", tags));
+                                    println!(
+                                        "       {}: {}",
+                                        "Tags".yellow(),
+                                        format!("{:?}", tags)
+                                    );
                                 }
                                 if let Some(when) = &task.when {
                                     println!("       {}: {}", "When".yellow(), when);
@@ -631,7 +638,10 @@ impl ListTasksArgs {
             }
 
             println!("\n{}", "=".repeat(40).bright_black());
-            println!("Total tasks: {}", total_task_count.to_string().green().bold());
+            println!(
+                "Total tasks: {}",
+                total_task_count.to_string().green().bold()
+            );
         }
 
         Ok(0)

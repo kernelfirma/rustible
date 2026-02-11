@@ -200,31 +200,55 @@ impl InteractiveSession {
         }
 
         let mut vars = Vec::new();
+        let mut lines_to_clear = 0;
+        let mut error_msg: Option<String> = None;
 
         loop {
+            if lines_to_clear > 0 {
+                self.term.clear_last_lines(lines_to_clear)?;
+            }
+
+            let mut current_lines = 0;
+
             if !vars.is_empty() {
-                println!("{}", "Current variables:".dimmed());
+                self.term
+                    .write_line(&format!("{}", "Current variables:".dimmed()))?;
+                current_lines += 1;
                 for var in &vars {
-                    println!("  {} {}", "•".green(), var);
+                    self.term
+                        .write_line(&format!("  {} {}", "•".green(), var))?;
+                    current_lines += 1;
                 }
-                println!();
+                self.term.write_line("")?;
+                current_lines += 1;
+            }
+
+            if let Some(msg) = &error_msg {
+                self.term.write_line(msg)?;
+                current_lines += 1;
+                error_msg = None;
             }
 
             let var: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter variable (key=value, or empty to finish)")
                 .allow_empty(true)
                 .interact_on(&self.term)?;
+            current_lines += 1;
 
             if var.is_empty() {
                 break;
             }
 
             if var.contains('=') || var.starts_with('@') {
-                println!("{} Added '{}'", "✔".green(), var);
                 vars.push(var);
             } else {
-                println!("{}", "Invalid format. Use key=value or @file.yml".yellow());
+                error_msg = Some(format!(
+                    "{}",
+                    "Invalid format. Use key=value or @file.yml".yellow()
+                ));
             }
+
+            lines_to_clear = current_lines;
         }
 
         Ok(vars)
