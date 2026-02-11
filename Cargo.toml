@@ -46,6 +46,8 @@ parallel_fs = []
 openstack = []
 # Bare-metal BMC management via Redfish/IPMI
 redfish = []
+# VMware vSphere VM management via govc CLI (experimental)
+vsphere = []
 # Background warmup of lazy-initialized components
 startup-warmup = []
 # REST API server
@@ -61,7 +63,7 @@ full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
 # Full feature set with all HPC support
-full-hpc = ["full", "hpc", "ofed", "parallel_fs"]
+full-hpc = ["full", "hpc", "ofed", "parallel_fs", "redfish", "vsphere"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 
