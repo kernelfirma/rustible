@@ -1695,6 +1695,7 @@ impl ModuleRegistry {
         register_modules!(registry,
             Hpc: [
                 hpc::RdmaStackModule,
+                hpc::IbValidateModule,
             ],
         );
 

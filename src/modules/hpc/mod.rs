@@ -59,6 +59,8 @@ pub mod toolchain;
 pub mod nfs;
 #[cfg(feature = "ofed")]
 pub mod ofed;
+#[cfg(feature = "ofed")]
+pub mod ib_validate;
 #[cfg(feature = "slurm")]
 pub mod slurm;
 
@@ -76,5 +78,7 @@ pub use toolchain::HpcToolchainModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
+#[cfg(feature = "ofed")]
+pub use ib_validate::IbValidateModule;
 #[cfg(feature = "slurm")]
 pub use slurm::{SlurmConfigModule, SlurmOpsModule};
