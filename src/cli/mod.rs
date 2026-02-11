@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Migration tools (Terraform, Ansible, xCAT, Warewulf)
+    #[command(name = "migrate")]
+    Migrate(commands::migrate::MigrateArgs),
 }
 
 /// Arguments for agent command
