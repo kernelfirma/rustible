@@ -51,6 +51,7 @@ pub mod observability;
 pub mod raft;
 pub mod recovery;
 pub mod state;
+pub mod topology;
 pub mod types;
 
 // Re-export commonly used types
