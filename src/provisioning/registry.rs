@@ -36,18 +36,32 @@ impl ProviderRegistry {
     }
 
     /// Create a registry with built-in providers
-    #[cfg(feature = "aws")]
     pub fn with_builtins() -> Self {
-        let registry = Self::new();
-        // AWS provider will be registered here once implemented
-        // registry.register_factory("aws", || Box::new(AwsProvider::new()));
-        registry
-    }
+        let mut registry = Self::new();
 
-    /// Create a registry with built-in providers (no-op without features)
-    #[cfg(not(feature = "aws"))]
-    pub fn with_builtins() -> Self {
-        Self::new()
+        // AWS provider (feature-gated)
+        #[cfg(feature = "aws")]
+        {
+            // registry.register_factory("aws", || Box::new(super::providers::aws::AwsProvider::new()));
+        }
+
+        // Azure provider (experimental)
+        #[cfg(all(feature = "azure", feature = "experimental"))]
+        {
+            registry.register_factory("azure", || {
+                Box::new(super::providers::azure::AzureProvider::new())
+            });
+        }
+
+        // GCP provider (experimental)
+        #[cfg(all(feature = "gcp", feature = "experimental"))]
+        {
+            registry.register_factory("gcp", || {
+                Box::new(super::providers::gcp::GcpProvider::new())
+            });
+        }
+
+        registry
     }
 
     /// Register a provider factory

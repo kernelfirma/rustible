@@ -45,40 +45,56 @@
 //! - Unsupported OS → `ModuleError::Unsupported` with clear message
 //! - Missing prerequisites → `ModuleError::ExecutionFailed` with install hint
 
+pub mod boot_profile;
 pub mod common;
+pub mod discovery;
 pub mod facts;
 #[cfg(feature = "parallel_fs")]
 pub mod fs;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod healthcheck;
+pub mod image_pipeline;
 pub mod lmod;
 pub mod mpi;
 pub mod munge;
-pub mod toolchain;
 pub mod nfs;
 #[cfg(feature = "ofed")]
 pub mod ofed;
 #[cfg(feature = "ofed")]
 pub mod ib_validate;
 #[cfg(feature = "slurm")]
+pub mod partition_policy;
+pub mod power;
+#[cfg(feature = "slurm")]
+pub mod scheduler_orchestration;
+#[cfg(feature = "slurm")]
 pub mod slurm;
+pub mod toolchain;
 
+pub use boot_profile::BootProfileModule;
 pub use common::HpcBaselineModule;
+pub use discovery::HpcDiscoveryModule;
 pub use facts::HpcFactsModule;
 #[cfg(feature = "parallel_fs")]
 pub use fs::{BeegfsClientModule, LustreClientModule};
 #[cfg(feature = "gpu")]
 pub use gpu::NvidiaGpuModule;
 pub use healthcheck::HpcHealthcheckModule;
+pub use image_pipeline::ImagePipelineModule;
 pub use lmod::LmodModule;
 pub use mpi::MpiModule;
 pub use munge::MungeModule;
-pub use toolchain::HpcToolchainModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
 #[cfg(feature = "ofed")]
 pub use ib_validate::IbValidateModule;
 #[cfg(feature = "slurm")]
+pub use partition_policy::PartitionPolicyModule;
+pub use power::HpcPowerModule;
+#[cfg(feature = "slurm")]
+pub use scheduler_orchestration::SchedulerOrchestrationModule;
+#[cfg(feature = "slurm")]
 pub use slurm::{SlurmConfigModule, SlurmOpsModule};
+pub use toolchain::HpcToolchainModule;
