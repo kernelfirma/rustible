@@ -883,6 +883,35 @@ pub mod native;
 /// state, secrets, and inventory between tenants in shared environments.
 pub mod tenant;
 
+// ============================================================================
+// Event Bus and Reactive Automation
+// ============================================================================
+
+/// Event bus and reactive automation engine.
+///
+/// This module provides an event-driven architecture for Rustible, enabling
+/// reactive automation based on system events such as playbook lifecycle
+/// events, host status changes, and configuration drift detection.
+///
+/// # Features
+///
+/// - **Event Types**: Playbook, task, host, drift, and custom events
+/// - **Pub/Sub Bus**: Distribute events to filtered subscribers
+/// - **Reactor Engine**: Rule-based matching of events to actions
+/// - **Actions**: Run playbooks, execute modules, send notifications, call webhooks
+/// - **Reliability**: Deduplication, retry policies, and dead-letter queue
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rustible::eventbus::{Event, EventType, EventSource, EventBus};
+///
+/// let mut bus = EventBus::new();
+/// let event = Event::new(EventType::PlaybookCompleted, EventSource::new("executor"));
+/// bus.publish(&event);
+/// ```
+pub mod eventbus;
+
 /// Agent mode for persistent target execution.
 ///
 /// This module provides an agent that can be deployed to target hosts for

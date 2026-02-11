@@ -4,6 +4,7 @@
 
 pub mod check;
 pub mod drift;
+pub mod event;
 pub mod fleet;
 pub mod galaxy;
 pub mod inventory;

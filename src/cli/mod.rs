@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Event bus and reactive automation engine
+    #[command(name = "event")]
+    Event(commands::event::EventArgs),
 }
 
 /// Arguments for agent command
