@@ -202,7 +202,7 @@ impl UserModule {
         if let Some(groups) = groups {
             if !groups.is_empty() {
                 cmd_parts.push("-G".to_string());
-                cmd_parts.push(groups.join(","));
+                cmd_parts.push(shell_escape(&groups.join(",")).into_owned());
             }
         }
 
@@ -288,7 +288,7 @@ impl UserModule {
 
         if let Some(groups) = groups {
             if !groups.is_empty() {
-                let groups_str = groups.join(",");
+                let groups_str = shell_escape(&groups.join(",")).into_owned();
                 if append_groups {
                     cmd_parts.push("-a".to_string());
                     cmd_parts.push("-G".to_string());

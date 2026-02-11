@@ -2569,3 +2569,128 @@ mod shell_command_injection {
         assert!(result.is_ok(), "Long paths should pass validation");
     }
 }
+
+// ============================================================================
+// 13. USER MODULE INJECTION PREVENTION TESTS
+// ============================================================================
+
+mod user_injection_prevention {
+    use super::*;
+    use async_trait::async_trait;
+    use rustible::modules::user::UserModule;
+    use rustible::connection::{
+        CommandResult, Connection, ConnectionResult, ExecuteOptions, FileStat, TransferOptions,
+    };
+    use std::sync::{Arc, Mutex};
+
+    // Mock Connection to capture commands
+    #[derive(Clone)]
+    struct MockConnection {
+        executed_commands: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl MockConnection {
+        fn new() -> Self {
+            Self {
+                executed_commands: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Connection for MockConnection {
+        fn identifier(&self) -> &str {
+            "mock"
+        }
+
+        async fn is_alive(&self) -> bool {
+            true
+        }
+
+        async fn execute(
+            &self,
+            command: &str,
+            _options: Option<ExecuteOptions>,
+        ) -> ConnectionResult<CommandResult> {
+            self.executed_commands.lock().unwrap().push(command.to_string());
+
+            // Mock responses for user existence checks
+            if command.starts_with("id ") {
+                // User doesn't exist
+                return Ok(CommandResult::failure(1, "".to_string(), "no such user".to_string()));
+            }
+
+            Ok(CommandResult::success("".to_string(), "".to_string()))
+        }
+
+        async fn upload(
+            &self,
+            _local_path: &std::path::Path,
+            _remote_path: &std::path::Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn upload_content(
+            &self,
+            _content: &[u8],
+            _remote_path: &std::path::Path,
+            _options: Option<TransferOptions>,
+        ) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download(&self, _remote_path: &std::path::Path, _local_path: &std::path::Path) -> ConnectionResult<()> {
+            Ok(())
+        }
+
+        async fn download_content(&self, _remote_path: &std::path::Path) -> ConnectionResult<Vec<u8>> {
+            Ok(Vec::new())
+        }
+
+        async fn path_exists(&self, _path: &std::path::Path) -> ConnectionResult<bool> {
+            Ok(false)
+        }
+
+        async fn is_directory(&self, _path: &std::path::Path) -> ConnectionResult<bool> {
+            Ok(false)
+        }
+
+        async fn stat(&self, _path: &std::path::Path) -> ConnectionResult<FileStat> {
+            Err(rustible::connection::ConnectionError::ExecutionFailed("Not implemented".to_string()))
+        }
+
+        async fn close(&self) -> ConnectionResult<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_user_module_group_injection_prevention() {
+        let module = UserModule;
+        let mock_conn = MockConnection::new();
+        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(mock_conn.clone());
+
+        let mut params = ModuleParams::new();
+        params.insert("name".to_string(), serde_json::json!("testuser"));
+        params.insert("groups".to_string(), serde_json::json!(["safe_group", "malicious; echo pwned"]));
+        params.insert("state".to_string(), serde_json::json!("present"));
+
+        let context = ModuleContext::builder()
+            .connection(conn)
+            .build()
+            .unwrap();
+
+        // UserModule::execute is synchronous but blocks on async calls
+        let _ = module.execute(&params, &context);
+
+        let commands = mock_conn.executed_commands.lock().unwrap();
+        let create_cmd = commands.iter().find(|c| c.contains("useradd")).expect("useradd command not found");
+
+        let group_arg_part = "safe_group,malicious; echo pwned";
+        let secure_pattern = format!("-G '{}'", group_arg_part.replace("'", "'\''"));
+
+        assert!(create_cmd.contains(&secure_pattern), "Command did not contain securely escaped group argument. Got: {}", create_cmd);
+    }
+}
