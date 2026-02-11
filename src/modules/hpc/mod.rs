@@ -55,6 +55,7 @@ pub mod healthcheck;
 pub mod lmod;
 pub mod mpi;
 pub mod munge;
+pub mod toolchain;
 pub mod nfs;
 #[cfg(feature = "ofed")]
 pub mod ofed;
@@ -71,6 +72,7 @@ pub use healthcheck::HpcHealthcheckModule;
 pub use lmod::LmodModule;
 pub use mpi::MpiModule;
 pub use munge::MungeModule;
+pub use toolchain::HpcToolchainModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
