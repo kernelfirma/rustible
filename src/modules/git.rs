@@ -553,6 +553,26 @@ impl Module for GitModule {
             return Err(ModuleError::MissingParameter("dest".to_string()));
         }
 
+        // Security: Prevent argument injection via repo
+        if let Some(repo) = params.get_string("repo")? {
+            if repo.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid repo: '{}'. Repo URL cannot start with '-' to prevent argument injection.",
+                    repo
+                )));
+            }
+        }
+
+        // Security: Prevent argument injection via remote
+        if let Some(remote) = params.get_string("remote")? {
+            if remote.trim().starts_with('-') {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Invalid remote: '{}'. Remote name cannot start with '-' to prevent argument injection.",
+                    remote
+                )));
+            }
+        }
+
         // Validate depth if provided
         if let Some(depth) = params.get_u32("depth")? {
             if depth == 0 {
@@ -1118,5 +1138,37 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("cannot start with '-'"));
+    }
+
+    #[test]
+    fn test_git_module_vulnerability_check() {
+        let module = GitModule;
+
+        // Test repo starting with -
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "repo".to_string(),
+            serde_json::json!("--upload-pack=touch /tmp/pwned"),
+        );
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+
+        // This should FAIL validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err(), "Repo starting with - should be rejected");
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
+
+        // Test remote starting with -
+        let mut params: ModuleParams = HashMap::new();
+        params.insert(
+            "repo".to_string(),
+            serde_json::json!("https://github.com/test/repo"),
+        );
+        params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
+        params.insert("remote".to_string(), serde_json::json!("--upload-pack=touch /tmp/pwned"));
+
+        // This should FAIL validation
+        let result = module.validate_params(&params);
+        assert!(result.is_err(), "Remote starting with - should be rejected");
+        assert!(result.unwrap_err().to_string().contains("cannot start with '-'"));
     }
 }
