@@ -79,6 +79,8 @@ async fn main() -> Result<()> {
             1
         }
         Commands::Fleet(args) => args.execute(&mut ctx).await?,
+        #[cfg(feature = "provisioning")]
+        Commands::Migrate(args) => args.execute(&mut ctx).await?,
     };
 
     std::process::exit(exit_code);
