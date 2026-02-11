@@ -72,6 +72,10 @@
 **Learning:** In shell command construction, even seemingly benign characters like `#` can be weaponized to alter control flow (by truncating execution). Validation must account for all shell metacharacters, including those that don't execute commands directly but modify how the shell parses the line.
 **Prevention:** Added `#` to the blacklist in `validate_command_args`. When constructing shell commands, consider all shell metacharacters including comments.
 
+## 2024-05-22 - [Preventing Credential Leakage in HTTP Clients]
+**Vulnerability:** The `UriModule` manually added the `Authorization` header to requests. `reqwest` (and other HTTP clients) forwards manually set headers to redirected URLs, potentially leaking credentials to third-party domains if a redirect occurs.
+**Learning:** Manual header management for sensitive data bypasses built-in safety mechanisms of HTTP client libraries.
+**Prevention:** Always use the library's specific methods for authentication (e.g., `.basic_auth()`, `.bearer_auth()`) instead of manually setting the header. These methods signal the library to handle the header securely, including stripping it on cross-domain redirects.
 ## 2025-06-03 - Git Argument Injection via Repo/Remote
 **Vulnerability:** The `git` module accepted arbitrary strings for `repo` and `remote` parameters without validation. If these strings started with `-`, they could be interpreted as flags by `git fetch` or `git clone` (e.g., `--upload-pack=...`), allowing argument injection and potentially arbitrary command execution.
 **Learning:** Tools like `git` often treat arguments starting with `-` as options, even if they are positional arguments in some contexts (like `git fetch <remote>`). This ambiguity is a common source of vulnerabilities.
