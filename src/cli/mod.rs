@@ -153,6 +153,10 @@ pub enum Commands {
     /// Show fleet infrastructure dashboard
     #[command(name = "fleet")]
     Fleet(commands::fleet::FleetArgs),
+
+    /// Role-based access control management
+    #[command(name = "rbac")]
+    Rbac(commands::rbac::RbacArgs),
 }
 
 /// Arguments for agent command

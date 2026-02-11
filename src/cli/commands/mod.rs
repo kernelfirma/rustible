@@ -10,6 +10,7 @@ pub mod inventory;
 pub mod lock;
 pub mod provider;
 pub mod provision;
+pub mod rbac;
 pub mod provisioner;
 pub mod run;
 pub mod state;

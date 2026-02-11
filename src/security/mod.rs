@@ -74,6 +74,7 @@ pub mod path;
 pub mod rate_limit;
 pub mod secret;
 pub mod template;
+pub mod rbac;
 pub mod validation;
 
 use serde::{Deserialize, Serialize};
