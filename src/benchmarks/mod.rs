@@ -2,6 +2,22 @@
 //!
 //! This module provides comprehensive benchmarking infrastructure to measure
 //! and track Rustible's performance against Ansible and across different scenarios.
+//!
+//! ## HPC Benchmark Harness
+//!
+//! The [`scenarios`], [`results`], and [`environment`] submodules form a
+//! reproducible benchmark harness for large-scale fanout workloads:
+//!
+//! - [`scenarios::BenchmarkScenario`] -- predefined node-count / latency
+//!   profiles (1 k, 5 k, 10 k nodes).
+//! - [`results::BenchmarkReport`] -- structured result collection with
+//!   system metadata and per-run percentile statistics.
+//! - [`environment::BenchmarkEnvironment`] -- mock-based test harness that
+//!   simulates fanout latency via `tokio::time::sleep`.
+
+pub mod environment;
+pub mod results;
+pub mod scenarios;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
