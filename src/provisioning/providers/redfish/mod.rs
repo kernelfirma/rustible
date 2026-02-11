@@ -92,6 +92,7 @@ pub struct RedfishProvider {
     config: Value,
     resources: HashMap<String, Arc<dyn Resource>>,
     timeout_seconds: u64,
+    verify_ssl: bool,
 }
 
 impl Default for RedfishProvider {
@@ -111,6 +112,7 @@ impl RedfishProvider {
             config: Value::Null,
             resources: HashMap::new(),
             timeout_seconds: DEFAULT_TIMEOUT,
+            verify_ssl: false,
         }
     }
 }
@@ -167,17 +169,27 @@ impl Provider for RedfishProvider {
                     sensitive: true,
                 },
             ],
-            optional_fields: vec![SchemaField {
-                name: "timeout".to_string(),
-                field_type: FieldType::Integer,
-                description: "HTTP request timeout in seconds".to_string(),
-                default: Some(Value::Number(DEFAULT_TIMEOUT.into())),
-                constraints: vec![
-                    FieldConstraint::MinValue { value: 10 },
-                    FieldConstraint::MaxValue { value: 600 },
-                ],
-                sensitive: false,
-            }],
+            optional_fields: vec![
+                SchemaField {
+                    name: "timeout".to_string(),
+                    field_type: FieldType::Integer,
+                    description: "HTTP request timeout in seconds".to_string(),
+                    default: Some(Value::Number(DEFAULT_TIMEOUT.into())),
+                    constraints: vec![
+                        FieldConstraint::MinValue { value: 10 },
+                        FieldConstraint::MaxValue { value: 600 },
+                    ],
+                    sensitive: false,
+                },
+                SchemaField {
+                    name: "verify_ssl".to_string(),
+                    field_type: FieldType::Boolean,
+                    description: "Verify TLS certificates (default: false, BMCs often use self-signed certs)".to_string(),
+                    default: Some(Value::Bool(false)),
+                    constraints: vec![],
+                    sensitive: false,
+                },
+            ],
             regions: None,
         }
     }
@@ -213,6 +225,10 @@ impl Provider for RedfishProvider {
 
         if let Some(t) = settings.get("timeout").and_then(|v| v.as_u64()) {
             self.timeout_seconds = t;
+        }
+
+        if let Some(v) = settings.get("verify_ssl").and_then(|v| v.as_bool()) {
+            self.verify_ssl = v;
         }
 
         self.endpoint = Some(endpoint.clone());
@@ -354,8 +370,9 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
+        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
         let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true) // BMCs commonly use self-signed certs
+            .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
             .build()
             .map_err(|e| ProvisioningError::CloudApiError(format!("HTTP client error: {}", e)))?;
@@ -411,8 +428,9 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
+        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
         let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
             .build()
             .map_err(|e| ProvisioningError::CloudApiError(format!("HTTP client error: {}", e)))?;
@@ -470,8 +488,9 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
+        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
         let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
             .build()
             .map_err(|e| ProvisioningError::CloudApiError(format!("HTTP client error: {}", e)))?;
