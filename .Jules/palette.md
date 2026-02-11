@@ -41,3 +41,6 @@
 ## 2026-06-14 - [Interactive Input Feedback]
 **Learning:** When asking users for multiple inputs in a loop (like variables or tags), they often lose track of what they've already entered. Providing a running list of entered items and immediate success feedback ("✔ Added...") significantly reduces cognitive load and increases confidence.
 **Action:** In `dialoguer` loops, always print the current state of accumulated items before prompting for the next one.
+## 2024-03-22 - [Hybrid Output Strategies]
+**Learning:** Commands that support both human-readable text and machine-readable JSON often fail to produce valid JSON if they print text incrementally during execution. Interleaved text breaks the JSON structure.
+**Action:** For commands supporting `--output json`, collect all data into a structured object first, then decide whether to print it as JSON or iterate over it for formatted text output. Avoid immediate `println!` during data gathering.
