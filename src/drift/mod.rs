@@ -10,6 +10,8 @@ use std::sync::Arc;
 
 use crate::connection::{CommandResult, Connection};
 
+pub mod history;
+
 /// Drift detection configuration
 #[derive(Debug, Clone)]
 pub struct DriftConfig {

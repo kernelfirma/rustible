@@ -81,6 +81,12 @@ async fn main() -> Result<()> {
         Commands::Fleet(args) => args.execute(&mut ctx).await?,
         #[cfg(feature = "provisioning")]
         Commands::Migrate(args) => args.execute(&mut ctx).await?,
+        Commands::Audit(args) => args.execute(&mut ctx).await?,
+        Commands::Rbac(args) => args.execute(&mut ctx).await?,
+        Commands::Sign(args) => args.execute(&mut ctx).await?,
+        Commands::Policy(args) => args.execute(&mut ctx).await?,
+        Commands::Forensics(args) => args.execute(&mut ctx).await?,
+        Commands::Event(args) => args.execute(&mut ctx).await?,
     };
 
     std::process::exit(exit_code);

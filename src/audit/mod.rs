@@ -45,6 +45,10 @@
 
 mod event;
 mod logger;
+pub mod hashchain;
+pub mod immutable;
+pub mod sink;
+pub mod verify;
 
 // Re-export main types
 pub use event::{AuditCategory, AuditEvent, AuditOutcome, AuditSeverity};

@@ -4,16 +4,22 @@
 
 pub mod check;
 pub mod drift;
+pub mod audit;
+pub mod event;
 pub mod fleet;
+pub mod forensics;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
 #[cfg(feature = "provisioning")]
 pub mod migrate;
+pub mod policy;
 pub mod provider;
 pub mod provision;
 pub mod provisioner;
+pub mod rbac;
 pub mod run;
+pub mod sign;
 pub mod state;
 pub mod vault;
 

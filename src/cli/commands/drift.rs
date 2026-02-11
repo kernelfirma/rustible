@@ -27,7 +27,7 @@
 //! ```
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,6 +35,10 @@ use std::time::Duration;
 
 use reqwest;
 
+use rustible::drift::history::{
+    DriftHistoryStore, DriftSnapshot, DriftTimeline,
+    ExportFormat, TimelineExporter, TimelineFilter,
+};
 use rustible::inventory::Inventory;
 use rustible::modules::{ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleRegistry};
 
@@ -59,9 +63,36 @@ const NON_DRIFT_MODULES: &[&str] = &[
     "facts",
 ];
 
-/// Arguments for the drift command
+/// Arguments for the drift command (with subcommands)
 #[derive(Parser, Debug, Clone)]
 pub struct DriftArgs {
+    /// Drift subcommand
+    #[command(subcommand)]
+    pub command: DriftCommands,
+}
+
+/// Available drift subcommands
+#[derive(Subcommand, Debug, Clone)]
+pub enum DriftCommands {
+    /// Detect drift by comparing current state against a playbook
+    Detect(DetectArgs),
+
+    /// List recorded drift snapshots
+    History(HistoryArgs),
+
+    /// Show a timeline of drift events with optional filters
+    Timeline(TimelineArgs),
+
+    /// Compare two drift snapshots side-by-side
+    Compare(CompareArgs),
+
+    /// Remove old snapshots recorded before a given date
+    Prune(PruneArgs),
+}
+
+/// Arguments for the detect subcommand (original drift detection)
+#[derive(Parser, Debug, Clone)]
+pub struct DetectArgs {
     /// Playbook file to check drift against
     pub playbook: PathBuf,
 
@@ -108,6 +139,67 @@ pub struct DriftArgs {
     /// Email address for drift alerts (stored in report; sending not implemented)
     #[arg(long)]
     pub alert_email: Option<String>,
+}
+
+/// Arguments for the history subcommand
+#[derive(Parser, Debug, Clone)]
+pub struct HistoryArgs {
+    /// Output in JSON format
+    #[arg(long)]
+    pub json: bool,
+
+    /// Path to the drift history file
+    #[arg(long, default_value = ".rustible/drift-history.json")]
+    pub store_path: PathBuf,
+}
+
+/// Arguments for the timeline subcommand
+#[derive(Parser, Debug, Clone)]
+pub struct TimelineArgs {
+    /// Only show events from this date (RFC3339, e.g. 2025-01-01T00:00:00Z)
+    #[arg(long)]
+    pub from: Option<String>,
+
+    /// Only show events until this date (RFC3339)
+    #[arg(long)]
+    pub to: Option<String>,
+
+    /// Filter by resource name substring
+    #[arg(long)]
+    pub resource: Option<String>,
+
+    /// Export format: json, csv, markdown (default: human-readable)
+    #[arg(long)]
+    pub format: Option<String>,
+
+    /// Path to the drift history file
+    #[arg(long, default_value = ".rustible/drift-history.json")]
+    pub store_path: PathBuf,
+}
+
+/// Arguments for the compare subcommand
+#[derive(Parser, Debug, Clone)]
+pub struct CompareArgs {
+    /// First snapshot ID
+    pub snapshot_a: String,
+
+    /// Second snapshot ID
+    pub snapshot_b: String,
+
+    /// Path to the drift history file
+    #[arg(long, default_value = ".rustible/drift-history.json")]
+    pub store_path: PathBuf,
+}
+
+/// Arguments for the prune subcommand
+#[derive(Parser, Debug, Clone)]
+pub struct PruneArgs {
+    /// Remove snapshots older than this date (RFC3339, e.g. 2025-01-01T00:00:00Z)
+    pub before: String,
+
+    /// Path to the drift history file
+    #[arg(long, default_value = ".rustible/drift-history.json")]
+    pub store_path: PathBuf,
 }
 
 /// Status of a resource's drift
@@ -290,7 +382,292 @@ fn module_output_to_drift_diff(output: &ModuleOutput) -> Option<DriftDiff> {
 }
 
 impl DriftArgs {
-    /// Execute the drift command
+    /// Execute the drift command by dispatching to the appropriate subcommand
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        match &self.command {
+            DriftCommands::Detect(args) => args.execute(ctx).await,
+            DriftCommands::History(args) => args.execute(ctx).await,
+            DriftCommands::Timeline(args) => args.execute(ctx).await,
+            DriftCommands::Compare(args) => args.execute(ctx).await,
+            DriftCommands::Prune(args) => args.execute(ctx).await,
+        }
+    }
+}
+
+// --- History store file I/O helpers ---
+
+/// Load a drift history store from a JSON file on disk.
+fn load_history_store(path: &PathBuf) -> Result<DriftHistoryStore> {
+    if !path.exists() {
+        return Ok(DriftHistoryStore::new());
+    }
+    let content = std::fs::read_to_string(path)?;
+    let snapshots: Vec<DriftSnapshot> = serde_json::from_str(&content)?;
+    let mut store = DriftHistoryStore::new();
+    for snap in snapshots {
+        store.add_snapshot(snap);
+    }
+    Ok(store)
+}
+
+/// Save a drift history store to a JSON file on disk.
+fn save_history_store(path: &PathBuf, store: &DriftHistoryStore) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(store.list_snapshots())?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+impl HistoryArgs {
+    /// List all recorded drift snapshots
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("DRIFT HISTORY");
+
+        let store = load_history_store(&self.store_path)?;
+        let snapshots = store.list_snapshots();
+
+        if snapshots.is_empty() {
+            ctx.output.info("No drift snapshots recorded yet.");
+            ctx.output.hint(
+                "Run 'rustible drift detect <playbook>' to detect drift and record snapshots.",
+            );
+            return Ok(0);
+        }
+
+        if self.json {
+            let json = serde_json::to_string_pretty(snapshots)?;
+            println!("{}", json);
+        } else {
+            ctx.output.info(&format!("{} snapshot(s) recorded:\n", snapshots.len()));
+            for snap in snapshots {
+                let item_count = snap.items.len();
+                let trigger = serde_json::to_value(&snap.trigger)
+                    .ok()
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    .unwrap_or_else(|| format!("{:?}", snap.trigger));
+                ctx.output.info(&format!(
+                    "  [{}] {} - trigger: {}, items: {}",
+                    snap.id,
+                    snap.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                    trigger,
+                    item_count,
+                ));
+            }
+        }
+
+        Ok(0)
+    }
+}
+
+impl TimelineArgs {
+    /// Show a filtered timeline of drift events
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("DRIFT TIMELINE");
+
+        let store = load_history_store(&self.store_path)?;
+        let entries = DriftTimeline::build_from(&store);
+
+        if entries.is_empty() {
+            ctx.output.info("No timeline entries found.");
+            return Ok(0);
+        }
+
+        // Build filter
+        let from = self
+            .from
+            .as_ref()
+            .map(|s| {
+                chrono::DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .map_err(|e| anyhow::anyhow!("Invalid --from date '{}': {}", s, e))
+            })
+            .transpose()?;
+
+        let to = self
+            .to
+            .as_ref()
+            .map(|s| {
+                chrono::DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .map_err(|e| anyhow::anyhow!("Invalid --to date '{}': {}", s, e))
+            })
+            .transpose()?;
+
+        let filter = TimelineFilter {
+            from,
+            to,
+            resource_pattern: self.resource.clone(),
+            event_type: None,
+        };
+
+        let filtered = DriftTimeline::filter(&entries, &filter);
+
+        if filtered.is_empty() {
+            ctx.output.info("No timeline entries match the given filters.");
+            return Ok(0);
+        }
+
+        // Determine output format
+        if let Some(ref fmt) = self.format {
+            let export_format = match fmt.to_lowercase().as_str() {
+                "json" => ExportFormat::Json,
+                "csv" => ExportFormat::Csv,
+                "markdown" | "md" => ExportFormat::Markdown,
+                other => {
+                    ctx.output.error(&format!(
+                        "Unknown format '{}'. Supported: json, csv, markdown",
+                        other
+                    ));
+                    return Ok(1);
+                }
+            };
+            let output = TimelineExporter::export(&filtered, &export_format);
+            println!("{}", output);
+        } else {
+            ctx.output.info(&format!("{} event(s):\n", filtered.len()));
+            for entry in &filtered {
+                let event_type = serde_json::to_value(&entry.event_type)
+                    .ok()
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    .unwrap_or_else(|| format!("{:?}", entry.event_type));
+                ctx.output.info(&format!(
+                    "  {} [{}] {} - {}",
+                    entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    event_type,
+                    entry.resource,
+                    entry.details,
+                ));
+            }
+        }
+
+        Ok(0)
+    }
+}
+
+impl CompareArgs {
+    /// Compare two snapshots side-by-side
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("DRIFT COMPARE");
+
+        let store = load_history_store(&self.store_path)?;
+
+        let snap_a = store.get_snapshot(&self.snapshot_a);
+        let snap_b = store.get_snapshot(&self.snapshot_b);
+
+        if snap_a.is_none() {
+            ctx.output
+                .error(&format!("Snapshot '{}' not found.", self.snapshot_a));
+            return Ok(1);
+        }
+        if snap_b.is_none() {
+            ctx.output
+                .error(&format!("Snapshot '{}' not found.", self.snapshot_b));
+            return Ok(1);
+        }
+
+        let snap_a = snap_a.unwrap();
+        let snap_b = snap_b.unwrap();
+
+        ctx.output.info(&format!(
+            "Comparing {} ({}) vs {} ({})\n",
+            snap_a.id,
+            snap_a.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            snap_b.id,
+            snap_b.timestamp.format("%Y-%m-%d %H:%M:%S"),
+        ));
+
+        // Build resource maps
+        let resources_a: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> =
+            snap_a.items.iter().map(|i| (i.resource.as_str(), i)).collect();
+        let resources_b: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> =
+            snap_b.items.iter().map(|i| (i.resource.as_str(), i)).collect();
+
+        // Collect all resource names
+        let mut all_resources: Vec<&str> = resources_a
+            .keys()
+            .chain(resources_b.keys())
+            .copied()
+            .collect();
+        all_resources.sort();
+        all_resources.dedup();
+
+        let mut added = 0usize;
+        let mut removed = 0usize;
+        let mut changed = 0usize;
+        let mut unchanged = 0usize;
+
+        for resource in &all_resources {
+            match (resources_a.get(resource), resources_b.get(resource)) {
+                (Some(a), Some(b)) => {
+                    if a.expected == b.expected && a.actual == b.actual && a.severity == b.severity {
+                        unchanged += 1;
+                    } else {
+                        changed += 1;
+                        ctx.output.info(&format!(
+                            "  ~ {} (severity: {} -> {}, actual: {} -> {})",
+                            resource, a.severity, b.severity, a.actual, b.actual,
+                        ));
+                    }
+                }
+                (Some(a), None) => {
+                    removed += 1;
+                    ctx.output.info(&format!(
+                        "  - {} (was: severity={}, actual={})",
+                        resource, a.severity, a.actual,
+                    ));
+                }
+                (None, Some(b)) => {
+                    added += 1;
+                    ctx.output.info(&format!(
+                        "  + {} (now: severity={}, actual={})",
+                        resource, b.severity, b.actual,
+                    ));
+                }
+                (None, None) => unreachable!(),
+            }
+        }
+
+        println!();
+        ctx.output.info(&format!(
+            "Summary: {} added, {} removed, {} changed, {} unchanged",
+            added, removed, changed, unchanged,
+        ));
+
+        Ok(0)
+    }
+}
+
+impl PruneArgs {
+    /// Remove snapshots older than a given date
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.banner("DRIFT PRUNE");
+
+        let before = chrono::DateTime::parse_from_rfc3339(&self.before)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .map_err(|e| anyhow::anyhow!("Invalid date '{}': {}", self.before, e))?;
+
+        let mut store = load_history_store(&self.store_path)?;
+        let pruned = store.prune_before(before);
+
+        if pruned > 0 {
+            save_history_store(&self.store_path, &store)?;
+            ctx.output.info(&format!(
+                "Pruned {} snapshot(s) older than {}.",
+                pruned,
+                before.format("%Y-%m-%d %H:%M:%S UTC"),
+            ));
+        } else {
+            ctx.output.info("No snapshots to prune.");
+        }
+
+        Ok(0)
+    }
+}
+
+impl DetectArgs {
+    /// Execute the drift detection command
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
         ctx.output.banner("DRIFT DETECTION");
 
@@ -935,11 +1312,12 @@ mod tests {
     }
 
     #[test]
-    fn test_drift_args_parse() {
+    fn test_drift_detect_args_parse() {
         use clap::Parser;
 
         let args = DriftArgs::try_parse_from([
             "drift",
+            "detect",
             "playbook.yml",
             "--limit",
             "webservers",
@@ -947,9 +1325,89 @@ mod tests {
         ])
         .unwrap();
 
-        assert_eq!(args.playbook, PathBuf::from("playbook.yml"));
-        assert_eq!(args.limit, Some("webservers".to_string()));
-        assert!(args.detailed);
+        match args.command {
+            DriftCommands::Detect(ref detect) => {
+                assert_eq!(detect.playbook, PathBuf::from("playbook.yml"));
+                assert_eq!(detect.limit, Some("webservers".to_string()));
+                assert!(detect.detailed);
+            }
+            _ => panic!("Expected Detect subcommand"),
+        }
+    }
+
+    #[test]
+    fn test_drift_history_args_parse() {
+        use clap::Parser;
+
+        let args = DriftArgs::try_parse_from(["drift", "history", "--json"]).unwrap();
+
+        match args.command {
+            DriftCommands::History(ref hist) => {
+                assert!(hist.json);
+            }
+            _ => panic!("Expected History subcommand"),
+        }
+    }
+
+    #[test]
+    fn test_drift_timeline_args_parse() {
+        use clap::Parser;
+
+        let args = DriftArgs::try_parse_from([
+            "drift",
+            "timeline",
+            "--from",
+            "2025-01-01T00:00:00Z",
+            "--resource",
+            "nginx",
+            "--format",
+            "csv",
+        ])
+        .unwrap();
+
+        match args.command {
+            DriftCommands::Timeline(ref tl) => {
+                assert_eq!(tl.from, Some("2025-01-01T00:00:00Z".to_string()));
+                assert_eq!(tl.resource, Some("nginx".to_string()));
+                assert_eq!(tl.format, Some("csv".to_string()));
+            }
+            _ => panic!("Expected Timeline subcommand"),
+        }
+    }
+
+    #[test]
+    fn test_drift_compare_args_parse() {
+        use clap::Parser;
+
+        let args =
+            DriftArgs::try_parse_from(["drift", "compare", "snap-1", "snap-2"]).unwrap();
+
+        match args.command {
+            DriftCommands::Compare(ref cmp) => {
+                assert_eq!(cmp.snapshot_a, "snap-1");
+                assert_eq!(cmp.snapshot_b, "snap-2");
+            }
+            _ => panic!("Expected Compare subcommand"),
+        }
+    }
+
+    #[test]
+    fn test_drift_prune_args_parse() {
+        use clap::Parser;
+
+        let args = DriftArgs::try_parse_from([
+            "drift",
+            "prune",
+            "2025-01-01T00:00:00Z",
+        ])
+        .unwrap();
+
+        match args.command {
+            DriftCommands::Prune(ref p) => {
+                assert_eq!(p.before, "2025-01-01T00:00:00Z");
+            }
+            _ => panic!("Expected Prune subcommand"),
+        }
     }
 
     #[test]
