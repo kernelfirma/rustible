@@ -63,11 +63,18 @@ jobs:
         # Windows excluded: Unix-only codebase (uses std::os::unix extensively)
         os: [ubuntu-latest, macos-latest]
         rust: [stable, beta, "1.85"]  # MSRV from Cargo.toml
-        features: [default, pure-rust]
+        features: [default, pure-rust, hpc]
         exclude:
           # Skip MSRV on macOS to reduce CI time
           - os: macos-latest
             rust: "1.85"
+          # HPC features only need testing on Linux stable
+          - os: macos-latest
+            features: hpc
+          - rust: beta
+            features: hpc
+          - rust: "1.85"
+            features: hpc
 
     steps:
       - name: Free disk space (Ubuntu)
