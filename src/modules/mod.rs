@@ -1672,6 +1672,7 @@ impl ModuleRegistry {
                 hpc::HpcFactsModule,
                 hpc::LmodModule,
                 hpc::MpiModule,
+                hpc::HpcToolchainModule,
             ],
         );
 
