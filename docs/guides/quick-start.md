@@ -41,9 +41,15 @@ Rustible supports multiple feature configurations:
 | `russh` (default) | Pure Rust SSH backend - recommended |
 | `ssh2-backend` | Legacy SSH via libssh2 (requires C dependencies) |
 | `docker` | Docker container execution support |
-| `kubernetes` | Kubernetes pod execution (planned) |
+| `kubernetes` | Kubernetes pod execution |
 | `pure-rust` | Minimal pure Rust build |
-| `full` | All features enabled |
+| `aws` | AWS cloud modules (EC2, S3, VPC, IAM) |
+| `azure` | Azure cloud modules (experimental) |
+| `gcp` | GCP cloud modules (experimental) |
+| `hpc` | HPC modules (Slurm, GPU, OFED) |
+| `database` | Database modules (experimental) |
+| `full` | All core features enabled |
+| `full-cloud` | All features plus all cloud providers |
 
 ```bash
 # Pure Rust build (default)

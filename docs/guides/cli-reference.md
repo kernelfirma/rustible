@@ -607,7 +607,7 @@ privilege_escalation:
 
 ## See Also
 
-- [Getting Started Guide](./getting-started.md)
-- [Playbook Syntax](./playbook-syntax.md)
-- [Inventory Format](./inventory-format.md)
-- [Module Reference](./modules.md)
+- [Getting Started Guide](./quick-start.md)
+- [Playbook Syntax](./02-playbooks.md)
+- [Inventory Format](./03-inventory.md)
+- [Module Reference](../reference/modules.md)

@@ -44,6 +44,12 @@ For those extending Rustible with custom modules.
 - [command](reference/modules/command.md) - Command execution
 - [service](reference/modules/service.md) - Service management
 - [package](reference/modules/package.md) - Package management
+- [docker_container](reference/modules/docker_container.md) - Docker container management
+- [k8s_deployment](reference/modules/k8s_deployment.md) - Kubernetes deployments
+- [aws_ec2](reference/modules/aws_ec2.md) - AWS EC2 instances
+- [user](reference/modules/user.md) - User account management
+- [group](reference/modules/group.md) - Group management
+- [cron](reference/modules/cron.md) - Cron job management
 
 ---
 
@@ -93,6 +99,7 @@ For operators running Rustible in production environments.
 | All modules | [Module Reference](reference/modules.md) |
 | Variable precedence | [Variables Reference](reference/variables.md) |
 | Inventory formats | [Inventory Reference](reference/inventory.md) |
+| Inventory & Variables | [Inventory & Variables Guide](guides/03-inventory.md), [Variables Deep Dive](guides/04-variables.md) |
 | Callback plugins | [Callbacks Reference](reference/callbacks.md) |
 | CLI options | [CLI Reference](guides/cli-reference.md) |
 

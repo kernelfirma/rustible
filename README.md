@@ -100,7 +100,7 @@ rustible init <PATH>          # Initialize new project
 - **SSH** (default): Via russh
 - **Local**: Direct local execution
 - **Docker**: Container-based execution
-- **Kubernetes**: Pod execution (feature flag)
+- **Kubernetes**: Pod execution (feature flag, implemented)
 
 ### Built-in Modules
 
@@ -115,6 +115,18 @@ rustible init <PATH>          # Initialize new project
 **Security**: authorized_key, known_hosts, ufw, firewalld
 
 **Cloud modules** (feature flags): aws_ec2_instance, aws_s3, azure_vm, gcp_compute_instance
+
+**Docker**: docker_container, docker_image, docker_network, docker_volume, docker_compose
+
+**Kubernetes** (feature flag): k8s_namespace, k8s_deployment, k8s_service, k8s_configmap, k8s_secret
+
+**Database** (feature flag): postgresql_db, postgresql_user, mysql_db, mysql_user, and more
+
+**Network devices** (feature flag): ios_config, eos_config, junos_config, nxos_config
+
+**HPC** (feature flag): slurm_config, nvidia_gpu, lmod, mpi, rdma_stack, lustre_client
+
+**Windows** (feature flag): win_copy, win_feature, win_service, win_package, win_user
 
 Unsupported modules automatically fall back to Ansible's Python execution engine.
 
@@ -147,7 +159,29 @@ cargo build --features docker,kubernetes,aws
 | `docker` | Docker container support |
 | `kubernetes` | Kubernetes pod execution |
 | `aws` | AWS cloud modules |
-| `experimental` | Required opt-in for stubbed features (azure, gcp, database, winrm, reqwest) |
+| `hpc` | HPC modules (Slurm, GPU, OFED) |
+| `slurm` | Slurm workload manager modules |
+| `gpu` | GPU management modules (NVIDIA) |
+| `ofed` | InfiniBand/RDMA/OFED support |
+| `parallel_fs` | Parallel filesystem clients (Lustre, BeeGFS) |
+| `distributed` | Distributed execution support |
+| `api` | REST API server |
+| `provisioning` | Infrastructure provisioning (requires AWS) |
+| `full` | All core features enabled |
+| `full-cloud` | All features plus all cloud providers |
+| `full-aws` | All features plus AWS |
+| `full-hpc` | All features plus HPC support |
+| `pure-rust` | Minimal pure Rust build (no C deps) |
+| `ssh2-backend` | Legacy SSH via libssh2 (C dependency) |
+| `startup-warmup` | Background warmup of lazy components |
+| `openstack` | OpenStack cloud provider (stub/experimental) |
+| `redfish` | Bare-metal BMC management via Redfish/IPMI (stub/experimental) |
+| `database` | Database modules (PostgreSQL, MySQL) (stub/experimental) |
+| `winrm` | Windows Remote Management (stub/experimental) |
+| `azure` | Azure cloud modules (stub/experimental) |
+| `gcp` | GCP cloud modules (stub/experimental) |
+| `reqwest` | HTTP client backend (stub/experimental) |
+| `experimental` | Required opt-in for stubbed features (azure, gcp, database, winrm, reqwest, openstack, redfish) |
 
 ## Performance
 
