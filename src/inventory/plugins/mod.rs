@@ -56,6 +56,11 @@ pub mod config;
 pub mod gcp;
 pub mod terraform;
 
+#[cfg(feature = "slurm")]
+pub mod slurm;
+#[cfg(feature = "openstack")]
+pub mod openstack;
+
 pub use aws_ec2::AwsEc2Plugin;
 pub use azure::AzurePlugin;
 pub use config::{
@@ -67,6 +72,11 @@ pub use terraform::{
     CacheConfig, GroupByRule, LocalBackend, ResourceMapping, TerraformBackendType,
     TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
 };
+
+#[cfg(feature = "slurm")]
+pub use slurm::SlurmPlugin;
+#[cfg(feature = "openstack")]
+pub use openstack::OpenstackPlugin;
 
 use super::{Inventory, InventoryError, InventoryResult};
 use async_trait::async_trait;
@@ -265,6 +275,22 @@ impl DynamicPluginRegistry {
             registry.register("terraform", Arc::new(plugin));
         }
 
+        // Register Slurm plugin
+        #[cfg(feature = "slurm")]
+        {
+            if let Ok(plugin) = SlurmPlugin::with_defaults() {
+                registry.register("slurm", Arc::new(plugin));
+            }
+        }
+
+        // Register OpenStack plugin
+        #[cfg(feature = "openstack")]
+        {
+            if let Ok(plugin) = OpenstackPlugin::with_defaults() {
+                registry.register("openstack", Arc::new(plugin));
+            }
+        }
+
         registry
     }
 }
@@ -335,8 +361,28 @@ pub fn create_plugin_from_config(
             })?;
             Ok(Arc::new(plugin))
         }
+        #[cfg(feature = "slurm")]
+        "slurm" | "hpc.slurm" => {
+            let plugin = SlurmPlugin::new(config).map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Failed to create Slurm plugin: {}",
+                    e
+                ))
+            })?;
+            Ok(Arc::new(plugin))
+        }
+        #[cfg(feature = "openstack")]
+        "openstack" | "openstack.cloud.openstack" => {
+            let plugin = OpenstackPlugin::new(config).map_err(|e| {
+                InventoryError::DynamicInventoryFailed(format!(
+                    "Failed to create OpenStack plugin: {}",
+                    e
+                ))
+            })?;
+            Ok(Arc::new(plugin))
+        }
         _ => Err(InventoryError::DynamicInventoryFailed(format!(
-            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp, terraform",
+            "Unknown plugin: '{}'. Available plugins: aws_ec2, azure, gcp, terraform, slurm, openstack",
             plugin_name
         ))),
     }
