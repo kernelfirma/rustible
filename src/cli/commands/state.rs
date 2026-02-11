@@ -250,9 +250,8 @@ impl StateArgs {
                 // Check if state config already exists
                 let config_path = PathBuf::from(".rustible/backend.json");
                 if config_path.exists() && !reconfigure {
-                    ctx.output.warning(
-                        "Backend already configured. Use --reconfigure to overwrite.",
-                    );
+                    ctx.output
+                        .warning("Backend already configured. Use --reconfigure to overwrite.");
                     return Ok(1);
                 }
 
@@ -262,7 +261,8 @@ impl StateArgs {
                 // Build backend configuration
                 let backend_config = match backend {
                     BackendType::Local => {
-                        ctx.output.info(&format!("Initializing local backend at {:?}", path));
+                        ctx.output
+                            .info(&format!("Initializing local backend at {:?}", path));
                         serde_json::json!({
                             "type": "local",
                             "path": path.to_string_lossy()
@@ -272,13 +272,14 @@ impl StateArgs {
                         let bucket = bucket.as_ref().ok_or_else(|| {
                             anyhow::anyhow!("--bucket is required for S3 backend")
                         })?;
-                        let key = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+                        let key = key
+                            .as_ref()
+                            .map(|k| k.as_str())
+                            .unwrap_or("terraform.tfstate");
                         let region = region.as_ref().map(|r| r.as_str()).unwrap_or("us-east-1");
 
-                        ctx.output.info(&format!(
-                            "Initializing S3 backend: s3://{}/{}",
-                            bucket, key
-                        ));
+                        ctx.output
+                            .info(&format!("Initializing S3 backend: s3://{}/{}", bucket, key));
 
                         let mut config = serde_json::json!({
                             "type": "s3",
@@ -290,7 +291,8 @@ impl StateArgs {
 
                         if let Some(table) = dynamodb_table {
                             config["dynamodb_table"] = serde_json::json!(table);
-                            ctx.output.info(&format!("  DynamoDB locking enabled: {}", table));
+                            ctx.output
+                                .info(&format!("  DynamoDB locking enabled: {}", table));
                         }
 
                         config
@@ -299,7 +301,10 @@ impl StateArgs {
                         let bucket = bucket.as_ref().ok_or_else(|| {
                             anyhow::anyhow!("--bucket is required for GCS backend")
                         })?;
-                        let key = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+                        let key = key
+                            .as_ref()
+                            .map(|k| k.as_str())
+                            .unwrap_or("terraform.tfstate");
 
                         ctx.output.info(&format!(
                             "Initializing GCS backend: gs://{}/{}",
@@ -319,7 +324,10 @@ impl StateArgs {
                         let container = container.as_ref().ok_or_else(|| {
                             anyhow::anyhow!("--container is required for Azure backend")
                         })?;
-                        let blob_name = key.as_ref().map(|k| k.as_str()).unwrap_or("terraform.tfstate");
+                        let blob_name = key
+                            .as_ref()
+                            .map(|k| k.as_str())
+                            .unwrap_or("terraform.tfstate");
 
                         ctx.output.info(&format!(
                             "Initializing Azure backend: {}/{}/{}",
@@ -334,7 +342,9 @@ impl StateArgs {
                         })
                     }
                     BackendType::Consul => {
-                        let addr = address.as_ref().map(|a| a.as_str())
+                        let addr = address
+                            .as_ref()
+                            .map(|a| a.as_str())
                             .unwrap_or("http://127.0.0.1:8500");
                         let path = key.as_ref().map(|k| k.as_str()).unwrap_or("rustible/state");
 
@@ -354,10 +364,8 @@ impl StateArgs {
                             anyhow::anyhow!("--address is required for HTTP backend")
                         })?;
 
-                        ctx.output.info(&format!(
-                            "Initializing HTTP backend: {}",
-                            addr
-                        ));
+                        ctx.output
+                            .info(&format!("Initializing HTTP backend: {}", addr));
 
                         serde_json::json!({
                             "type": "http",
@@ -370,10 +378,12 @@ impl StateArgs {
                 let config_content = serde_json::to_string_pretty(&backend_config)?;
                 std::fs::write(&config_path, &config_content)?;
 
-                ctx.output.info(&format!("Backend configuration saved to {:?}", config_path));
+                ctx.output
+                    .info(&format!("Backend configuration saved to {:?}", config_path));
                 ctx.output.info("");
                 ctx.output.info("Successfully configured the backend!");
-                ctx.output.info("You may now begin working with Rustible provisioning.");
+                ctx.output
+                    .info("You may now begin working with Rustible provisioning.");
 
                 Ok(0)
             }
@@ -386,14 +396,14 @@ impl StateArgs {
                 force,
             } => {
                 ctx.output.banner("STATE MIGRATE");
-                ctx.output.info(&format!("Migrating state from {} to {}", from, to));
+                ctx.output
+                    .info(&format!("Migrating state from {} to {}", from, to));
                 ctx.output.info(&format!("  Source: {}", from_path));
                 ctx.output.info(&format!("  Destination: {}", to_path));
 
                 if !force {
-                    ctx.output.warning(
-                        "This will copy state data. Use --force to confirm.",
-                    );
+                    ctx.output
+                        .warning("This will copy state data. Use --force to confirm.");
                     return Ok(1);
                 }
 
@@ -402,7 +412,8 @@ impl StateArgs {
                     BackendType::Local => {
                         let path = PathBuf::from(from_path);
                         if !path.exists() {
-                            ctx.output.error(&format!("Source state not found: {:?}", path));
+                            ctx.output
+                                .error(&format!("Source state not found: {:?}", path));
                             return Ok(1);
                         }
                         std::fs::read_to_string(&path)?
@@ -454,15 +465,15 @@ impl StateArgs {
 
                 // Check source exists
                 if !tfstate.exists() {
-                    ctx.output.error(&format!("Terraform state file not found: {:?}", tfstate));
+                    ctx.output
+                        .error(&format!("Terraform state file not found: {:?}", tfstate));
                     return Ok(1);
                 }
 
                 // Check destination doesn't exist (unless force)
                 if output.exists() && !force {
-                    ctx.output.warning(
-                        "Output file already exists. Use --force to overwrite.",
-                    );
+                    ctx.output
+                        .warning("Output file already exists. Use --force to overwrite.");
                     return Ok(1);
                 }
 
@@ -472,18 +483,19 @@ impl StateArgs {
 
                 // Validate it's a Terraform state file
                 if tf_state.get("version").is_none() {
-                    ctx.output.error("Invalid Terraform state file: missing version field");
+                    ctx.output
+                        .error("Invalid Terraform state file: missing version field");
                     return Ok(1);
                 }
 
-                let tf_version = tf_state.get("terraform_version")
+                let tf_version = tf_state
+                    .get("terraform_version")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
-                let serial = tf_state.get("serial")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
+                let serial = tf_state.get("serial").and_then(|v| v.as_u64()).unwrap_or(0);
 
-                ctx.output.info(&format!("  Terraform version: {}", tf_version));
+                ctx.output
+                    .info(&format!("  Terraform version: {}", tf_version));
                 ctx.output.info(&format!("  State serial: {}", serial));
 
                 // Import using the provisioning module (feature-gated)
@@ -495,8 +507,14 @@ impl StateArgs {
                         .map_err(|e| anyhow::anyhow!("Failed to import state: {}", e))?;
 
                     // Report what was imported
-                    ctx.output.info(&format!("  Resources imported: {}", rustible_state.resource_count()));
-                    ctx.output.info(&format!("  Outputs imported: {}", rustible_state.outputs.len()));
+                    ctx.output.info(&format!(
+                        "  Resources imported: {}",
+                        rustible_state.resource_count()
+                    ));
+                    ctx.output.info(&format!(
+                        "  Outputs imported: {}",
+                        rustible_state.outputs.len()
+                    ));
 
                     // Create output directory if needed
                     if let Some(parent) = output.parent() {
@@ -509,22 +527,27 @@ impl StateArgs {
 
                     ctx.output.info("");
                     ctx.output.info("Successfully imported Terraform state!");
-                    ctx.output.info("You can now use 'rustible provision plan' to see the current state.");
+                    ctx.output.info(
+                        "You can now use 'rustible provision plan' to see the current state.",
+                    );
                 }
 
                 #[cfg(not(feature = "provisioning"))]
                 {
                     // Fallback: simple JSON-to-JSON conversion for basic import
-                    let resources = tf_state.get("resources")
+                    let resources = tf_state
+                        .get("resources")
                         .and_then(|r| r.as_array())
                         .map(|a| a.len())
                         .unwrap_or(0);
-                    let outputs = tf_state.get("outputs")
+                    let outputs = tf_state
+                        .get("outputs")
                         .and_then(|o| o.as_object())
                         .map(|o| o.len())
                         .unwrap_or(0);
 
-                    ctx.output.info(&format!("  Resources found: {}", resources));
+                    ctx.output
+                        .info(&format!("  Resources found: {}", resources));
                     ctx.output.info(&format!("  Outputs found: {}", outputs));
 
                     // Create output directory if needed
@@ -539,7 +562,8 @@ impl StateArgs {
 
                     ctx.output.info("");
                     ctx.output.info("Successfully imported Terraform state!");
-                    ctx.output.info("Note: Enable 'provisioning' feature for full state management.");
+                    ctx.output
+                        .info("Note: Enable 'provisioning' feature for full state management.");
                 }
 
                 Ok(0)
@@ -791,31 +815,36 @@ fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
     let mut outputs: HashMap<String, serde_json::Value> = HashMap::new();
 
     // Extract lineage and serial
-    let lineage = tf_state.get("lineage")
+    let lineage = tf_state
+        .get("lineage")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let serial = tf_state.get("serial")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let serial = tf_state.get("serial").and_then(|v| v.as_u64()).unwrap_or(0);
 
     // Convert resources
     if let Some(tf_resources) = tf_state.get("resources").and_then(|r| r.as_array()) {
         for resource in tf_resources {
-            let resource_type = resource.get("type")
+            let resource_type = resource
+                .get("type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            let name = resource.get("name")
+            let name = resource
+                .get("name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            let mode = resource.get("mode")
+            let mode = resource
+                .get("mode")
                 .and_then(|v| v.as_str())
                 .unwrap_or("managed");
-            let provider = resource.get("provider")
+            let provider = resource
+                .get("provider")
                 .and_then(|v| v.as_str())
                 .map(|p| {
                     // Extract provider name from full provider path
-                    p.split('/').last().unwrap_or(p)
+                    p.split('/')
+                        .last()
+                        .unwrap_or(p)
                         .trim_start_matches("provider[\"")
                         .trim_end_matches("\"]")
                         .split('.')
@@ -829,10 +858,12 @@ fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
             // Process instances
             if let Some(instances) = resource.get("instances").and_then(|i| i.as_array()) {
                 for (idx, instance) in instances.iter().enumerate() {
-                    let attributes = instance.get("attributes")
+                    let attributes = instance
+                        .get("attributes")
                         .cloned()
                         .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
-                    let cloud_id = attributes.get("id")
+                    let cloud_id = attributes
+                        .get("id")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
@@ -842,25 +873,28 @@ fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
 
                     let resource_key = format!("{}.{}", resource_type, name);
 
-                    resources.insert(resource_key.clone(), serde_json::json!({
-                        "id": {
+                    resources.insert(
+                        resource_key.clone(),
+                        serde_json::json!({
+                            "id": {
+                                "resource_type": resource_type,
+                                "name": name
+                            },
+                            "cloud_id": cloud_id,
                             "resource_type": resource_type,
-                            "name": name
-                        },
-                        "cloud_id": cloud_id,
-                        "resource_type": resource_type,
-                        "provider": provider,
-                        "config": {},
-                        "attributes": attributes,
-                        "dependencies": [],
-                        "dependents": [],
-                        "created_at": Utc::now().to_rfc3339(),
-                        "updated_at": Utc::now().to_rfc3339(),
-                        "metadata": {},
-                        "tainted": false,
-                        "index": index,
-                        "mode": mode
-                    }));
+                            "provider": provider,
+                            "config": {},
+                            "attributes": attributes,
+                            "dependencies": [],
+                            "dependents": [],
+                            "created_at": Utc::now().to_rfc3339(),
+                            "updated_at": Utc::now().to_rfc3339(),
+                            "metadata": {},
+                            "tainted": false,
+                            "index": index,
+                            "mode": mode
+                        }),
+                    );
                 }
             }
         }
@@ -869,18 +903,25 @@ fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
     // Convert outputs
     if let Some(tf_outputs) = tf_state.get("outputs").and_then(|o| o.as_object()) {
         for (name, output) in tf_outputs {
-            let value = output.get("value").cloned().unwrap_or(serde_json::Value::Null);
-            let sensitive = output.get("sensitive")
+            let value = output
+                .get("value")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let sensitive = output
+                .get("sensitive")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let output_type = output.get("type").cloned();
 
-            outputs.insert(name.clone(), serde_json::json!({
-                "value": value,
-                "sensitive": sensitive,
-                "type": output_type,
-                "description": null
-            }));
+            outputs.insert(
+                name.clone(),
+                serde_json::json!({
+                    "value": value,
+                    "sensitive": sensitive,
+                    "type": output_type,
+                    "description": null
+                }),
+            );
         }
     }
 

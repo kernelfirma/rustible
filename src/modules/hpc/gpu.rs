@@ -2,9 +2,7 @@
 //!
 //! Manages NVIDIA GPU drivers and configuration.
 
-use crate::modules::{
-    Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult,
-};
+use crate::modules::{Module, ModuleContext, ModuleOutput, ModuleParams, ModuleResult};
 
 pub struct NvidiaGpuModule;
 
@@ -26,8 +24,10 @@ impl Module for NvidiaGpuModule {
             return Ok(ModuleOutput::ok("Would configure NVIDIA GPU"));
         }
 
-        Ok(ModuleOutput::ok("NVIDIA GPU management: stub - not yet implemented")
-            .with_data("status", serde_json::json!("stub")))
+        Ok(
+            ModuleOutput::ok("NVIDIA GPU management: stub - not yet implemented")
+                .with_data("status", serde_json::json!("stub")),
+        )
     }
 
     fn required_params(&self) -> &[&'static str] {

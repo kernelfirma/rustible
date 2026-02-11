@@ -858,15 +858,9 @@ impl OutputFormatter {
 
         println!();
         if self.use_color {
-            println!(
-                "{}",
-                "─".repeat(78).bright_black()
-            );
+            println!("{}", "─".repeat(78).bright_black());
             println!("{}", title.bright_white().bold());
-            println!(
-                "{}",
-                "─".repeat(78).bright_black()
-            );
+            println!("{}", "─".repeat(78).bright_black());
         } else {
             println!("{}", "─".repeat(78));
             println!("{}", title);
@@ -941,7 +935,11 @@ impl OutputFormatter {
         let old_str = old_value.unwrap_or("(not set)");
         let new_str = new_value.unwrap_or("(not set)");
 
-        let force_marker = if forces_replacement { " # forces replacement" } else { "" };
+        let force_marker = if forces_replacement {
+            " # forces replacement"
+        } else {
+            ""
+        };
 
         if self.use_color {
             let arrow = "→".bright_black();
@@ -976,10 +974,7 @@ impl OutputFormatter {
 
         println!();
         if self.use_color {
-            println!(
-                "{}",
-                "─".repeat(78).bright_black()
-            );
+            println!("{}", "─".repeat(78).bright_black());
 
             let total = to_add + to_change + to_destroy;
             if total == 0 {

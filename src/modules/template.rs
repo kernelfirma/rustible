@@ -10,7 +10,7 @@ use super::{
 use crate::connection::TransferOptions;
 use crate::template::TEMPLATE_ENGINE;
 use crate::utils::shell_escape;
-use serde::ser::{Serialize, Serializer, SerializeMap};
+use serde::ser::{Serialize, SerializeMap, Serializer};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 #[cfg(unix)]
