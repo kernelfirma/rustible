@@ -11,7 +11,7 @@ use crate::connection::TransferOptions;
 use crate::template::TEMPLATE_ENGINE;
 use crate::utils::shell_escape;
 use serde::ser::{Serialize, SerializeMap, Serializer};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -30,21 +30,33 @@ impl<'a> Serialize for MergedContext<'a> {
     where
         S: Serializer,
     {
-        // Use BTreeSet for deterministic order of keys
-        let mut keys: BTreeSet<&str> = BTreeSet::new();
+        // Calculate estimated capacity to avoid reallocations
+        // extra_vars + facts + vars + 1 (ansible_facts)
+        let capacity = self.vars.len()
+            + self.facts.len()
+            + self.extra_vars.and_then(|v| v.as_object()).map(|o| o.len()).unwrap_or(0)
+            + 1;
+
+        // Use Vec with sort/dedup instead of BTreeSet for better performance (less allocation)
+        // while maintaining deterministic order
+        let mut keys: Vec<&str> = Vec::with_capacity(capacity);
 
         if let Some(serde_json::Value::Object(obj)) = self.extra_vars {
             keys.extend(obj.keys().map(|s| s.as_str()));
         }
 
         // Always include ansible_facts key
-        keys.insert("ansible_facts");
+        keys.push("ansible_facts");
 
         // Add facts keys
         keys.extend(self.facts.keys().map(|s| s.as_str()));
 
         // Add vars keys
         keys.extend(self.vars.keys().map(|s| s.as_str()));
+
+        // Sort and deduplicate to ensure unique keys in deterministic order
+        keys.sort_unstable();
+        keys.dedup();
 
         let mut map = serializer.serialize_map(Some(keys.len()))?;
 

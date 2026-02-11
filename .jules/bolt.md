@@ -26,3 +26,7 @@
 ## 2024-05-26 - [File Module Syscall Reduction]
 **Learning:** Recursive file operations using `walkdir` can trigger excessive syscalls if internal helpers (`set_permissions`, `set_owner`) re-stat the file. Furthermore, checking global system state (like `sestatus`) inside a file loop spawns a subprocess for every file, causing massive slowdowns.
 **Action:** Reuse `metadata` obtained from `walkdir` or a single `stat` call across multiple attribute setters. Cache system checks (like SELinux status) outside the recursive loop.
+
+## 2024-05-27 - [Optimized Context Serialization]
+**Learning:** Using `BTreeSet<&str>` to sort and deduplicate keys for deterministic serialization of merged contexts is significantly slower (~15%) than using `Vec<&str>` with `sort_unstable` and `dedup`, due to the overhead of tree node allocations and pointer chasing.
+**Action:** When preparing a list of keys for serialization where the number of keys is moderate to large (e.g. merging vars + facts), prefer flat `Vec` with `sort_unstable` and `dedup` over `BTreeSet`. Pre-calculate capacity using `Vec::with_capacity` to avoid reallocations.
