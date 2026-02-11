@@ -114,7 +114,7 @@ impl OutputFormatter {
             return;
         }
 
-        let line = "=".repeat(title.len() + 4);
+        let line = "─".repeat(title.len() + 4);
         if self.use_color {
             println!("\n{}", line.bright_blue());
             println!("{}", format!("  {}  ", title).bright_blue().bold());
@@ -734,7 +734,7 @@ impl OutputFormatter {
                     "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}",
                 )
                 .unwrap()
-                .progress_chars("#>-"),
+                .progress_chars("━╸ "),
         );
         pb.set_message(message.to_string());
 
@@ -753,11 +753,12 @@ impl OutputFormatter {
 
         sp.set_style(
             ProgressStyle::default_spinner()
+                .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
                 .template("{spinner:.green} {msg} {elapsed}")
                 .unwrap(),
         );
         sp.set_message(message.to_string());
-        sp.enable_steady_tick(Duration::from_millis(100));
+        sp.enable_steady_tick(Duration::from_millis(80));
 
         Some(sp)
     }
