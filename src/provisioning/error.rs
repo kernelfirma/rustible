@@ -120,6 +120,18 @@ pub enum ProvisioningError {
     /// Serialization error
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    /// Lifecycle prevent_destroy violation
+    #[error("Cannot destroy resource {resource}: prevent_destroy is set")]
+    PreventDestroyViolation { resource: String },
+
+    /// Blast radius exceeded
+    #[error("Blast radius exceeded: {message}")]
+    BlastRadiusExceeded { message: String },
+
+    /// State move failed
+    #[error("State move failed: {message}")]
+    StateMoveFailed { message: String },
 }
 
 impl ProvisioningError {

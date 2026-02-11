@@ -88,6 +88,10 @@ pub struct InfrastructureConfig {
     /// Local settings
     #[serde(default)]
     pub locals: HashMap<String, Value>,
+
+    /// Moved blocks for resource address refactoring
+    #[serde(default)]
+    pub moved: Vec<super::moved::MovedBlock>,
 }
 
 /// Configuration for an output value
@@ -130,6 +134,7 @@ impl Default for InfrastructureConfig {
             outputs: HashMap::new(),
             terraform: None,
             locals: HashMap::new(),
+            moved: Vec::new(),
         }
     }
 }
@@ -813,6 +818,9 @@ impl InfrastructureConfig {
         for (name, value) in other.locals {
             self.locals.insert(name, value);
         }
+
+        // Merge moved blocks
+        self.moved.extend(other.moved);
 
         // Take terraform config from other if this doesn't have one
         if self.terraform.is_none() {

@@ -18,6 +18,12 @@
 #[cfg(feature = "aws")]
 pub mod aws;
 
+#[cfg(all(feature = "azure", feature = "experimental"))]
+pub mod azure;
+
+#[cfg(all(feature = "gcp", feature = "experimental"))]
+pub mod gcp;
+
 #[cfg(feature = "redfish")]
 pub mod redfish;
 

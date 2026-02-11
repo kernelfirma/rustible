@@ -47,6 +47,7 @@
 pub mod cluster;
 pub mod controller;
 pub mod distribution;
+pub mod fanout;
 pub mod observability;
 pub mod raft;
 pub mod recovery;

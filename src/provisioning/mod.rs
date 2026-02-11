@@ -125,19 +125,31 @@
 //!     dynamodb_table: terraform-locks
 //! ```
 
+pub mod admission;
+pub mod canary;
+pub mod checkpoint;
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod guardrails;
+pub mod lifecycle;
+pub mod moved;
 pub mod plan;
+pub mod provider_lockfile;
 pub mod providers;
 pub mod registry;
 pub mod resolver;
 pub mod resources;
+pub mod rollback;
 pub mod state;
 pub mod state_backends;
+pub mod state_encryption;
 pub mod state_lock;
+pub mod state_ops;
+pub mod state_shard;
 pub mod template_functions;
 pub mod traits;
+pub mod workspace;
 
 // Re-export commonly used types
 pub use config::{DependencyEdge, InfrastructureConfig, ReferenceType};

@@ -54,6 +54,9 @@ pub enum ProvisionCommands {
 
     /// Initialize provisioning for a project
     Init(InitArgs),
+
+    /// Manage provisioning workspaces
+    Workspace(WorkspaceArgs),
 }
 
 /// Arguments for plan command
@@ -122,6 +125,42 @@ pub struct ApplyArgs {
     /// Skip state locking
     #[arg(long)]
     pub no_lock: bool,
+
+    /// Apply a previously saved plan file instead of generating a new one
+    #[arg(long)]
+    pub plan: Option<PathBuf>,
+
+    /// Resume a previously interrupted apply from checkpoint
+    #[arg(long)]
+    pub resume: bool,
+
+    /// Validate provider lockfile (fail if not frozen)
+    #[arg(long)]
+    pub frozen: bool,
+
+    /// Encrypt state at rest
+    #[arg(long)]
+    pub encrypt_state: bool,
+
+    /// Maximum number of resources that can be destroyed (blast radius)
+    #[arg(long)]
+    pub max_destroy_count: Option<usize>,
+
+    /// Maximum percentage of resources that can be destroyed
+    #[arg(long)]
+    pub max_destroy_pct: Option<f64>,
+
+    /// Number of resources to apply in canary phase
+    #[arg(long)]
+    pub canary_count: Option<usize>,
+
+    /// Percentage of resources to apply in canary phase
+    #[arg(long)]
+    pub canary_pct: Option<f64>,
+
+    /// Path to admission policy file (YAML/JSON)
+    #[arg(long)]
+    pub policy_file: Option<PathBuf>,
 }
 
 /// Arguments for destroy command
@@ -248,6 +287,41 @@ pub struct ImportTerraformArgs {
     /// Backend configuration file (JSON/YAML)
     #[arg(long)]
     pub backend_config: Option<PathBuf>,
+}
+
+/// Arguments for workspace command
+#[derive(Parser, Debug, Clone)]
+pub struct WorkspaceArgs {
+    /// Workspace subcommand
+    #[command(subcommand)]
+    pub command: WorkspaceCommands,
+}
+
+/// Workspace subcommands
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorkspaceCommands {
+    /// List all workspaces
+    List,
+    /// Create a new workspace
+    New {
+        /// Workspace name
+        name: String,
+    },
+    /// Select a workspace
+    Select {
+        /// Workspace name
+        name: String,
+    },
+    /// Delete a workspace
+    Delete {
+        /// Workspace name
+        name: String,
+        /// Skip confirmation
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show current workspace
+    Show,
 }
 
 /// Arguments for init command
@@ -1138,6 +1212,71 @@ outputs: {}
     }
 }
 
+impl WorkspaceArgs {
+    /// Execute the workspace command
+    #[cfg(feature = "provisioning")]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        use rustible::provisioning::workspace::WorkspaceManager;
+
+        let manager = WorkspaceManager::new(".rustible/workspaces");
+
+        match &self.command {
+            WorkspaceCommands::List => {
+                ctx.output.banner("WORKSPACES");
+                let workspaces = manager.list().await?;
+                let current = manager.current().await.unwrap_or_default();
+
+                for ws in &workspaces {
+                    let marker = if ws == &current { " *" } else { "" };
+                    ctx.output.info(&format!("  {}{}", ws, marker));
+                }
+
+                if workspaces.is_empty() {
+                    ctx.output.info("  (no workspaces; using default)");
+                }
+                Ok(0)
+            }
+            WorkspaceCommands::New { name } => {
+                ctx.output.banner("WORKSPACE NEW");
+                manager.create(name).await?;
+                ctx.output.info(&format!("Created and switched to workspace \"{}\".", name));
+                Ok(0)
+            }
+            WorkspaceCommands::Select { name } => {
+                ctx.output.banner("WORKSPACE SELECT");
+                manager.select(name).await?;
+                ctx.output.info(&format!("Switched to workspace \"{}\".", name));
+                Ok(0)
+            }
+            WorkspaceCommands::Delete { name, force } => {
+                ctx.output.banner("WORKSPACE DELETE");
+                if !force {
+                    ctx.output.warning(&format!(
+                        "This will delete workspace \"{}\". Use --force to confirm.",
+                        name
+                    ));
+                    return Ok(1);
+                }
+                manager.delete(name).await?;
+                ctx.output.info(&format!("Deleted workspace \"{}\".", name));
+                Ok(0)
+            }
+            WorkspaceCommands::Show => {
+                let current = manager.current().await.unwrap_or_else(|_| "default".to_string());
+                ctx.output.info(&current);
+                Ok(0)
+            }
+        }
+    }
+
+    #[cfg(not(feature = "provisioning"))]
+    pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output
+            .error("Provisioning feature not enabled. Rebuild with --features provisioning");
+        Ok(1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1942,6 +2081,15 @@ mod tests {
         assert!(cli.args.state.is_none());
         assert!(!cli.args.no_backup);
         assert!(!cli.args.no_lock);
+        assert!(cli.args.plan.is_none());
+        assert!(!cli.args.resume);
+        assert!(!cli.args.frozen);
+        assert!(!cli.args.encrypt_state);
+        assert!(cli.args.max_destroy_count.is_none());
+        assert!(cli.args.max_destroy_pct.is_none());
+        assert!(cli.args.canary_count.is_none());
+        assert!(cli.args.canary_pct.is_none());
+        assert!(cli.args.policy_file.is_none());
     }
 
     #[test]
@@ -2019,6 +2167,15 @@ mod tests {
             backend_config: None,
             no_backup: true,
             no_lock: true,
+            plan: None,
+            resume: false,
+            frozen: false,
+            encrypt_state: false,
+            max_destroy_count: None,
+            max_destroy_pct: None,
+            canary_count: None,
+            canary_pct: None,
+            policy_file: None,
         };
         let cloned = args.clone();
         assert_eq!(cloned.parallelism, args.parallelism);

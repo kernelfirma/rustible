@@ -461,6 +461,28 @@ impl ExecutionPlan {
     pub fn add_warning(&mut self, warning: impl Into<String>) {
         self.warnings.push(warning.into());
     }
+
+    /// Save the plan to a file for later apply
+    pub async fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> ProvisioningResult<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| ProvisioningError::SerializationError(e.to_string()))?;
+        tokio::fs::write(path, json).await.map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!("Failed to save plan: {}", e))
+        })?;
+        Ok(())
+    }
+
+    /// Load a plan from a file
+    pub async fn load_from_file(
+        path: impl AsRef<std::path::Path>,
+    ) -> ProvisioningResult<Self> {
+        let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!("Failed to load plan: {}", e))
+        })?;
+        let plan: Self = serde_json::from_str(&content)
+            .map_err(|e| ProvisioningError::SerializationError(e.to_string()))?;
+        Ok(plan)
+    }
 }
 
 // ============================================================================
