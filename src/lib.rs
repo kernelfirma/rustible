@@ -883,6 +883,13 @@ pub mod native;
 /// state, secrets, and inventory between tenants in shared environments.
 pub mod tenant;
 
+/// Migration framework for importing infrastructure from external tools.
+///
+/// This module provides parsers and mappers for migrating configuration
+/// data from other infrastructure management systems (e.g. Warewulf, xCAT)
+/// into Rustible's inventory and metadata formats.
+pub mod migration;
+
 /// Agent mode for persistent target execution.
 ///
 /// This module provides an agent that can be deployed to target hosts for
