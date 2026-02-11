@@ -1069,13 +1069,9 @@ impl TlsValidationConfig {
     pub fn to_reqwest_config(&self) -> reqwest::ClientBuilder {
         let mut builder = reqwest::Client::builder();
 
-        if !self.require_valid_cert {
-            builder = builder.danger_accept_invalid_certs(true);
-        }
+        builder = builder.danger_accept_invalid_certs(!self.require_valid_cert);
 
-        if !self.verify_hostname {
-            builder = builder.danger_accept_invalid_hostnames(true);
-        }
+        builder = builder.danger_accept_invalid_hostnames(!self.verify_hostname);
 
         // Add CA bundle if specified
         if let Some(ca_path) = &self.ca_bundle {
@@ -1272,7 +1268,7 @@ impl AuditEvent {
         let session_info = self
             .session_id
             .as_ref()
-            .map(|s| format!(" session={}", s))
+            .map(|_| " session=[REDACTED]".to_string())
             .unwrap_or_default();
         let error_info = self
             .error

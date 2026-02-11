@@ -546,11 +546,9 @@ impl EosConfigModule {
     fn build_eapi_client(config: &EosConfig) -> ModuleResult<Client> {
         let builder = Client::builder().timeout(Duration::from_secs(config.timeout));
 
-        let client = if config.eapi_use_ssl && !config.eapi_validate_certs {
-            builder.danger_accept_invalid_certs(true).build()
-        } else {
-            builder.build()
-        };
+        let client = builder
+            .danger_accept_invalid_certs(!config.eapi_validate_certs)
+            .build();
 
         client.map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))

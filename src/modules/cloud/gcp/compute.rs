@@ -426,7 +426,7 @@ impl ComputeInstanceConfig {
 }
 
 /// Instance information returned from GCP API
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InstanceInfo {
     /// Instance ID
     pub id: String,
@@ -452,6 +452,28 @@ pub struct InstanceInfo {
     pub metadata: HashMap<String, String>,
     /// Self-link URL
     pub self_link: String,
+}
+
+impl std::fmt::Debug for InstanceInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InstanceInfo")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("status", &self.status)
+            .field("machine_type", &self.machine_type)
+            .field("zone", &self.zone)
+            .field("creation_timestamp", &self.creation_timestamp)
+            .field("network_interfaces", &self.network_interfaces)
+            .field("labels", &self.labels)
+            .field("tags", &self.tags)
+            .field(
+                "service_accounts",
+                &self.service_accounts.iter().map(|_| "[REDACTED]").collect::<Vec<_>>(),
+            )
+            .field("metadata", &self.metadata)
+            .field("self_link", &self.self_link)
+            .finish()
+    }
 }
 
 /// Network interface information

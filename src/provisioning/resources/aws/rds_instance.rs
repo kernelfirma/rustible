@@ -201,7 +201,7 @@ impl RdsInstanceConfig {
 }
 
 /// Computed attributes returned after RDS instance operations
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct RdsInstanceState {
     /// DB instance identifier
     pub id: String,
@@ -266,6 +266,35 @@ pub struct RdsInstanceState {
     /// Tags
     #[serde(default)]
     pub tags: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for RdsInstanceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RdsInstanceState")
+            .field("id", &self.id)
+            .field("arn", &self.arn)
+            .field("address", &self.address)
+            .field("port", &self.port)
+            .field("status", &self.status)
+            .field("engine", &self.engine)
+            .field("engine_version", &self.engine_version)
+            .field("instance_class", &self.instance_class)
+            .field("allocated_storage", &self.allocated_storage)
+            .field("username", &self.username.as_ref().map(|_| "[REDACTED]"))
+            .field("db_name", &self.db_name)
+            .field("availability_zone", &self.availability_zone)
+            .field("multi_az", &self.multi_az)
+            .field("vpc_id", &self.vpc_id)
+            .field("db_subnet_group_name", &self.db_subnet_group_name)
+            .field("vpc_security_group_ids", &self.vpc_security_group_ids)
+            .field("storage_encrypted", &self.storage_encrypted)
+            .field("kms_key_id", &self.kms_key_id)
+            .field("resource_id", &self.resource_id)
+            .field("ca_cert_identifier", &self.ca_cert_identifier)
+            .field("hosted_zone_id", &self.hosted_zone_id)
+            .field("tags", &self.tags)
+            .finish()
+    }
 }
 
 // ============================================================================

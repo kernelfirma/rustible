@@ -522,22 +522,13 @@ impl NxosConfigModule {
         let url = format!("{}://{}:{}/ins", scheme, host, port);
 
         // Build client with appropriate SSL settings
-        let client = if config.nxapi_use_ssl && !config.nxapi_validate_certs {
-            Client::builder()
-                .danger_accept_invalid_certs(true)
-                .timeout(Duration::from_secs(config.timeout))
-                .build()
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
-                })?
-        } else {
-            Client::builder()
-                .timeout(Duration::from_secs(config.timeout))
-                .build()
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
-                })?
-        };
+        let client = Client::builder()
+            .danger_accept_invalid_certs(!config.nxapi_validate_certs)
+            .timeout(Duration::from_secs(config.timeout))
+            .build()
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         // Join commands with semicolons for batch execution
         let command_str = commands.join(" ; ");
@@ -649,22 +640,13 @@ impl NxosConfigModule {
         };
         let url = format!("{}://{}:{}/ins", scheme, host, port);
 
-        let client = if config.nxapi_use_ssl && !config.nxapi_validate_certs {
-            Client::builder()
-                .danger_accept_invalid_certs(true)
-                .timeout(Duration::from_secs(config.timeout))
-                .build()
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
-                })?
-        } else {
-            Client::builder()
-                .timeout(Duration::from_secs(config.timeout))
-                .build()
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
-                })?
-        };
+        let client = Client::builder()
+            .danger_accept_invalid_certs(!config.nxapi_validate_certs)
+            .timeout(Duration::from_secs(config.timeout))
+            .build()
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         let request = NxApiRequest {
             ins_api: NxApiInsApi {

@@ -170,9 +170,7 @@ impl GalaxyClient {
             .pool_max_idle_per_host(10)
             .tcp_keepalive(Duration::from_secs(60));
 
-        if config.ignore_certs {
-            builder = builder.danger_accept_invalid_certs(true);
-        }
+        builder = builder.danger_accept_invalid_certs(config.ignore_certs);
 
         let client = builder
             .build()

@@ -504,7 +504,7 @@ impl SshConnection {
         // Build the full command with options
         let full_command = Self::build_command(command, options)?;
 
-        trace!(command = %full_command, "Executing remote command");
+        trace!(command_len = full_command.len(), "Executing remote command");
 
         // Set environment variables
         for (key, value) in &options.env {

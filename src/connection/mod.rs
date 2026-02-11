@@ -347,7 +347,7 @@ impl CommandResult {
 }
 
 /// Options for command execution
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct ExecuteOptions {
     /// Working directory for the command
     pub cwd: Option<String>,
@@ -363,6 +363,23 @@ pub struct ExecuteOptions {
     pub escalate_method: Option<String>,
     /// Password for privilege escalation operations
     pub escalate_password: Option<String>,
+}
+
+impl std::fmt::Debug for ExecuteOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecuteOptions")
+            .field("cwd", &self.cwd)
+            .field("env", &self.env)
+            .field("timeout", &self.timeout)
+            .field("escalate", &self.escalate)
+            .field("escalate_user", &self.escalate_user)
+            .field("escalate_method", &self.escalate_method)
+            .field(
+                "escalate_password",
+                &self.escalate_password.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 impl ExecuteOptions {

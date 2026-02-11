@@ -244,7 +244,7 @@ impl Default for ConnectionDefaults {
 }
 
 /// Host-specific configuration
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct HostConfig {
     /// Actual hostname or IP address
     pub hostname: Option<String>,
@@ -300,6 +300,30 @@ pub struct HostConfig {
     /// Extra SSH options
     #[serde(default)]
     pub options: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for HostConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HostConfig")
+            .field("hostname", &self.hostname)
+            .field("port", &self.port)
+            .field("user", &self.user)
+            .field("identity_file", &self.identity_file)
+            .field("password", &self.password.as_ref().map(|_| "[REDACTED]"))
+            .field("connect_timeout", &self.connect_timeout)
+            .field("retries", &self.retries)
+            .field("retry_delay", &self.retry_delay)
+            .field("connection", &self.connection)
+            .field("proxy_jump", &self.proxy_jump)
+            .field("forward_agent", &self.forward_agent)
+            .field("compression", &self.compression)
+            .field("server_alive_interval", &self.server_alive_interval)
+            .field("server_alive_count_max", &self.server_alive_count_max)
+            .field("strict_host_key_checking", &self.strict_host_key_checking)
+            .field("user_known_hosts_file", &self.user_known_hosts_file)
+            .field("options", &self.options)
+            .finish()
+    }
 }
 
 impl HostConfig {
