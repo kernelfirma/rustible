@@ -160,8 +160,8 @@ impl DockerVolumeModule {
     /// Create volume
     async fn create_volume(docker: &Docker, config: &VolumeConfig) -> ModuleResult<()> {
         let options = CreateVolumeOptions {
-            name: config.name.as_str(),
-            driver: config.driver.as_str(),
+            name: config.name.clone(),
+            driver: config.driver.clone(),
             driver_opts: config.driver_options.clone(),
             labels: config.labels.clone(),
         };

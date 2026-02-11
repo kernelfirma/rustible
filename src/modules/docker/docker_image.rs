@@ -301,7 +301,7 @@ impl DockerImageModule {
             forcerm: config.build.forcerm,
             buildargs: config.build.args.clone(),
             labels: config.build.labels.clone(),
-            target: config.build.target.clone().unwrap_or_default(),
+            // Note: bollard 0.16 does not expose a `target` field on BuildImageOptions
             ..Default::default()
         };
 
@@ -475,11 +475,18 @@ impl DockerImageModule {
                                         e
                                     ))
                                 })?;
+                                let bytes = {
+                                    use std::io::Read;
+                                    let mut buf = Vec::new();
+                                    let mut file = file;
+                                    file.read_to_end(&mut buf).map_err(|e| {
+                                        ModuleError::ExecutionFailed(format!("Failed to read archive: {}", e))
+                                    })?;
+                                    bytes::Bytes::from(buf)
+                                };
                                 let mut stream = docker.import_image(
                                     bollard::image::ImportImageOptions { quiet: true },
-                                    hyper::Body::wrap_stream(tokio_util::io::ReaderStream::new(
-                                        tokio::fs::File::from_std(file),
-                                    )),
+                                    bytes,
                                     None,
                                 );
                                 while let Some(result) = stream.next().await {

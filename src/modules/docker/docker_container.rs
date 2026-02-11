@@ -564,7 +564,7 @@ impl DockerContainerModule {
         timeout: Option<i64>,
     ) -> ModuleResult<()> {
         let options = RestartContainerOptions {
-            t: timeout.unwrap_or(10) as i64,
+            t: timeout.unwrap_or(10) as isize,
         };
         docker
             .restart_container(name, Some(options))

@@ -307,10 +307,10 @@ impl DockerNetworkModule {
         });
 
         let options = CreateNetworkOptions {
-            name: config.name.as_str(),
-            driver: config.driver.as_str(),
+            name: config.name.clone(),
+            driver: config.driver.as_str().to_string(),
             options: config.driver_options.clone(),
-            ipam,
+            ipam: ipam.unwrap_or_default(),
             internal: config.internal,
             attachable: config.attachable,
             labels: config.labels.clone(),
