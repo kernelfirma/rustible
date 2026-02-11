@@ -280,31 +280,23 @@ fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
         )))
     };
 
-    // If it's an absolute path, verify it falls under a search path before
-    // performing any filesystem operations (prevents information disclosure).
+    // If it's an absolute path, reconstruct it from a trusted base + relative
+    // suffix so that only sanitised paths reach filesystem operations.
     if playbook_path.is_absolute() {
-        let mut in_search_path = false;
         for base in search_paths {
             if let Ok(canonical_base) = Path::new(base).canonicalize() {
-                if playbook_path.starts_with(&canonical_base) {
-                    in_search_path = true;
-                    break;
+                if let Ok(relative) = playbook_path.strip_prefix(&canonical_base) {
+                    // Reconstruct from trusted base to avoid tainted path in fs ops
+                    let safe_path = canonical_base.join(relative);
+                    if safe_path.exists() {
+                        validate_path(&safe_path)?;
+                        return Ok(safe_path.to_string_lossy().to_string());
+                    }
                 }
             }
         }
-        if !in_search_path {
-            return Err(ApiError::Forbidden(format!(
-                "Access denied to playbook outside search paths: {}",
-                playbook_path.display()
-            )));
-        }
-        if playbook_path.exists() {
-            // Re-validate with canonicalize to catch symlink escapes
-            validate_path(playbook_path)?;
-            return Ok(playbook.to_string());
-        }
         return Err(ApiError::NotFound(format!(
-            "Playbook not found: {}",
+            "Playbook not found or access denied: {}",
             playbook
         )));
     }
