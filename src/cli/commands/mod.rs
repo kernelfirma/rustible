@@ -8,6 +8,8 @@ pub mod fleet;
 pub mod galaxy;
 pub mod inventory;
 pub mod lock;
+#[cfg(feature = "provisioning")]
+pub mod migrate;
 pub mod provider;
 pub mod provision;
 pub mod provisioner;
