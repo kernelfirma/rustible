@@ -717,10 +717,8 @@ impl DriftArgs {
         ctx.output.plan_header("Drift Detection Report");
 
         ctx.output.info(&format!("Playbook: {}", report.playbook));
-        ctx.output.info(&format!(
-            "Hosts: {}",
-            report.hosts_checked.join(", ")
-        ));
+        ctx.output
+            .info(&format!("Hosts: {}", report.hosts_checked.join(", ")));
         ctx.output.info(&format!(
             "Timestamp: {}",
             report.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
@@ -738,7 +736,8 @@ impl DriftArgs {
         // Print resource changes if there are any drifted/missing resources
         if report.summary.drifted > 0 || report.summary.missing > 0 || report.summary.extra > 0 {
             println!();
-            ctx.output.info("Rustible will perform the following actions to remediate drift:");
+            ctx.output
+                .info("Rustible will perform the following actions to remediate drift:");
             println!();
 
             // Sort hosts for consistent output
@@ -764,7 +763,8 @@ impl DriftArgs {
                 }
 
                 // Print host header
-                ctx.output.info(&format!("# {} ({})", host, relevant_findings.len()));
+                ctx.output
+                    .info(&format!("# {} ({})", host, relevant_findings.len()));
                 println!();
 
                 for finding in relevant_findings {
@@ -816,9 +816,9 @@ impl DriftArgs {
 
         // Print Terraform-style summary
         ctx.output.plan_summary(
-            report.summary.missing,  // to_add (missing resources need to be created)
-            report.summary.drifted,  // to_change (drifted resources need updates)
-            report.summary.extra,    // to_destroy (extra resources should be removed)
+            report.summary.missing, // to_add (missing resources need to be created)
+            report.summary.drifted, // to_change (drifted resources need updates)
+            report.summary.extra,   // to_destroy (extra resources should be removed)
         );
 
         // Additional statistics

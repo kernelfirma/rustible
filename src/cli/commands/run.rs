@@ -7,12 +7,13 @@ use crate::cli::json_output::{timestamp, JsonDiffOutput, JsonEvent, JsonOutput, 
 use crate::cli::output::{HostStats, RecapStats, TaskStatus};
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use dialoguer::theme::ColorfulTheme;
 use indexmap::IndexMap;
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, IsTerminal, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -611,7 +612,11 @@ impl RunArgs {
                         total_tasks: 0,
                     },
                     hosts: HashMap::new(),
-                    plan: if plan_lines.is_empty() { None } else { Some(plan_lines) },
+                    plan: if plan_lines.is_empty() {
+                        None
+                    } else {
+                        Some(plan_lines)
+                    },
                 };
 
                 bundle.finish(&summary)?;
@@ -624,6 +629,23 @@ impl RunArgs {
             ctx.output
                 .warning("Running in CHECK MODE - no changes will be made");
         }
+
+        // Ask for become password if requested
+        let become_password = if self.ask_become_pass {
+            if std::io::stdin().is_terminal() {
+                Some(
+                    dialoguer::Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("🔐 BECOME password")
+                        .interact()?,
+                )
+            } else {
+                ctx.output
+                    .warning("Cannot ask for become password: stdin is not a terminal");
+                None
+            }
+        } else {
+            None
+        };
 
         // Build executor configuration from CLI args
         let executor_config = ExecutorConfig {
@@ -641,7 +663,7 @@ impl RunArgs {
             r#become: self.r#become,
             become_method: self.become_method.clone(),
             become_user: self.become_user.clone(),
-            become_password: None,
+            become_password,
             distributed: self.distributed,
             workers: self.workers,
             distribution_strategy: self.distribution_strategy.clone(),
@@ -836,22 +858,22 @@ impl RunArgs {
                 ctx,
                 &mut plan_lines,
                 format!(
-                "{}[Play {}/{}] {} {}",
-                if play_idx > 0 { "\n" } else { "" },
-                play_idx + 1,
-                plays.len(),
-                "*".to_string(),
-                play_name
+                    "{}[Play {}/{}] {} {}",
+                    if play_idx > 0 { "\n" } else { "" },
+                    play_idx + 1,
+                    plays.len(),
+                    "*".to_string(),
+                    play_name
                 ),
             );
             emit_plan_line(
                 ctx,
                 &mut plan_lines,
                 format!(
-                "  Hosts: {} ({} host{})",
-                hosts_pattern,
-                hosts.len(),
-                if hosts.len() == 1 { "" } else { "s" }
+                    "  Hosts: {} ({} host{})",
+                    hosts_pattern,
+                    hosts.len(),
+                    if hosts.len() == 1 { "" } else { "s" }
                 ),
             );
 
@@ -936,9 +958,9 @@ impl RunArgs {
                 ctx,
                 &mut plan_lines,
                 format!(
-                "  Tasks: {} task{}",
-                total_play_tasks,
-                if total_play_tasks == 1 { "" } else { "s" }
+                    "  Tasks: {} task{}",
+                    total_play_tasks,
+                    if total_play_tasks == 1 { "" } else { "s" }
                 ),
             );
 
@@ -968,11 +990,11 @@ impl RunArgs {
                     ctx,
                     plan_lines,
                     format!(
-                    "\n  {} Task {}/{}: {}",
-                    ">".to_string(),
-                    task_num,
-                    total,
-                    task_name
+                        "\n  {} Task {}/{}: {}",
+                        ">".to_string(),
+                        task_num,
+                        total,
+                        task_name
                     ),
                 );
                 emit_plan_line(ctx, plan_lines, format!("    Module: {}", module));
@@ -996,7 +1018,11 @@ impl RunArgs {
                         vec![]
                     };
                     if !handlers.is_empty() {
-                        emit_plan_line(ctx, plan_lines, format!("    Notify: {}", handlers.join(", ")));
+                        emit_plan_line(
+                            ctx,
+                            plan_lines,
+                            format!("    Notify: {}", handlers.join(", ")),
+                        );
                     }
                 }
             };
@@ -1004,7 +1030,16 @@ impl RunArgs {
             // Show pre_tasks
             for task in &pre_tasks {
                 task_num += 1;
-                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(
+                    ctx,
+                    &mut plan_lines,
+                    task,
+                    task_num,
+                    total_play_tasks,
+                    &hosts,
+                    &vars,
+                    self,
+                );
             }
 
             // Show role tasks
@@ -1050,13 +1085,31 @@ impl RunArgs {
             // Show tasks
             for task in &tasks {
                 task_num += 1;
-                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(
+                    ctx,
+                    &mut plan_lines,
+                    task,
+                    task_num,
+                    total_play_tasks,
+                    &hosts,
+                    &vars,
+                    self,
+                );
             }
 
             // Show post_tasks
             for task in &post_tasks {
                 task_num += 1;
-                show_task(ctx, &mut plan_lines, task, task_num, total_play_tasks, &hosts, &vars, self);
+                show_task(
+                    ctx,
+                    &mut plan_lines,
+                    task,
+                    task_num,
+                    total_play_tasks,
+                    &hosts,
+                    &vars,
+                    self,
+                );
             }
         }
 
@@ -1145,11 +1198,11 @@ impl RunArgs {
             ctx,
             &mut plan_lines,
             format!(
-            "Plan: {} task{} across {} host{}",
-            total_tasks,
-            if total_tasks == 1 { "" } else { "s" },
-            total_hosts.len(),
-            if total_hosts.len() == 1 { "" } else { "s" }
+                "Plan: {} task{} across {} host{}",
+                total_tasks,
+                if total_tasks == 1 { "" } else { "s" },
+                total_hosts.len(),
+                if total_hosts.len() == 1 { "" } else { "s" }
             ),
         );
 

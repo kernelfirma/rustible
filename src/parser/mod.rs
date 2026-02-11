@@ -481,17 +481,47 @@ impl Parser {
         });
 
         // Hash filters
-        env.add_filter("hash", |s: String, algorithm: Option<String>| -> String {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
+        env.add_filter(
+            "hash",
+            |s: String, algorithm: Option<String>| -> Result<String, minijinja::Error> {
+                use sha1::Sha1;
+                use sha2::{Digest, Sha256, Sha512};
 
-            let _algo = algorithm.unwrap_or_else(|| "sha256".to_string());
-            // For simplicity, use a basic hash for non-crypto purposes.
-            // In production, you'd use proper crypto hash functions.
-            let mut hasher = DefaultHasher::new();
-            s.hash(&mut hasher);
-            format!("{:x}", hasher.finish())
-        });
+                let algo = algorithm.unwrap_or_else(|| "sha256".to_string());
+                let algo_lower = algo.to_lowercase();
+
+                match algo_lower.as_str() {
+                    "sha256" => {
+                        let mut hasher = Sha256::new();
+                        hasher.update(s.as_bytes());
+                        Ok(format!("{:x}", hasher.finalize()))
+                    }
+                    "sha512" => {
+                        let mut hasher = Sha512::new();
+                        hasher.update(s.as_bytes());
+                        Ok(format!("{:x}", hasher.finalize()))
+                    }
+                    "md5" => {
+                        let digest = md5::compute(s.as_bytes());
+                        Ok(format!("{:x}", digest))
+                    }
+                    "sha1" => {
+                        let mut hasher = Sha1::new();
+                        hasher.update(s.as_bytes());
+                        Ok(format!("{:x}", hasher.finalize()))
+                    }
+                    "blake3" => {
+                        let mut hasher = blake3::Hasher::new();
+                        hasher.update(s.as_bytes());
+                        Ok(hasher.finalize().to_hex().to_string())
+                    }
+                    _ => Err(minijinja::Error::new(
+                        minijinja::ErrorKind::InvalidOperation,
+                        format!("Unsupported hash algorithm: {}", algo),
+                    )),
+                }
+            },
+        );
 
         // Quote filter for shell
         env.add_filter("quote", |s: String| -> String {
@@ -1389,5 +1419,46 @@ debug: true
             .render_template("{{ undefined_var | default('default_value') }}", &vars)
             .unwrap();
         assert_eq!(result, "default_value");
+    }
+}
+
+#[cfg(test)]
+mod hash_test {
+    use super::*;
+    use indexmap::IndexMap;
+
+    #[test]
+    fn test_hash_sha256_repro() {
+        let parser = Parser::new();
+        let vars = IndexMap::new();
+
+        // SHA256 of "hello"
+        let expected = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let template = "{{ 'hello' | hash('sha256') }}";
+
+        let result = parser.render_template(template, &vars).unwrap();
+        assert_eq!(result, expected);
+
+        // MD5 of "hello"
+        let expected_md5 = "5d41402abc4b2a76b9719d911017c592";
+        let template_md5 = "{{ 'hello' | hash('md5') }}";
+        let result_md5 = parser.render_template(template_md5, &vars).unwrap();
+        assert_eq!(result_md5, expected_md5);
+
+        // SHA1 of "hello"
+        let expected_sha1 = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d";
+        let template_sha1 = "{{ 'hello' | hash('sha1') }}";
+        let result_sha1 = parser.render_template(template_sha1, &vars).unwrap();
+        assert_eq!(result_sha1, expected_sha1);
+
+        // Default (SHA256)
+        let template_default = "{{ 'hello' | hash }}";
+        let result_default = parser.render_template(template_default, &vars).unwrap();
+        assert_eq!(result_default, expected);
+
+        // Unsupported
+        let template_bad = "{{ 'hello' | hash('unknown') }}";
+        let result_bad = parser.render_template(template_bad, &vars);
+        assert!(result_bad.is_err());
     }
 }

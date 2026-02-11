@@ -2816,8 +2816,7 @@ path: state.json
             .mount(&server)
             .await;
 
-        let backend = ConsulBackend::new("rustible/state".to_string())
-            .with_address(server.uri());
+        let backend = ConsulBackend::new("rustible/state".to_string()).with_address(server.uri());
 
         let loaded = backend.load().await.unwrap().unwrap();
         assert_eq!(loaded.resources.len(), 1);
@@ -2833,10 +2832,7 @@ path: state.json
 
         Mock::given(method("PUT"))
             .and(path("/v1/session/create"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_string(r#"{"ID":"session-123"}"#),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"ID":"session-123"}"#))
             .mount(&server)
             .await;
         Mock::given(method("PUT"))
@@ -2871,8 +2867,7 @@ path: state.json
             .mount(&server)
             .await;
 
-        let backend = ConsulBackend::new("rustible/state".to_string())
-            .with_address(server.uri());
+        let backend = ConsulBackend::new("rustible/state".to_string()).with_address(server.uri());
         let lock_backend = backend.lock_backend().unwrap();
 
         assert!(lock_backend

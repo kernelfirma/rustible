@@ -458,9 +458,10 @@ impl VaultClient for HttpVaultClient {
             request = request.header("X-Vault-Namespace", namespace);
         }
 
-        let response = request.send().await.map_err(|e| {
-            SecretError::Connection(format!("Failed to connect to Vault: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| SecretError::Connection(format!("Failed to connect to Vault: {}", e)))?;
 
         let status = response.status();
         if status == reqwest::StatusCode::NOT_FOUND {
@@ -524,14 +525,15 @@ impl VaultClient for HttpVaultClient {
 
         let client = reqwest::Client::new();
         let mut request = client
-            .request(reqwest::Method::from_bytes(b"LIST").unwrap_or(reqwest::Method::GET), &url)
+            .request(
+                reqwest::Method::from_bytes(b"LIST").unwrap_or(reqwest::Method::GET),
+                &url,
+            )
             .header("X-Vault-Token", token);
 
         // Fallback: use GET with list=true query param
         let url_with_list = format!("{}?list=true", url);
-        let mut request_fallback = client
-            .get(&url_with_list)
-            .header("X-Vault-Token", token);
+        let mut request_fallback = client.get(&url_with_list).header("X-Vault-Token", token);
 
         if let Some(ref namespace) = self.config.namespace {
             request = request.header("X-Vault-Namespace", namespace);
@@ -541,9 +543,10 @@ impl VaultClient for HttpVaultClient {
         // Try LIST method first, fall back to GET with list=true
         let response = match request.send().await {
             Ok(resp) if resp.status().is_success() => resp,
-            _ => request_fallback.send().await.map_err(|e| {
-                SecretError::Connection(format!("Failed to list secrets: {}", e))
-            })?,
+            _ => request_fallback
+                .send()
+                .await
+                .map_err(|e| SecretError::Connection(format!("Failed to list secrets: {}", e)))?,
         };
 
         let status = response.status();
@@ -562,10 +565,7 @@ impl VaultClient for HttpVaultClient {
             SecretError::Serialization(format!("Failed to parse Vault list response: {}", e))
         })?;
 
-        Ok(vault_response
-            .data
-            .and_then(|d| d.keys)
-            .unwrap_or_default())
+        Ok(vault_response.data.and_then(|d| d.keys).unwrap_or_default())
     }
 
     async fn put_secret(&self, path: &str, data: HashMap<String, String>) -> SecretResult<()> {
@@ -588,18 +588,16 @@ impl VaultClient for HttpVaultClient {
         };
 
         let client = reqwest::Client::new();
-        let mut request = client
-            .post(&url)
-            .header("X-Vault-Token", token)
-            .json(&body);
+        let mut request = client.post(&url).header("X-Vault-Token", token).json(&body);
 
         if let Some(ref namespace) = self.config.namespace {
             request = request.header("X-Vault-Namespace", namespace);
         }
 
-        let response = request.send().await.map_err(|e| {
-            SecretError::Connection(format!("Failed to write secret: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| SecretError::Connection(format!("Failed to write secret: {}", e)))?;
 
         let status = response.status();
         if status == reqwest::StatusCode::FORBIDDEN {
@@ -642,9 +640,10 @@ impl VaultClient for HttpVaultClient {
             request = request.header("X-Vault-Namespace", namespace);
         }
 
-        let response = request.send().await.map_err(|e| {
-            SecretError::Connection(format!("Failed to delete secret: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| SecretError::Connection(format!("Failed to delete secret: {}", e)))?;
 
         let status = response.status();
         if status == reqwest::StatusCode::NOT_FOUND {
@@ -701,7 +700,9 @@ impl VaultClient for HttpVaultClient {
         let status = response.status();
         match status.as_u16() {
             200 | 429 | 472 | 473 => Ok(true),
-            501 => Err(SecretError::Configuration("Vault is not initialized".into())),
+            501 => Err(SecretError::Configuration(
+                "Vault is not initialized".into(),
+            )),
             503 => Err(SecretError::Sealed("Vault is sealed".into())),
             _ => {
                 let body_text = response.text().await.unwrap_or_default();
@@ -968,11 +969,7 @@ mod tests {
             Ok(self.secrets.lock().unwrap().keys().cloned().collect())
         }
 
-        async fn put_secret(
-            &self,
-            path: &str,
-            data: HashMap<String, String>,
-        ) -> SecretResult<()> {
+        async fn put_secret(&self, path: &str, data: HashMap<String, String>) -> SecretResult<()> {
             self.secrets.lock().unwrap().insert(path.to_string(), data);
             Ok(())
         }
@@ -1040,10 +1037,7 @@ mod tests {
         let mut data = HashMap::new();
         data.insert("api_key".to_string(), "sk-12345".to_string());
 
-        provider
-            .put_secret("secret/data/api", data)
-            .await
-            .unwrap();
+        provider.put_secret("secret/data/api", data).await.unwrap();
 
         let secret = provider.get_secret("secret/data/api").await.unwrap();
         assert_eq!(secret.get_string("api_key").unwrap(), "sk-12345");

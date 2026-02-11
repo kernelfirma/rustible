@@ -42,25 +42,25 @@
 //! - Missing prerequisites → `ModuleError::ExecutionFailed` with install hint
 
 pub mod common;
-#[cfg(feature = "slurm")]
-pub mod slurm;
-pub mod lmod;
-pub mod mpi;
-#[cfg(feature = "gpu")]
-pub mod gpu;
-#[cfg(feature = "ofed")]
-pub mod ofed;
 #[cfg(feature = "parallel_fs")]
 pub mod fs;
+#[cfg(feature = "gpu")]
+pub mod gpu;
+pub mod lmod;
+pub mod mpi;
+#[cfg(feature = "ofed")]
+pub mod ofed;
+#[cfg(feature = "slurm")]
+pub mod slurm;
 
 pub use common::HpcBaselineModule;
-#[cfg(feature = "slurm")]
-pub use slurm::{SlurmConfigModule, SlurmOpsModule};
-pub use lmod::LmodModule;
-pub use mpi::MpiModule;
+#[cfg(feature = "parallel_fs")]
+pub use fs::{BeegfsClientModule, LustreClientModule};
 #[cfg(feature = "gpu")]
 pub use gpu::NvidiaGpuModule;
+pub use lmod::LmodModule;
+pub use mpi::MpiModule;
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
-#[cfg(feature = "parallel_fs")]
-pub use fs::{LustreClientModule, BeegfsClientModule};
+#[cfg(feature = "slurm")]
+pub use slurm::{SlurmConfigModule, SlurmOpsModule};

@@ -230,13 +230,12 @@ impl ProvisioningExecutor {
         executor_config: ExecutorConfig,
     ) -> ProvisioningResult<Self> {
         // Resolve backend and load state
-        let state_backend: Arc<dyn StateBackend> = if let Some(ref backend_config) =
-            executor_config.state_backend
-        {
-            Arc::from(backend_config.create_backend().await?)
-        } else {
-            Arc::new(LocalBackend::new(executor_config.state_path.clone()))
-        };
+        let state_backend: Arc<dyn StateBackend> =
+            if let Some(ref backend_config) = executor_config.state_backend {
+                Arc::from(backend_config.create_backend().await?)
+            } else {
+                Arc::new(LocalBackend::new(executor_config.state_path.clone()))
+            };
 
         let state = match state_backend.load().await? {
             Some(state) => state,

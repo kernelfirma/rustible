@@ -24,12 +24,19 @@ impl Module for HpcBaselineModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         if context.check_mode {
-            return Ok(ModuleOutput::ok("Would validate HPC baseline configuration"));
+            return Ok(ModuleOutput::ok(
+                "Would validate HPC baseline configuration",
+            ));
         }
 
-        Ok(ModuleOutput::ok("HPC baseline validation: stub - not yet implemented")
-            .with_data("status", serde_json::json!("stub"))
-            .with_data("supported_distros", serde_json::json!(["rocky-9", "alma-9", "ubuntu-22.04"])))
+        Ok(
+            ModuleOutput::ok("HPC baseline validation: stub - not yet implemented")
+                .with_data("status", serde_json::json!("stub"))
+                .with_data(
+                    "supported_distros",
+                    serde_json::json!(["rocky-9", "alma-9", "ubuntu-22.04"]),
+                ),
+        )
     }
 
     fn required_params(&self) -> &[&'static str] {
