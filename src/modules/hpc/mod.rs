@@ -78,6 +78,8 @@ pub mod slurm_info;
 pub mod slurm_job;
 #[cfg(feature = "slurm")]
 pub mod slurm_queue;
+#[cfg(feature = "slurm")]
+pub mod slurmrestd;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -113,4 +115,6 @@ pub use slurm_info::SlurmInfoModule;
 pub use slurm_job::SlurmJobModule;
 #[cfg(feature = "slurm")]
 pub use slurm_queue::SlurmQueueModule;
+#[cfg(feature = "slurm")]
+pub use slurmrestd::SlurmrestdModule;
 pub use toolchain::HpcToolchainModule;
