@@ -12,11 +12,11 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use clap::{Parser, Subcommand};
-use dialoguer::theme::ColorfulTheme;
+use dialoguer::{theme::ColorfulTheme, Input};
 use rand::rngs::OsRng;
 use rand::Rng;
 use std::fs;
-use std::io::{self};
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 
 /// Vault header marker
@@ -173,7 +173,7 @@ pub struct EncryptStringArgs {
 #[derive(Parser, Debug, Clone)]
 pub struct DecryptStringArgs {
     /// The encrypted string to decrypt
-    pub string: String,
+    pub string: Option<String>,
 
     /// Vault password file
     #[arg(long)]
@@ -618,6 +618,11 @@ impl VaultArgs {
 
                 let plaintext = if let Some(ref s) = args.string {
                     s.as_bytes().to_vec()
+                } else if std::io::stdin().is_terminal() {
+                    let input: String = Input::with_theme(&ColorfulTheme::default())
+                        .with_prompt("📝 Enter text to encrypt")
+                        .interact_text()?;
+                    input.as_bytes().to_vec()
                 } else {
                     let mut input = String::new();
                     io::stdin().read_line(&mut input)?;
@@ -647,8 +652,20 @@ impl VaultArgs {
                 let password = get_password(args.vault_password_file.as_ref(), ctx)?;
                 let engine = VaultEngine::new(password);
 
+                let encrypted_string = if let Some(ref s) = args.string {
+                    s.clone()
+                } else if std::io::stdin().is_terminal() {
+                    Input::with_theme(&ColorfulTheme::default())
+                        .with_prompt("📝 Enter encrypted string")
+                        .interact_text()?
+                } else {
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)?;
+                    input.trim().to_string()
+                };
+
                 let spinner = ctx.output.create_spinner("Decrypting...");
-                let decrypted = engine.decrypt(&args.string);
+                let decrypted = engine.decrypt(&encrypted_string);
                 if let Some(sp) = spinner {
                     sp.finish_and_clear();
                 }
