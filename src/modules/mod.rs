@@ -1686,6 +1686,15 @@ impl ModuleRegistry {
             ],
         );
 
+        #[cfg(feature = "pbs")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::PbsJobModule,
+                hpc::PbsQueueModule,
+                hpc::PbsServerModule,
+            ],
+        );
+
         #[cfg(feature = "gpu")]
         register_modules!(registry,
             Hpc: [

@@ -36,6 +36,8 @@ distributed = []
 hpc = ["slurm", "gpu"]
 # Slurm workload manager modules
 slurm = []
+# PBS Pro workload manager modules
+pbs = []
 # GPU management modules (NVIDIA, ROCm)
 gpu = []
 # InfiniBand / RDMA / OFED support
@@ -63,7 +65,7 @@ full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
 # Full feature set with all HPC support
-full-hpc = ["full", "hpc", "ofed", "parallel_fs", "redfish", "vsphere"]
+full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 
