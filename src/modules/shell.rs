@@ -7,8 +7,9 @@
 //! execution via async connections (SSH, Docker, etc.).
 
 use super::{
-    validate_env_var_name, validate_path_param, Module, ModuleClassification, ModuleContext,
-    ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
+    validate_command_args, validate_env_var_name, validate_path_param, Module,
+    ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
 use crate::utils::{cmd_escape, shell_escape};
@@ -68,7 +69,21 @@ impl ShellModule {
             // Unix-like shells (sh, bash, zsh, fish)
             // Use shell_escape to correctly quote/escape the command string
             // shell_escape guarantees a single safe token (quoted if necessary)
-            Ok(format!("{} -c {}", executable, shell_escape(cmd)))
+
+            // Split executable into command and arguments to safely escape them
+            // This prevents argument injection if executable contains spaces or other metacharacters
+            // that were somehow missed by validation, and correctly handles arguments like "python -u"
+            let parts = shell_words::split(&executable).map_err(|e| {
+                ModuleError::InvalidParameter(format!("Invalid executable string: {}", e))
+            })?;
+
+            let safe_exec = parts
+                .iter()
+                .map(|p| shell_escape(p))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            Ok(format!("{} -c {}", safe_exec, shell_escape(cmd)))
         }
     }
 
@@ -425,6 +440,12 @@ impl Module for ShellModule {
         if params.get("cmd").is_none() && params.get("_raw_params").is_none() {
             return Err(ModuleError::MissingParameter("cmd".to_string()));
         }
+
+        // Validate executable parameter for security to prevent injection
+        if let Some(executable) = params.get_string("executable")? {
+            validate_command_args(&executable)?;
+        }
+
         Ok(())
     }
 
@@ -594,5 +615,44 @@ mod tests {
 
         // Should escape quotes with ""
         assert_eq!(result, "cmd.exe /c \"echo \"\"hello\"\"\"");
+    }
+
+    #[test]
+    fn test_shell_executable_injection() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        // Malicious executable
+        params.insert("executable".to_string(), serde_json::json!("bash; echo pwned"));
+        params.insert("cmd".to_string(), serde_json::json!("echo hello"));
+
+        // This should fail validation once fixed.
+        assert!(module.validate_params(&params).is_err(), "Should reject malicious executable");
+    }
+
+    #[test]
+    fn test_shell_executable_safe_args() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        // Safe executable with arguments
+        params.insert("executable".to_string(), serde_json::json!("/usr/bin/env python3"));
+        params.insert("cmd".to_string(), serde_json::json!("print('hello')"));
+
+        // Validation should pass
+        assert!(module.validate_params(&params).is_ok());
+
+        // Command construction should be safe (split and escaped)
+        // With fix, this should be: '/usr/bin/env' 'python3' -c 'print('hello')'
+        // Without fix, it is: /usr/bin/env python3 -c 'print('hello')'
+        // We will assert on the fixed behavior once implemented.
+        let result = module.build_shell_command("print('hello')", &params).unwrap();
+
+        // Assert command structure:
+        // /usr/bin/env and python3 are split and escaped individually.
+        // /usr/bin/env has no special chars, so no quotes.
+        // python3 has no special chars, so no quotes.
+        // They are joined with space: /usr/bin/env python3
+        // -c is appended.
+        // cmd is escaped: print('hello') -> 'print('\''hello'\'')'
+        assert_eq!(result, "/usr/bin/env python3 -c 'print('\\''hello'\\'')'");
     }
 }
