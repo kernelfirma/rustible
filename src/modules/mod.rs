@@ -1678,6 +1678,10 @@ impl ModuleRegistry {
             Hpc: [
                 hpc::SlurmConfigModule,
                 hpc::SlurmOpsModule,
+                hpc::SlurmJobModule,
+                hpc::SlurmInfoModule,
+                hpc::SlurmQueueModule,
+                hpc::SlurmAccountModule,
             ],
         );
 

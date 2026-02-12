@@ -70,6 +70,14 @@ pub mod power;
 pub mod scheduler_orchestration;
 #[cfg(feature = "slurm")]
 pub mod slurm;
+#[cfg(feature = "slurm")]
+pub mod slurm_account;
+#[cfg(feature = "slurm")]
+pub mod slurm_info;
+#[cfg(feature = "slurm")]
+pub mod slurm_job;
+#[cfg(feature = "slurm")]
+pub mod slurm_queue;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -97,4 +105,12 @@ pub use power::HpcPowerModule;
 pub use scheduler_orchestration::SchedulerOrchestrationModule;
 #[cfg(feature = "slurm")]
 pub use slurm::{SlurmConfigModule, SlurmOpsModule};
+#[cfg(feature = "slurm")]
+pub use slurm_account::SlurmAccountModule;
+#[cfg(feature = "slurm")]
+pub use slurm_info::SlurmInfoModule;
+#[cfg(feature = "slurm")]
+pub use slurm_job::SlurmJobModule;
+#[cfg(feature = "slurm")]
+pub use slurm_queue::SlurmQueueModule;
 pub use toolchain::HpcToolchainModule;
