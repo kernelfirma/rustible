@@ -662,10 +662,11 @@ fn filter_string(value: MiniJinjaValue) -> String {
 fn filter_bool(value: MiniJinjaValue) -> bool {
     // Ansible-compatible bool filter: handles yes/no/true/false/on/off/1/0 strings
     if let Some(s) = value.as_str() {
-        match s.to_lowercase().as_str() {
-            "true" | "yes" | "on" | "1" | "y" | "t" => return true,
-            "false" | "no" | "off" | "0" | "n" | "f" | "" => return false,
-            _ => {}
+        if s.is_empty() {
+            return false;
+        }
+        if let Some(b) = crate::utils::parse_bool(s) {
+            return b;
         }
     }
     is_truthy_value(&value)
@@ -1729,5 +1730,26 @@ mod tests {
         assert!(result_custom.contains(r#""a": 1"#));
         // Check indentation is 2 spaces
         assert!(result_custom.contains("\n  \"a\""));
+    }
+
+    #[test]
+    fn test_filter_bool() {
+        let engine = TemplateEngine::new();
+        let vars = HashMap::new();
+
+        // Test truthy values
+        assert_eq!(engine.render("{{ 'true' | bool }}", &vars).unwrap(), "true");
+        assert_eq!(engine.render("{{ 'yes' | bool }}", &vars).unwrap(), "true");
+        assert_eq!(engine.render("{{ 'on' | bool }}", &vars).unwrap(), "true");
+        assert_eq!(engine.render("{{ '1' | bool }}", &vars).unwrap(), "true");
+
+        // Test falsy values
+        assert_eq!(engine.render("{{ 'false' | bool }}", &vars).unwrap(), "false");
+        assert_eq!(engine.render("{{ 'no' | bool }}", &vars).unwrap(), "false");
+        assert_eq!(engine.render("{{ 'off' | bool }}", &vars).unwrap(), "false");
+        assert_eq!(engine.render("{{ '0' | bool }}", &vars).unwrap(), "false");
+
+        // Test empty string (should be false)
+        assert_eq!(engine.render("{{ '' | bool }}", &vars).unwrap(), "false");
     }
 }

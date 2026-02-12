@@ -57,6 +57,29 @@ pub fn unsafe_template_access_allowed() -> bool {
     }
 }
 
+/// Parse a boolean string case-insensitively without allocation.
+///
+/// Handles common boolean representations:
+/// - True: "true", "yes", "on", "1", "y", "t"
+/// - False: "false", "no", "off", "0", "n", "f"
+///
+/// Returns `None` if the string is not a recognized boolean value.
+pub fn parse_bool(s: &str) -> Option<bool> {
+    match s {
+        "1" | "t" | "T" | "y" | "Y" => Some(true),
+        "0" | "f" | "F" | "n" | "N" => Some(false),
+        _ => {
+            if s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("yes") || s.eq_ignore_ascii_case("on") {
+                Some(true)
+            } else if s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("no") || s.eq_ignore_ascii_case("off") {
+                Some(false)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 /// Escape a string for safe use in shell commands.
 ///
 /// This function is essential for preventing command injection vulnerabilities.
@@ -204,6 +227,38 @@ pub fn powershell_escape_double_quoted(s: &str) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_bool() {
+        // True values
+        assert_eq!(parse_bool("true"), Some(true));
+        assert_eq!(parse_bool("True"), Some(true));
+        assert_eq!(parse_bool("TRUE"), Some(true));
+        assert_eq!(parse_bool("yes"), Some(true));
+        assert_eq!(parse_bool("Yes"), Some(true));
+        assert_eq!(parse_bool("on"), Some(true));
+        assert_eq!(parse_bool("On"), Some(true));
+        assert_eq!(parse_bool("1"), Some(true));
+        assert_eq!(parse_bool("y"), Some(true));
+        assert_eq!(parse_bool("t"), Some(true));
+
+        // False values
+        assert_eq!(parse_bool("false"), Some(false));
+        assert_eq!(parse_bool("False"), Some(false));
+        assert_eq!(parse_bool("FALSE"), Some(false));
+        assert_eq!(parse_bool("no"), Some(false));
+        assert_eq!(parse_bool("No"), Some(false));
+        assert_eq!(parse_bool("off"), Some(false));
+        assert_eq!(parse_bool("Off"), Some(false));
+        assert_eq!(parse_bool("0"), Some(false));
+        assert_eq!(parse_bool("n"), Some(false));
+        assert_eq!(parse_bool("f"), Some(false));
+
+        // Invalid values
+        assert_eq!(parse_bool(""), None);
+        assert_eq!(parse_bool("foo"), None);
+        assert_eq!(parse_bool("2"), None);
+    }
 
     #[test]
     fn test_shell_escape() {

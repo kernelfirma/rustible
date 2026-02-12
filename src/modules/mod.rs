@@ -1399,14 +1399,11 @@ impl ParamExt for ModuleParams {
     fn get_bool(&self, key: &str) -> ModuleResult<Option<bool>> {
         match self.get(key) {
             Some(serde_json::Value::Bool(b)) => Ok(Some(*b)),
-            Some(serde_json::Value::String(s)) => match s.to_lowercase().as_str() {
-                "true" | "yes" | "1" | "on" => Ok(Some(true)),
-                "false" | "no" | "0" | "off" => Ok(Some(false)),
-                _ => Err(ModuleError::InvalidParameter(format!(
-                    "{} must be a boolean",
-                    key
-                ))),
-            },
+            Some(serde_json::Value::String(s)) => crate::utils::parse_bool(s)
+                .map(Some)
+                .ok_or_else(|| {
+                    ModuleError::InvalidParameter(format!("{} must be a boolean", key))
+                }),
             Some(_) => Err(ModuleError::InvalidParameter(format!(
                 "{} must be a boolean",
                 key
