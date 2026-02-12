@@ -80,6 +80,12 @@ pub mod slurm_job;
 pub mod slurm_queue;
 #[cfg(feature = "slurm")]
 pub mod slurmrestd;
+#[cfg(feature = "pbs")]
+pub mod pbs_job;
+#[cfg(feature = "pbs")]
+pub mod pbs_queue;
+#[cfg(feature = "pbs")]
+pub mod pbs_server;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -117,4 +123,10 @@ pub use slurm_job::SlurmJobModule;
 pub use slurm_queue::SlurmQueueModule;
 #[cfg(feature = "slurm")]
 pub use slurmrestd::SlurmrestdModule;
+#[cfg(feature = "pbs")]
+pub use pbs_job::PbsJobModule;
+#[cfg(feature = "pbs")]
+pub use pbs_queue::PbsQueueModule;
+#[cfg(feature = "pbs")]
+pub use pbs_server::PbsServerModule;
 pub use toolchain::HpcToolchainModule;
