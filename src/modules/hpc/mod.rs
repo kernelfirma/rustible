@@ -54,6 +54,11 @@ pub mod fs;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod healthcheck;
+pub mod hpc_job;
+pub mod hpc_queue;
+pub mod hpc_server;
+#[cfg(feature = "ofed")]
+pub mod ib_validate;
 pub mod image_pipeline;
 pub mod lmod;
 pub mod mpi;
@@ -61,13 +66,22 @@ pub mod munge;
 pub mod nfs;
 #[cfg(feature = "ofed")]
 pub mod ofed;
-#[cfg(feature = "ofed")]
-pub mod ib_validate;
 #[cfg(feature = "slurm")]
 pub mod partition_policy;
+#[cfg(feature = "pbs")]
+pub mod pbs_job;
+#[cfg(feature = "pbs")]
+pub mod pbs_queue;
+#[cfg(feature = "pbs")]
+pub mod pbs_server;
 pub mod power;
+pub mod scheduler;
 #[cfg(feature = "slurm")]
 pub mod scheduler_orchestration;
+#[cfg(feature = "pbs")]
+pub mod scheduler_pbs;
+#[cfg(feature = "slurm")]
+pub mod scheduler_slurm;
 #[cfg(feature = "slurm")]
 pub mod slurm;
 #[cfg(feature = "slurm")]
@@ -80,20 +94,6 @@ pub mod slurm_job;
 pub mod slurm_queue;
 #[cfg(feature = "slurm")]
 pub mod slurmrestd;
-#[cfg(feature = "pbs")]
-pub mod pbs_job;
-#[cfg(feature = "pbs")]
-pub mod pbs_queue;
-#[cfg(feature = "pbs")]
-pub mod pbs_server;
-pub mod scheduler;
-#[cfg(feature = "slurm")]
-pub mod scheduler_slurm;
-#[cfg(feature = "pbs")]
-pub mod scheduler_pbs;
-pub mod hpc_job;
-pub mod hpc_queue;
-pub mod hpc_server;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -105,6 +105,11 @@ pub use fs::{BeegfsClientModule, LustreClientModule};
 #[cfg(feature = "gpu")]
 pub use gpu::NvidiaGpuModule;
 pub use healthcheck::HpcHealthcheckModule;
+pub use hpc_job::HpcJobModule;
+pub use hpc_queue::HpcQueueModule;
+pub use hpc_server::HpcServerModule;
+#[cfg(feature = "ofed")]
+pub use ib_validate::IbValidateModule;
 pub use image_pipeline::ImagePipelineModule;
 pub use lmod::LmodModule;
 pub use mpi::MpiModule;
@@ -112,13 +117,22 @@ pub use munge::MungeModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
-#[cfg(feature = "ofed")]
-pub use ib_validate::IbValidateModule;
 #[cfg(feature = "slurm")]
 pub use partition_policy::PartitionPolicyModule;
+#[cfg(feature = "pbs")]
+pub use pbs_job::PbsJobModule;
+#[cfg(feature = "pbs")]
+pub use pbs_queue::PbsQueueModule;
+#[cfg(feature = "pbs")]
+pub use pbs_server::PbsServerModule;
 pub use power::HpcPowerModule;
+pub use scheduler::{HpcScheduler, JobInfo, JobState, QueueInfo, ServerInfo};
 #[cfg(feature = "slurm")]
 pub use scheduler_orchestration::SchedulerOrchestrationModule;
+#[cfg(feature = "pbs")]
+pub use scheduler_pbs::PbsScheduler;
+#[cfg(feature = "slurm")]
+pub use scheduler_slurm::SlurmScheduler;
 #[cfg(feature = "slurm")]
 pub use slurm::{SlurmConfigModule, SlurmOpsModule};
 #[cfg(feature = "slurm")]
@@ -131,18 +145,4 @@ pub use slurm_job::SlurmJobModule;
 pub use slurm_queue::SlurmQueueModule;
 #[cfg(feature = "slurm")]
 pub use slurmrestd::SlurmrestdModule;
-#[cfg(feature = "pbs")]
-pub use pbs_job::PbsJobModule;
-#[cfg(feature = "pbs")]
-pub use pbs_queue::PbsQueueModule;
-#[cfg(feature = "pbs")]
-pub use pbs_server::PbsServerModule;
-pub use scheduler::{HpcScheduler, JobState, JobInfo, QueueInfo, ServerInfo};
-#[cfg(feature = "slurm")]
-pub use scheduler_slurm::SlurmScheduler;
-#[cfg(feature = "pbs")]
-pub use scheduler_pbs::PbsScheduler;
-pub use hpc_job::HpcJobModule;
-pub use hpc_queue::HpcQueueModule;
-pub use hpc_server::HpcServerModule;
 pub use toolchain::HpcToolchainModule;

@@ -19,6 +19,4 @@ pub mod scorecard;
 
 pub use connection::ChaosLayer;
 pub use fault::{CompositeFaultInjector, Fault, FaultInjector, SimpleFaultInjector};
-pub use scorecard::{
-    RegressionGate, ReliabilityScorecard, ScenarioCategory, ScenarioResult,
-};
+pub use scorecard::{RegressionGate, ReliabilityScorecard, ScenarioCategory, ScenarioResult};

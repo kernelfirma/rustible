@@ -51,35 +51,120 @@ pub struct CompatResult {
 
 /// Known supported modules in Rustible.
 const SUPPORTED_MODULES: &[&str] = &[
-    "command", "shell", "copy", "template", "file", "lineinfile",
-    "apt", "yum", "dnf", "package", "pip", "service", "systemd",
-    "user", "group", "cron", "git", "debug", "set_fact", "assert",
-    "fail", "pause", "wait_for", "uri", "get_url", "stat",
-    "find", "fetch", "synchronize", "unarchive", "archive",
-    "docker_container", "docker_image", "docker_network",
-    "include_tasks", "import_tasks", "include_role", "import_role",
-    "include_vars", "block", "rescue", "always",
+    "command",
+    "shell",
+    "copy",
+    "template",
+    "file",
+    "lineinfile",
+    "apt",
+    "yum",
+    "dnf",
+    "package",
+    "pip",
+    "service",
+    "systemd",
+    "user",
+    "group",
+    "cron",
+    "git",
+    "debug",
+    "set_fact",
+    "assert",
+    "fail",
+    "pause",
+    "wait_for",
+    "uri",
+    "get_url",
+    "stat",
+    "find",
+    "fetch",
+    "synchronize",
+    "unarchive",
+    "archive",
+    "docker_container",
+    "docker_image",
+    "docker_network",
+    "include_tasks",
+    "import_tasks",
+    "include_role",
+    "import_role",
+    "include_vars",
+    "block",
+    "rescue",
+    "always",
 ];
 
 /// Partially supported modules.
 const PARTIAL_MODULES: &[&str] = &[
-    "raw", "script", "expect", "mount", "hostname", "sysctl",
-    "firewalld", "iptables", "selinux", "nmcli",
+    "raw",
+    "script",
+    "expect",
+    "mount",
+    "hostname",
+    "sysctl",
+    "firewalld",
+    "iptables",
+    "selinux",
+    "nmcli",
 ];
 
 /// Supported Jinja2 filters.
 const SUPPORTED_FILTERS: &[&str] = &[
-    "default", "d", "bool", "int", "float", "string", "list",
-    "dict", "join", "split", "lower", "upper", "capitalize",
-    "replace", "regex_replace", "regex_search", "regex_findall",
-    "basename", "dirname", "expanduser", "realpath",
-    "to_json", "from_json", "to_yaml", "from_yaml",
-    "to_nice_json", "to_nice_yaml", "b64encode", "b64decode",
-    "hash", "password_hash", "combine", "flatten",
-    "map", "select", "reject", "selectattr", "rejectattr",
-    "sort", "reverse", "unique", "union", "intersect", "difference",
-    "length", "count", "first", "last", "min", "max", "sum",
-    "ipaddr", "ipv4", "ipv6",
+    "default",
+    "d",
+    "bool",
+    "int",
+    "float",
+    "string",
+    "list",
+    "dict",
+    "join",
+    "split",
+    "lower",
+    "upper",
+    "capitalize",
+    "replace",
+    "regex_replace",
+    "regex_search",
+    "regex_findall",
+    "basename",
+    "dirname",
+    "expanduser",
+    "realpath",
+    "to_json",
+    "from_json",
+    "to_yaml",
+    "from_yaml",
+    "to_nice_json",
+    "to_nice_yaml",
+    "b64encode",
+    "b64decode",
+    "hash",
+    "password_hash",
+    "combine",
+    "flatten",
+    "map",
+    "select",
+    "reject",
+    "selectattr",
+    "rejectattr",
+    "sort",
+    "reverse",
+    "unique",
+    "union",
+    "intersect",
+    "difference",
+    "length",
+    "count",
+    "first",
+    "last",
+    "min",
+    "max",
+    "sum",
+    "ipaddr",
+    "ipv4",
+    "ipv6",
 ];
 
 /// Verifies Ansible playbook compatibility with Rustible.
@@ -93,25 +178,50 @@ impl AnsibleCompatVerifier {
     }
 
     /// Verify a playbook YAML string.
-    pub fn verify_playbook(&self, playbook_yaml: &str) -> crate::migration::MigrationResult<MigrationReport> {
+    pub fn verify_playbook(
+        &self,
+        playbook_yaml: &str,
+    ) -> crate::migration::MigrationResult<MigrationReport> {
         let plays: Vec<serde_yaml::Value> = serde_yaml::from_str(playbook_yaml)?;
 
         let mut checks = Vec::new();
 
         for play in &plays {
             // Check modules used in tasks
-            if let Some(tasks) = play.get("tasks").and_then(|t: &serde_yaml::Value| t.as_sequence()) {
+            if let Some(tasks) = play
+                .get("tasks")
+                .and_then(|t: &serde_yaml::Value| t.as_sequence())
+            {
                 for task in tasks {
                     if let Some(mapping) = task.as_mapping() {
                         for (key, _) in mapping {
                             if let Some(module_name) = key.as_str() {
-                                if matches!(module_name,
-                                    "name" | "when" | "tags" | "register" | "ignore_errors" |
-                                    "become" | "become_user" | "delegate_to" | "notify" |
-                                    "loop" | "with_items" | "vars" | "changed_when" |
-                                    "failed_when" | "no_log" | "retries" | "delay" |
-                                    "until" | "environment" | "any_errors_fatal" |
-                                    "listen" | "block" | "rescue" | "always"
+                                if matches!(
+                                    module_name,
+                                    "name"
+                                        | "when"
+                                        | "tags"
+                                        | "register"
+                                        | "ignore_errors"
+                                        | "become"
+                                        | "become_user"
+                                        | "delegate_to"
+                                        | "notify"
+                                        | "loop"
+                                        | "with_items"
+                                        | "vars"
+                                        | "changed_when"
+                                        | "failed_when"
+                                        | "no_log"
+                                        | "retries"
+                                        | "delay"
+                                        | "until"
+                                        | "environment"
+                                        | "any_errors_fatal"
+                                        | "listen"
+                                        | "block"
+                                        | "rescue"
+                                        | "always"
                                 ) {
                                     continue;
                                 }
@@ -123,7 +233,10 @@ impl AnsibleCompatVerifier {
             }
 
             // Check connection plugin
-            if let Some(conn) = play.get("connection").and_then(|c: &serde_yaml::Value| c.as_str()) {
+            if let Some(conn) = play
+                .get("connection")
+                .and_then(|c: &serde_yaml::Value| c.as_str())
+            {
                 checks.push(self.check_connection(conn));
             }
         }
@@ -160,7 +273,10 @@ impl AnsibleCompatVerifier {
             name: name.to_string(),
             compatible,
             notes: if compatible == CompatLevel::Unsupported {
-                Some(format!("Module '{}' is not yet supported in Rustible", name))
+                Some(format!(
+                    "Module '{}' is not yet supported in Rustible",
+                    name
+                ))
             } else {
                 None
             },
@@ -197,92 +313,135 @@ impl AnsibleCompatVerifier {
 
     fn compute_result(&self, checks: &[CompatCheck]) -> CompatResult {
         let total = checks.len();
-        let compatible = checks.iter().filter(|c| c.compatible == CompatLevel::Full).count();
-        let partial = checks.iter().filter(|c| c.compatible == CompatLevel::Partial).count();
-        let unsupported = checks.iter().filter(|c| c.compatible == CompatLevel::Unsupported).count();
+        let compatible = checks
+            .iter()
+            .filter(|c| c.compatible == CompatLevel::Full)
+            .count();
+        let partial = checks
+            .iter()
+            .filter(|c| c.compatible == CompatLevel::Partial)
+            .count();
+        let unsupported = checks
+            .iter()
+            .filter(|c| c.compatible == CompatLevel::Unsupported)
+            .count();
         let score = if total > 0 {
             (compatible as f64 + 0.5 * partial as f64) / total as f64 * 100.0
         } else {
             100.0
         };
-        CompatResult { checks: checks.to_vec(), score, total, compatible, partial, unsupported }
+        CompatResult {
+            checks: checks.to_vec(),
+            score,
+            total,
+            compatible,
+            partial,
+            unsupported,
+        }
     }
 
     fn build_report(&self, result: &CompatResult) -> MigrationReport {
-        let mut report = MigrationReport::new(
-            "Ansible Compatibility Check",
-            "Ansible playbook",
-        );
+        let mut report = MigrationReport::new("Ansible Compatibility Check", "Ansible playbook");
 
         // Module compatibility finding
-        let module_checks: Vec<&CompatCheck> = result.checks.iter()
+        let module_checks: Vec<&CompatCheck> = result
+            .checks
+            .iter()
             .filter(|c| c.category == CompatCategory::Module)
             .collect();
         if !module_checks.is_empty() {
-            let unsupported: Vec<&CompatCheck> = module_checks.iter()
+            let unsupported: Vec<&CompatCheck> = module_checks
+                .iter()
                 .filter(|c| c.compatible == CompatLevel::Unsupported)
                 .copied()
                 .collect();
             report.findings.push(MigrationFinding {
                 source_item: "Module Compatibility".into(),
                 target_item: None,
-                status: if unsupported.is_empty() { FindingStatus::Matched } else { FindingStatus::PartiallyMapped },
-                diagnostics: unsupported.iter().map(|c| MigrationDiagnostic {
-                    category: DiagnosticCategory::UnsupportedField,
-                    severity: MigrationSeverity::Warning,
-                    source_path: None,
-                    source_field: Some(c.name.clone()),
-                    message: format!("Module '{}' not supported", c.name),
-                    suggestion: c.notes.clone(),
-                }).collect(),
+                status: if unsupported.is_empty() {
+                    FindingStatus::Matched
+                } else {
+                    FindingStatus::PartiallyMapped
+                },
+                diagnostics: unsupported
+                    .iter()
+                    .map(|c| MigrationDiagnostic {
+                        category: DiagnosticCategory::UnsupportedField,
+                        severity: MigrationSeverity::Warning,
+                        source_path: None,
+                        source_field: Some(c.name.clone()),
+                        message: format!("Module '{}' not supported", c.name),
+                        suggestion: c.notes.clone(),
+                    })
+                    .collect(),
             });
         }
 
         // Connection compatibility finding
-        let conn_checks: Vec<&CompatCheck> = result.checks.iter()
+        let conn_checks: Vec<&CompatCheck> = result
+            .checks
+            .iter()
             .filter(|c| c.category == CompatCategory::ConnectionPlugin)
             .collect();
         if !conn_checks.is_empty() {
-            let unsupported: Vec<&CompatCheck> = conn_checks.iter()
+            let unsupported: Vec<&CompatCheck> = conn_checks
+                .iter()
                 .filter(|c| c.compatible == CompatLevel::Unsupported)
                 .copied()
                 .collect();
             report.findings.push(MigrationFinding {
                 source_item: "Connection Plugin Compatibility".into(),
                 target_item: None,
-                status: if unsupported.is_empty() { FindingStatus::Matched } else { FindingStatus::Divergent },
-                diagnostics: unsupported.iter().map(|c| MigrationDiagnostic {
-                    category: DiagnosticCategory::UnsupportedField,
-                    severity: MigrationSeverity::Error,
-                    source_path: None,
-                    source_field: Some(c.name.clone()),
-                    message: format!("Connection plugin '{}' not supported", c.name),
-                    suggestion: None,
-                }).collect(),
+                status: if unsupported.is_empty() {
+                    FindingStatus::Matched
+                } else {
+                    FindingStatus::Divergent
+                },
+                diagnostics: unsupported
+                    .iter()
+                    .map(|c| MigrationDiagnostic {
+                        category: DiagnosticCategory::UnsupportedField,
+                        severity: MigrationSeverity::Error,
+                        source_path: None,
+                        source_field: Some(c.name.clone()),
+                        message: format!("Connection plugin '{}' not supported", c.name),
+                        suggestion: None,
+                    })
+                    .collect(),
             });
         }
 
         // Filter compatibility finding
-        let filter_checks: Vec<&CompatCheck> = result.checks.iter()
+        let filter_checks: Vec<&CompatCheck> = result
+            .checks
+            .iter()
             .filter(|c| c.category == CompatCategory::Filter)
             .collect();
         if !filter_checks.is_empty() {
-            let unsupported: Vec<&CompatCheck> = filter_checks.iter()
+            let unsupported: Vec<&CompatCheck> = filter_checks
+                .iter()
                 .filter(|c| c.compatible == CompatLevel::Unsupported)
                 .copied()
                 .collect();
             report.findings.push(MigrationFinding {
                 source_item: "Filter Compatibility".into(),
                 target_item: None,
-                status: if unsupported.is_empty() { FindingStatus::Matched } else { FindingStatus::PartiallyMapped },
-                diagnostics: unsupported.iter().map(|c| MigrationDiagnostic {
-                    category: DiagnosticCategory::UnsupportedField,
-                    severity: MigrationSeverity::Info,
-                    source_path: None,
-                    source_field: Some(c.name.clone()),
-                    message: format!("Filter '{}' not supported", c.name),
-                    suggestion: None,
-                }).collect(),
+                status: if unsupported.is_empty() {
+                    FindingStatus::Matched
+                } else {
+                    FindingStatus::PartiallyMapped
+                },
+                diagnostics: unsupported
+                    .iter()
+                    .map(|c| MigrationDiagnostic {
+                        category: DiagnosticCategory::UnsupportedField,
+                        severity: MigrationSeverity::Info,
+                        source_path: None,
+                        source_field: Some(c.name.clone()),
+                        message: format!("Filter '{}' not supported", c.name),
+                        suggestion: None,
+                    })
+                    .collect(),
             });
         }
 
@@ -290,7 +449,11 @@ impl AnsibleCompatVerifier {
         report.findings.push(MigrationFinding {
             source_item: "Overall Compatibility Score".into(),
             target_item: None,
-            status: if result.score >= self.threshold { FindingStatus::Matched } else { FindingStatus::Divergent },
+            status: if result.score >= self.threshold {
+                FindingStatus::Matched
+            } else {
+                FindingStatus::Divergent
+            },
             diagnostics: vec![MigrationDiagnostic {
                 category: DiagnosticCategory::CompatibilityGap,
                 severity: MigrationSeverity::Info,
@@ -298,7 +461,11 @@ impl AnsibleCompatVerifier {
                 source_field: None,
                 message: format!(
                     "Score: {:.1}% ({} full, {} partial, {} unsupported of {} total)",
-                    result.score, result.compatible, result.partial, result.unsupported, result.total
+                    result.score,
+                    result.compatible,
+                    result.partial,
+                    result.unsupported,
+                    result.total
                 ),
                 suggestion: None,
             }],

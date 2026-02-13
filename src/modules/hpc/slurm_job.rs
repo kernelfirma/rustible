@@ -25,8 +25,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -143,10 +143,7 @@ impl SlurmJobModule {
         if let Some(ref name) = job_name {
             let (ok, stdout, _) = run_cmd(
                 connection,
-                &format!(
-                    "squeue --noheader --name={} -o '%i|%T' 2>/dev/null",
-                    name
-                ),
+                &format!("squeue --noheader --name={} -o '%i|%T' 2>/dev/null", name),
                 context,
             )?;
             if ok && !stdout.trim().is_empty() {
@@ -172,11 +169,10 @@ impl SlurmJobModule {
         }
 
         if context.check_mode {
-            return Ok(ModuleOutput::changed("Would submit Slurm job")
-                .with_data(
-                    "job_name",
-                    serde_json::json!(job_name.as_deref().unwrap_or("")),
-                ));
+            return Ok(ModuleOutput::changed("Would submit Slurm job").with_data(
+                "job_name",
+                serde_json::json!(job_name.as_deref().unwrap_or("")),
+            ));
         }
 
         // Build sbatch command
@@ -191,15 +187,14 @@ impl SlurmJobModule {
             ))
         })?;
 
-        Ok(ModuleOutput::changed(format!(
-            "Submitted batch job {}",
-            job_id
-        ))
-        .with_data("job_id", serde_json::json!(job_id))
-        .with_data(
-            "job_name",
-            serde_json::json!(job_name.as_deref().unwrap_or("")),
-        ))
+        Ok(
+            ModuleOutput::changed(format!("Submitted batch job {}", job_id))
+                .with_data("job_id", serde_json::json!(job_id))
+                .with_data(
+                    "job_name",
+                    serde_json::json!(job_name.as_deref().unwrap_or("")),
+                ),
+        )
     }
 
     fn action_cancel(
@@ -239,10 +234,8 @@ impl SlurmJobModule {
 
         run_cmd_ok(connection, &cmd, context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Cancelled job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Cancelled job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn action_status(
@@ -370,12 +363,9 @@ fn build_sbatch_command(params: &ModuleParams) -> ModuleResult<String> {
         let script_content = script.unwrap();
         // Use heredoc for inline script
         let escaped = script_content.replace('\'', "'\\''");
-        Ok(format!(
-            "sbatch {} --wrap '{}'",
-            args_str, escaped
-        )
-        .trim()
-        .to_string())
+        Ok(format!("sbatch {} --wrap '{}'", args_str, escaped)
+            .trim()
+            .to_string())
     }
 }
 
@@ -506,14 +496,8 @@ mod tests {
         params.insert("nodes".to_string(), serde_json::json!("2"));
         params.insert("ntasks".to_string(), serde_json::json!("8"));
         params.insert("time_limit".to_string(), serde_json::json!("4:00:00"));
-        params.insert(
-            "output".to_string(),
-            serde_json::json!("/logs/out_%j.log"),
-        );
-        params.insert(
-            "error".to_string(),
-            serde_json::json!("/logs/err_%j.log"),
-        );
+        params.insert("output".to_string(), serde_json::json!("/logs/out_%j.log"));
+        params.insert("error".to_string(), serde_json::json!("/logs/err_%j.log"));
 
         let cmd = build_sbatch_command(&params).unwrap();
         assert!(cmd.contains("--job-name=full_job"));
@@ -528,7 +512,18 @@ mod tests {
     #[test]
     fn test_parse_pipe_delimited_jobs() {
         let output = "12345|my_job|alice|RUNNING|compute|4|128|2-00:00:00|0:05:30|(Resources)\n";
-        let fields = ["job_id", "name", "user", "state", "partition", "nodes", "cpus", "time_limit", "time_used", "reason"];
+        let fields = [
+            "job_id",
+            "name",
+            "user",
+            "state",
+            "partition",
+            "nodes",
+            "cpus",
+            "time_limit",
+            "time_used",
+            "reason",
+        ];
         let jobs = parse_pipe_delimited(output, &fields);
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0]["job_id"], "12345");

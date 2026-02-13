@@ -17,8 +17,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -249,11 +249,8 @@ impl Module for IbValidateModule {
         }
 
         // --- Verify ibstat is available ---
-        let (ibstat_exists, _, _) = run_cmd(
-            connection,
-            "command -v ibstat >/dev/null 2>&1",
-            context,
-        )?;
+        let (ibstat_exists, _, _) =
+            run_cmd(connection, "command -v ibstat >/dev/null 2>&1", context)?;
         if !ibstat_exists {
             return Err(ModuleError::ExecutionFailed(
                 "ibstat not found. Install rdma-core / infiniband-diags first.".to_string(),
@@ -328,10 +325,7 @@ impl Module for IbValidateModule {
 
         // --- Build final output ---
         let msg = if all_pass {
-            format!(
-                "All {} InfiniBand port(s) passed validation",
-                ports.len()
-            )
+            format!("All {} InfiniBand port(s) passed validation", ports.len())
         } else {
             let fail_count = validation_results
                 .iter()

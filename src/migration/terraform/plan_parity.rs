@@ -120,21 +120,19 @@ impl TerraformPlanValidator {
                 e
             ))
         })?;
-        let rustible_content =
-            std::fs::read_to_string(&self.rustible_plan_path).map_err(|e| {
-                MigrationError::SourceNotFound(format!(
-                    "Rustible plan at {}: {}",
-                    self.rustible_plan_path.display(),
-                    e
-                ))
-            })?;
+        let rustible_content = std::fs::read_to_string(&self.rustible_plan_path).map_err(|e| {
+            MigrationError::SourceNotFound(format!(
+                "Rustible plan at {}: {}",
+                self.rustible_plan_path.display(),
+                e
+            ))
+        })?;
 
-        let tf_plan: TfPlanJson = serde_json::from_str(&tf_content).map_err(|e| {
-            MigrationError::ParseError {
+        let tf_plan: TfPlanJson =
+            serde_json::from_str(&tf_content).map_err(|e| MigrationError::ParseError {
                 file: "terraform plan".to_string(),
                 message: e.to_string(),
-            }
-        })?;
+            })?;
 
         let rustible_plan: RustiblePlanJson =
             serde_json::from_str(&rustible_content).map_err(|e| MigrationError::ParseError {
@@ -182,9 +180,7 @@ impl TerraformPlanValidator {
             divergences.push(PlanDivergence {
                 resource: addr.clone(),
                 divergence_type: DivergenceType::MissingInRustible,
-                tf_action: tf_actions
-                    .get(addr)
-                    .map(|rc| rc.change.actions.join(",")),
+                tf_action: tf_actions.get(addr).map(|rc| rc.change.actions.join(",")),
                 rustible_action: None,
                 details: format!(
                     "Resource {} exists in Terraform plan but not in Rustible plan",

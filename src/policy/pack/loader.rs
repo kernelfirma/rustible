@@ -56,8 +56,8 @@ impl PackLoader {
     /// loader then derives concrete [`PackRule`] instances from the rule names
     /// listed in the manifest.
     pub fn load_from_manifest(manifest_yaml: &str) -> Result<PolicyPack, String> {
-        let manifest: PolicyPackManifest =
-            serde_yaml::from_str(manifest_yaml).map_err(|e| format!("invalid manifest YAML: {}", e))?;
+        let manifest: PolicyPackManifest = serde_yaml::from_str(manifest_yaml)
+            .map_err(|e| format!("invalid manifest YAML: {}", e))?;
 
         let rules = manifest
             .rules
@@ -276,8 +276,8 @@ parameters: []
 
     #[test]
     fn test_load_from_manifest_yaml() {
-        let pack = PackLoader::load_from_manifest(&sample_manifest_yaml())
-            .expect("should parse manifest");
+        let pack =
+            PackLoader::load_from_manifest(&sample_manifest_yaml()).expect("should parse manifest");
 
         assert_eq!(pack.manifest.name, "test-security");
         assert_eq!(pack.rules.len(), 2);

@@ -72,11 +72,11 @@ pub mod input;
 pub mod password_cache;
 pub mod path;
 pub mod rate_limit;
+pub mod rbac;
 pub mod secret;
+pub mod signing;
 pub mod template;
 pub mod validation;
-pub mod rbac;
-pub mod signing;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

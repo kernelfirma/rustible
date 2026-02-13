@@ -243,8 +243,13 @@ mod tests {
     fn test_add_and_retrieve_nodes() {
         let mut topo = ClusterTopology::new();
 
-        let n1 = TopologyNode::new("ctrl-1", "Controller 1", NodeType::Controller, NodeRole::Leader)
-            .with_address("10.0.0.1:9000");
+        let n1 = TopologyNode::new(
+            "ctrl-1",
+            "Controller 1",
+            NodeType::Controller,
+            NodeRole::Leader,
+        )
+        .with_address("10.0.0.1:9000");
         let n2 = TopologyNode::new("worker-1", "Worker 1", NodeType::Worker, NodeRole::Follower);
 
         topo.add_node(n1);
@@ -266,9 +271,24 @@ mod tests {
     fn test_add_edges() {
         let mut topo = ClusterTopology::new();
 
-        topo.add_node(TopologyNode::new("a", "A", NodeType::Controller, NodeRole::Leader));
-        topo.add_node(TopologyNode::new("b", "B", NodeType::Worker, NodeRole::Follower));
-        topo.add_node(TopologyNode::new("c", "C", NodeType::Worker, NodeRole::Follower));
+        topo.add_node(TopologyNode::new(
+            "a",
+            "A",
+            NodeType::Controller,
+            NodeRole::Leader,
+        ));
+        topo.add_node(TopologyNode::new(
+            "b",
+            "B",
+            NodeType::Worker,
+            NodeRole::Follower,
+        ));
+        topo.add_node(TopologyNode::new(
+            "c",
+            "C",
+            NodeType::Worker,
+            NodeRole::Follower,
+        ));
 
         assert!(topo.add_edge("a", "b", TopologyEdge::new(EdgeType::Control)));
         assert!(topo.add_edge("a", "c", TopologyEdge::new(EdgeType::Data).with_latency(5)));
@@ -282,10 +302,20 @@ mod tests {
     fn test_replace_existing_node() {
         let mut topo = ClusterTopology::new();
 
-        topo.add_node(TopologyNode::new("x", "X-old", NodeType::Worker, NodeRole::Follower));
+        topo.add_node(TopologyNode::new(
+            "x",
+            "X-old",
+            NodeType::Worker,
+            NodeRole::Follower,
+        ));
         assert_eq!(topo.get_node("x").unwrap().name, "X-old");
 
-        topo.add_node(TopologyNode::new("x", "X-new", NodeType::Worker, NodeRole::Leader));
+        topo.add_node(TopologyNode::new(
+            "x",
+            "X-new",
+            NodeType::Worker,
+            NodeRole::Leader,
+        ));
         assert_eq!(topo.node_count(), 1);
         assert_eq!(topo.get_node("x").unwrap().name, "X-new");
         assert_eq!(topo.get_node("x").unwrap().role, NodeRole::Leader);

@@ -189,8 +189,7 @@ impl SlurmApiClient {
         if !status.is_success() {
             return Err(ModuleError::ExecutionFailed(format!(
                 "HTTP {} from slurmrestd: {}",
-                status,
-                body
+                status, body
             )));
         }
 
@@ -218,8 +217,7 @@ impl SlurmApiClient {
         if !status.is_success() {
             return Err(ModuleError::ExecutionFailed(format!(
                 "HTTP {} from slurmrestd: {}",
-                status,
-                resp_body
+                status, resp_body
             )));
         }
 
@@ -246,8 +244,7 @@ impl SlurmApiClient {
         if !status.is_success() {
             return Err(ModuleError::ExecutionFailed(format!(
                 "HTTP {} from slurmrestd: {}",
-                status,
-                body
+                status, body
             )));
         }
 
@@ -261,10 +258,7 @@ impl SlurmApiClient {
                 .iter()
                 .filter(|e| {
                     // Skip entries with error_number 0 (no error)
-                    e.get("error_number")
-                        .and_then(|n| n.as_i64())
-                        .unwrap_or(-1)
-                        != 0
+                    e.get("error_number").and_then(|n| n.as_i64()).unwrap_or(-1) != 0
                 })
                 .collect();
 
@@ -276,10 +270,7 @@ impl SlurmApiClient {
                             .get("error")
                             .and_then(|v| v.as_str())
                             .unwrap_or("Unknown error");
-                        let num = e
-                            .get("error_number")
-                            .and_then(|v| v.as_i64())
-                            .unwrap_or(0);
+                        let num = e.get("error_number").and_then(|v| v.as_i64()).unwrap_or(0);
                         format!("[{}] {}", num, msg)
                     })
                     .collect();
@@ -404,10 +395,7 @@ impl Module for SlurmrestdModule {
         let api_version = params
             .get_string("api_version")?
             .unwrap_or_else(|| "v0.0.44".to_string());
-        let timeout_secs = params
-            .get_i64("timeout")?
-            .unwrap_or(30)
-            .max(1) as u64;
+        let timeout_secs = params.get_i64("timeout")?.unwrap_or(30).max(1) as u64;
         let validate_certs = params.get_bool_or("validate_certs", true);
 
         // CLI fallback actions don't need the REST client
@@ -474,14 +462,8 @@ impl SlurmrestdModule {
             let existing = run_async(async { client.get("jobs/").await })?;
             if let Some(jobs) = existing.get("jobs").and_then(|j| j.as_array()) {
                 let active = jobs.iter().any(|j| {
-                    let name_match = j
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        == Some(&job_name);
-                    let state = j
-                        .get("job_state")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("");
+                    let name_match = j.get("name").and_then(|n| n.as_str()) == Some(&job_name);
+                    let state = j.get("job_state").and_then(|s| s.as_str()).unwrap_or("");
                     name_match
                         && (state == "RUNNING" || state == "PENDING" || state == "CONFIGURING")
                 });
@@ -502,14 +484,13 @@ impl SlurmrestdModule {
         let body = build_job_submission_body(params)?;
         let resp = run_async(async { client.post("job/submit", &body).await })?;
 
-        let job_id = resp
-            .get("job_id")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let job_id = resp.get("job_id").and_then(|v| v.as_u64()).unwrap_or(0);
 
-        Ok(ModuleOutput::changed(format!("Job submitted (id={})", job_id))
-            .with_data("job_id", serde_json::json!(job_id))
-            .with_data("response", resp))
+        Ok(
+            ModuleOutput::changed(format!("Job submitted (id={})", job_id))
+                .with_data("job_id", serde_json::json!(job_id))
+                .with_data("response", resp),
+        )
     }
 
     fn action_cancel_job(
@@ -528,10 +509,7 @@ impl SlurmrestdModule {
 
         if let Some(jobs) = info.get("jobs").and_then(|j| j.as_array()) {
             if let Some(job) = jobs.first() {
-                let state = job
-                    .get("job_state")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("");
+                let state = job.get("job_state").and_then(|s| s.as_str()).unwrap_or("");
                 if state == "COMPLETED"
                     || state == "CANCELLED"
                     || state == "FAILED"
@@ -562,19 +540,23 @@ impl SlurmrestdModule {
         };
         let resp = run_async(async { client.delete(&path).await })?;
 
-        Ok(
-            ModuleOutput::changed(format!("Job {} cancelled", job_id))
-                .with_data("job_id", Value::String(job_id))
-                .with_data("response", resp),
-        )
+        Ok(ModuleOutput::changed(format!("Job {} cancelled", job_id))
+            .with_data("job_id", Value::String(job_id))
+            .with_data("response", resp))
     }
 
-    fn action_get_job(client: &SlurmApiClient, params: &ModuleParams) -> ModuleResult<ModuleOutput> {
+    fn action_get_job(
+        client: &SlurmApiClient,
+        params: &ModuleParams,
+    ) -> ModuleResult<ModuleOutput> {
         let job_id = params.get_string_required("job_id")?;
         let resp = run_async(async { client.get(&format!("job/{}", job_id)).await })?;
         Ok(ModuleOutput::ok(format!("Retrieved job {}", job_id))
             .with_data("job_id", Value::String(job_id))
-            .with_data("jobs", resp.get("jobs").cloned().unwrap_or(Value::Array(vec![]))))
+            .with_data(
+                "jobs",
+                resp.get("jobs").cloned().unwrap_or(Value::Array(vec![])),
+            ))
     }
 
     fn action_list_jobs(client: &SlurmApiClient) -> ModuleResult<ModuleOutput> {
@@ -584,7 +566,10 @@ impl SlurmrestdModule {
             .and_then(|j| j.as_array())
             .map_or(0, |a| a.len());
         Ok(ModuleOutput::ok(format!("Retrieved {} jobs", count))
-            .with_data("jobs", resp.get("jobs").cloned().unwrap_or(Value::Array(vec![])))
+            .with_data(
+                "jobs",
+                resp.get("jobs").cloned().unwrap_or(Value::Array(vec![])),
+            )
             .with_data("job_count", serde_json::json!(count)))
     }
 
@@ -609,7 +594,10 @@ impl SlurmrestdModule {
             .and_then(|j| j.as_array())
             .map_or(0, |a| a.len());
         Ok(ModuleOutput::ok(format!("Retrieved {} nodes", count))
-            .with_data("nodes", resp.get("nodes").cloned().unwrap_or(Value::Array(vec![])))
+            .with_data(
+                "nodes",
+                resp.get("nodes").cloned().unwrap_or(Value::Array(vec![])),
+            )
             .with_data("node_count", serde_json::json!(count)))
     }
 
@@ -626,10 +614,7 @@ impl SlurmrestdModule {
         let current = run_async(async { client.get(&format!("node/{}", node_name)).await })?;
         if let Some(nodes) = current.get("nodes").and_then(|n| n.as_array()) {
             if let Some(node) = nodes.first() {
-                let current_state = node
-                    .get("state")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("");
+                let current_state = node.get("state").and_then(|s| s.as_str()).unwrap_or("");
                 if current_state.eq_ignore_ascii_case(&state) {
                     return Ok(ModuleOutput::ok(format!(
                         "Node '{}' is already in state '{}'",
@@ -655,13 +640,12 @@ impl SlurmrestdModule {
 
         let resp = run_async(async { client.post(&format!("node/{}", node_name), &body).await })?;
 
-        Ok(ModuleOutput::changed(format!(
-            "Updated node '{}' to state '{}'",
-            node_name, state
-        ))
-        .with_data("node_name", Value::String(node_name))
-        .with_data("state", Value::String(state))
-        .with_data("response", resp))
+        Ok(
+            ModuleOutput::changed(format!("Updated node '{}' to state '{}'", node_name, state))
+                .with_data("node_name", Value::String(node_name))
+                .with_data("state", Value::String(state))
+                .with_data("response", resp),
+        )
     }
 
     fn action_get_partition(
@@ -776,10 +760,7 @@ mod tests {
         assert_eq!(m.name(), "slurmrestd");
         assert!(m.description().contains("REST"));
         assert_eq!(m.classification(), ModuleClassification::RemoteCommand);
-        assert_eq!(
-            m.parallelization_hint(),
-            ParallelizationHint::FullyParallel
-        );
+        assert_eq!(m.parallelization_hint(), ParallelizationHint::FullyParallel);
         assert_eq!(
             m.required_params(),
             &["api_url", "api_user", "api_token", "action"]
@@ -789,7 +770,10 @@ mod tests {
     #[test]
     fn test_build_job_submission_body() {
         let mut params: ModuleParams = HashMap::new();
-        params.insert("script".to_string(), serde_json::json!("#!/bin/bash\necho hello"));
+        params.insert(
+            "script".to_string(),
+            serde_json::json!("#!/bin/bash\necho hello"),
+        );
         params.insert("job_name".to_string(), serde_json::json!("test_job"));
         params.insert("partition".to_string(), serde_json::json!("batch"));
         params.insert("nodes".to_string(), serde_json::json!("2"));
@@ -808,10 +792,7 @@ mod tests {
     #[test]
     fn test_build_job_submission_body_minimal() {
         let mut params: ModuleParams = HashMap::new();
-        params.insert(
-            "script".to_string(),
-            serde_json::json!("#!/bin/bash\ndate"),
-        );
+        params.insert("script".to_string(), serde_json::json!("#!/bin/bash\ndate"));
 
         let body = build_job_submission_body(&params).unwrap();
         assert_eq!(body["script"], "#!/bin/bash\ndate");

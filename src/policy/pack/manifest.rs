@@ -83,8 +83,7 @@ mod tests {
         };
 
         let yaml = serde_yaml::to_string(&manifest).expect("serialize");
-        let deserialized: PolicyPackManifest =
-            serde_yaml::from_str(&yaml).expect("deserialize");
+        let deserialized: PolicyPackManifest = serde_yaml::from_str(&yaml).expect("deserialize");
 
         assert_eq!(deserialized.name, "test-pack");
         assert_eq!(deserialized.version, "1.0.0");

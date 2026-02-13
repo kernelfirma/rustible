@@ -44,9 +44,9 @@
 //! - Monitoring for audit log tampering
 
 mod event;
-mod logger;
 pub mod hashchain;
 pub mod immutable;
+mod logger;
 pub mod sink;
 pub mod verify;
 

@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -228,11 +228,8 @@ impl ImagePipelineModule {
         context: &ModuleContext,
         path: &str,
     ) -> ModuleResult<Option<OsImage>> {
-        let (ok, content, _) = run_cmd(
-            connection,
-            &format!("cat '{}' 2>/dev/null", path),
-            context,
-        )?;
+        let (ok, content, _) =
+            run_cmd(connection, &format!("cat '{}' 2>/dev/null", path), context)?;
         if !ok || content.trim().is_empty() {
             return Ok(None);
         }
@@ -275,11 +272,10 @@ impl ImagePipelineModule {
         let build_script = params.get_string("build_script")?;
 
         if context.check_mode {
-            return Ok(ModuleOutput::changed(format!(
-                "Would build image '{}'",
-                name
-            ))
-            .with_data("name", serde_json::json!(name)));
+            return Ok(
+                ModuleOutput::changed(format!("Would build image '{}'", name))
+                    .with_data("name", serde_json::json!(name)),
+            );
         }
 
         let build_id = Self::generate_build_id(connection, context)?;
@@ -288,11 +284,7 @@ impl ImagePipelineModule {
 
         // Ensure image directory exists
         let version_dir = format!("{}/{}", image_dir, name);
-        run_cmd_ok(
-            connection,
-            &format!("mkdir -p '{}'", version_dir),
-            context,
-        )?;
+        run_cmd_ok(connection, &format!("mkdir -p '{}'", version_dir), context)?;
 
         // Create initial image record as Building
         let mut image = OsImage::new(
@@ -385,10 +377,7 @@ impl ImagePipelineModule {
         // Deprecate any currently active image
         let (ok, listing, _) = run_cmd(
             connection,
-            &format!(
-                "ls -1 '{}'/*.json 2>/dev/null",
-                version_dir
-            ),
+            &format!("ls -1 '{}'/*.json 2>/dev/null", version_dir),
             context,
         )?;
 
@@ -588,9 +577,7 @@ impl ImagePipelineModule {
 
         // If version specified, get that specific image
         if let Some(ver) = version {
-            let build_id = ver
-                .strip_prefix(&format!("{}-", name))
-                .unwrap_or(&ver);
+            let build_id = ver.strip_prefix(&format!("{}-", name)).unwrap_or(&ver);
             let metadata_path = format!("{}/{}.json", version_dir, build_id);
 
             let image =
@@ -618,11 +605,10 @@ impl ImagePipelineModule {
                 name, img.version, img.build_id
             ))
             .with_data("image", serde_json::json!(img))),
-            None => Ok(ModuleOutput::ok(format!(
-                "No active image found for '{}'",
-                name
-            ))
-            .with_data("name", serde_json::json!(name))),
+            None => Ok(
+                ModuleOutput::ok(format!("No active image found for '{}'", name))
+                    .with_data("name", serde_json::json!(name)),
+            ),
         }
     }
 }

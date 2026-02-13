@@ -415,12 +415,22 @@ fn build_demo_topology() -> rustible::distributed::topology::ClusterTopology {
     let mut topo = ClusterTopology::new();
 
     topo.add_node(
-        TopologyNode::new("ctrl-1", "Controller 1", NodeType::Controller, NodeRole::Leader)
-            .with_address("10.0.0.1:9000"),
+        TopologyNode::new(
+            "ctrl-1",
+            "Controller 1",
+            NodeType::Controller,
+            NodeRole::Leader,
+        )
+        .with_address("10.0.0.1:9000"),
     );
     topo.add_node(
-        TopologyNode::new("ctrl-2", "Controller 2", NodeType::Controller, NodeRole::Follower)
-            .with_address("10.0.0.2:9000"),
+        TopologyNode::new(
+            "ctrl-2",
+            "Controller 2",
+            NodeType::Controller,
+            NodeRole::Follower,
+        )
+        .with_address("10.0.0.2:9000"),
     );
     topo.add_node(
         TopologyNode::new("worker-1", "Worker 1", NodeType::Worker, NodeRole::Follower)
@@ -435,12 +445,36 @@ fn build_demo_topology() -> rustible::distributed::topology::ClusterTopology {
             .with_address("10.0.0.100:443"),
     );
 
-    topo.add_edge("ctrl-1", "ctrl-2", TopologyEdge::new(EdgeType::Control).with_latency(1));
-    topo.add_edge("ctrl-1", "worker-1", TopologyEdge::new(EdgeType::Data).with_latency(3));
-    topo.add_edge("ctrl-1", "worker-2", TopologyEdge::new(EdgeType::Data).with_latency(5));
-    topo.add_edge("ctrl-2", "worker-1", TopologyEdge::new(EdgeType::Heartbeat).with_latency(2));
-    topo.add_edge("ctrl-2", "worker-2", TopologyEdge::new(EdgeType::Heartbeat).with_latency(4));
-    topo.add_edge("gw-1", "ctrl-1", TopologyEdge::new(EdgeType::Control).with_latency(1));
+    topo.add_edge(
+        "ctrl-1",
+        "ctrl-2",
+        TopologyEdge::new(EdgeType::Control).with_latency(1),
+    );
+    topo.add_edge(
+        "ctrl-1",
+        "worker-1",
+        TopologyEdge::new(EdgeType::Data).with_latency(3),
+    );
+    topo.add_edge(
+        "ctrl-1",
+        "worker-2",
+        TopologyEdge::new(EdgeType::Data).with_latency(5),
+    );
+    topo.add_edge(
+        "ctrl-2",
+        "worker-1",
+        TopologyEdge::new(EdgeType::Heartbeat).with_latency(2),
+    );
+    topo.add_edge(
+        "ctrl-2",
+        "worker-2",
+        TopologyEdge::new(EdgeType::Heartbeat).with_latency(4),
+    );
+    topo.add_edge(
+        "gw-1",
+        "ctrl-1",
+        TopologyEdge::new(EdgeType::Control).with_latency(1),
+    );
 
     topo
 }
@@ -487,8 +521,7 @@ async fn execute_health(_args: &FleetHealthArgs, ctx: &mut CommandContext) -> Re
             "ctrl-2",
             vec![
                 HealthCheck::new("raft", HealthStatus::Healthy),
-                HealthCheck::new("disk", HealthStatus::Degraded)
-                    .with_message("85% utilization"),
+                HealthCheck::new("disk", HealthStatus::Degraded).with_message("85% utilization"),
             ],
         ),
         NodeHealth::new(
@@ -499,10 +532,7 @@ async fn execute_health(_args: &FleetHealthArgs, ctx: &mut CommandContext) -> Re
             "worker-2",
             vec![HealthCheck::new("connectivity", HealthStatus::Healthy)],
         ),
-        NodeHealth::new(
-            "gw-1",
-            vec![HealthCheck::new("tls", HealthStatus::Healthy)],
-        ),
+        NodeHealth::new("gw-1", vec![HealthCheck::new("tls", HealthStatus::Healthy)]),
     ];
 
     let summary: ClusterHealthSummary = HealthAggregator::aggregate(&topo, &node_checks);
@@ -563,8 +593,10 @@ async fn execute_nodes(args: &FleetNodesArgs, ctx: &mut CommandContext) -> Resul
             "gateway" => NodeType::Gateway,
             "storage" => NodeType::Storage,
             other => {
-                ctx.output
-                    .error(&format!("Unknown node type: {}. Use controller, worker, gateway, or storage.", other));
+                ctx.output.error(&format!(
+                    "Unknown node type: {}. Use controller, worker, gateway, or storage.",
+                    other
+                ));
                 return Ok(1);
             }
         };

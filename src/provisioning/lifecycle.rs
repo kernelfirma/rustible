@@ -61,9 +61,7 @@ pub fn check_prevent_destroy(
         let address = action.resource_id.address();
         if let Some(lc) = lifecycles.get(&address) {
             if lc.prevent_destroy {
-                return Err(ProvisioningError::PreventDestroyViolation {
-                    resource: address,
-                });
+                return Err(ProvisioningError::PreventDestroyViolation { resource: address });
             }
         }
     }
@@ -89,7 +87,10 @@ pub fn apply_replace_triggers(
     let mut promoted = 0usize;
 
     for action in &mut plan.actions {
-        if matches!(action.change_type, ChangeType::Destroy | ChangeType::Replace) {
+        if matches!(
+            action.change_type,
+            ChangeType::Destroy | ChangeType::Replace
+        ) {
             continue; // already destructive
         }
         let address = action.resource_id.address();
@@ -114,10 +115,10 @@ pub fn apply_replace_triggers(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::plan::{ExecutionPlan, PlannedAction};
     use super::super::state::ResourceId;
     use super::super::traits::{ChangeType, ResourceDiff};
+    use super::*;
     use std::collections::HashMap;
 
     fn make_action(addr: &str, change: ChangeType) -> PlannedAction {
@@ -137,7 +138,8 @@ mod tests {
     #[test]
     fn test_prevent_destroy_blocks() {
         let mut plan = ExecutionPlan::empty();
-        plan.actions.push(make_action("aws_rds.db", ChangeType::Destroy));
+        plan.actions
+            .push(make_action("aws_rds.db", ChangeType::Destroy));
 
         let mut lc = HashMap::new();
         lc.insert(
@@ -146,13 +148,17 @@ mod tests {
         );
 
         let err = check_prevent_destroy(&plan, &lc).unwrap_err();
-        assert!(matches!(err, ProvisioningError::PreventDestroyViolation { .. }));
+        assert!(matches!(
+            err,
+            ProvisioningError::PreventDestroyViolation { .. }
+        ));
     }
 
     #[test]
     fn test_prevent_destroy_allows_create() {
         let mut plan = ExecutionPlan::empty();
-        plan.actions.push(make_action("aws_rds.db", ChangeType::Create));
+        plan.actions
+            .push(make_action("aws_rds.db", ChangeType::Create));
 
         let mut lc = HashMap::new();
         lc.insert(
@@ -166,8 +172,10 @@ mod tests {
     #[test]
     fn test_replace_triggers() {
         let mut plan = ExecutionPlan::empty();
-        plan.actions.push(make_action("aws_ami.latest", ChangeType::Update));
-        plan.actions.push(make_action("aws_instance.web", ChangeType::NoOp));
+        plan.actions
+            .push(make_action("aws_ami.latest", ChangeType::Update));
+        plan.actions
+            .push(make_action("aws_instance.web", ChangeType::NoOp));
 
         let mut lc = HashMap::new();
         lc.insert(
@@ -183,7 +191,8 @@ mod tests {
     #[test]
     fn test_no_false_trigger() {
         let mut plan = ExecutionPlan::empty();
-        plan.actions.push(make_action("aws_instance.web", ChangeType::NoOp));
+        plan.actions
+            .push(make_action("aws_instance.web", ChangeType::NoOp));
 
         let mut lc = HashMap::new();
         lc.insert(

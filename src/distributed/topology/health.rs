@@ -186,7 +186,11 @@ fn worse(a: HealthStatus, b: HealthStatus) -> HealthStatus {
             HealthStatus::Unhealthy => 3,
         }
     }
-    if severity(b) > severity(a) { b } else { a }
+    if severity(b) > severity(a) {
+        b
+    } else {
+        a
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -201,13 +205,22 @@ mod tests {
     fn sample_topology() -> ClusterTopology {
         let mut topo = ClusterTopology::new();
         topo.add_node(TopologyNode::new(
-            "ctrl-1", "Controller 1", NodeType::Controller, NodeRole::Leader,
+            "ctrl-1",
+            "Controller 1",
+            NodeType::Controller,
+            NodeRole::Leader,
         ));
         topo.add_node(TopologyNode::new(
-            "worker-1", "Worker 1", NodeType::Worker, NodeRole::Follower,
+            "worker-1",
+            "Worker 1",
+            NodeType::Worker,
+            NodeRole::Follower,
         ));
         topo.add_node(TopologyNode::new(
-            "worker-2", "Worker 2", NodeType::Worker, NodeRole::Follower,
+            "worker-2",
+            "Worker 2",
+            NodeType::Worker,
+            NodeRole::Follower,
         ));
         topo
     }
@@ -216,9 +229,18 @@ mod tests {
     fn test_all_healthy() {
         let topo = sample_topology();
         let checks = vec![
-            NodeHealth::new("ctrl-1", vec![HealthCheck::new("raft", HealthStatus::Healthy)]),
-            NodeHealth::new("worker-1", vec![HealthCheck::new("disk", HealthStatus::Healthy)]),
-            NodeHealth::new("worker-2", vec![HealthCheck::new("disk", HealthStatus::Healthy)]),
+            NodeHealth::new(
+                "ctrl-1",
+                vec![HealthCheck::new("raft", HealthStatus::Healthy)],
+            ),
+            NodeHealth::new(
+                "worker-1",
+                vec![HealthCheck::new("disk", HealthStatus::Healthy)],
+            ),
+            NodeHealth::new(
+                "worker-2",
+                vec![HealthCheck::new("disk", HealthStatus::Healthy)],
+            ),
         ];
 
         let summary = HealthAggregator::aggregate(&topo, &checks);
@@ -231,7 +253,10 @@ mod tests {
     fn test_mixed_health() {
         let topo = sample_topology();
         let checks = vec![
-            NodeHealth::new("ctrl-1", vec![HealthCheck::new("raft", HealthStatus::Healthy)]),
+            NodeHealth::new(
+                "ctrl-1",
+                vec![HealthCheck::new("raft", HealthStatus::Healthy)],
+            ),
             NodeHealth::new(
                 "worker-1",
                 vec![HealthCheck::new("disk", HealthStatus::Degraded).with_message("90% full")],
@@ -255,8 +280,14 @@ mod tests {
                 "ctrl-1",
                 vec![HealthCheck::new("raft", HealthStatus::Unhealthy)],
             ),
-            NodeHealth::new("worker-1", vec![HealthCheck::new("disk", HealthStatus::Healthy)]),
-            NodeHealth::new("worker-2", vec![HealthCheck::new("disk", HealthStatus::Healthy)]),
+            NodeHealth::new(
+                "worker-1",
+                vec![HealthCheck::new("disk", HealthStatus::Healthy)],
+            ),
+            NodeHealth::new(
+                "worker-2",
+                vec![HealthCheck::new("disk", HealthStatus::Healthy)],
+            ),
         ];
 
         let summary = HealthAggregator::aggregate(&topo, &checks);

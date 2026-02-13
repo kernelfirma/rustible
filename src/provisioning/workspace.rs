@@ -100,12 +100,14 @@ impl WorkspaceManager {
 
         // Ensure the workspaces directory exists
         let workspaces_dir = root_dir.join(WORKSPACES_DIR);
-        tokio::fs::create_dir_all(&workspaces_dir).await.map_err(|e| {
-            ProvisioningError::StatePersistenceError(format!(
-                "Failed to create workspaces directory: {}",
-                e
-            ))
-        })?;
+        tokio::fs::create_dir_all(&workspaces_dir)
+            .await
+            .map_err(|e| {
+                ProvisioningError::StatePersistenceError(format!(
+                    "Failed to create workspaces directory: {}",
+                    e
+                ))
+            })?;
 
         // Ensure the default workspace directory exists
         let default_dir = workspaces_dir.join(DEFAULT_WORKSPACE);
@@ -163,12 +165,14 @@ impl WorkspaceManager {
             )));
         }
 
-        tokio::fs::create_dir_all(&workspace_dir).await.map_err(|e| {
-            ProvisioningError::StatePersistenceError(format!(
-                "Failed to create workspace directory: {}",
-                e
-            ))
-        })?;
+        tokio::fs::create_dir_all(&workspace_dir)
+            .await
+            .map_err(|e| {
+                ProvisioningError::StatePersistenceError(format!(
+                    "Failed to create workspace directory: {}",
+                    e
+                ))
+            })?;
 
         tracing::info!(workspace = %name, "Created workspace");
 
@@ -222,12 +226,14 @@ impl WorkspaceManager {
             )));
         }
 
-        tokio::fs::remove_dir_all(&workspace_dir).await.map_err(|e| {
-            ProvisioningError::StatePersistenceError(format!(
-                "Failed to delete workspace directory: {}",
-                e
-            ))
-        })?;
+        tokio::fs::remove_dir_all(&workspace_dir)
+            .await
+            .map_err(|e| {
+                ProvisioningError::StatePersistenceError(format!(
+                    "Failed to delete workspace directory: {}",
+                    e
+                ))
+            })?;
 
         tracing::info!(workspace = %name, "Deleted workspace");
 
@@ -361,9 +367,7 @@ mod tests {
         assert_eq!(manager.current(), DEFAULT_WORKSPACE);
 
         // Default workspace directory should exist
-        let default_dir = dir
-            .path()
-            .join(".rustible/workspaces/default");
+        let default_dir = dir.path().join(".rustible/workspaces/default");
         assert!(default_dir.exists());
     }
 

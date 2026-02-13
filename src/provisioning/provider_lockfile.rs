@@ -138,10 +138,7 @@ pub enum LockfileMismatchKind {
     MissingProvider,
 
     /// Provider version does not match lockfile
-    VersionMismatch {
-        locked: String,
-        current: String,
-    },
+    VersionMismatch { locked: String, current: String },
 
     /// Provider hash does not match lockfile
     HashMismatch,
@@ -154,7 +151,11 @@ impl std::fmt::Display for LockfileValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
             LockfileMismatchKind::MissingProvider => {
-                write!(f, "Provider '{}' is locked but not configured", self.provider)
+                write!(
+                    f,
+                    "Provider '{}' is locked but not configured",
+                    self.provider
+                )
             }
             LockfileMismatchKind::VersionMismatch { locked, current } => {
                 write!(
@@ -232,11 +233,7 @@ impl ProviderLockfile {
         let mut lockfile = Self::new();
 
         for info in providers {
-            let lock = ProviderLock::new(
-                &info.version,
-                &info.constraints,
-                info.hashes.clone(),
-            );
+            let lock = ProviderLock::new(&info.version, &info.constraints, info.hashes.clone());
             lockfile.providers.insert(info.name.clone(), lock);
 
             tracing::debug!(
@@ -285,10 +282,8 @@ impl ProviderLockfile {
 
                     // Check hashes (if both have hashes)
                     if !lock.hashes.is_empty() && !current.hashes.is_empty() {
-                        let has_matching_hash = current
-                            .hashes
-                            .iter()
-                            .any(|h| lock.contains_hash(h));
+                        let has_matching_hash =
+                            current.hashes.iter().any(|h| lock.contains_hash(h));
 
                         if !has_matching_hash {
                             errors.push(LockfileValidationError {
@@ -325,11 +320,7 @@ impl ProviderLockfile {
 
     /// Update a single provider entry in the lockfile
     pub fn update_provider(&mut self, info: &ProviderInfo) {
-        let lock = ProviderLock::new(
-            &info.version,
-            &info.constraints,
-            info.hashes.clone(),
-        );
+        let lock = ProviderLock::new(&info.version, &info.constraints, info.hashes.clone());
         self.providers.insert(info.name.clone(), lock);
         self.updated_at = Utc::now();
 
@@ -475,10 +466,7 @@ mod tests {
                 "aws",
                 "5.31.0",
                 "~> 5.0",
-                vec![
-                    "h1:abc123def456".to_string(),
-                    "zh:789ghi012jkl".to_string(),
-                ],
+                vec!["h1:abc123def456".to_string(), "zh:789ghi012jkl".to_string()],
             ),
             ProviderInfo::new(
                 "azure",
@@ -745,6 +733,9 @@ mod tests {
         )];
 
         let errors = lockfile.validate(&current);
-        assert!(errors.is_empty(), "Empty locked hashes should skip hash check");
+        assert!(
+            errors.is_empty(),
+            "Empty locked hashes should skip hash check"
+        );
     }
 }

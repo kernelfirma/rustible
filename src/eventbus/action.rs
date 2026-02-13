@@ -95,34 +95,25 @@ impl ActionExecutor {
                     output: Some(format!("Queued playbook for execution: {}", path)),
                 })
             }
-            ReactorAction::ExecuteModule { module, args } => {
-                Ok(ActionResult {
-                    action_name: "execute_module".to_string(),
-                    success: true,
-                    output: Some(format!(
-                        "Queued module '{}' with {} arg(s)",
-                        module,
-                        args.len()
-                    )),
-                })
-            }
-            ReactorAction::Notify { channel, message } => {
-                Ok(ActionResult {
-                    action_name: "notify".to_string(),
-                    success: true,
-                    output: Some(format!(
-                        "Notification sent to '{}': {}",
-                        channel, message
-                    )),
-                })
-            }
-            ReactorAction::WebhookCall { url, method } => {
-                Ok(ActionResult {
-                    action_name: "webhook_call".to_string(),
-                    success: true,
-                    output: Some(format!("Webhook {} {}", method, url)),
-                })
-            }
+            ReactorAction::ExecuteModule { module, args } => Ok(ActionResult {
+                action_name: "execute_module".to_string(),
+                success: true,
+                output: Some(format!(
+                    "Queued module '{}' with {} arg(s)",
+                    module,
+                    args.len()
+                )),
+            }),
+            ReactorAction::Notify { channel, message } => Ok(ActionResult {
+                action_name: "notify".to_string(),
+                success: true,
+                output: Some(format!("Notification sent to '{}': {}", channel, message)),
+            }),
+            ReactorAction::WebhookCall { url, method } => Ok(ActionResult {
+                action_name: "webhook_call".to_string(),
+                success: true,
+                output: Some(format!("Webhook {} {}", method, url)),
+            }),
         }
     }
 }

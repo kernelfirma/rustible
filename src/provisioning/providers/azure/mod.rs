@@ -341,7 +341,11 @@ impl Provider for AzureProvider {
         }
 
         // Extract default tags
-        if let Some(tags) = config.settings.get("default_tags").and_then(|v| v.as_object()) {
+        if let Some(tags) = config
+            .settings
+            .get("default_tags")
+            .and_then(|v| v.as_object())
+        {
             for (key, value) in tags {
                 if let Some(v) = value.as_str() {
                     self.default_tags.insert(key.clone(), v.to_string());

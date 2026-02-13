@@ -145,10 +145,7 @@ impl Module for HpcFactsModule {
                 for i in 0..node_count {
                     let cpulist = run_cmd_opt(
                         connection,
-                        &format!(
-                            "cat /sys/devices/system/node/node{}/cpulist 2>/dev/null",
-                            i
-                        ),
+                        &format!("cat /sys/devices/system/node/node{}/cpulist 2>/dev/null", i),
                         context,
                     )
                     .unwrap_or_default();
@@ -273,17 +270,12 @@ impl Module for HpcFactsModule {
             );
             if has_ibstat.is_some() {
                 let ib_output =
-                    run_cmd_opt(connection, "ibstat -s 2>/dev/null", context)
-                        .unwrap_or_default();
+                    run_cmd_opt(connection, "ibstat -s 2>/dev/null", context).unwrap_or_default();
                 let ib_devs: Vec<serde_json::Value> = ib_output
                     .lines()
                     .filter(|l| l.contains("CA '"))
                     .map(|l| {
-                        let name = l
-                            .split('\'')
-                            .nth(1)
-                            .unwrap_or("unknown")
-                            .to_string();
+                        let name = l.split('\'').nth(1).unwrap_or("unknown").to_string();
                         serde_json::json!({"name": name})
                     })
                     .collect();
@@ -315,10 +307,8 @@ impl Module for HpcFactsModule {
             }
         }
 
-        Ok(
-            ModuleOutput::ok("Gathered HPC facts")
-                .with_data("hpc_facts", serde_json::Value::Object(facts)),
-        )
+        Ok(ModuleOutput::ok("Gathered HPC facts")
+            .with_data("hpc_facts", serde_json::Value::Object(facts)))
     }
 
     fn required_params(&self) -> &[&'static str] {

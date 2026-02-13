@@ -1401,9 +1401,7 @@ impl ParamExt for ModuleParams {
             Some(serde_json::Value::Bool(b)) => Ok(Some(*b)),
             Some(serde_json::Value::String(s)) => crate::utils::parse_bool(s)
                 .map(Some)
-                .ok_or_else(|| {
-                    ModuleError::InvalidParameter(format!("{} must be a boolean", key))
-                }),
+                .ok_or_else(|| ModuleError::InvalidParameter(format!("{} must be a boolean", key))),
             Some(_) => Err(ModuleError::InvalidParameter(format!(
                 "{} must be a boolean",
                 key

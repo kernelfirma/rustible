@@ -544,7 +544,11 @@ impl Resource for GoogleComputeSubnetwork {
                     sensitive: false,
                 },
             ],
-            force_new: vec!["name".to_string(), "network".to_string(), "region".to_string()],
+            force_new: vec![
+                "name".to_string(),
+                "network".to_string(),
+                "region".to_string(),
+            ],
             timeouts: ResourceTimeouts::default(),
         }
     }
@@ -618,7 +622,11 @@ impl Resource for GoogleComputeSubnetwork {
     }
 
     fn forces_replacement(&self) -> Vec<String> {
-        vec!["name".to_string(), "network".to_string(), "region".to_string()]
+        vec![
+            "name".to_string(),
+            "network".to_string(),
+            "region".to_string(),
+        ]
     }
 
     fn validate(&self, config: &Value) -> ProvisioningResult<()> {
@@ -905,7 +913,11 @@ mod tests {
         assert_eq!(schema.required_args.len(), 3);
         assert_eq!(schema.timeouts.create, 600);
 
-        let names: Vec<&str> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+        let names: Vec<&str> = schema
+            .required_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(names.contains(&"name"));
         assert!(names.contains(&"machine_type"));
         assert!(names.contains(&"zone"));
@@ -1024,7 +1036,11 @@ mod tests {
         let schema = res.schema();
         assert_eq!(schema.required_args.len(), 2);
 
-        let names: Vec<&str> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+        let names: Vec<&str> = schema
+            .required_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(names.contains(&"name"));
         assert!(names.contains(&"network"));
 

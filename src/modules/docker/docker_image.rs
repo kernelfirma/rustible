@@ -480,7 +480,10 @@ impl DockerImageModule {
                                     let mut buf = Vec::new();
                                     let mut file = file;
                                     file.read_to_end(&mut buf).map_err(|e| {
-                                        ModuleError::ExecutionFailed(format!("Failed to read archive: {}", e))
+                                        ModuleError::ExecutionFailed(format!(
+                                            "Failed to read archive: {}",
+                                            e
+                                        ))
                                     })?;
                                     bytes::Bytes::from(buf)
                                 };

@@ -339,7 +339,11 @@ impl Resource for AzurermVirtualNetwork {
                 )));
             }
         }
-        if config.get("address_space").and_then(|v| v.as_array()).is_none() {
+        if config
+            .get("address_space")
+            .and_then(|v| v.as_array())
+            .is_none()
+        {
             return Err(ProvisioningError::ValidationError(
                 "address_space is required for azurerm_virtual_network".to_string(),
             ));
@@ -941,7 +945,11 @@ mod tests {
         assert_eq!(schema.resource_type, "azurerm_resource_group");
         assert_eq!(schema.required_args.len(), 2);
 
-        let names: Vec<&str> = schema.required_args.iter().map(|f| f.name.as_str()).collect();
+        let names: Vec<&str> = schema
+            .required_args
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         assert!(names.contains(&"name"));
         assert!(names.contains(&"location"));
     }

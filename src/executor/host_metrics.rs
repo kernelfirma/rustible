@@ -477,7 +477,10 @@ mod tests {
         summary.ok_hosts = 487;
         summary.failed_hosts = 8;
         summary.unreachable_hosts = 5;
-        assert_eq!(summary.summary_line(), "487/500 ok, 8 failed, 5 unreachable");
+        assert_eq!(
+            summary.summary_line(),
+            "487/500 ok, 8 failed, 5 unreachable"
+        );
     }
 
     #[test]

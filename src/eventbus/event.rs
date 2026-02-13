@@ -206,10 +206,7 @@ mod tests {
             EventType::from_str_loose("PlaybookStarted"),
             EventType::PlaybookStarted
         );
-        assert_eq!(
-            EventType::from_str_loose("host.down"),
-            EventType::HostDown
-        );
+        assert_eq!(EventType::from_str_loose("host.down"), EventType::HostDown);
         assert_eq!(
             EventType::from_str_loose("unknown_event"),
             EventType::Custom("unknown_event".to_string())

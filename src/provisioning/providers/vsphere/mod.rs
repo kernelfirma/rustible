@@ -428,10 +428,7 @@ async fn run_govc(
     }
 
     serde_json::from_str(stdout.trim()).map_err(|e| {
-        ProvisioningError::CloudApiError(format!(
-            "Failed to parse govc JSON output: {}",
-            e
-        ))
+        ProvisioningError::CloudApiError(format!("Failed to parse govc JSON output: {}", e))
     })
 }
 
@@ -461,9 +458,7 @@ async fn run_govc_no_json(
         operation: format!("govc {}", args.first().unwrap_or(&"")),
         seconds: timeout_seconds,
     })?
-    .map_err(|e| {
-        ProvisioningError::CloudApiError(format!("Failed to execute govc: {}", e))
-    })?;
+    .map_err(|e| ProvisioningError::CloudApiError(format!("Failed to execute govc: {}", e)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -503,16 +498,14 @@ impl Resource for VsphereVmResource {
         ResourceSchema {
             resource_type: "vsphere_vm".to_string(),
             description: "VMware vSphere virtual machine (managed via govc CLI)".to_string(),
-            required_args: vec![
-                SchemaField {
-                    name: "name".to_string(),
-                    field_type: FieldType::String,
-                    description: "VM name".to_string(),
-                    default: None,
-                    constraints: vec![FieldConstraint::MinLength { min: 1 }],
-                    sensitive: false,
-                },
-            ],
+            required_args: vec![SchemaField {
+                name: "name".to_string(),
+                field_type: FieldType::String,
+                description: "VM name".to_string(),
+                default: None,
+                constraints: vec![FieldConstraint::MinLength { min: 1 }],
+                sensitive: false,
+            }],
             optional_args: vec![
                 SchemaField {
                     name: "template".to_string(),
@@ -538,9 +531,7 @@ impl Resource for VsphereVmResource {
                     field_type: FieldType::Integer,
                     description: "Memory in megabytes".to_string(),
                     default: None,
-                    constraints: vec![
-                        FieldConstraint::MinValue { value: 128 },
-                    ],
+                    constraints: vec![FieldConstraint::MinValue { value: 128 }],
                     sensitive: false,
                 },
                 SchemaField {
@@ -707,7 +698,11 @@ impl Resource for VsphereVmResource {
             "annotation": annotation,
         });
 
-        let cloud_id = if uuid.is_empty() { id.to_string() } else { uuid };
+        let cloud_id = if uuid.is_empty() {
+            id.to_string()
+        } else {
+            uuid
+        };
         Ok(ResourceReadResult::found(cloud_id, attrs))
     }
 
@@ -776,21 +771,14 @@ impl Resource for VsphereVmResource {
         let name = config
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ProvisioningError::ValidationError("name is required".to_string())
-            })?;
+            .ok_or_else(|| ProvisioningError::ValidationError("name is required".to_string()))?;
 
         // Build govc vm.clone args
-        let template = config
-            .get("template")
-            .and_then(|v| v.as_str());
+        let template = config.get("template").and_then(|v| v.as_str());
 
         if let Some(tpl) = template {
-            let mut args: Vec<String> = vec![
-                "vm.clone".to_string(),
-                "-vm".to_string(),
-                tpl.to_string(),
-            ];
+            let mut args: Vec<String> =
+                vec!["vm.clone".to_string(), "-vm".to_string(), tpl.to_string()];
 
             if let Some(ds) = config.get("datastore").and_then(|v| v.as_str()) {
                 args.push("-ds".to_string());
@@ -827,7 +815,8 @@ impl Resource for VsphereVmResource {
         }
 
         // Apply CPU/memory changes if specified
-        let mut change_args: Vec<String> = vec!["vm.change".to_string(), "-vm".to_string(), name.to_string()];
+        let mut change_args: Vec<String> =
+            vec!["vm.change".to_string(), "-vm".to_string(), name.to_string()];
         let mut has_changes = false;
 
         if let Some(cpus) = config.get("num_cpus").and_then(|v| v.as_u64()) {
@@ -879,12 +868,10 @@ impl Resource for VsphereVmResource {
         new: &Value,
         _ctx: &ProviderContext,
     ) -> ProvisioningResult<ResourceResult> {
-        let name = new
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or(id);
+        let name = new.get("name").and_then(|v| v.as_str()).unwrap_or(id);
 
-        let mut change_args: Vec<String> = vec!["vm.change".to_string(), "-vm".to_string(), name.to_string()];
+        let mut change_args: Vec<String> =
+            vec!["vm.change".to_string(), "-vm".to_string(), name.to_string()];
         let mut has_changes = false;
 
         if let Some(cpus) = new.get("num_cpus").and_then(|v| v.as_u64()) {
@@ -934,12 +921,7 @@ impl Resource for VsphereVmResource {
         .await;
 
         // Destroy
-        run_govc_no_json(
-            &["vm.destroy", id],
-            &self.govc_env,
-            self.timeout_seconds,
-        )
-        .await?;
+        run_govc_no_json(&["vm.destroy", id], &self.govc_env, self.timeout_seconds).await?;
 
         Ok(ResourceResult::success(
             id,
@@ -947,11 +929,7 @@ impl Resource for VsphereVmResource {
         ))
     }
 
-    async fn import(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let read_result = self.read(id, ctx).await?;
         if !read_result.exists {
             return Err(ProvisioningError::ImportError {
@@ -1088,7 +1066,10 @@ mod tests {
         provider.insecure = true;
 
         let env = provider.govc_env();
-        assert_eq!(env.get("GOVC_URL"), Some(&"https://vcenter/sdk".to_string()));
+        assert_eq!(
+            env.get("GOVC_URL"),
+            Some(&"https://vcenter/sdk".to_string())
+        );
         assert_eq!(env.get("GOVC_USERNAME"), Some(&"admin".to_string()));
         assert_eq!(env.get("GOVC_PASSWORD"), Some(&"secret".to_string()));
         assert_eq!(env.get("GOVC_DATACENTER"), Some(&"DC0".to_string()));
@@ -1128,7 +1109,10 @@ mod tests {
         assert!(!creds.is_expired());
 
         let val = creds.as_value();
-        assert_eq!(val.get("type").and_then(|v| v.as_str()), Some("vsphere_govc"));
+        assert_eq!(
+            val.get("type").and_then(|v| v.as_str()),
+            Some("vsphere_govc")
+        );
         // Password should not appear
         assert!(val.get("password").is_none());
     }

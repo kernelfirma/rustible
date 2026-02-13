@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -210,9 +210,7 @@ impl BootProfileModule {
         let name = params.get_string_required("name")?;
         let kernel_url = params.get_string_required("kernel_url")?;
         let initrd_url = params.get_string_required("initrd_url")?;
-        let cmdline = params
-            .get_string("cmdline")?
-            .unwrap_or_default();
+        let cmdline = params.get_string("cmdline")?.unwrap_or_default();
         let boot_mode_str = params
             .get_string("boot_mode")?
             .unwrap_or_else(|| "ipxe".to_string());
@@ -224,9 +222,9 @@ impl BootProfileModule {
         })?;
 
         let profile = BootProfile::new(name.clone(), kernel_url, initrd_url, cmdline, boot_mode);
-        let profile_json = profile
-            .to_json_string()
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to serialize profile: {}", e)))?;
+        let profile_json = profile.to_json_string().map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to serialize profile: {}", e))
+        })?;
 
         let profile_path = format!("{}/{}.json", profile_dir, name);
 
@@ -238,12 +236,11 @@ impl BootProfileModule {
         )?;
 
         if exists && existing_content.trim() == profile_json.trim() {
-            return Ok(ModuleOutput::ok(format!(
-                "Boot profile '{}' is already up to date",
-                name
-            ))
-            .with_data("profile", serde_json::json!(profile))
-            .with_data("path", serde_json::json!(profile_path)));
+            return Ok(
+                ModuleOutput::ok(format!("Boot profile '{}' is already up to date", name))
+                    .with_data("profile", serde_json::json!(profile))
+                    .with_data("path", serde_json::json!(profile_path)),
+            );
         }
 
         if context.check_mode {
@@ -255,11 +252,7 @@ impl BootProfileModule {
         }
 
         // Ensure directory exists
-        run_cmd_ok(
-            connection,
-            &format!("mkdir -p '{}'", profile_dir),
-            context,
-        )?;
+        run_cmd_ok(connection, &format!("mkdir -p '{}'", profile_dir), context)?;
 
         // Write profile
         run_cmd_ok(
@@ -272,12 +265,11 @@ impl BootProfileModule {
             context,
         )?;
 
-        Ok(ModuleOutput::changed(format!(
-            "Wrote boot profile '{}' to {}",
-            name, profile_path
-        ))
-        .with_data("profile", serde_json::json!(profile))
-        .with_data("path", serde_json::json!(profile_path)))
+        Ok(
+            ModuleOutput::changed(format!("Wrote boot profile '{}' to {}", name, profile_path))
+                .with_data("profile", serde_json::json!(profile))
+                .with_data("path", serde_json::json!(profile_path)),
+        )
     }
 
     fn action_get(
@@ -297,23 +289,16 @@ impl BootProfileModule {
             )));
         }
 
-        let content = run_cmd_ok(
-            connection,
-            &format!("cat '{}'", profile_path),
-            context,
-        )
-        .map_err(|_| {
-            ModuleError::ExecutionFailed(format!(
-                "Boot profile '{}' not found at {}",
-                name, profile_path
-            ))
-        })?;
+        let content =
+            run_cmd_ok(connection, &format!("cat '{}'", profile_path), context).map_err(|_| {
+                ModuleError::ExecutionFailed(format!(
+                    "Boot profile '{}' not found at {}",
+                    name, profile_path
+                ))
+            })?;
 
         let profile = BootProfile::from_json_str(content.trim()).map_err(|e| {
-            ModuleError::ExecutionFailed(format!(
-                "Failed to parse boot profile '{}': {}",
-                name, e
-            ))
+            ModuleError::ExecutionFailed(format!("Failed to parse boot profile '{}': {}", name, e))
         })?;
 
         Ok(ModuleOutput::ok(format!("Read boot profile '{}'", name))
@@ -350,12 +335,11 @@ impl BootProfileModule {
             Vec::new()
         };
 
-        Ok(ModuleOutput::ok(format!(
-            "Found {} boot profiles",
-            profiles.len()
-        ))
-        .with_data("profiles", serde_json::json!(profiles))
-        .with_data("profile_dir", serde_json::json!(profile_dir)))
+        Ok(
+            ModuleOutput::ok(format!("Found {} boot profiles", profiles.len()))
+                .with_data("profiles", serde_json::json!(profiles))
+                .with_data("profile_dir", serde_json::json!(profile_dir)),
+        )
     }
 
     fn action_generate_ipxe(
@@ -375,33 +359,25 @@ impl BootProfileModule {
             )));
         }
 
-        let content = run_cmd_ok(
-            connection,
-            &format!("cat '{}'", profile_path),
-            context,
-        )
-        .map_err(|_| {
-            ModuleError::ExecutionFailed(format!(
-                "Boot profile '{}' not found at {}",
-                name, profile_path
-            ))
-        })?;
+        let content =
+            run_cmd_ok(connection, &format!("cat '{}'", profile_path), context).map_err(|_| {
+                ModuleError::ExecutionFailed(format!(
+                    "Boot profile '{}' not found at {}",
+                    name, profile_path
+                ))
+            })?;
 
         let profile = BootProfile::from_json_str(content.trim()).map_err(|e| {
-            ModuleError::ExecutionFailed(format!(
-                "Failed to parse boot profile '{}': {}",
-                name, e
-            ))
+            ModuleError::ExecutionFailed(format!("Failed to parse boot profile '{}': {}", name, e))
         })?;
 
         let ipxe_script = profile.generate_ipxe_script();
 
-        Ok(ModuleOutput::ok(format!(
-            "Generated iPXE script for profile '{}'",
-            name
-        ))
-        .with_data("ipxe_script", serde_json::json!(ipxe_script))
-        .with_data("profile", serde_json::json!(profile)))
+        Ok(
+            ModuleOutput::ok(format!("Generated iPXE script for profile '{}'", name))
+                .with_data("ipxe_script", serde_json::json!(ipxe_script))
+                .with_data("profile", serde_json::json!(profile)),
+        )
     }
 }
 
@@ -450,7 +426,8 @@ mod tests {
 
         assert!(script.starts_with("#!ipxe\n"));
         assert!(script.contains("# Boot profile: ubuntu2204\n"));
-        assert!(script.contains("kernel http://boot.example.com/ubuntu/vmlinuz console=ttyS0 ip=dhcp\n"));
+        assert!(script
+            .contains("kernel http://boot.example.com/ubuntu/vmlinuz console=ttyS0 ip=dhcp\n"));
         assert!(script.contains("initrd http://boot.example.com/ubuntu/initrd\n"));
         assert!(script.ends_with("boot\n"));
     }

@@ -70,9 +70,7 @@ impl ChaosLayer {
                     }
                 }
                 Fault::NetworkPartition => {
-                    return Some(
-                        "ChaosLayer: NetworkPartition - connection refused".to_string(),
-                    );
+                    return Some("ChaosLayer: NetworkPartition - connection refused".to_string());
                 }
                 Fault::PacketLoss { rate } => {
                     let current = (count as f64) * rate;

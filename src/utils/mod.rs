@@ -69,9 +69,15 @@ pub fn parse_bool(s: &str) -> Option<bool> {
         "1" | "t" | "T" | "y" | "Y" => Some(true),
         "0" | "f" | "F" | "n" | "N" => Some(false),
         _ => {
-            if s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("yes") || s.eq_ignore_ascii_case("on") {
+            if s.eq_ignore_ascii_case("true")
+                || s.eq_ignore_ascii_case("yes")
+                || s.eq_ignore_ascii_case("on")
+            {
                 Some(true)
-            } else if s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("no") || s.eq_ignore_ascii_case("off") {
+            } else if s.eq_ignore_ascii_case("false")
+                || s.eq_ignore_ascii_case("no")
+                || s.eq_ignore_ascii_case("off")
+            {
                 Some(false)
             } else {
                 None

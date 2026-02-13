@@ -20,7 +20,7 @@ use tokio::runtime::Handle;
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
-    ModuleResult, ParamExt, ParallelizationHint,
+    ModuleResult, ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -226,11 +226,7 @@ impl Module for HpcBaselineModule {
         // --- Directories ---
         if let Some(directories) = params.get_vec_string("directories")? {
             for dir in &directories {
-                let (exists, _, _) = run_cmd(
-                    connection,
-                    &format!("test -d '{}'", dir),
-                    context,
-                )?;
+                let (exists, _, _) = run_cmd(connection, &format!("test -d '{}'", dir), context)?;
                 if !exists {
                     if context.check_mode {
                         changes.push(format!("Would create directory {}", dir));
@@ -275,12 +271,11 @@ impl Module for HpcBaselineModule {
         }
 
         if changed {
-            Ok(ModuleOutput::changed(format!(
-                "Applied {} baseline changes",
-                changes.len()
-            ))
-            .with_data("changes", serde_json::json!(changes))
-            .with_data("os_family", serde_json::json!(os_family)))
+            Ok(
+                ModuleOutput::changed(format!("Applied {} baseline changes", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
+                    .with_data("os_family", serde_json::json!(os_family)),
+            )
         } else {
             Ok(ModuleOutput::ok("HPC baseline configuration is up to date")
                 .with_data("os_family", serde_json::json!(os_family)))

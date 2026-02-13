@@ -101,11 +101,7 @@ impl ApplyCheckpoint {
     }
 
     /// Record a failed action
-    pub fn record_failure(
-        &mut self,
-        action_id: impl Into<String>,
-        message: impl Into<String>,
-    ) {
+    pub fn record_failure(&mut self, action_id: impl Into<String>, message: impl Into<String>) {
         self.failed_action = Some(action_id.into());
         self.failure_message = Some(message.into());
         self.updated_at = Utc::now();
@@ -176,10 +172,7 @@ impl CheckpointManager {
     }
 
     /// Save a checkpoint to disk
-    pub async fn save_checkpoint(
-        &self,
-        checkpoint: &ApplyCheckpoint,
-    ) -> ProvisioningResult<()> {
+    pub async fn save_checkpoint(&self, checkpoint: &ApplyCheckpoint) -> ProvisioningResult<()> {
         let path = self.checkpoint_path();
 
         // Ensure directory exists
@@ -193,10 +186,7 @@ impl CheckpointManager {
         }
 
         let content = serde_json::to_string_pretty(checkpoint).map_err(|e| {
-            ProvisioningError::SerializationError(format!(
-                "Failed to serialize checkpoint: {}",
-                e
-            ))
+            ProvisioningError::SerializationError(format!("Failed to serialize checkpoint: {}", e))
         })?;
 
         // Write atomically
@@ -244,13 +234,12 @@ impl CheckpointManager {
             ))
         })?;
 
-        let checkpoint: ApplyCheckpoint =
-            serde_json::from_str(&content).map_err(|e| {
-                ProvisioningError::StatePersistenceError(format!(
-                    "Failed to parse checkpoint file: {}",
-                    e
-                ))
-            })?;
+        let checkpoint: ApplyCheckpoint = serde_json::from_str(&content).map_err(|e| {
+            ProvisioningError::StatePersistenceError(format!(
+                "Failed to parse checkpoint file: {}",
+                e
+            ))
+        })?;
 
         tracing::info!(
             plan_id = %checkpoint.plan_id,
@@ -281,10 +270,7 @@ impl CheckpointManager {
     }
 
     /// Check if a resumable checkpoint exists for the given plan
-    pub async fn has_resumable_checkpoint(
-        &self,
-        plan_id: &str,
-    ) -> ProvisioningResult<bool> {
+    pub async fn has_resumable_checkpoint(&self, plan_id: &str) -> ProvisioningResult<bool> {
         match self.load_checkpoint().await? {
             Some(checkpoint) => Ok(checkpoint.can_resume(plan_id)),
             None => Ok(false),
@@ -342,7 +328,9 @@ mod tests {
         checkpoint.record_completed("aws_subnet.public");
 
         assert_eq!(checkpoint.completed_count(), 2);
-        assert!(checkpoint.completed_actions.contains(&"aws_vpc.main".to_string()));
+        assert!(checkpoint
+            .completed_actions
+            .contains(&"aws_vpc.main".to_string()));
         assert!(checkpoint
             .completed_actions
             .contains(&"aws_subnet.public".to_string()));
@@ -430,7 +418,9 @@ mod tests {
 
         assert_eq!(loaded.plan_id, "plan-abc");
         assert_eq!(loaded.completed_actions.len(), 2);
-        assert!(loaded.completed_actions.contains(&"aws_vpc.main".to_string()));
+        assert!(loaded
+            .completed_actions
+            .contains(&"aws_vpc.main".to_string()));
         assert!(loaded
             .completed_actions
             .contains(&"aws_subnet.public".to_string()));

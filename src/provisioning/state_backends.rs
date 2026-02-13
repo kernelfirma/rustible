@@ -1512,7 +1512,11 @@ impl ConsulSessionLock {
         ))
     }
 
-    fn build_request(&self, method: reqwest::Method, url: &str) -> ProvisioningResult<reqwest::RequestBuilder> {
+    fn build_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+    ) -> ProvisioningResult<reqwest::RequestBuilder> {
         self.ensure_secure_address()?;
         let mut request = self.client.request(method, url).timeout(self.timeout);
 

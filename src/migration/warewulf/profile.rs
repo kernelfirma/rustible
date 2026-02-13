@@ -307,11 +307,12 @@ impl WarewulfProfileImporter {
             })
             .collect();
 
-        let total = hosts.len() + report
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == MigrationSeverity::Error)
-            .count();
+        let total = hosts.len()
+            + report
+                .diagnostics
+                .iter()
+                .filter(|d| d.severity == MigrationSeverity::Error)
+                .count();
 
         report.compute_summary(total, successful);
         report.compute_outcome(0.1);
@@ -327,11 +328,7 @@ impl WarewulfProfileImporter {
     ///
     /// Returns `None` if the node cannot be meaningfully mapped.
     fn map_node(node: &WarewulfNode, report: &mut MigrationReport) -> Option<ImportedHost> {
-        let hostname = node
-            .name
-            .as_deref()
-            .unwrap_or(&node.id)
-            .to_string();
+        let hostname = node.name.as_deref().unwrap_or(&node.id).to_string();
 
         if hostname.is_empty() {
             return None;
@@ -340,10 +337,7 @@ impl WarewulfProfileImporter {
         let mut vars: HashMap<String, serde_yaml::Value> = HashMap::new();
 
         // Map primary IP from first network device.
-        let ansible_host = node
-            .net_devs
-            .first()
-            .and_then(|nd| nd.ipaddr.clone());
+        let ansible_host = node.net_devs.first().and_then(|nd| nd.ipaddr.clone());
 
         if ansible_host.is_none() {
             report.add_diagnostic(MigrationDiagnostic {
@@ -497,7 +491,11 @@ compute-02:
         let result = WarewulfProfileImporter::import_from_str(yaml).unwrap();
         assert_eq!(result.hosts.len(), 2);
 
-        let host1 = result.hosts.iter().find(|h| h.name == "compute-01").unwrap();
+        let host1 = result
+            .hosts
+            .iter()
+            .find(|h| h.name == "compute-01")
+            .unwrap();
         assert_eq!(host1.ansible_host.as_deref(), Some("10.0.0.101"));
         assert_eq!(host1.groups, vec!["default", "compute"]);
         assert_eq!(
@@ -522,10 +520,7 @@ compute-02:
         assert!(compute_group.hosts.contains(&"compute-02".to_string()));
 
         // Report should show success.
-        assert_eq!(
-            result.report.outcome,
-            Some(MigrationOutcome::Success)
-        );
+        assert_eq!(result.report.outcome, Some(MigrationOutcome::Success));
     }
 
     #[test]
@@ -619,6 +614,9 @@ lonely-node:
             .iter()
             .filter(|f| f.title.contains("no profiles"))
             .collect();
-        assert!(!findings.is_empty(), "expected finding about missing profiles");
+        assert!(
+            !findings.is_empty(),
+            "expected finding about missing profiles"
+        );
     }
 }

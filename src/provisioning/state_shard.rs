@@ -189,9 +189,7 @@ impl ShardedState {
         // Merge all resources and collect outputs/providers from all shards
         for shard in self.shards.values() {
             for (address, resource) in &shard.resources {
-                merged
-                    .resources
-                    .insert(address.clone(), resource.clone());
+                merged.resources.insert(address.clone(), resource.clone());
             }
 
             // Merge outputs (later shards may override earlier ones)
@@ -259,11 +257,7 @@ mod tests {
     use serde_json::json;
 
     /// Create a test resource state with the given parameters
-    fn make_resource(
-        resource_type: &str,
-        name: &str,
-        provider: &str,
-    ) -> (String, ResourceState) {
+    fn make_resource(resource_type: &str, name: &str, provider: &str) -> (String, ResourceState) {
         let id = ResourceId::new(resource_type, name);
         let address = id.address();
         let resource = ResourceState::new(

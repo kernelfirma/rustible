@@ -9,8 +9,8 @@ use clap::{Parser, Subcommand};
 use std::collections::HashMap;
 
 use rustible::eventbus::{
-    Event, EventBus, EventSource, EventType, ReactorCondition, ReactorEngine,
-    ReactorRule, ReactorAction, DeadLetterQueue,
+    DeadLetterQueue, Event, EventBus, EventSource, EventType, ReactorAction, ReactorCondition,
+    ReactorEngine, ReactorRule,
 };
 
 use super::CommandContext;
@@ -156,20 +156,11 @@ async fn execute_rules_list(ctx: &mut CommandContext) -> Result<i32> {
 
     for (i, rule) in rules.iter().enumerate() {
         let status = if rule.enabled { "enabled" } else { "disabled" };
-        ctx.output.info(&format!(
-            "  {}. {} [{}]",
-            i + 1,
-            rule.name,
-            status,
-        ));
-        ctx.output.info(&format!(
-            "     Condition: {:?}",
-            rule.condition
-        ));
-        ctx.output.info(&format!(
-            "     Action: {:?}",
-            rule.action
-        ));
+        ctx.output
+            .info(&format!("  {}. {} [{}]", i + 1, rule.name, status,));
+        ctx.output
+            .info(&format!("     Condition: {:?}", rule.condition));
+        ctx.output.info(&format!("     Action: {:?}", rule.action));
     }
 
     ctx.output
@@ -194,10 +185,8 @@ async fn execute_rules_check(args: &RulesCheckArgs, ctx: &mut CommandContext) ->
     if actions.is_empty() {
         ctx.output.info("No rules matched this event.");
     } else {
-        ctx.output.info(&format!(
-            "{} rule(s) would fire:",
-            actions.len()
-        ));
+        ctx.output
+            .info(&format!("{} rule(s) would fire:", actions.len()));
         for (i, action) in actions.iter().enumerate() {
             ctx.output.info(&format!("  {}. {:?}", i + 1, action));
         }
@@ -221,10 +210,7 @@ async fn execute_dlq_list(ctx: &mut CommandContext) -> Result<i32> {
     for entry in dlq.list() {
         ctx.output.info(&format!(
             "  {} | {} | retries: {} | {}",
-            entry.id,
-            entry.event.event_type,
-            entry.retry_count,
-            entry.error_message,
+            entry.id, entry.event.event_type, entry.retry_count, entry.error_message,
         ));
     }
 

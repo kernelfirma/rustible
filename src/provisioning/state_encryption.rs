@@ -185,8 +185,7 @@ impl StateEncryption {
                 // Mix bytes with rotation and XOR
                 let prev = state[i];
                 let salt_byte = self.config.salt[i % self.config.salt.len()];
-                let pass_byte = self.config.passphrase.as_bytes()
-                    [i % self.config.passphrase.len()];
+                let pass_byte = self.config.passphrase.as_bytes()[i % self.config.passphrase.len()];
                 next_state[i] = prev
                     .wrapping_add(salt_byte)
                     .wrapping_mul(pass_byte.wrapping_add(1))
@@ -293,9 +292,8 @@ impl StateEncryption {
         let ciphertext = &encrypted[offset..];
 
         // Derive key using the salt from the encrypted data
-        let config_with_salt =
-            EncryptionConfig::with_salt(&self.config.passphrase, salt.to_vec())
-                .with_iterations(self.config.kdf_iterations);
+        let config_with_salt = EncryptionConfig::with_salt(&self.config.passphrase, salt.to_vec())
+            .with_iterations(self.config.kdf_iterations);
         let decryptor = StateEncryption::new(config_with_salt);
         let key = decryptor.derive_key();
 
@@ -303,13 +301,12 @@ impl StateEncryption {
         let plaintext = self.xor_cipher(ciphertext, &key, nonce);
 
         // Deserialize
-        let state: ProvisioningState =
-            serde_json::from_slice(&plaintext).map_err(|e| {
-                ProvisioningError::StateCorruption(format!(
-                    "Failed to deserialize decrypted state (wrong passphrase?): {}",
-                    e
-                ))
-            })?;
+        let state: ProvisioningState = serde_json::from_slice(&plaintext).map_err(|e| {
+            ProvisioningError::StateCorruption(format!(
+                "Failed to deserialize decrypted state (wrong passphrase?): {}",
+                e
+            ))
+        })?;
 
         tracing::debug!(
             encrypted_len = encrypted.len(),
@@ -343,9 +340,7 @@ impl StateEncryption {
         // Initialize state from key and nonce
         let mut state = vec![0u8; KEY_LENGTH];
         for i in 0..KEY_LENGTH {
-            state[i] = key[i % key.len()]
-                ^ nonce[i % nonce.len()]
-                ^ (i as u8);
+            state[i] = key[i % key.len()] ^ nonce[i % nonce.len()] ^ (i as u8);
         }
 
         // Generate keystream bytes

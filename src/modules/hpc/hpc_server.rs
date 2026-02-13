@@ -11,8 +11,8 @@
 use std::collections::HashMap;
 
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 use super::scheduler::resolve_scheduler;

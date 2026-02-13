@@ -16,8 +16,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -175,8 +175,7 @@ impl Module for MpiModule {
                     if !mca_map.is_empty() {
                         let mut mca_lines: Vec<String> = Vec::with_capacity(mca_map.len());
                         for (key, value) in mca_map {
-                            let val_str =
-                                value.as_str().unwrap_or(&value.to_string()).to_string();
+                            let val_str = value.as_str().unwrap_or(&value.to_string()).to_string();
                             mca_lines.push(format!("{} = {}", key, val_str));
                         }
                         mca_lines.sort();
@@ -195,11 +194,7 @@ impl Module for MpiModule {
                                     mca_map.len()
                                 ));
                             } else {
-                                run_cmd_ok(
-                                    connection,
-                                    "mkdir -p /etc/openmpi",
-                                    context,
-                                )?;
+                                run_cmd_ok(connection, "mkdir -p /etc/openmpi", context)?;
                                 run_cmd_ok(
                                     connection,
                                     &format!(
@@ -244,8 +239,7 @@ impl Module for MpiModule {
                         prefix = mpi_prefix
                     )
                 }
-                "intelmpi" => {
-                    "-- Intel MPI modulefile - managed by Rustible\n\
+                "intelmpi" => "-- Intel MPI modulefile - managed by Rustible\n\
                      help([[Intel MPI library for parallel computing]])\n\
                      \n\
                      local base = \"/opt/intel/oneapi/mpi/latest\"\n\
@@ -255,8 +249,7 @@ impl Module for MpiModule {
                      prepend_path(\"MANPATH\", pathJoin(base, \"man\"))\n\
                      setenv(\"MPI_HOME\", base)\n\
                      setenv(\"I_MPI_ROOT\", base)\n"
-                        .to_string()
-                }
+                    .to_string(),
                 _ => unreachable!(),
             };
 
@@ -270,11 +263,7 @@ impl Module for MpiModule {
                 if context.check_mode {
                     changes.push(format!("Would create Lmod modulefile at {}", module_file));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("mkdir -p '{}'", module_dir),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("mkdir -p '{}'", module_dir), context)?;
                     run_cmd_ok(
                         connection,
                         &format!(
@@ -291,13 +280,12 @@ impl Module for MpiModule {
         }
 
         if context.check_mode && !changes.is_empty() {
-            return Ok(ModuleOutput::changed(format!(
-                "Would apply {} MPI changes",
-                changes.len()
-            ))
-            .with_data("changes", serde_json::json!(changes))
-            .with_data("flavor", serde_json::json!(flavor))
-            .with_data("os_family", serde_json::json!(os_family)));
+            return Ok(
+                ModuleOutput::changed(format!("Would apply {} MPI changes", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
+                    .with_data("flavor", serde_json::json!(flavor))
+                    .with_data("os_family", serde_json::json!(os_family)),
+            );
         }
 
         if changed {
@@ -308,9 +296,11 @@ impl Module for MpiModule {
                     .with_data("os_family", serde_json::json!(os_family)),
             )
         } else {
-            Ok(ModuleOutput::ok(format!("MPI ({}) is configured and up to date", flavor))
-                .with_data("flavor", serde_json::json!(flavor))
-                .with_data("os_family", serde_json::json!(os_family)))
+            Ok(
+                ModuleOutput::ok(format!("MPI ({}) is configured and up to date", flavor))
+                    .with_data("flavor", serde_json::json!(flavor))
+                    .with_data("os_family", serde_json::json!(os_family)),
+            )
         }
     }
 

@@ -51,8 +51,10 @@ async fn execute_verify(args: &VerifyArgs, ctx: &mut CommandContext) -> Result<i
         .info(&format!("Verifying: {}", args.log_file.display()));
 
     if !args.log_file.exists() {
-        ctx.output
-            .error(&format!("Audit log file not found: {}", args.log_file.display()));
+        ctx.output.error(&format!(
+            "Audit log file not found: {}",
+            args.log_file.display()
+        ));
         return Ok(1);
     }
 
@@ -80,7 +82,8 @@ async fn execute_status(ctx: &mut CommandContext) -> Result<i32> {
     ctx.output.banner("AUDIT SYSTEM STATUS");
     ctx.output.info("Immutable audit log pipeline: enabled");
     ctx.output.info("Hash algorithm: BLAKE3");
-    ctx.output.info("Storage backend: file (JSON-lines, append-only)");
+    ctx.output
+        .info("Storage backend: file (JSON-lines, append-only)");
     ctx.output
         .info("Sink pipeline: file, http (stub), syslog (stub)");
     Ok(0)

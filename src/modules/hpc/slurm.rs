@@ -26,8 +26,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -278,12 +278,7 @@ impl Module for SlurmConfigModule {
         if let Some(gres_conf) = params.get_string("gres_conf")? {
             if context.check_mode {
                 changes.push("Would write gres.conf".to_string());
-            } else if ensure_config_file(
-                connection,
-                "/etc/slurm/gres.conf",
-                &gres_conf,
-                context,
-            )? {
+            } else if ensure_config_file(connection, "/etc/slurm/gres.conf", &gres_conf, context)? {
                 changed = true;
                 changes.push("Updated gres.conf".to_string());
             }
@@ -339,11 +334,7 @@ impl Module for SlurmConfigModule {
                 if context.check_mode {
                     changes.push(format!("Would start {}", service));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("systemctl start {}", service),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("systemctl start {}", service), context)?;
                     changed = true;
                     changes.push(format!("Started {}", service));
                 }
@@ -477,16 +468,15 @@ impl SlurmOpsModule {
 
         if ok {
             // Parse node states
-            let all_drained = stdout.lines().all(|line| {
-                line.contains("State=DRAINED") || line.contains("State=DRAIN")
-            });
+            let all_drained = stdout
+                .lines()
+                .all(|line| line.contains("State=DRAINED") || line.contains("State=DRAIN"));
             if all_drained && !stdout.is_empty() {
-                return Ok(ModuleOutput::ok(format!(
-                    "Nodes '{}' are already drained",
-                    nodes
-                ))
-                .with_data("nodes", serde_json::json!(nodes))
-                .with_data("action", serde_json::json!("drain")));
+                return Ok(
+                    ModuleOutput::ok(format!("Nodes '{}' are already drained", nodes))
+                        .with_data("nodes", serde_json::json!(nodes))
+                        .with_data("action", serde_json::json!("drain")),
+                );
             }
         }
 
@@ -574,7 +564,9 @@ impl SlurmOpsModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         let partition_config = params.get("partition_config").ok_or_else(|| {
-            ModuleError::MissingParameter("partition_config is required for update_partition".to_string())
+            ModuleError::MissingParameter(
+                "partition_config is required for update_partition".to_string(),
+            )
         })?;
 
         let config_map = partition_config.as_object().ok_or_else(|| {

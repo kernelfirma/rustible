@@ -77,7 +77,10 @@ mod tests {
         let bundle = signer.sign_bytes(data, &key);
 
         assert_eq!(bundle.key_id, "sign-test");
-        assert_eq!(bundle.algorithm, super::super::keys::SigningAlgorithm::Blake3Hmac);
+        assert_eq!(
+            bundle.algorithm,
+            super::super::keys::SigningAlgorithm::Blake3Hmac
+        );
         assert!(!bundle.signature_hex.is_empty());
         assert!(!bundle.artifact_hash.is_empty());
 

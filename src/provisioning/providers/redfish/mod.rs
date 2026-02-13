@@ -184,7 +184,9 @@ impl Provider for RedfishProvider {
                 SchemaField {
                     name: "verify_ssl".to_string(),
                     field_type: FieldType::Boolean,
-                    description: "Verify TLS certificates (default: false, BMCs often use self-signed certs)".to_string(),
+                    description:
+                        "Verify TLS certificates (default: false, BMCs often use self-signed certs)"
+                            .to_string(),
                     default: Some(Value::Bool(false)),
                     constraints: vec![],
                     sensitive: false,
@@ -203,7 +205,10 @@ impl Provider for RedfishProvider {
             .get("endpoint")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: endpoint")
+                ProvisioningError::provider_config(
+                    PROVIDER_NAME,
+                    "Missing required field: endpoint",
+                )
             })?
             .to_string();
 
@@ -211,7 +216,10 @@ impl Provider for RedfishProvider {
             .get("username")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: username")
+                ProvisioningError::provider_config(
+                    PROVIDER_NAME,
+                    "Missing required field: username",
+                )
             })?
             .to_string();
 
@@ -219,7 +227,10 @@ impl Provider for RedfishProvider {
             .get("password")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: password")
+                ProvisioningError::provider_config(
+                    PROVIDER_NAME,
+                    "Missing required field: password",
+                )
             })?
             .to_string();
 
@@ -350,11 +361,7 @@ impl RedfishMachineResource {
     // ------------------------------------------------------------------
 
     #[cfg(feature = "redfish")]
-    async fn http_get(
-        &self,
-        url: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<Value> {
+    async fn http_get(&self, url: &str, ctx: &ProviderContext) -> ProvisioningResult<Value> {
         let creds = ctx.credentials.as_value();
         let username = creds
             .get("username")
@@ -370,7 +377,11 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
-        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
+        let verify_ssl = ctx
+            .config
+            .get("verify_ssl")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
@@ -398,11 +409,7 @@ impl RedfishMachineResource {
     }
 
     #[cfg(not(feature = "redfish"))]
-    async fn http_get(
-        &self,
-        _url: &str,
-        _ctx: &ProviderContext,
-    ) -> ProvisioningResult<Value> {
+    async fn http_get(&self, _url: &str, _ctx: &ProviderContext) -> ProvisioningResult<Value> {
         Err(ProvisioningError::ConfigError(
             "Redfish feature not enabled. Rebuild with --features redfish".to_string(),
         ))
@@ -428,7 +435,11 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
-        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
+        let verify_ssl = ctx
+            .config
+            .get("verify_ssl")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
@@ -488,7 +499,11 @@ impl RedfishMachineResource {
             .unwrap_or_default()
             .to_string();
 
-        let verify_ssl = ctx.config.get("verify_ssl").and_then(|v| v.as_bool()).unwrap_or(false);
+        let verify_ssl = ctx
+            .config
+            .get("verify_ssl")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(!verify_ssl)
             .timeout(std::time::Duration::from_secs(ctx.timeout_seconds))
@@ -583,16 +598,14 @@ impl Resource for RedfishMachineResource {
         ResourceSchema {
             resource_type: "redfish_machine".to_string(),
             description: "Manage a bare-metal server via Redfish BMC API".to_string(),
-            required_args: vec![
-                SchemaField {
-                    name: "system_id".to_string(),
-                    field_type: FieldType::String,
-                    description: "Redfish system identifier (e.g. 'System.Embedded.1')".to_string(),
-                    default: None,
-                    constraints: vec![FieldConstraint::MinLength { min: 1 }],
-                    sensitive: false,
-                },
-            ],
+            required_args: vec![SchemaField {
+                name: "system_id".to_string(),
+                field_type: FieldType::String,
+                description: "Redfish system identifier (e.g. 'System.Embedded.1')".to_string(),
+                default: None,
+                constraints: vec![FieldConstraint::MinLength { min: 1 }],
+                sensitive: false,
+            }],
             optional_args: vec![
                 SchemaField {
                     name: "desired_power_state".to_string(),
@@ -757,10 +770,7 @@ impl Resource for RedfishMachineResource {
             if db != cb {
                 modifications.insert(
                     "boot_device".to_string(),
-                    (
-                        Value::String(cb.to_string()),
-                        Value::String(db.to_string()),
-                    ),
+                    (Value::String(cb.to_string()), Value::String(db.to_string())),
                 );
             }
         }
@@ -858,11 +868,7 @@ impl Resource for RedfishMachineResource {
         Ok(ResourceResult::success(id, attrs))
     }
 
-    async fn destroy(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn destroy(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let system_url = self.system_url(ctx, id);
         info!("Powering off Redfish system: {}", id);
 
@@ -875,11 +881,7 @@ impl Resource for RedfishMachineResource {
         ))
     }
 
-    async fn import(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let read_result = self.read(id, ctx).await?;
         if !read_result.exists {
             return Err(ProvisioningError::ImportError {
@@ -924,9 +926,9 @@ impl Resource for RedfishMachineResource {
                 "None" | "Pxe" | "Cd" | "Hdd" | "BiosSetup" | "UefiTarget" => {}
                 other => {
                     return Err(ProvisioningError::ValidationError(format!(
-                        "Invalid boot_device '{}'. Valid: None, Pxe, Cd, Hdd, BiosSetup, UefiTarget",
-                        other
-                    )))
+                    "Invalid boot_device '{}'. Valid: None, Pxe, Cd, Hdd, BiosSetup, UefiTarget",
+                    other
+                )))
                 }
             }
         }
@@ -1019,7 +1021,10 @@ mod tests {
 
         let result = provider.configure(config).await;
         assert!(result.is_ok());
-        assert_eq!(provider.endpoint, Some("https://bmc.example.com".to_string()));
+        assert_eq!(
+            provider.endpoint,
+            Some("https://bmc.example.com".to_string())
+        );
         assert_eq!(provider.timeout_seconds, 60);
 
         // Should now be able to get context
@@ -1094,7 +1099,10 @@ mod tests {
         assert!(!creds.is_expired());
 
         let val = creds.as_value();
-        assert_eq!(val.get("type").and_then(|v| v.as_str()), Some("redfish_basic"));
+        assert_eq!(
+            val.get("type").and_then(|v| v.as_str()),
+            Some("redfish_basic")
+        );
         // Password must not appear in serialized credentials
         assert!(val.get("password").is_none());
     }

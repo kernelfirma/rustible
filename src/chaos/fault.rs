@@ -94,16 +94,12 @@ impl FaultInjector for SimpleFaultInjector {
                     Ok(())
                 }
             }
-            Fault::NetworkPartition => {
-                Err("NetworkPartition: connection refused".to_string())
-            }
+            Fault::NetworkPartition => Err("NetworkPartition: connection refused".to_string()),
             Fault::PacketLoss { rate } => {
                 let current = (count as f64) * rate;
                 let next = ((count + 1) as f64) * rate;
                 if next.floor() > current.floor() {
-                    Err(format!(
-                        "PacketLoss triggered (rate={rate}, call={count})"
-                    ))
+                    Err(format!("PacketLoss triggered (rate={rate}, call={count})"))
                 } else {
                     Ok(())
                 }
@@ -189,11 +185,7 @@ mod tests {
         for _ in 0..5 {
             let result = injector.inject(&fault);
             assert!(result.is_err());
-            assert!(
-                result
-                    .unwrap_err()
-                    .contains("NetworkPartition")
-            );
+            assert!(result.unwrap_err().contains("NetworkPartition"));
         }
     }
 
@@ -222,10 +214,8 @@ mod tests {
         let ok_injector = SimpleFaultInjector::new();
         let fail_injector = SimpleFaultInjector::new();
 
-        let composite = CompositeFaultInjector::new(vec![
-            Box::new(ok_injector),
-            Box::new(fail_injector),
-        ]);
+        let composite =
+            CompositeFaultInjector::new(vec![Box::new(ok_injector), Box::new(fail_injector)]);
 
         // NetworkPartition always fails, so the composite should fail
         // even though the first injector would pass for Delay.
@@ -238,10 +228,7 @@ mod tests {
         let a = SimpleFaultInjector::new();
         let b = SimpleFaultInjector::new();
 
-        let composite = CompositeFaultInjector::new(vec![
-            Box::new(a),
-            Box::new(b),
-        ]);
+        let composite = CompositeFaultInjector::new(vec![Box::new(a), Box::new(b)]);
 
         let fault = Fault::Delay { ms: 100 };
         assert!(composite.inject(&fault).is_ok());

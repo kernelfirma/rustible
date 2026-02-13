@@ -23,8 +23,8 @@
 use std::collections::HashMap;
 
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 use super::scheduler::resolve_scheduler;
@@ -61,12 +61,8 @@ impl Module for HpcJobModule {
             "status" => {
                 let job_id = params.get_string_required("job_id")?;
                 let info = scheduler.job_status(&job_id, context)?;
-                ModuleOutput::ok(format!(
-                    "Job {} is {}",
-                    info.id,
-                    info.state
-                ))
-                .with_data("job", serde_json::to_value(&info).unwrap_or_default())
+                ModuleOutput::ok(format!("Job {} is {}", info.id, info.state))
+                    .with_data("job", serde_json::to_value(&info).unwrap_or_default())
             }
             "hold" => {
                 let job_id = params.get_string_required("job_id")?;

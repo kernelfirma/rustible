@@ -315,8 +315,7 @@ impl Module for HpcDiscoveryModule {
 
         // --- NIC discovery ---
         if should_gather("nic") {
-            if let Some(ip_output) =
-                run_cmd_opt(connection, "ip -o link show 2>/dev/null", context)
+            if let Some(ip_output) = run_cmd_opt(connection, "ip -o link show 2>/dev/null", context)
             {
                 let nics = parse_ip_link(&ip_output);
                 inventory.nic_count = nics.len() as u32;
@@ -344,11 +343,9 @@ impl Module for HpcDiscoveryModule {
 
         // --- BMC address discovery ---
         if should_gather("bmc") {
-            if let Some(lan_output) = run_cmd_opt(
-                connection,
-                "ipmitool lan print 2>/dev/null",
-                context,
-            ) {
+            if let Some(lan_output) =
+                run_cmd_opt(connection, "ipmitool lan print 2>/dev/null", context)
+            {
                 inventory.bmc_address = parse_bmc_address(&lan_output);
             }
         }
@@ -449,15 +446,9 @@ nvme0n1 1.5T disk Dell NVMe PE8010
         assert_eq!(devices[0].name, "sda");
         assert_eq!(devices[0].size, "894.3G");
         assert_eq!(devices[0].device_type, "disk");
-        assert_eq!(
-            devices[0].model,
-            Some("SAMSUNG MZ7LH960".to_string())
-        );
+        assert_eq!(devices[0].model, Some("SAMSUNG MZ7LH960".to_string()));
         assert_eq!(devices[2].name, "nvme0n1");
-        assert_eq!(
-            devices[2].model,
-            Some("Dell NVMe PE8010".to_string())
-        );
+        assert_eq!(devices[2].model, Some("Dell NVMe PE8010".to_string()));
     }
 
     #[test]

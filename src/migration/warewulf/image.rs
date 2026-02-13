@@ -163,8 +163,8 @@ impl WarewulfImageImporter {
     ///         ww_template: false
     /// ```
     pub fn import_from_yaml(&self, yaml_content: &str) -> MigrationResult<ImageImportResult> {
-        let config: YamlWarewulfConfig =
-            serde_yaml::from_str(yaml_content).map_err(|e| MigrationError::ParseError(e.to_string()))?;
+        let config: YamlWarewulfConfig = serde_yaml::from_str(yaml_content)
+            .map_err(|e| MigrationError::ParseError(e.to_string()))?;
 
         let mut report = MigrationReport::new("warewulf-images");
         let mut images = Vec::new();
@@ -204,7 +204,8 @@ impl WarewulfImageImporter {
                     severity: MigrationSeverity::Warning,
                     status: FindingStatus::Open,
                     title: format!("Image '{}' has no container reference", name),
-                    description: "The 'container' field is empty; image may not be pullable.".into(),
+                    description: "The 'container' field is empty; image may not be pullable."
+                        .into(),
                     category: DiagnosticCategory::FieldMapping,
                     diagnostics: vec![],
                 });
@@ -235,7 +236,8 @@ impl WarewulfImageImporter {
                         severity: MigrationSeverity::Error,
                         status: FindingStatus::Open,
                         title: format!("Overlay at index {} has no name", idx),
-                        description: "Every overlay entry must have a non-empty 'name' field.".into(),
+                        description: "Every overlay entry must have a non-empty 'name' field."
+                            .into(),
                         category: DiagnosticCategory::Validation,
                         diagnostics: vec![],
                     });
@@ -276,10 +278,7 @@ impl WarewulfImageImporter {
                         id: format!("TPL-W{:03}", finding_idx),
                         severity: MigrationSeverity::Warning,
                         status: FindingStatus::Open,
-                        title: format!(
-                            "Incomplete template file in overlay '{}'",
-                            name
-                        ),
+                        title: format!("Incomplete template file in overlay '{}'", name),
                         description: format!(
                             "source='{}', dest='{}' — both must be non-empty.",
                             source_path, dest_path
@@ -455,7 +454,10 @@ overlays:
         assert_eq!(result.overlays[0].overlay_type, OverlayType::Custom);
 
         let summary = result.report.compute_summary();
-        assert!(summary.warnings >= 1, "expected at least one warning for unknown overlay type");
+        assert!(
+            summary.warnings >= 1,
+            "expected at least one warning for unknown overlay type"
+        );
     }
 
     #[test]

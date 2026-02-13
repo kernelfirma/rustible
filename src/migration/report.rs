@@ -133,9 +133,7 @@ impl MigrationReport {
             }
             for diag in &finding.diagnostics {
                 match diag.severity {
-                    MigrationSeverity::Error | MigrationSeverity::Critical => {
-                        summary.errors += 1
-                    }
+                    MigrationSeverity::Error | MigrationSeverity::Critical => summary.errors += 1,
                     MigrationSeverity::Warning => summary.warnings += 1,
                     _ => {}
                 }

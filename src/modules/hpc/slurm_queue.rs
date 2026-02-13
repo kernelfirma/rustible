@@ -21,8 +21,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -184,12 +184,14 @@ impl SlurmQueueModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         // Check existence
-        let current = self.get_partition(connection, name, context)?.ok_or_else(|| {
-            ModuleError::ExecutionFailed(format!(
-                "Partition '{}' does not exist; cannot update",
-                name
-            ))
-        })?;
+        let current = self
+            .get_partition(connection, name, context)?
+            .ok_or_else(|| {
+                ModuleError::ExecutionFailed(format!(
+                    "Partition '{}' does not exist; cannot update",
+                    name
+                ))
+            })?;
 
         // Build desired properties and compare
         let desired = build_desired_properties(params)?;
@@ -220,10 +222,7 @@ impl SlurmQueueModule {
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
             .join(" ");
-        let cmd = format!(
-            "scontrol update PartitionName={} {}",
-            name, update_str
-        );
+        let cmd = format!("scontrol update PartitionName={} {}", name, update_str);
         run_cmd_ok(connection, &cmd, context)?;
 
         let updated = self.get_partition(connection, name, context)?;
@@ -286,9 +285,11 @@ impl SlurmQueueModule {
             )));
         }
 
-        let current = self.get_partition(connection, name, context)?.ok_or_else(|| {
-            ModuleError::ExecutionFailed(format!("Partition '{}' does not exist", name))
-        })?;
+        let current = self
+            .get_partition(connection, name, context)?
+            .ok_or_else(|| {
+                ModuleError::ExecutionFailed(format!("Partition '{}' does not exist", name))
+            })?;
 
         let current_state = current.get("State").map(|s| s.to_uppercase());
         if current_state.as_deref() == Some(&desired_upper) {
@@ -316,12 +317,11 @@ impl SlurmQueueModule {
             context,
         )?;
 
-        Ok(ModuleOutput::changed(format!(
-            "Set partition '{}' to {}",
-            name, desired_upper
-        ))
-        .with_data("name", serde_json::json!(name))
-        .with_data("state", serde_json::json!(desired_upper)))
+        Ok(
+            ModuleOutput::changed(format!("Set partition '{}' to {}", name, desired_upper))
+                .with_data("name", serde_json::json!(name))
+                .with_data("state", serde_json::json!(desired_upper)),
+        )
     }
 }
 

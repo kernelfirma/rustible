@@ -15,9 +15,17 @@ use std::path::Path;
 /// Attribute-level mismatch between Terraform and Rustible state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttributeMismatch {
-    ValueDifference { key: String, tf_value: String, rustible_value: String },
-    MissingInRustible { key: String },
-    ExtraInRustible { key: String },
+    ValueDifference {
+        key: String,
+        tf_value: String,
+        rustible_value: String,
+    },
+    MissingInRustible {
+        key: String,
+    },
+    ExtraInRustible {
+        key: String,
+    },
 }
 
 /// Dependency-level mismatch.
@@ -169,8 +177,10 @@ impl TerraformStateValidator {
         let tf_keys: HashSet<&String> = tf_resources.keys().collect();
         let r_keys: HashSet<&String> = r_resources.keys().collect();
 
-        let missing_in_rustible: Vec<String> = tf_keys.difference(&r_keys).map(|s| (*s).clone()).collect();
-        let extra_in_rustible: Vec<String> = r_keys.difference(&tf_keys).map(|s| (*s).clone()).collect();
+        let missing_in_rustible: Vec<String> =
+            tf_keys.difference(&r_keys).map(|s| (*s).clone()).collect();
+        let extra_in_rustible: Vec<String> =
+            r_keys.difference(&tf_keys).map(|s| (*s).clone()).collect();
         let common: HashSet<&&String> = tf_keys.intersection(&r_keys).collect();
 
         let mut attribute_mismatches = Vec::new();
@@ -225,8 +235,10 @@ impl TerraformStateValidator {
                 .map(|i| i.dependencies.iter().collect())
                 .unwrap_or_default();
             let r_deps: HashSet<&String> = r_res.dependencies.iter().collect();
-            let only_in_tf: Vec<String> = tf_deps.difference(&r_deps).map(|s| (*s).clone()).collect();
-            let only_in_r: Vec<String> = r_deps.difference(&tf_deps).map(|s| (*s).clone()).collect();
+            let only_in_tf: Vec<String> =
+                tf_deps.difference(&r_deps).map(|s| (*s).clone()).collect();
+            let only_in_r: Vec<String> =
+                r_deps.difference(&tf_deps).map(|s| (*s).clone()).collect();
             if !only_in_tf.is_empty() || !only_in_r.is_empty() {
                 dependency_mismatches.push(DependencyMismatch {
                     resource: (**key).clone(),
@@ -243,7 +255,11 @@ impl TerraformStateValidator {
 
         // Compare outputs
         let mut output_mismatches = Vec::new();
-        let all_output_keys: HashSet<&String> = tf_state.outputs.keys().chain(r_state.outputs.keys()).collect();
+        let all_output_keys: HashSet<&String> = tf_state
+            .outputs
+            .keys()
+            .chain(r_state.outputs.keys())
+            .collect();
         for okey in all_output_keys {
             let tf_val = tf_state.outputs.get(okey).map(|o| o.value.to_string());
             let r_val = r_state.outputs.get(okey).map(|v| v.to_string());
@@ -297,7 +313,8 @@ impl TerraformStateValidator {
         // Resource count finding
         report.add_finding(MigrationFinding {
             name: "Resource Count".into(),
-            status: if result.missing_in_rustible.is_empty() && result.extra_in_rustible.is_empty() {
+            status: if result.missing_in_rustible.is_empty() && result.extra_in_rustible.is_empty()
+            {
                 FindingStatus::Pass
             } else {
                 FindingStatus::Fail
@@ -336,25 +353,33 @@ impl TerraformStateValidator {
                 FindingStatus::Fail
             },
             severity: MigrationSeverity::Warning,
-            diagnostics: result.attribute_mismatches.iter().map(|m| {
-                let msg = match m {
-                    AttributeMismatch::ValueDifference { key, tf_value, rustible_value } => {
-                        format!("{}: tf={} vs rustible={}", key, tf_value, rustible_value)
+            diagnostics: result
+                .attribute_mismatches
+                .iter()
+                .map(|m| {
+                    let msg = match m {
+                        AttributeMismatch::ValueDifference {
+                            key,
+                            tf_value,
+                            rustible_value,
+                        } => {
+                            format!("{}: tf={} vs rustible={}", key, tf_value, rustible_value)
+                        }
+                        AttributeMismatch::MissingInRustible { key } => {
+                            format!("{}: missing in Rustible", key)
+                        }
+                        AttributeMismatch::ExtraInRustible { key } => {
+                            format!("{}: extra in Rustible", key)
+                        }
+                    };
+                    MigrationDiagnostic {
+                        category: DiagnosticCategory::AttributeDivergence,
+                        severity: MigrationSeverity::Warning,
+                        message: msg,
+                        context: None,
                     }
-                    AttributeMismatch::MissingInRustible { key } => {
-                        format!("{}: missing in Rustible", key)
-                    }
-                    AttributeMismatch::ExtraInRustible { key } => {
-                        format!("{}: extra in Rustible", key)
-                    }
-                };
-                MigrationDiagnostic {
-                    category: DiagnosticCategory::AttributeDivergence,
-                    severity: MigrationSeverity::Warning,
-                    message: msg,
-                    context: None,
-                }
-            }).collect(),
+                })
+                .collect(),
         });
 
         // Dependency parity finding
@@ -366,8 +391,10 @@ impl TerraformStateValidator {
                 FindingStatus::Fail
             },
             severity: MigrationSeverity::Warning,
-            diagnostics: result.dependency_mismatches.iter().map(|m| {
-                MigrationDiagnostic {
+            diagnostics: result
+                .dependency_mismatches
+                .iter()
+                .map(|m| MigrationDiagnostic {
                     category: DiagnosticCategory::DependencyMismatch,
                     severity: MigrationSeverity::Warning,
                     message: format!(
@@ -375,8 +402,8 @@ impl TerraformStateValidator {
                         m.resource, m.only_in_terraform, m.only_in_rustible
                     ),
                     context: None,
-                }
-            }).collect(),
+                })
+                .collect(),
         });
 
         // Output parity finding
@@ -388,14 +415,16 @@ impl TerraformStateValidator {
                 FindingStatus::Fail
             },
             severity: MigrationSeverity::Info,
-            diagnostics: result.output_mismatches.iter().map(|m| {
-                MigrationDiagnostic {
+            diagnostics: result
+                .output_mismatches
+                .iter()
+                .map(|m| MigrationDiagnostic {
                     category: DiagnosticCategory::OutputMismatch,
                     severity: MigrationSeverity::Info,
                     message: format!("Output '{}': {}", m.name, m.mismatch_type),
                     context: None,
-                }
-            }).collect(),
+                })
+                .collect(),
         });
 
         report
@@ -425,7 +454,10 @@ mod tests {
 
         let validator = TerraformStateValidator::new(80.0);
         let report = validator.validate_from_str(tf, r).unwrap();
-        assert_eq!(report.outcome, Some(crate::migration::MigrationOutcome::Pass));
+        assert_eq!(
+            report.outcome,
+            Some(crate::migration::MigrationOutcome::Pass)
+        );
     }
 
     #[test]
@@ -448,7 +480,10 @@ mod tests {
 
         let validator = TerraformStateValidator::new(80.0);
         let report = validator.validate_from_str(tf, r).unwrap();
-        assert_eq!(report.outcome, Some(crate::migration::MigrationOutcome::Fail));
+        assert_eq!(
+            report.outcome,
+            Some(crate::migration::MigrationOutcome::Fail)
+        );
     }
 
     #[test]
@@ -458,6 +493,9 @@ mod tests {
 
         let validator = TerraformStateValidator::new(80.0);
         let report = validator.validate_from_str(tf, r).unwrap();
-        assert_eq!(report.outcome, Some(crate::migration::MigrationOutcome::Pass));
+        assert_eq!(
+            report.outcome,
+            Some(crate::migration::MigrationOutcome::Pass)
+        );
     }
 }

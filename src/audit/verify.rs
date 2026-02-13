@@ -21,11 +21,7 @@ pub struct VerificationReport {
 impl std::fmt::Display for VerificationReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.valid {
-            write!(
-                f,
-                "VALID: all {} entries verified",
-                self.entries_checked
-            )
+            write!(f, "VALID: all {} entries verified", self.entries_checked)
         } else {
             write!(
                 f,
@@ -54,9 +50,8 @@ impl AuditVerifier {
             if trimmed.is_empty() {
                 continue;
             }
-            let entry: HashChainEntry = serde_json::from_str(trimmed).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-            })?;
+            let entry: HashChainEntry = serde_json::from_str(trimmed)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             entries.push(entry);
         }
 
@@ -135,7 +130,9 @@ mod tests {
     fn test_verify_valid_file() {
         let tmp = NamedTempFile::new().unwrap();
         let mut chain = Chain::new();
-        let entries: Vec<_> = (0..5).map(|i| chain.append(format!("evt-{i}").as_bytes())).collect();
+        let entries: Vec<_> = (0..5)
+            .map(|i| chain.append(format!("evt-{i}").as_bytes()))
+            .collect();
         write_entries(tmp.path(), &entries);
 
         let report = AuditVerifier::verify_file(tmp.path()).unwrap();
@@ -148,7 +145,9 @@ mod tests {
     fn test_verify_tampered_file() {
         let tmp = NamedTempFile::new().unwrap();
         let mut chain = Chain::new();
-        let mut entries: Vec<_> = (0..3).map(|i| chain.append(format!("evt-{i}").as_bytes())).collect();
+        let mut entries: Vec<_> = (0..3)
+            .map(|i| chain.append(format!("evt-{i}").as_bytes()))
+            .collect();
 
         // Tamper with the second entry
         entries[1].event_hash = "tampered".to_string();

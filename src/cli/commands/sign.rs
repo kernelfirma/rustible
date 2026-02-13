@@ -112,7 +112,10 @@ async fn sign_artifact(args: &SignArtifactArgs, ctx: &mut CommandContext) -> Res
         .with_context(|| format!("Failed to read key file: {}", args.key.display()))?;
 
     let key = SigningKeyPair::from_bytes(&args.key_id, &key_bytes).ok_or_else(|| {
-        anyhow::anyhow!("Invalid key file: expected exactly 32 bytes, got {}", key_bytes.len())
+        anyhow::anyhow!(
+            "Invalid key file: expected exactly 32 bytes, got {}",
+            key_bytes.len()
+        )
     })?;
 
     let signer = ArtifactSigner::new();
@@ -120,30 +123,29 @@ async fn sign_artifact(args: &SignArtifactArgs, ctx: &mut CommandContext) -> Res
         .sign_file(&args.file, &key)
         .with_context(|| format!("Failed to sign file: {}", args.file.display()))?;
 
-    let output_path = args
-        .output
-        .clone()
-        .unwrap_or_else(|| {
-            let mut p = args.file.clone();
-            let name = p
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            p.set_file_name(format!("{}.sig.json", name));
-            p
-        });
+    let output_path = args.output.clone().unwrap_or_else(|| {
+        let mut p = args.file.clone();
+        let name = p
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        p.set_file_name(format!("{}.sig.json", name));
+        p
+    });
 
     let json = serde_json::to_string_pretty(&bundle)?;
     std::fs::write(&output_path, &json)
         .with_context(|| format!("Failed to write signature: {}", output_path.display()))?;
 
-    ctx.output
-        .success(&format!("Signed {} -> {}", args.file.display(), output_path.display()));
+    ctx.output.success(&format!(
+        "Signed {} -> {}",
+        args.file.display(),
+        output_path.display()
+    ));
     ctx.output
         .info(&format!("Key: {} ({})", bundle.key_id, bundle.algorithm));
-    ctx.output
-        .info(&format!("Hash: {}", bundle.artifact_hash));
+    ctx.output.info(&format!("Hash: {}", bundle.artifact_hash));
 
     Ok(0)
 }
@@ -160,14 +162,17 @@ async fn verify_artifact(args: &VerifyArgs, ctx: &mut CommandContext) -> Result<
     let sig_json = std::fs::read_to_string(&args.signature)
         .with_context(|| format!("Failed to read signature: {}", args.signature.display()))?;
 
-    let bundle: SignatureBundle = serde_json::from_str(&sig_json)
-        .with_context(|| "Failed to parse signature bundle")?;
+    let bundle: SignatureBundle =
+        serde_json::from_str(&sig_json).with_context(|| "Failed to parse signature bundle")?;
 
     let key_bytes = std::fs::read(&args.key)
         .with_context(|| format!("Failed to read key file: {}", args.key.display()))?;
 
     let key = SigningKeyPair::from_bytes(&args.key_id, &key_bytes).ok_or_else(|| {
-        anyhow::anyhow!("Invalid key file: expected exactly 32 bytes, got {}", key_bytes.len())
+        anyhow::anyhow!(
+            "Invalid key file: expected exactly 32 bytes, got {}",
+            key_bytes.len()
+        )
     })?;
 
     let data = std::fs::read(&args.file)
@@ -229,8 +234,7 @@ async fn list_keys(ctx: &mut CommandContext) -> Result<i32> {
         ctx.output
             .hint("Run 'rustible sign keygen' to generate a new key.");
     } else {
-        ctx.output
-            .info(&format!("Found {} signing key(s)", found));
+        ctx.output.info(&format!("Found {} signing key(s)", found));
     }
 
     Ok(0)

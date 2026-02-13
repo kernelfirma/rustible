@@ -167,15 +167,21 @@ impl MigrateArgs {
             MigrateCommand::TerraformPlan(args) => args.execute(ctx).await,
             MigrateCommand::TerraformState(args) => {
                 ctx.output.info("Terraform state parity validation");
-                ctx.output.info(&format!("TF state: {}", args.tf_state.display()));
-                ctx.output.info(&format!("Rustible state: {}", args.rustible_state.display()));
-                ctx.output.warning("Full implementation requires provisioning feature");
+                ctx.output
+                    .info(&format!("TF state: {}", args.tf_state.display()));
+                ctx.output.info(&format!(
+                    "Rustible state: {}",
+                    args.rustible_state.display()
+                ));
+                ctx.output
+                    .warning("Full implementation requires provisioning feature");
                 Ok(0)
             }
             MigrateCommand::AnsibleCompat(args) => {
                 ctx.output.info("Ansible compatibility verification");
                 ctx.output.info(&format!("Path: {}", args.path.display()));
-                ctx.output.warning("Full implementation requires ansible compat module");
+                ctx.output
+                    .warning("Full implementation requires ansible compat module");
                 Ok(0)
             }
             #[cfg(feature = "hpc")]
@@ -229,8 +235,7 @@ impl TerraformPlanArgs {
         ctx.output.banner("TERRAFORM PLAN PARITY VALIDATION");
 
         let threshold = self.threshold as f64 / 100.0;
-        let validator =
-            TerraformPlanValidator::new(&self.tf_plan, &self.rustible_plan, threshold);
+        let validator = TerraformPlanValidator::new(&self.tf_plan, &self.rustible_plan, threshold);
 
         match validator.validate() {
             Ok(report) => {

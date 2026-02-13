@@ -34,7 +34,11 @@ impl<'a> Serialize for MergedContext<'a> {
         // extra_vars + facts + vars + 1 (ansible_facts)
         let capacity = self.vars.len()
             + self.facts.len()
-            + self.extra_vars.and_then(|v| v.as_object()).map(|o| o.len()).unwrap_or(0)
+            + self
+                .extra_vars
+                .and_then(|v| v.as_object())
+                .map(|o| o.len())
+                .unwrap_or(0)
             + 1;
 
         // Use Vec with sort/dedup instead of BTreeSet for better performance (less allocation)

@@ -13,8 +13,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -145,11 +145,7 @@ impl Module for LustreClientModule {
                 if context.check_mode {
                     changes.push(format!("Would unmount {}", mount_point));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("umount '{}'", mount_point),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("umount '{}'", mount_point), context)?;
                     changed = true;
                     changes.push(format!("Unmounted {}", mount_point));
                 }
@@ -168,10 +164,7 @@ impl Module for LustreClientModule {
                 } else {
                     run_cmd_ok(
                         connection,
-                        &format!(
-                            "sed -i '\\|{}:/{}|d' /etc/fstab",
-                            nid, fs_name
-                        ),
+                        &format!("sed -i '\\|{}:/{}|d' /etc/fstab", nid, fs_name),
                         context,
                     )?;
                     changed = true;
@@ -192,7 +185,8 @@ impl Module for LustreClientModule {
                 } else {
                     let remove_cmd = match os_family {
                         "rhel" => "dnf remove -y lustre-client".to_string(),
-                        _ => "DEBIAN_FRONTEND=noninteractive apt-get remove -y lustre-client-utils".to_string(),
+                        _ => "DEBIAN_FRONTEND=noninteractive apt-get remove -y lustre-client-utils"
+                            .to_string(),
                     };
                     run_cmd_ok(connection, &remove_cmd, context)?;
                     changed = true;
@@ -209,10 +203,11 @@ impl Module for LustreClientModule {
             }
 
             if changed {
-                return Ok(
-                    ModuleOutput::changed(format!("Removed Lustre client from {}", mount_point))
-                        .with_data("changes", serde_json::json!(changes)),
-                );
+                return Ok(ModuleOutput::changed(format!(
+                    "Removed Lustre client from {}",
+                    mount_point
+                ))
+                .with_data("changes", serde_json::json!(changes)));
             }
 
             return Ok(ModuleOutput::ok("Lustre client is not present"));
@@ -250,8 +245,7 @@ impl Module for LustreClientModule {
         }
 
         // Step 2: Load lustre kernel module
-        let (lustre_loaded, _, _) =
-            run_cmd(connection, "lsmod | grep -q lustre", context)?;
+        let (lustre_loaded, _, _) = run_cmd(connection, "lsmod | grep -q lustre", context)?;
 
         if !lustre_loaded {
             if context.check_mode {
@@ -264,21 +258,14 @@ impl Module for LustreClientModule {
         }
 
         // Step 3: Create mount point directory
-        let (dir_exists, _, _) = run_cmd(
-            connection,
-            &format!("test -d '{}'", mount_point),
-            context,
-        )?;
+        let (dir_exists, _, _) =
+            run_cmd(connection, &format!("test -d '{}'", mount_point), context)?;
 
         if !dir_exists {
             if context.check_mode {
                 changes.push(format!("Would create mount point {}", mount_point));
             } else {
-                run_cmd_ok(
-                    connection,
-                    &format!("mkdir -p '{}'", mount_point),
-                    context,
-                )?;
+                run_cmd_ok(connection, &format!("mkdir -p '{}'", mount_point), context)?;
                 changed = true;
                 changes.push(format!("Created mount point {}", mount_point));
             }
@@ -316,11 +303,7 @@ impl Module for LustreClientModule {
             if context.check_mode {
                 changes.push(format!("Would mount {}", mount_point));
             } else {
-                run_cmd_ok(
-                    connection,
-                    &format!("mount '{}'", mount_point),
-                    context,
-                )?;
+                run_cmd_ok(connection, &format!("mount '{}'", mount_point), context)?;
                 changed = true;
                 changes.push(format!("Mounted {}", mount_point));
             }
@@ -357,20 +340,15 @@ impl Module for LustreClientModule {
 
         if changed {
             Ok(
-                ModuleOutput::changed(format!(
-                    "Applied {} Lustre client changes",
-                    changes.len()
-                ))
-                .with_data("changes", serde_json::json!(changes))
-                .with_data("mount_point", serde_json::json!(mount_point))
-                .with_data("health", health_status),
-            )
-        } else {
-            Ok(
-                ModuleOutput::ok("Lustre client is configured")
+                ModuleOutput::changed(format!("Applied {} Lustre client changes", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
                     .with_data("mount_point", serde_json::json!(mount_point))
                     .with_data("health", health_status),
             )
+        } else {
+            Ok(ModuleOutput::ok("Lustre client is configured")
+                .with_data("mount_point", serde_json::json!(mount_point))
+                .with_data("health", health_status))
         }
     }
 
@@ -458,11 +436,7 @@ impl Module for BeegfsClientModule {
                 if context.check_mode {
                     changes.push(format!("Would unmount {}", mount_point));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("umount '{}'", mount_point),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("umount '{}'", mount_point), context)?;
                     changed = true;
                     changes.push(format!("Unmounted {}", mount_point));
                 }
@@ -470,26 +444,15 @@ impl Module for BeegfsClientModule {
 
             // Stop and disable services
             for svc in &["beegfs-client.service", "beegfs-helperd.service"] {
-                let (active, _, _) = run_cmd(
-                    connection,
-                    &format!("systemctl is-active {}", svc),
-                    context,
-                )?;
+                let (active, _, _) =
+                    run_cmd(connection, &format!("systemctl is-active {}", svc), context)?;
 
                 if active {
                     if context.check_mode {
                         changes.push(format!("Would stop {}", svc));
                     } else {
-                        let _ = run_cmd(
-                            connection,
-                            &format!("systemctl stop {}", svc),
-                            context,
-                        );
-                        let _ = run_cmd(
-                            connection,
-                            &format!("systemctl disable {}", svc),
-                            context,
-                        );
+                        let _ = run_cmd(connection, &format!("systemctl stop {}", svc), context);
+                        let _ = run_cmd(connection, &format!("systemctl disable {}", svc), context);
                         changed = true;
                         changes.push(format!("Stopped and disabled {}", svc));
                     }
@@ -529,10 +492,11 @@ impl Module for BeegfsClientModule {
             }
 
             if changed {
-                return Ok(
-                    ModuleOutput::changed(format!("Removed BeeGFS client from {}", mount_point))
-                        .with_data("changes", serde_json::json!(changes)),
-                );
+                return Ok(ModuleOutput::changed(format!(
+                    "Removed BeeGFS client from {}",
+                    mount_point
+                ))
+                .with_data("changes", serde_json::json!(changes)));
             }
 
             return Ok(ModuleOutput::ok("BeeGFS client is not present"));
@@ -599,10 +563,7 @@ impl Module for BeegfsClientModule {
                 } else {
                     run_cmd_ok(
                         connection,
-                        &format!(
-                            "echo '{}' >> /etc/beegfs/beegfs-client.conf",
-                            mgmtd_line
-                        ),
+                        &format!("echo '{}' >> /etc/beegfs/beegfs-client.conf", mgmtd_line),
                         context,
                     )?;
                 }
@@ -667,7 +628,10 @@ impl Module for BeegfsClientModule {
             ));
             if let Some(ref conf_map) = client_conf {
                 for (key, value) in conf_map {
-                    changes.push(format!("Would set {} = {} in beegfs-client.conf", key, value));
+                    changes.push(format!(
+                        "Would set {} = {} in beegfs-client.conf",
+                        key, value
+                    ));
                 }
             }
         }
@@ -698,29 +662,20 @@ impl Module for BeegfsClientModule {
             if !already_configured {
                 run_cmd_ok(
                     connection,
-                    &format!(
-                        "/opt/beegfs/sbin/beegfs-setup-client -m '{}'",
-                        mount_point
-                    ),
+                    &format!("/opt/beegfs/sbin/beegfs-setup-client -m '{}'", mount_point),
                     context,
                 )?;
                 changed = true;
                 changes.push(format!("Ran beegfs-setup-client for {}", mount_point));
             }
         } else {
-            changes.push(format!(
-                "Would run beegfs-setup-client -m {}",
-                mount_point
-            ));
+            changes.push(format!("Would run beegfs-setup-client -m {}", mount_point));
         }
 
         // Step 4: Enable and start beegfs-helperd and beegfs-client services
         for svc in &["beegfs-helperd.service", "beegfs-client.service"] {
-            let (active, _, _) = run_cmd(
-                connection,
-                &format!("systemctl is-active {}", svc),
-                context,
-            )?;
+            let (active, _, _) =
+                run_cmd(connection, &format!("systemctl is-active {}", svc), context)?;
             let (enabled, _, _) = run_cmd(
                 connection,
                 &format!("systemctl is-enabled {}", svc),
@@ -731,11 +686,7 @@ impl Module for BeegfsClientModule {
                 if context.check_mode {
                     changes.push(format!("Would enable {}", svc));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("systemctl enable {}", svc),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("systemctl enable {}", svc), context)?;
                     changed = true;
                     changes.push(format!("Enabled {}", svc));
                 }
@@ -745,11 +696,7 @@ impl Module for BeegfsClientModule {
                 if context.check_mode {
                     changes.push(format!("Would start {}", svc));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("systemctl start {}", svc),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("systemctl start {}", svc), context)?;
                     changed = true;
                     changes.push(format!("Started {}", svc));
                 }
@@ -757,21 +704,14 @@ impl Module for BeegfsClientModule {
         }
 
         // Step 5: Create mount point directory and mount
-        let (dir_exists, _, _) = run_cmd(
-            connection,
-            &format!("test -d '{}'", mount_point),
-            context,
-        )?;
+        let (dir_exists, _, _) =
+            run_cmd(connection, &format!("test -d '{}'", mount_point), context)?;
 
         if !dir_exists {
             if context.check_mode {
                 changes.push(format!("Would create mount point {}", mount_point));
             } else {
-                run_cmd_ok(
-                    connection,
-                    &format!("mkdir -p '{}'", mount_point),
-                    context,
-                )?;
+                run_cmd_ok(connection, &format!("mkdir -p '{}'", mount_point), context)?;
                 changed = true;
                 changes.push(format!("Created mount point {}", mount_point));
             }
@@ -787,11 +727,7 @@ impl Module for BeegfsClientModule {
             if context.check_mode {
                 changes.push(format!("Would mount {}", mount_point));
             } else {
-                run_cmd_ok(
-                    connection,
-                    &format!("mount '{}'", mount_point),
-                    context,
-                )?;
+                run_cmd_ok(connection, &format!("mount '{}'", mount_point), context)?;
                 changed = true;
                 changes.push(format!("Mounted {}", mount_point));
             }
@@ -800,11 +736,8 @@ impl Module for BeegfsClientModule {
         // Step 6: Health check (non-fatal)
         let mut health_status = serde_json::json!("unknown");
         if !context.check_mode && is_mounted {
-            let (health_ok, health_stdout, _) = run_cmd(
-                connection,
-                "beegfs-check-servers 2>&1",
-                context,
-            )?;
+            let (health_ok, health_stdout, _) =
+                run_cmd(connection, "beegfs-check-servers 2>&1", context)?;
             if health_ok {
                 health_status = serde_json::json!({
                     "healthy": true,
@@ -828,20 +761,15 @@ impl Module for BeegfsClientModule {
 
         if changed {
             Ok(
-                ModuleOutput::changed(format!(
-                    "Applied {} BeeGFS client changes",
-                    changes.len()
-                ))
-                .with_data("changes", serde_json::json!(changes))
-                .with_data("mount_point", serde_json::json!(mount_point))
-                .with_data("health", health_status),
-            )
-        } else {
-            Ok(
-                ModuleOutput::ok("BeeGFS client is configured")
+                ModuleOutput::changed(format!("Applied {} BeeGFS client changes", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
                     .with_data("mount_point", serde_json::json!(mount_point))
                     .with_data("health", health_status),
             )
+        } else {
+            Ok(ModuleOutput::ok("BeeGFS client is configured")
+                .with_data("mount_point", serde_json::json!(mount_point))
+                .with_data("health", health_status))
         }
     }
 

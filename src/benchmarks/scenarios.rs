@@ -11,10 +11,7 @@ pub enum LatencyProfile {
     /// Every node has the same latency.
     Uniform(u64),
     /// Nodes in the same rack are fast; cross-rack nodes are slower.
-    RackAware {
-        local_ms: u64,
-        remote_ms: u64,
-    },
+    RackAware { local_ms: u64, remote_ms: u64 },
     /// Most nodes are fast, but a configurable ratio are slow.
     Mixed {
         low_ms: u64,
@@ -23,10 +20,7 @@ pub enum LatencyProfile {
         high_ratio: f64,
     },
     /// Two distinct latency buckets (e.g. local SSD vs remote storage).
-    Bimodal {
-        fast_ms: u64,
-        slow_ms: u64,
-    },
+    Bimodal { fast_ms: u64, slow_ms: u64 },
 }
 
 impl LatencyProfile {
@@ -102,12 +96,7 @@ impl BenchmarkScenario {
 
     /// 1 000-node fanout with uniform 2 ms latency.
     pub fn fanout_1k() -> Self {
-        Self::new(
-            "fanout_1k",
-            1_000,
-            LatencyProfile::Uniform(2),
-            "linear",
-        )
+        Self::new("fanout_1k", 1_000, LatencyProfile::Uniform(2), "linear")
     }
 
     /// 5 000-node fanout with rack-aware latency.

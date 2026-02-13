@@ -53,7 +53,9 @@ impl Redactor {
             match &rule.pattern {
                 RedactionPattern::Regex(pattern) => {
                     if let Ok(re) = regex::Regex::new(pattern) {
-                        result = re.replace_all(&result, rule.replacement.as_str()).to_string();
+                        result = re
+                            .replace_all(&result, rule.replacement.as_str())
+                            .to_string();
                     }
                 }
                 RedactionPattern::Literal(literal) => {
@@ -108,8 +110,14 @@ mod tests {
         let rules = Redactor::builtin_rules();
         let redacted = Redactor::redact(content, &rules);
 
-        assert!(!redacted.contains("supersecret123"), "password should be redacted");
-        assert!(redacted.contains("REDACTED"), "replacement marker should be present");
+        assert!(
+            !redacted.contains("supersecret123"),
+            "password should be redacted"
+        );
+        assert!(
+            redacted.contains("REDACTED"),
+            "replacement marker should be present"
+        );
     }
 
     #[test]

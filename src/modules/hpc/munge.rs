@@ -17,8 +17,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -225,10 +225,7 @@ impl Module for MungeModule {
                 } else {
                     run_cmd_ok(
                         connection,
-                        &format!(
-                            "echo '{}' | base64 -d > /etc/munge/munge.key",
-                            content
-                        ),
+                        &format!("echo '{}' | base64 -d > /etc/munge/munge.key", content),
                         context,
                     )?;
                     true
@@ -263,8 +260,7 @@ impl Module for MungeModule {
             }
         } else {
             // Check if key exists, generate if not
-            let (key_exists, _, _) =
-                run_cmd(connection, "test -f /etc/munge/munge.key", context)?;
+            let (key_exists, _, _) = run_cmd(connection, "test -f /etc/munge/munge.key", context)?;
             if !key_exists {
                 if context.check_mode {
                     changes.push("Would generate new munge key".to_string());

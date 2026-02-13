@@ -17,8 +17,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -126,11 +126,7 @@ impl RdmaStackModule {
         );
 
         // Remove persistence config
-        let _ = run_cmd(
-            connection,
-            "rm -f /etc/modules-load.d/rdma.conf",
-            context,
-        );
+        let _ = run_cmd(connection, "rm -f /etc/modules-load.d/rdma.conf", context);
 
         // Remove packages
         let remove_cmd = match os_family {
@@ -273,11 +269,7 @@ impl Module for RdmaStackModule {
                 if context.check_mode {
                     changes.push(format!("Would load kernel module {}", module));
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        &format!("modprobe {}", module),
-                        context,
-                    )?;
+                    run_cmd_ok(connection, &format!("modprobe {}", module), context)?;
                     changed = true;
                     changes.push(format!("Loaded kernel module {}", module));
                 }
@@ -365,11 +357,9 @@ impl Module for RdmaStackModule {
                     .with_data("kernel_modules", serde_json::json!(all_modules)),
             )
         } else {
-            Ok(
-                ModuleOutput::ok("RDMA stack is installed and configured")
-                    .with_data("os_family", serde_json::json!(os_family))
-                    .with_data("kernel_modules", serde_json::json!(all_modules)),
-            )
+            Ok(ModuleOutput::ok("RDMA stack is installed and configured")
+                .with_data("os_family", serde_json::json!(os_family))
+                .with_data("kernel_modules", serde_json::json!(all_modules)))
         }
     }
 

@@ -791,12 +791,12 @@ impl StateArgs {
                 force,
             } => {
                 ctx.output.banner("STATE MV");
-                ctx.output.info(&format!("Moving {} -> {}", source, destination));
+                ctx.output
+                    .info(&format!("Moving {} -> {}", source, destination));
 
                 if !force {
-                    ctx.output.warning(
-                        "This will rename a resource in state. Use --force to confirm.",
-                    );
+                    ctx.output
+                        .warning("This will rename a resource in state. Use --force to confirm.");
                     return Ok(1);
                 }
 
@@ -809,13 +809,20 @@ impl StateArgs {
                         return Ok(1);
                     }
 
-                    let mut prov_state = ProvisioningState::load(&state).await
+                    let mut prov_state = ProvisioningState::load(&state)
+                        .await
                         .map_err(|e| anyhow::anyhow!("Failed to load state: {}", e))?;
 
-                    rustible::provisioning::state_ops::state_mv(&mut prov_state, source, destination)
-                        .map_err(|e| anyhow::anyhow!("State mv failed: {}", e))?;
+                    rustible::provisioning::state_ops::state_mv(
+                        &mut prov_state,
+                        source,
+                        destination,
+                    )
+                    .map_err(|e| anyhow::anyhow!("State mv failed: {}", e))?;
 
-                    prov_state.save(&state).await
+                    prov_state
+                        .save(&state)
+                        .await
                         .map_err(|e| anyhow::anyhow!("Failed to save state: {}", e))?;
 
                     ctx.output.info("Successfully moved resource in state.");
@@ -824,7 +831,9 @@ impl StateArgs {
 
                 #[cfg(not(feature = "provisioning"))]
                 {
-                    ctx.output.error("Provisioning feature not enabled. Rebuild with --features provisioning");
+                    ctx.output.error(
+                        "Provisioning feature not enabled. Rebuild with --features provisioning",
+                    );
                     return Ok(1);
                 }
 
@@ -839,7 +848,10 @@ impl StateArgs {
                 force,
             } => {
                 ctx.output.banner("STATE REPLACE-PROVIDER");
-                ctx.output.info(&format!("Replacing provider {} -> {}", from_provider, to_provider));
+                ctx.output.info(&format!(
+                    "Replacing provider {} -> {}",
+                    from_provider, to_provider
+                ));
 
                 if !force {
                     ctx.output.warning(
@@ -857,25 +869,32 @@ impl StateArgs {
                         return Ok(1);
                     }
 
-                    let mut prov_state = ProvisioningState::load(&state).await
+                    let mut prov_state = ProvisioningState::load(&state)
+                        .await
                         .map_err(|e| anyhow::anyhow!("Failed to load state: {}", e))?;
 
                     let count = rustible::provisioning::state_ops::state_replace_provider(
                         &mut prov_state,
                         from_provider,
                         to_provider,
-                    ).map_err(|e| anyhow::anyhow!("Replace provider failed: {}", e))?;
+                    )
+                    .map_err(|e| anyhow::anyhow!("Replace provider failed: {}", e))?;
 
-                    prov_state.save(&state).await
+                    prov_state
+                        .save(&state)
+                        .await
                         .map_err(|e| anyhow::anyhow!("Failed to save state: {}", e))?;
 
-                    ctx.output.info(&format!("Replaced provider in {} resource(s).", count));
+                    ctx.output
+                        .info(&format!("Replaced provider in {} resource(s).", count));
                     return Ok(0);
                 }
 
                 #[cfg(not(feature = "provisioning"))]
                 {
-                    ctx.output.error("Provisioning feature not enabled. Rebuild with --features provisioning");
+                    ctx.output.error(
+                        "Provisioning feature not enabled. Rebuild with --features provisioning",
+                    );
                     return Ok(1);
                 }
 

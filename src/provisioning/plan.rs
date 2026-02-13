@@ -473,9 +473,7 @@ impl ExecutionPlan {
     }
 
     /// Load a plan from a file
-    pub async fn load_from_file(
-        path: impl AsRef<std::path::Path>,
-    ) -> ProvisioningResult<Self> {
+    pub async fn load_from_file(path: impl AsRef<std::path::Path>) -> ProvisioningResult<Self> {
         let content = tokio::fs::read_to_string(path).await.map_err(|e| {
             ProvisioningError::StatePersistenceError(format!("Failed to load plan: {}", e))
         })?;

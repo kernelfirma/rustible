@@ -17,8 +17,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -93,26 +93,24 @@ fn toolchain_packages(set_name: &str, os_family: &str) -> Option<Vec<&'static st
             "gcc", "gcc-c++", "make", "cmake", "autoconf", "automake", "libtool",
         ]),
         ("build_essentials", "debian") => Some(vec![
-            "build-essential", "cmake", "autoconf", "automake", "libtool",
+            "build-essential",
+            "cmake",
+            "autoconf",
+            "automake",
+            "libtool",
         ]),
-        ("perf_tools", "rhel") => Some(vec![
-            "perf", "strace", "ltrace", "sysstat", "htop",
-        ]),
+        ("perf_tools", "rhel") => Some(vec!["perf", "strace", "ltrace", "sysstat", "htop"]),
         ("perf_tools", "debian") => Some(vec![
-            "linux-tools-generic", "strace", "ltrace", "sysstat", "htop",
+            "linux-tools-generic",
+            "strace",
+            "ltrace",
+            "sysstat",
+            "htop",
         ]),
-        ("debug_tools", "rhel") => Some(vec![
-            "gdb", "valgrind", "elfutils",
-        ]),
-        ("debug_tools", "debian") => Some(vec![
-            "gdb", "valgrind", "elfutils",
-        ]),
-        ("rdma_userland", "rhel") => Some(vec![
-            "rdma-core", "libibverbs-utils", "librdmacm-utils",
-        ]),
-        ("rdma_userland", "debian") => Some(vec![
-            "rdma-core", "ibverbs-utils", "rdmacm-utils",
-        ]),
+        ("debug_tools", "rhel") => Some(vec!["gdb", "valgrind", "elfutils"]),
+        ("debug_tools", "debian") => Some(vec!["gdb", "valgrind", "elfutils"]),
+        ("rdma_userland", "rhel") => Some(vec!["rdma-core", "libibverbs-utils", "librdmacm-utils"]),
+        ("rdma_userland", "debian") => Some(vec!["rdma-core", "ibverbs-utils", "rdmacm-utils"]),
         _ => None,
     }
 }
@@ -150,9 +148,9 @@ impl Module for HpcToolchainModule {
             .as_ref()
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
-        let sets = params.get_vec_string("sets")?.ok_or_else(|| {
-            ModuleError::MissingParameter("sets".to_string())
-        })?;
+        let sets = params
+            .get_vec_string("sets")?
+            .ok_or_else(|| ModuleError::MissingParameter("sets".to_string()))?;
 
         if sets.is_empty() {
             return Err(ModuleError::InvalidParameter(
@@ -242,17 +240,18 @@ impl Module for HpcToolchainModule {
         }
 
         if changed {
-            Ok(ModuleOutput::changed(format!(
-                "Installed {} toolchain sets",
-                changes.len()
-            ))
-            .with_data("changes", serde_json::json!(changes))
-            .with_data("installed_sets", serde_json::json!(installed_sets))
-            .with_data("os_family", serde_json::json!(os_family)))
+            Ok(
+                ModuleOutput::changed(format!("Installed {} toolchain sets", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
+                    .with_data("installed_sets", serde_json::json!(installed_sets))
+                    .with_data("os_family", serde_json::json!(os_family)),
+            )
         } else {
-            Ok(ModuleOutput::ok("All requested toolchain sets are already installed")
-                .with_data("installed_sets", serde_json::json!(installed_sets))
-                .with_data("os_family", serde_json::json!(os_family)))
+            Ok(
+                ModuleOutput::ok("All requested toolchain sets are already installed")
+                    .with_data("installed_sets", serde_json::json!(installed_sets))
+                    .with_data("os_family", serde_json::json!(os_family)),
+            )
         }
     }
 

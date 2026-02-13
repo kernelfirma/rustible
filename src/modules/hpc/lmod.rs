@@ -15,8 +15,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -108,11 +108,7 @@ impl LmodModule {
         }
 
         // Remove profile script if it exists
-        let _ = run_cmd(
-            connection,
-            "rm -f /etc/profile.d/lmod.sh",
-            context,
-        );
+        let _ = run_cmd(connection, "rm -f /etc/profile.d/lmod.sh", context);
 
         // Remove packages
         let remove_cmd = match os_family {
@@ -194,20 +190,12 @@ impl Module for LmodModule {
         // Create module path directories
         if let Some(ref paths) = modulepath {
             for dir in paths {
-                let (exists, _, _) = run_cmd(
-                    connection,
-                    &format!("test -d '{}'", dir),
-                    context,
-                )?;
+                let (exists, _, _) = run_cmd(connection, &format!("test -d '{}'", dir), context)?;
                 if !exists {
                     if context.check_mode {
                         changes.push(format!("Would create module directory {}", dir));
                     } else {
-                        run_cmd_ok(
-                            connection,
-                            &format!("mkdir -p '{}'", dir),
-                            context,
-                        )?;
+                        run_cmd_ok(connection, &format!("mkdir -p '{}'", dir), context)?;
                         changed = true;
                         changes.push(format!("Created module directory {}", dir));
                     }

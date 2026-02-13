@@ -56,10 +56,10 @@ pub mod config;
 pub mod gcp;
 pub mod terraform;
 
-#[cfg(feature = "slurm")]
-pub mod slurm;
 #[cfg(feature = "openstack")]
 pub mod openstack;
+#[cfg(feature = "slurm")]
+pub mod slurm;
 
 pub use aws_ec2::AwsEc2Plugin;
 pub use azure::AzurePlugin;
@@ -73,10 +73,10 @@ pub use terraform::{
     TerraformInventoryPlugin, TerraformPlugin, TerraformPluginConfig, TerraformStateBackend,
 };
 
-#[cfg(feature = "slurm")]
-pub use slurm::SlurmPlugin;
 #[cfg(feature = "openstack")]
 pub use openstack::OpenstackPlugin;
+#[cfg(feature = "slurm")]
+pub use slurm::SlurmPlugin;
 
 use super::{Inventory, InventoryError, InventoryResult};
 use async_trait::async_trait;

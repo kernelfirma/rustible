@@ -21,8 +21,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -128,11 +128,7 @@ impl PbsServerModule {
         connection: &Arc<dyn Connection + Send + Sync>,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let stdout = run_cmd_ok(
-            connection,
-            "qmgr -c \"print server\" 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "qmgr -c \"print server\" 2>/dev/null", context)?;
 
         let server_attrs = parse_qmgr_server_output(&stdout);
 
@@ -150,11 +146,7 @@ impl PbsServerModule {
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         // Get current server state
-        let stdout = run_cmd_ok(
-            connection,
-            "qmgr -c \"print server\" 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "qmgr -c \"print server\" 2>/dev/null", context)?;
         let current = parse_qmgr_server_output(&stdout);
 
         // Build desired attributes
@@ -162,10 +154,8 @@ impl PbsServerModule {
         let changes = compute_server_changes(&current, &desired);
 
         if changes.is_empty() {
-            return Ok(
-                ModuleOutput::ok("Server attributes are already up to date")
-                    .with_data("server", serde_json::json!(current)),
-            );
+            return Ok(ModuleOutput::ok("Server attributes are already up to date")
+                .with_data("server", serde_json::json!(current)));
         }
 
         if context.check_mode {
@@ -186,11 +176,8 @@ impl PbsServerModule {
         }
 
         // Re-read current state
-        let (_, new_stdout, _) = run_cmd(
-            connection,
-            "qmgr -c \"print server\" 2>/dev/null",
-            context,
-        )?;
+        let (_, new_stdout, _) =
+            run_cmd(connection, "qmgr -c \"print server\" 2>/dev/null", context)?;
         let updated = parse_qmgr_server_output(&new_stdout);
 
         Ok(ModuleOutput::changed("Updated server attributes")
@@ -218,11 +205,7 @@ impl PbsServerModule {
         })?;
 
         // Query existing resources
-        let (_, stdout, _) = run_cmd(
-            connection,
-            "qmgr -c \"print server\" 2>/dev/null",
-            context,
-        )?;
+        let (_, stdout, _) = run_cmd(connection, "qmgr -c \"print server\" 2>/dev/null", context)?;
         let current = parse_qmgr_server_output(&stdout);
 
         let mut created = Vec::new();
@@ -255,10 +238,8 @@ impl PbsServerModule {
         }
 
         if created.is_empty() {
-            return Ok(
-                ModuleOutput::ok("All resources already exist")
-                    .with_data("skipped", serde_json::json!(skipped)),
-            );
+            return Ok(ModuleOutput::ok("All resources already exist")
+                .with_data("skipped", serde_json::json!(skipped)));
         }
 
         let msg = if context.check_mode {
@@ -294,10 +275,7 @@ fn parse_qmgr_server_output(output: &str) -> HashMap<String, String> {
         // Parse "set server key = value" lines
         if let Some(rest) = trimmed.strip_prefix("set server ") {
             if let Some((key, value)) = rest.split_once('=') {
-                map.insert(
-                    key.trim().to_string(),
-                    value.trim().to_string(),
-                );
+                map.insert(key.trim().to_string(), value.trim().to_string());
             }
         }
 
@@ -315,9 +293,7 @@ fn parse_qmgr_server_output(output: &str) -> HashMap<String, String> {
 }
 
 /// Build server attribute key-value pairs from params.
-fn build_server_attribute_pairs(
-    params: &ModuleParams,
-) -> ModuleResult<HashMap<String, String>> {
+fn build_server_attribute_pairs(params: &ModuleParams) -> ModuleResult<HashMap<String, String>> {
     let mut desired = HashMap::new();
 
     let attr_map: &[(&str, &str)] = &[
@@ -410,10 +386,7 @@ set server node_fail_requeue = True
     #[test]
     fn test_build_server_attribute_commands() {
         let mut params = ModuleParams::new();
-        params.insert(
-            "default_queue".to_string(),
-            serde_json::json!("batch"),
-        );
+        params.insert("default_queue".to_string(), serde_json::json!("batch"));
         params.insert("scheduling".to_string(), serde_json::json!("True"));
         params.insert(
             "resources_default_walltime".to_string(),

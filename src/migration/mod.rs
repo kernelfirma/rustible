@@ -11,9 +11,9 @@ pub mod terraform;
 
 pub mod ansible;
 #[cfg(feature = "hpc")]
-pub mod xcat;
-#[cfg(feature = "hpc")]
 pub mod warewulf;
+#[cfg(feature = "hpc")]
+pub mod xcat;
 
 pub use error::{MigrationError, MigrationResult};
 pub use report::{

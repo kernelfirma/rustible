@@ -10,9 +10,8 @@ pub struct ForensicsBundle;
 impl ForensicsBundle {
     /// Serialize a [`BundleData`] into a pretty-printed JSON string.
     pub fn export_json(data: &BundleData) -> String {
-        serde_json::to_string_pretty(data).unwrap_or_else(|e| {
-            format!("{{\"error\": \"serialization failed: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(data)
+            .unwrap_or_else(|e| format!("{{\"error\": \"serialization failed: {}\"}}", e))
     }
 
     /// Verify that a JSON string has the expected forensics bundle structure.

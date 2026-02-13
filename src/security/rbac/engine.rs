@@ -212,11 +212,7 @@ mod tests {
     fn test_role_inheritance() {
         let mut engine = RbacEngine::new();
         engine.load_roles(vec![
-            make_role(
-                "base",
-                vec![allow_perm("*", vec![Action::Read])],
-                vec![],
-            ),
+            make_role("base", vec![allow_perm("*", vec![Action::Read])], vec![]),
             make_role(
                 "operator",
                 vec![allow_perm("hosts:*", vec![Action::Execute])],

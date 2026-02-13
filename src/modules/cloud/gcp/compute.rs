@@ -468,7 +468,11 @@ impl std::fmt::Debug for InstanceInfo {
             .field("tags", &self.tags)
             .field(
                 "service_accounts",
-                &self.service_accounts.iter().map(|_| "[REDACTED]").collect::<Vec<_>>(),
+                &self
+                    .service_accounts
+                    .iter()
+                    .map(|_| "[REDACTED]")
+                    .collect::<Vec<_>>(),
             )
             .field("metadata", &self.metadata)
             .field("self_link", &self.self_link)

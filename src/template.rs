@@ -1744,7 +1744,10 @@ mod tests {
         assert_eq!(engine.render("{{ '1' | bool }}", &vars).unwrap(), "true");
 
         // Test falsy values
-        assert_eq!(engine.render("{{ 'false' | bool }}", &vars).unwrap(), "false");
+        assert_eq!(
+            engine.render("{{ 'false' | bool }}", &vars).unwrap(),
+            "false"
+        );
         assert_eq!(engine.render("{{ 'no' | bool }}", &vars).unwrap(), "false");
         assert_eq!(engine.render("{{ 'off' | bool }}", &vars).unwrap(), "false");
         assert_eq!(engine.render("{{ '0' | bool }}", &vars).unwrap(), "false");

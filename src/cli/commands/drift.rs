@@ -36,8 +36,7 @@ use std::time::Duration;
 use reqwest;
 
 use rustible::drift::history::{
-    DriftHistoryStore, DriftSnapshot, DriftTimeline,
-    ExportFormat, TimelineExporter, TimelineFilter,
+    DriftHistoryStore, DriftSnapshot, DriftTimeline, ExportFormat, TimelineExporter, TimelineFilter,
 };
 use rustible::inventory::Inventory;
 use rustible::modules::{ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleRegistry};
@@ -440,7 +439,8 @@ impl HistoryArgs {
             let json = serde_json::to_string_pretty(snapshots)?;
             println!("{}", json);
         } else {
-            ctx.output.info(&format!("{} snapshot(s) recorded:\n", snapshots.len()));
+            ctx.output
+                .info(&format!("{} snapshot(s) recorded:\n", snapshots.len()));
             for snap in snapshots {
                 let item_count = snap.items.len();
                 let trigger = serde_json::to_value(&snap.trigger)
@@ -505,7 +505,8 @@ impl TimelineArgs {
         let filtered = DriftTimeline::filter(&entries, &filter);
 
         if filtered.is_empty() {
-            ctx.output.info("No timeline entries match the given filters.");
+            ctx.output
+                .info("No timeline entries match the given filters.");
             return Ok(0);
         }
 
@@ -579,10 +580,16 @@ impl CompareArgs {
         ));
 
         // Build resource maps
-        let resources_a: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> =
-            snap_a.items.iter().map(|i| (i.resource.as_str(), i)).collect();
-        let resources_b: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> =
-            snap_b.items.iter().map(|i| (i.resource.as_str(), i)).collect();
+        let resources_a: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> = snap_a
+            .items
+            .iter()
+            .map(|i| (i.resource.as_str(), i))
+            .collect();
+        let resources_b: HashMap<&str, &rustible::drift::history::store::DriftHistoryItem> = snap_b
+            .items
+            .iter()
+            .map(|i| (i.resource.as_str(), i))
+            .collect();
 
         // Collect all resource names
         let mut all_resources: Vec<&str> = resources_a
@@ -601,7 +608,8 @@ impl CompareArgs {
         for resource in &all_resources {
             match (resources_a.get(resource), resources_b.get(resource)) {
                 (Some(a), Some(b)) => {
-                    if a.expected == b.expected && a.actual == b.actual && a.severity == b.severity {
+                    if a.expected == b.expected && a.actual == b.actual && a.severity == b.severity
+                    {
                         unchanged += 1;
                     } else {
                         changed += 1;
@@ -1379,8 +1387,7 @@ mod tests {
     fn test_drift_compare_args_parse() {
         use clap::Parser;
 
-        let args =
-            DriftArgs::try_parse_from(["drift", "compare", "snap-1", "snap-2"]).unwrap();
+        let args = DriftArgs::try_parse_from(["drift", "compare", "snap-1", "snap-2"]).unwrap();
 
         match args.command {
             DriftCommands::Compare(ref cmp) => {
@@ -1395,12 +1402,7 @@ mod tests {
     fn test_drift_prune_args_parse() {
         use clap::Parser;
 
-        let args = DriftArgs::try_parse_from([
-            "drift",
-            "prune",
-            "2025-01-01T00:00:00Z",
-        ])
-        .unwrap();
+        let args = DriftArgs::try_parse_from(["drift", "prune", "2025-01-01T00:00:00Z"]).unwrap();
 
         match args.command {
             DriftCommands::Prune(ref p) => {

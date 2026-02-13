@@ -622,11 +622,17 @@ mod tests {
         let module = ShellModule;
         let mut params: ModuleParams = HashMap::new();
         // Malicious executable
-        params.insert("executable".to_string(), serde_json::json!("bash; echo pwned"));
+        params.insert(
+            "executable".to_string(),
+            serde_json::json!("bash; echo pwned"),
+        );
         params.insert("cmd".to_string(), serde_json::json!("echo hello"));
 
         // This should fail validation once fixed.
-        assert!(module.validate_params(&params).is_err(), "Should reject malicious executable");
+        assert!(
+            module.validate_params(&params).is_err(),
+            "Should reject malicious executable"
+        );
     }
 
     #[test]
@@ -634,7 +640,10 @@ mod tests {
         let module = ShellModule;
         let mut params: ModuleParams = HashMap::new();
         // Safe executable with arguments
-        params.insert("executable".to_string(), serde_json::json!("/usr/bin/env python3"));
+        params.insert(
+            "executable".to_string(),
+            serde_json::json!("/usr/bin/env python3"),
+        );
         params.insert("cmd".to_string(), serde_json::json!("print('hello')"));
 
         // Validation should pass
@@ -644,7 +653,9 @@ mod tests {
         // With fix, this should be: '/usr/bin/env' 'python3' -c 'print('hello')'
         // Without fix, it is: /usr/bin/env python3 -c 'print('hello')'
         // We will assert on the fixed behavior once implemented.
-        let result = module.build_shell_command("print('hello')", &params).unwrap();
+        let result = module
+            .build_shell_command("print('hello')", &params)
+            .unwrap();
 
         // Assert command structure:
         // /usr/bin/env and python3 are split and escaped individually.

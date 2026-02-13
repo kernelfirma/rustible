@@ -52,8 +52,8 @@ pub mod observability;
 pub mod raft;
 pub mod recovery;
 pub mod state;
-pub mod types;
 pub mod topology;
+pub mod types;
 
 // Re-export commonly used types
 pub use cluster::{ClusterManager, ClusterState, PeerConnection};

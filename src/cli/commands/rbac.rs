@@ -110,7 +110,8 @@ impl RbacArgs {
             RbacAction::ShowRole(args) => {
                 if let Some(role) = config.roles.iter().find(|r| r.name == args.name) {
                     ctx.output.banner(&format!("Role: {}", role.name));
-                    ctx.output.info(&format!("Description: {}", role.description));
+                    ctx.output
+                        .info(&format!("Description: {}", role.description));
                     if !role.inherits.is_empty() {
                         ctx.output
                             .info(&format!("Inherits: {}", role.inherits.join(", ")));
@@ -128,8 +129,7 @@ impl RbacArgs {
                     }
                     Ok(0)
                 } else {
-                    ctx.output
-                        .error(&format!("Role '{}' not found", args.name));
+                    ctx.output.error(&format!("Role '{}' not found", args.name));
                     Ok(1)
                 }
             }

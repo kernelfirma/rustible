@@ -58,9 +58,9 @@ impl DriftCorrelator {
 
         for snapshot in snapshots {
             for item in &snapshot.items {
-                let entry = map.entry(item.resource.clone()).or_insert_with(|| {
-                    (0, snapshot.timestamp, snapshot.timestamp, Vec::new())
-                });
+                let entry = map
+                    .entry(item.resource.clone())
+                    .or_insert_with(|| (0, snapshot.timestamp, snapshot.timestamp, Vec::new()));
                 entry.0 += 1;
                 if snapshot.timestamp < entry.1 {
                     entry.1 = snapshot.timestamp;
@@ -74,16 +74,18 @@ impl DriftCorrelator {
 
         let mut results: Vec<CorrelationResult> = map
             .into_iter()
-            .map(|(resource, (frequency, first_seen, last_seen, severities))| {
-                let probable_cause = Self::guess_cause(&resource, frequency, &severities);
-                CorrelationResult {
-                    resource,
-                    frequency,
-                    first_seen,
-                    last_seen,
-                    probable_cause,
-                }
-            })
+            .map(
+                |(resource, (frequency, first_seen, last_seen, severities))| {
+                    let probable_cause = Self::guess_cause(&resource, frequency, &severities);
+                    CorrelationResult {
+                        resource,
+                        frequency,
+                        first_seen,
+                        last_seen,
+                        probable_cause,
+                    }
+                },
+            )
             .collect();
 
         // Sort by frequency descending so the most problematic resources appear first.
@@ -168,13 +170,19 @@ mod tests {
         // nginx-service appears 3 times, openssl-package 1 time
         assert_eq!(results.len(), 2);
 
-        let nginx = results.iter().find(|r| r.resource.contains("nginx")).unwrap();
+        let nginx = results
+            .iter()
+            .find(|r| r.resource.contains("nginx"))
+            .unwrap();
         assert_eq!(nginx.frequency, 3);
         assert_eq!(nginx.first_seen, ts1);
         assert_eq!(nginx.last_seen, ts3);
         assert_eq!(nginx.probable_cause, ProbableCause::ServiceRestart);
 
-        let openssl = results.iter().find(|r| r.resource.contains("openssl")).unwrap();
+        let openssl = results
+            .iter()
+            .find(|r| r.resource.contains("openssl"))
+            .unwrap();
         assert_eq!(openssl.frequency, 1);
         assert_eq!(openssl.probable_cause, ProbableCause::PackageUpdate);
     }

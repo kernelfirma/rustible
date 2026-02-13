@@ -56,21 +56,25 @@ impl XcatHierarchyImporter {
     }
 
     /// Import from a YAML definition of xCAT hierarchy.
-    pub fn import_from_yaml(&self, yaml: &str) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
-        let hierarchy: XcatHierarchy = serde_yaml::from_str(yaml)
-            .map_err(|e| crate::migration::MigrationError::ParseError(format!("xCAT hierarchy YAML: {}", e)))?;
+    pub fn import_from_yaml(
+        &self,
+        yaml: &str,
+    ) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
+        let hierarchy: XcatHierarchy = serde_yaml::from_str(yaml).map_err(|e| {
+            crate::migration::MigrationError::ParseError(format!("xCAT hierarchy YAML: {}", e))
+        })?;
 
         self.import(&hierarchy)
     }
 
     /// Import from a parsed xCAT hierarchy.
-    pub fn import(&self, hierarchy: &XcatHierarchy) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
+    pub fn import(
+        &self,
+        hierarchy: &XcatHierarchy,
+    ) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
         let mut groups = Vec::new();
-        let mut report = MigrationReport::new(
-            "xCAT Hierarchy Import",
-            "xCAT",
-            "Rustible Inventory",
-        );
+        let mut report =
+            MigrationReport::new("xCAT Hierarchy Import", "xCAT", "Rustible Inventory");
 
         // Top-level management group
         let mut mgmt_children = Vec::new();
@@ -128,20 +132,31 @@ impl XcatHierarchyImporter {
         // Validation finding
         report.add_finding(MigrationFinding {
             name: "Node Uniqueness".into(),
-            status: if duplicates.is_empty() { FindingStatus::Pass } else { FindingStatus::Fail },
+            status: if duplicates.is_empty() {
+                FindingStatus::Pass
+            } else {
+                FindingStatus::Fail
+            },
             severity: MigrationSeverity::Error,
-            diagnostics: duplicates.iter().map(|d| MigrationDiagnostic {
-                category: DiagnosticCategory::ResourceMismatch,
-                severity: MigrationSeverity::Error,
-                message: format!("Duplicate node: {}", d),
-                context: None,
-            }).collect(),
+            diagnostics: duplicates
+                .iter()
+                .map(|d| MigrationDiagnostic {
+                    category: DiagnosticCategory::ResourceMismatch,
+                    severity: MigrationSeverity::Error,
+                    message: format!("Duplicate node: {}", d),
+                    context: None,
+                })
+                .collect(),
         });
 
         // Service node coverage
         report.add_finding(MigrationFinding {
             name: "Service Node Coverage".into(),
-            status: if hierarchy.unassigned_nodes.is_empty() { FindingStatus::Pass } else { FindingStatus::Partial },
+            status: if hierarchy.unassigned_nodes.is_empty() {
+                FindingStatus::Pass
+            } else {
+                FindingStatus::Partial
+            },
             severity: MigrationSeverity::Warning,
             diagnostics: if hierarchy.unassigned_nodes.is_empty() {
                 vec![]
@@ -149,7 +164,10 @@ impl XcatHierarchyImporter {
                 vec![MigrationDiagnostic {
                     category: DiagnosticCategory::Other("unassigned".into()),
                     severity: MigrationSeverity::Warning,
-                    message: format!("{} nodes not assigned to any service node", hierarchy.unassigned_nodes.len()),
+                    message: format!(
+                        "{} nodes not assigned to any service node",
+                        hierarchy.unassigned_nodes.len()
+                    ),
                     context: Some(hierarchy.unassigned_nodes.join(", ")),
                 }]
             },
@@ -165,7 +183,9 @@ impl XcatHierarchyImporter {
                 severity: MigrationSeverity::Info,
                 message: format!(
                     "Imported {} service nodes, {} compute nodes from management node '{}'",
-                    hierarchy.service_nodes.len(), compute_count, hierarchy.management_node
+                    hierarchy.service_nodes.len(),
+                    compute_count,
+                    hierarchy.management_node
                 ),
                 context: None,
             }],
@@ -211,7 +231,10 @@ unassigned_nodes: []
         assert_eq!(result.service_node_count, 2);
         assert_eq!(result.compute_node_count, 5);
         assert_eq!(result.unassigned_count, 0);
-        assert_eq!(report.outcome, Some(crate::migration::MigrationOutcome::Pass));
+        assert_eq!(
+            report.outcome,
+            Some(crate::migration::MigrationOutcome::Pass)
+        );
     }
 
     #[test]

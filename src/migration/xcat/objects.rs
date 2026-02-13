@@ -156,10 +156,7 @@ impl XcatObjectImporter {
         let mut finding_counter = 0usize;
 
         for obj in objects {
-            let obj_type = obj
-                .object_type
-                .as_ref()
-                .or(self.default_type.as_ref());
+            let obj_type = obj.object_type.as_ref().or(self.default_type.as_ref());
 
             match obj_type {
                 Some(XcatObjectType::Node) => {
@@ -211,10 +208,7 @@ impl XcatObjectImporter {
                         diagnostics: vec![MigrationDiagnostic {
                             severity: MigrationSeverity::Warning,
                             category: DiagnosticCategory::Unsupported,
-                            message: format!(
-                                "Skipping {:?} object '{}'",
-                                other_type, obj.name
-                            ),
+                            message: format!("Skipping {:?} object '{}'", other_type, obj.name),
                             source_object: Some(obj.name.clone()),
                         }],
                     });
@@ -358,10 +352,7 @@ Object name: node02
         assert_eq!(objects.len(), 2);
         assert_eq!(objects[0].name, "node01");
         assert_eq!(objects[1].name, "node02");
-        assert_eq!(
-            objects[0].object_type,
-            Some(XcatObjectType::Node)
-        );
+        assert_eq!(objects[0].object_type, Some(XcatObjectType::Node));
     }
 
     #[test]
@@ -369,8 +360,14 @@ Object name: node02
         let importer = XcatObjectImporter::new();
         let objects = importer.parse_lsdef(SAMPLE_LSDEF).unwrap();
         let node01 = &objects[0];
-        assert_eq!(node01.attributes.get("arch").map(|s| s.as_str()), Some("x86_64"));
-        assert_eq!(node01.attributes.get("ip").map(|s| s.as_str()), Some("10.0.0.101"));
+        assert_eq!(
+            node01.attributes.get("arch").map(|s| s.as_str()),
+            Some("x86_64")
+        );
+        assert_eq!(
+            node01.attributes.get("ip").map(|s| s.as_str()),
+            Some("10.0.0.101")
+        );
         assert_eq!(
             node01.attributes.get("mac").map(|s| s.as_str()),
             Some("aa:bb:cc:dd:ee:01")
@@ -417,8 +414,7 @@ Object name: node02
         let result = importer.import(&objects);
 
         // Groups derived: compute, rack1, rack2
-        let group_names: HashSet<String> =
-            result.groups.iter().map(|g| g.name.clone()).collect();
+        let group_names: HashSet<String> = result.groups.iter().map(|g| g.name.clone()).collect();
         assert!(group_names.contains("compute"), "expected 'compute' group");
         assert!(group_names.contains("rack1"), "expected 'rack1' group");
         assert!(group_names.contains("rack2"), "expected 'rack2' group");

@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -260,9 +260,7 @@ impl Module for HpcPowerModule {
         let user = params
             .get_string("user")?
             .unwrap_or_else(|| "admin".to_string());
-        let password = params
-            .get_string("password")?
-            .unwrap_or_default();
+        let password = params.get_string("password")?.unwrap_or_default();
         let interface = params
             .get_string("interface")?
             .unwrap_or_else(|| "lanplus".to_string());
@@ -277,9 +275,9 @@ impl Module for HpcPowerModule {
         })?;
 
         match provider {
-            PowerProvider::Ipmi => {
-                self.execute_ipmi(connection, context, action, &host, &user, &password, &interface)
-            }
+            PowerProvider::Ipmi => self.execute_ipmi(
+                connection, context, action, &host, &user, &password, &interface,
+            ),
             PowerProvider::Redfish => {
                 self.execute_redfish(connection, context, action, &host, &user, &password)
             }
@@ -323,13 +321,12 @@ impl HpcPowerModule {
 
         // For status action, just return current state
         if action == PowerAction::Status {
-            return Ok(ModuleOutput::ok(format!(
-                "Power state: {:?}",
-                current_state
-            ))
-            .with_data("power_state", serde_json::json!(current_state))
-            .with_data("host", serde_json::json!(host))
-            .with_data("provider", serde_json::json!("ipmi")));
+            return Ok(
+                ModuleOutput::ok(format!("Power state: {:?}", current_state))
+                    .with_data("power_state", serde_json::json!(current_state))
+                    .with_data("host", serde_json::json!(host))
+                    .with_data("provider", serde_json::json!("ipmi")),
+            );
         }
 
         // Check idempotency
@@ -398,13 +395,12 @@ impl HpcPowerModule {
         };
 
         if action == PowerAction::Status {
-            return Ok(ModuleOutput::ok(format!(
-                "Power state: {:?}",
-                current_state
-            ))
-            .with_data("power_state", serde_json::json!(current_state))
-            .with_data("host", serde_json::json!(host))
-            .with_data("provider", serde_json::json!("redfish")));
+            return Ok(
+                ModuleOutput::ok(format!("Power state: {:?}", current_state))
+                    .with_data("power_state", serde_json::json!(current_state))
+                    .with_data("host", serde_json::json!(host))
+                    .with_data("provider", serde_json::json!("redfish")),
+            );
         }
 
         if !Self::action_would_change(action, current_state) {
@@ -517,10 +513,7 @@ mod tests {
             PowerState::from_redfish_value("PoweredOff"),
             PowerState::Off
         );
-        assert_eq!(
-            PowerState::from_redfish_value("PoweredOn"),
-            PowerState::On
-        );
+        assert_eq!(PowerState::from_redfish_value("PoweredOn"), PowerState::On);
         assert_eq!(
             PowerState::from_redfish_value("Something"),
             PowerState::Unknown

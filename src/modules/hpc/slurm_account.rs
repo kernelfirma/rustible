@@ -23,8 +23,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -224,10 +224,11 @@ impl SlurmAccountModule {
 
         let props = build_account_properties(params)?;
         if props.is_empty() {
-            return Ok(
-                ModuleOutput::ok(format!("No properties to update for account '{}'", account))
-                    .with_data("account", serde_json::json!(account)),
-            );
+            return Ok(ModuleOutput::ok(format!(
+                "No properties to update for account '{}'",
+                account
+            ))
+            .with_data("account", serde_json::json!(account)));
         }
 
         if context.check_mode {
@@ -304,13 +305,7 @@ impl SlurmAccountModule {
         let cluster = params.get_string("cluster")?;
 
         // Idempotency check
-        if self.user_association_exists(
-            connection,
-            &user,
-            account,
-            cluster.as_deref(),
-            context,
-        )? {
+        if self.user_association_exists(connection, &user, account, cluster.as_deref(), context)? {
             return Ok(ModuleOutput::ok(format!(
                 "User '{}' is already associated with account '{}'",
                 user, account
@@ -328,10 +323,7 @@ impl SlurmAccountModule {
             .with_data("account", serde_json::json!(account)));
         }
 
-        let mut cmd = format!(
-            "sacctmgr --immediate add user {} account={}",
-            user, account
-        );
+        let mut cmd = format!("sacctmgr --immediate add user {} account={}", user, account);
         if let Some(ref c) = cluster {
             cmd.push_str(&format!(" cluster={}", c));
         }
@@ -344,12 +336,11 @@ impl SlurmAccountModule {
 
         run_cmd_ok(connection, &cmd, context)?;
 
-        Ok(ModuleOutput::changed(format!(
-            "Added user '{}' to account '{}'",
-            user, account
-        ))
-        .with_data("user", serde_json::json!(user))
-        .with_data("account", serde_json::json!(account)))
+        Ok(
+            ModuleOutput::changed(format!("Added user '{}' to account '{}'", user, account))
+                .with_data("user", serde_json::json!(user))
+                .with_data("account", serde_json::json!(account)),
+        )
     }
 
     fn action_remove_user(
@@ -363,13 +354,7 @@ impl SlurmAccountModule {
         let cluster = params.get_string("cluster")?;
 
         // Idempotency check
-        if !self.user_association_exists(
-            connection,
-            &user,
-            account,
-            cluster.as_deref(),
-            context,
-        )? {
+        if !self.user_association_exists(connection, &user, account, cluster.as_deref(), context)? {
             return Ok(ModuleOutput::ok(format!(
                 "User '{}' is not associated with account '{}'",
                 user, account

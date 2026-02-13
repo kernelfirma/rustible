@@ -174,37 +174,61 @@ impl std::fmt::Debug for VaultAuthMethod {
                 .debug_struct("Token")
                 .field("token", &"[REDACTED]")
                 .finish(),
-            VaultAuthMethod::AppRole { role_id, mount_path, .. } => f
+            VaultAuthMethod::AppRole {
+                role_id,
+                mount_path,
+                ..
+            } => f
                 .debug_struct("AppRole")
                 .field("role_id", role_id)
                 .field("secret_id", &"[REDACTED]")
                 .field("mount_path", mount_path)
                 .finish(),
-            VaultAuthMethod::Kubernetes { role, jwt_path, mount_path } => f
+            VaultAuthMethod::Kubernetes {
+                role,
+                jwt_path,
+                mount_path,
+            } => f
                 .debug_struct("Kubernetes")
                 .field("role", role)
                 .field("jwt_path", jwt_path)
                 .field("mount_path", mount_path)
                 .finish(),
-            VaultAuthMethod::Ldap { username, mount_path, .. } => f
+            VaultAuthMethod::Ldap {
+                username,
+                mount_path,
+                ..
+            } => f
                 .debug_struct("Ldap")
                 .field("username", username)
                 .field("password", &"[REDACTED]")
                 .field("mount_path", mount_path)
                 .finish(),
-            VaultAuthMethod::AwsIam { role, region, mount_path } => f
+            VaultAuthMethod::AwsIam {
+                role,
+                region,
+                mount_path,
+            } => f
                 .debug_struct("AwsIam")
                 .field("role", role)
                 .field("region", region)
                 .field("mount_path", mount_path)
                 .finish(),
-            VaultAuthMethod::Userpass { username, mount_path, .. } => f
+            VaultAuthMethod::Userpass {
+                username,
+                mount_path,
+                ..
+            } => f
                 .debug_struct("Userpass")
                 .field("username", username)
                 .field("password", &"[REDACTED]")
                 .field("mount_path", mount_path)
                 .finish(),
-            VaultAuthMethod::Cert { cert_path, key_path, mount_path } => f
+            VaultAuthMethod::Cert {
+                cert_path,
+                key_path,
+                mount_path,
+            } => f
                 .debug_struct("Cert")
                 .field("cert_path", cert_path)
                 .field("key_path", key_path)
@@ -358,7 +382,10 @@ impl std::fmt::Debug for VaultConfig {
             .field("tls_verify", &self.tls_verify)
             .field("ca_cert_path", &self.ca_cert_path)
             .field("client_cert_path", &self.client_cert_path)
-            .field("client_key_path", &self.client_key_path.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "client_key_path",
+                &self.client_key_path.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("max_retries", &self.max_retries)
             .field("retry_delay_ms", &self.retry_delay_ms)
             .field("default_kv_version", &self.default_kv_version)

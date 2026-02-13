@@ -91,12 +91,8 @@ mod tests {
     #[tokio::test]
     async fn test_simulate_fanout_small() {
         // Use a tiny scenario so the test finishes well under 1 second.
-        let scenario = BenchmarkScenario::new(
-            "test_small",
-            20,
-            LatencyProfile::Uniform(1),
-            "linear",
-        );
+        let scenario =
+            BenchmarkScenario::new("test_small", 20, LatencyProfile::Uniform(1), "linear");
         let env = BenchmarkEnvironment::new(scenario);
         let run = env.simulate_fanout().await;
 

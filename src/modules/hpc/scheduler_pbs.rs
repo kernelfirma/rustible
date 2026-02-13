@@ -10,8 +10,7 @@ use crate::modules::{
 };
 
 use super::scheduler::{
-    run_cmd, run_cmd_ok, HpcScheduler, JobInfo, JobState, QueueInfo, ServerInfo,
-    map_pbs_state,
+    map_pbs_state, run_cmd, run_cmd_ok, HpcScheduler, JobInfo, JobState, QueueInfo, ServerInfo,
 };
 
 /// PBS Pro backend for the unified HPC scheduler abstraction.
@@ -36,11 +35,7 @@ impl HpcScheduler for PbsScheduler {
 
         // Idempotency: check if a job with this name is already active
         if let Some(ref name) = job_name {
-            let (ok, stdout, _) = run_cmd(
-                connection,
-                "qstat -f -F json 2>/dev/null",
-                context,
-            )?;
+            let (ok, stdout, _) = run_cmd(connection, "qstat -f -F json 2>/dev/null", context)?;
             if ok && !stdout.trim().is_empty() {
                 if let Some(existing_id) = find_active_job_by_name(&stdout, name) {
                     return Ok(ModuleOutput::ok(format!(
@@ -119,10 +114,8 @@ impl HpcScheduler for PbsScheduler {
 
         run_cmd_ok(connection, &format!("qdel {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Cancelled job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Cancelled job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn job_status(&self, job_id: &str, context: &ModuleContext) -> ModuleResult<JobInfo> {
@@ -137,15 +130,14 @@ impl HpcScheduler for PbsScheduler {
             context,
         )?;
 
-        let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to parse qstat JSON: {}", e)))?;
+        let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to parse qstat JSON: {}", e))
+        })?;
 
         let jobs = parsed
             .get("Jobs")
             .and_then(|j| j.as_object())
-            .ok_or_else(|| {
-                ModuleError::ExecutionFailed(format!("Job {} not found", job_id))
-            })?;
+            .ok_or_else(|| ModuleError::ExecutionFailed(format!("Job {} not found", job_id)))?;
 
         // Find the job (try exact match first, then prefix match)
         let (found_id, job_info) = jobs
@@ -159,9 +151,7 @@ impl HpcScheduler for PbsScheduler {
                     })
                     .map(|(k, v)| (k.clone(), v))
             })
-            .ok_or_else(|| {
-                ModuleError::ExecutionFailed(format!("Job {} not found", job_id))
-            })?;
+            .ok_or_else(|| ModuleError::ExecutionFailed(format!("Job {} not found", job_id)))?;
 
         let state_str = job_info
             .get("job_state")
@@ -224,18 +214,14 @@ impl HpcScheduler for PbsScheduler {
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
         if context.check_mode {
-            return Ok(
-                ModuleOutput::changed(format!("Would hold job {}", job_id))
-                    .with_data("job_id", serde_json::json!(job_id)),
-            );
+            return Ok(ModuleOutput::changed(format!("Would hold job {}", job_id))
+                .with_data("job_id", serde_json::json!(job_id)));
         }
 
         run_cmd_ok(connection, &format!("qhold {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Held job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Held job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn release_job(&self, job_id: &str, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
@@ -253,10 +239,8 @@ impl HpcScheduler for PbsScheduler {
 
         run_cmd_ok(connection, &format!("qrls {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Released job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Released job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn list_queues(&self, context: &ModuleContext) -> ModuleResult<Vec<QueueInfo>> {
@@ -265,14 +249,10 @@ impl HpcScheduler for PbsScheduler {
             .as_ref()
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
-        let stdout = run_cmd_ok(
-            connection,
-            "qstat -Q -f -F json 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "qstat -Q -f -F json 2>/dev/null", context)?;
 
-        let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
-            .unwrap_or(serde_json::Value::Null);
+        let parsed: serde_json::Value =
+            serde_json::from_str(stdout.trim()).unwrap_or(serde_json::Value::Null);
 
         let mut queues = Vec::new();
         if let Some(queue_obj) = parsed.get("Queue").and_then(|q| q.as_object()) {
@@ -319,19 +299,13 @@ impl HpcScheduler for PbsScheduler {
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
         // Idempotency: check if queue exists
-        let (ok, stdout, _) = run_cmd(
-            connection,
-            "qstat -Q -f -F json 2>/dev/null",
-            context,
-        )?;
+        let (ok, stdout, _) = run_cmd(connection, "qstat -Q -f -F json 2>/dev/null", context)?;
         if ok && !stdout.trim().is_empty() {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
                 if let Some(queues) = parsed.get("Queue").and_then(|q| q.as_object()) {
                     if queues.contains_key(name) {
-                        return Ok(
-                            ModuleOutput::ok(format!("Queue '{}' already exists", name))
-                                .with_data("name", serde_json::json!(name)),
-                        );
+                        return Ok(ModuleOutput::ok(format!("Queue '{}' already exists", name))
+                            .with_data("name", serde_json::json!(name)));
                     }
                 }
             }
@@ -350,7 +324,10 @@ impl HpcScheduler for PbsScheduler {
 
         run_cmd_ok(
             connection,
-            &format!("qmgr -c \"create queue {} queue_type={}\"", name, queue_type),
+            &format!(
+                "qmgr -c \"create queue {} queue_type={}\"",
+                name, queue_type
+            ),
             context,
         )?;
 
@@ -370,10 +347,8 @@ impl HpcScheduler for PbsScheduler {
             )?;
         }
 
-        Ok(
-            ModuleOutput::changed(format!("Created queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Created queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn delete_queue(&self, name: &str, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
@@ -383,19 +358,13 @@ impl HpcScheduler for PbsScheduler {
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
         // Idempotency: check if queue exists
-        let (ok, stdout, _) = run_cmd(
-            connection,
-            "qstat -Q -f -F json 2>/dev/null",
-            context,
-        )?;
+        let (ok, stdout, _) = run_cmd(connection, "qstat -Q -f -F json 2>/dev/null", context)?;
         if ok && !stdout.trim().is_empty() {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
                 if let Some(queues) = parsed.get("Queue").and_then(|q| q.as_object()) {
                     if !queues.contains_key(name) {
-                        return Ok(
-                            ModuleOutput::ok(format!("Queue '{}' does not exist", name))
-                                .with_data("name", serde_json::json!(name)),
-                        );
+                        return Ok(ModuleOutput::ok(format!("Queue '{}' does not exist", name))
+                            .with_data("name", serde_json::json!(name)));
                     }
                 }
             }
@@ -414,10 +383,8 @@ impl HpcScheduler for PbsScheduler {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Deleted queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Deleted queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn query_server(&self, context: &ModuleContext) -> ModuleResult<ServerInfo> {
@@ -426,11 +393,7 @@ impl HpcScheduler for PbsScheduler {
             .as_ref()
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
-        let stdout = run_cmd_ok(
-            connection,
-            "qmgr -c \"print server\" 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "qmgr -c \"print server\" 2>/dev/null", context)?;
 
         let attributes = parse_qmgr_server_output(&stdout);
 
@@ -485,11 +448,10 @@ impl HpcScheduler for PbsScheduler {
             )?;
         }
 
-        Ok(ModuleOutput::changed(format!(
-            "Set {} server attribute(s)",
-            attrs.len()
-        ))
-        .with_data("attributes", serde_json::json!(attrs)))
+        Ok(
+            ModuleOutput::changed(format!("Set {} server attribute(s)", attrs.len()))
+                .with_data("attributes", serde_json::json!(attrs)),
+        )
     }
 }
 
@@ -596,8 +558,7 @@ fn extract_job_state(output: &str, job_id: &str) -> Option<String> {
     let job_info = jobs.get(job_id).or_else(|| {
         jobs.iter()
             .find(|(k, _)| {
-                k.starts_with(&format!("{}.", job_id))
-                    || job_id.starts_with(&format!("{}.", k))
+                k.starts_with(&format!("{}.", job_id)) || job_id.starts_with(&format!("{}.", k))
             })
             .map(|(_, v)| v)
     })?;

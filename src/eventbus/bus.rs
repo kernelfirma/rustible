@@ -186,10 +186,7 @@ mod tests {
         let filtered_count = Arc::new(AtomicUsize::new(0));
 
         // Subscriber with no filter receives everything
-        bus.subscribe(Box::new(CountingSubscriber::new(
-            "all",
-            all_count.clone(),
-        )));
+        bus.subscribe(Box::new(CountingSubscriber::new("all", all_count.clone())));
 
         // Subscriber only interested in HostDown events
         bus.subscribe(Box::new(CountingSubscriber::with_filter(
@@ -235,7 +232,10 @@ mod tests {
     #[test]
     fn test_event_filter_matches() {
         let filter = EventFilter {
-            event_types: Some(vec![EventType::PlaybookStarted, EventType::PlaybookCompleted]),
+            event_types: Some(vec![
+                EventType::PlaybookStarted,
+                EventType::PlaybookCompleted,
+            ]),
             sources: Some(vec!["executor".to_string()]),
         };
 

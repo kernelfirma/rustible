@@ -94,17 +94,13 @@ async fn execute_check(args: &PolicyCheckArgs, ctx: &mut CommandContext) -> Resu
     ctx.output.banner("POLICY CHECK");
 
     if !args.playbook.exists() {
-        ctx.output.error(&format!(
-            "Playbook not found: {}",
-            args.playbook.display()
-        ));
+        ctx.output
+            .error(&format!("Playbook not found: {}", args.playbook.display()));
         return Ok(1);
     }
 
-    ctx.output.info(&format!(
-        "Checking: {}",
-        args.playbook.display()
-    ));
+    ctx.output
+        .info(&format!("Checking: {}", args.playbook.display()));
 
     let content = std::fs::read_to_string(&args.playbook)?;
     let playbook_data: serde_json::Value = serde_yaml::from_str(&content)
@@ -145,8 +141,7 @@ async fn execute_check(args: &PolicyCheckArgs, ctx: &mut CommandContext) -> Resu
         ctx.output.error("Policy check failed");
         Ok(1)
     } else if total_warnings > 0 {
-        ctx.output
-            .warning("Policy check passed with warnings");
+        ctx.output.warning("Policy check passed with warnings");
         Ok(0)
     } else {
         ctx.output.success("All policy checks passed");
@@ -196,10 +191,7 @@ async fn execute_inspect(args: &PolicyInspectArgs, ctx: &mut CommandContext) -> 
             } else {
                 "optional"
             };
-            let default_str = param
-                .default_value
-                .as_deref()
-                .unwrap_or("none");
+            let default_str = param.default_value.as_deref().unwrap_or("none");
             println!(
                 "  - {} ({}): {} [default: {}, {}]",
                 param.name, param.param_type, param.description, default_str, required_str
@@ -242,10 +234,7 @@ parameters:
 
     let manifest_path = output.join("manifest.yml");
     std::fs::write(&manifest_path, manifest_content)?;
-    ctx.output.created(&format!(
-        "{}",
-        manifest_path.display()
-    ));
+    ctx.output.created(&format!("{}", manifest_path.display()));
 
     ctx.output.success("Policy pack skeleton created");
     ctx.output.hint(&format!(

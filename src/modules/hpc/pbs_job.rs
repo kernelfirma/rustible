@@ -25,8 +25,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -143,11 +143,7 @@ impl PbsJobModule {
 
         // Idempotency: check if a job with this name is already active
         if let Some(ref name) = job_name {
-            let (ok, stdout, _) = run_cmd(
-                connection,
-                "qstat -f -F json 2>/dev/null",
-                context,
-            )?;
+            let (ok, stdout, _) = run_cmd(connection, "qstat -f -F json 2>/dev/null", context)?;
             if ok && !stdout.trim().is_empty() {
                 if let Some(existing_id) = find_active_job_by_name(&stdout, name) {
                     return Ok(ModuleOutput::ok(format!(
@@ -232,10 +228,8 @@ impl PbsJobModule {
 
         run_cmd_ok(connection, &format!("qdel {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Cancelled job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Cancelled job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn action_status(
@@ -301,18 +295,14 @@ impl PbsJobModule {
         }
 
         if context.check_mode {
-            return Ok(
-                ModuleOutput::changed(format!("Would hold job {}", job_id))
-                    .with_data("job_id", serde_json::json!(job_id)),
-            );
+            return Ok(ModuleOutput::changed(format!("Would hold job {}", job_id))
+                .with_data("job_id", serde_json::json!(job_id)));
         }
 
         run_cmd_ok(connection, &format!("qhold {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Held job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Held job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn action_release(
@@ -358,10 +348,8 @@ impl PbsJobModule {
 
         run_cmd_ok(connection, &format!("qrls {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Released job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Released job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 }
 
@@ -421,12 +409,9 @@ fn build_qsub_command(params: &ModuleParams) -> ModuleResult<String> {
         let script_content = script.unwrap();
         // Pipe inline script via heredoc
         let escaped = script_content.replace('\'', "'\\''");
-        Ok(format!(
-            "echo '{}' | qsub {}",
-            escaped, args_str
-        )
-        .trim()
-        .to_string())
+        Ok(format!("echo '{}' | qsub {}", escaped, args_str)
+            .trim()
+            .to_string())
     }
 }
 
@@ -498,7 +483,9 @@ fn extract_job_attribute(output: &str, job_id: &str, attribute: &str) -> Option<
     // Try exact job_id match first, then prefix match
     let job_info = jobs.get(job_id).or_else(|| {
         jobs.iter()
-            .find(|(k, _)| k.starts_with(&format!("{}.", job_id)) || job_id.starts_with(&format!("{}.", k)))
+            .find(|(k, _)| {
+                k.starts_with(&format!("{}.", job_id)) || job_id.starts_with(&format!("{}.", k))
+            })
             .map(|(_, v)| v)
     })?;
     job_info
@@ -526,10 +513,7 @@ mod tests {
 
     #[test]
     fn test_parse_qsub_output_bare_id() {
-        assert_eq!(
-            parse_qsub_output("12345\n"),
-            Some("12345".to_string())
-        );
+        assert_eq!(parse_qsub_output("12345\n"), Some("12345".to_string()));
     }
 
     #[test]
@@ -594,10 +578,7 @@ mod tests {
             "output_path".to_string(),
             serde_json::json!("/logs/out.log"),
         );
-        params.insert(
-            "error_path".to_string(),
-            serde_json::json!("/logs/err.log"),
-        );
+        params.insert("error_path".to_string(), serde_json::json!("/logs/err.log"));
 
         let cmd = build_qsub_command(&params).unwrap();
         assert!(cmd.contains("-N full_job"));
@@ -613,10 +594,7 @@ mod tests {
     fn test_build_qsub_command_extra_args() {
         let mut params = ModuleParams::new();
         params.insert("script_path".to_string(), serde_json::json!("/job.sh"));
-        params.insert(
-            "extra_args".to_string(),
-            serde_json::json!("-V -m abe"),
-        );
+        params.insert("extra_args".to_string(), serde_json::json!("-V -m abe"));
 
         let cmd = build_qsub_command(&params).unwrap();
         assert!(cmd.contains("-V -m abe"));

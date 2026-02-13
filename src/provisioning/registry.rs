@@ -56,9 +56,10 @@ impl ProviderRegistry {
         // GCP provider (experimental)
         #[cfg(all(feature = "gcp", feature = "experimental"))]
         {
-            registry.register_factory("gcp", || {
-                Box::new(super::providers::gcp::GcpProvider::new())
-            });
+            registry.register_factory(
+                "gcp",
+                || Box::new(super::providers::gcp::GcpProvider::new()),
+            );
         }
 
         registry

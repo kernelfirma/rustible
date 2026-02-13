@@ -185,7 +185,8 @@ mod tests {
         let e1 = chain.append(b"beta");
 
         // Resume from the state after e1
-        let mut resumed = HashChainState::resume(chain.next_sequence(), chain.last_hash().to_string());
+        let mut resumed =
+            HashChainState::resume(chain.next_sequence(), chain.last_hash().to_string());
         let e2 = resumed.append(b"gamma");
 
         assert_eq!(e2.sequence, 2);

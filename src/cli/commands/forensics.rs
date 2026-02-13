@@ -139,16 +139,12 @@ impl ForensicsArgs {
                 let content = std::fs::read_to_string(path)?;
 
                 if ForensicsBundle::verify_bundle(&content) {
-                    ctx.output.success(&format!(
-                        "Bundle is valid: {}",
-                        path.display()
-                    ));
+                    ctx.output
+                        .success(&format!("Bundle is valid: {}", path.display()));
                     Ok(0)
                 } else {
-                    ctx.output.error(&format!(
-                        "Bundle verification failed: {}",
-                        path.display()
-                    ));
+                    ctx.output
+                        .error(&format!("Bundle verification failed: {}", path.display()));
                     Ok(1)
                 }
             }
@@ -158,14 +154,10 @@ impl ForensicsArgs {
     /// Print a summary of the collected bundle data.
     fn print_summary(&self, data: &BundleData, ctx: &CommandContext) {
         ctx.output.section("Bundle Summary");
-        ctx.output.info(&format!(
-            "  Version:         {}",
-            data.manifest.version
-        ));
-        ctx.output.info(&format!(
-            "  Created:         {}",
-            data.manifest.created_at
-        ));
+        ctx.output
+            .info(&format!("  Version:         {}", data.manifest.version));
+        ctx.output
+            .info(&format!("  Created:         {}", data.manifest.created_at));
         ctx.output.info(&format!(
             "  Audit events:    {}",
             data.manifest.contents.audit_events
@@ -183,8 +175,7 @@ impl ForensicsArgs {
             data.manifest.contents.system_info
         ));
         if let Some(filter) = &data.manifest.host_filter {
-            ctx.output
-                .info(&format!("  Host filter:     {}", filter));
+            ctx.output.info(&format!("  Host filter:     {}", filter));
         }
     }
 }

@@ -47,8 +47,8 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use super::{
-    DynamicInventoryPlugin, PluginConfig, PluginConfigError, PluginOption, PluginOptionType,
-    sanitize_group_name,
+    sanitize_group_name, DynamicInventoryPlugin, PluginConfig, PluginConfigError, PluginOption,
+    PluginOptionType,
 };
 use crate::inventory::group::Group;
 use crate::inventory::host::Host;
@@ -141,13 +141,15 @@ impl SlurmPlugin {
 
         let partitions: Vec<String> = kv
             .get("Partitions")
-            .map(|p| p.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+            .map(|p| {
+                p.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
             .unwrap_or_default();
 
-        let cpus: u32 = kv
-            .get("CPUTot")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
+        let cpus: u32 = kv.get("CPUTot").and_then(|v| v.parse().ok()).unwrap_or(0);
 
         let real_memory: u64 = kv
             .get("RealMemory")
@@ -250,17 +252,17 @@ impl SlurmPlugin {
             .into_iter()
             .filter(|node| {
                 if let Some(ref partitions) = partition_filter {
-                    if !node
-                        .partitions
-                        .iter()
-                        .any(|p| partitions.contains(p))
-                    {
+                    if !node.partitions.iter().any(|p| partitions.contains(p)) {
                         return false;
                     }
                 }
                 if let Some(ref states) = state_filter {
                     // Slurm states can have modifiers like "idle*" or "down+drain"
-                    let base_state = node.state.split(&['+', '*', '~'][..]).next().unwrap_or(&node.state);
+                    let base_state = node
+                        .state
+                        .split(&['+', '*', '~'][..])
+                        .next()
+                        .unwrap_or(&node.state);
                     if !states.iter().any(|s| s.to_lowercase() == base_state) {
                         return false;
                     }
@@ -439,23 +441,14 @@ impl SlurmPlugin {
 
         // Feature-based groups (e.g., slurm_feature_avx2)
         for feature in &node.features {
-            groups.push(format!(
-                "slurm_feature_{}",
-                sanitize_group_name(feature)
-            ));
+            groups.push(format!("slurm_feature_{}", sanitize_group_name(feature)));
         }
 
         // GRES-based groups (e.g., slurm_gres_gpu)
         for gres_entry in &node.gres {
             // GRES format is typically "name:type:count" or "name:count"
-            let gres_name = gres_entry
-                .split(':')
-                .next()
-                .unwrap_or(gres_entry);
-            groups.push(format!(
-                "slurm_gres_{}",
-                sanitize_group_name(gres_name)
-            ));
+            let gres_name = gres_entry.split(':').next().unwrap_or(gres_entry);
+            groups.push(format!("slurm_gres_{}", sanitize_group_name(gres_name)));
         }
 
         // Process keyed_groups configuration
@@ -494,9 +487,10 @@ impl SlurmPlugin {
     /// Resolve a compose expression to a value from node data.
     fn resolve_compose_expression(&self, expr: &str, node: &SlurmNode) -> Option<String> {
         match expr {
-            "slurm_node_addr" | "node_addr" => {
-                node.node_addr.clone().or_else(|| Some(node.node_name.clone()))
-            }
+            "slurm_node_addr" | "node_addr" => node
+                .node_addr
+                .clone()
+                .or_else(|| Some(node.node_name.clone())),
             "slurm_state" | "state" => Some(node.state.clone()),
             "slurm_partition" | "partition" => node.partitions.first().cloned(),
             "slurm_cpus" | "cpus" => Some(node.cpus.to_string()),
@@ -566,10 +560,7 @@ impl DynamicInventoryPlugin for SlurmPlugin {
                 "Path to scontrol binary (default: auto-detect)",
                 "scontrol",
             ),
-            PluginOption::optional_list(
-                "partitions",
-                "Filter nodes by partition name(s)",
-            ),
+            PluginOption::optional_list("partitions", "Filter nodes by partition name(s)"),
             PluginOption::optional_list(
                 "states",
                 "Filter nodes by state (idle, allocated, mixed, down, drained)",
@@ -590,11 +581,7 @@ impl DynamicInventoryPlugin for SlurmPlugin {
                 option_type: PluginOptionType::Dict,
                 env_var: None,
             },
-            PluginOption::optional_bool(
-                "strict",
-                "Fail on template errors",
-                false,
-            ),
+            PluginOption::optional_bool("strict", "Fail on template errors", false),
             PluginOption {
                 name: "cache_ttl".to_string(),
                 description: "Cache TTL in seconds (0 = no caching)".to_string(),

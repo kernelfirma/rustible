@@ -146,8 +146,14 @@ mod tests {
 
     #[test]
     fn test_azure_auth_method_display() {
-        assert_eq!(AzureAuthMethod::ServicePrincipal.to_string(), "service_principal");
-        assert_eq!(AzureAuthMethod::ManagedIdentity.to_string(), "managed_identity");
+        assert_eq!(
+            AzureAuthMethod::ServicePrincipal.to_string(),
+            "service_principal"
+        );
+        assert_eq!(
+            AzureAuthMethod::ManagedIdentity.to_string(),
+            "managed_identity"
+        );
         assert_eq!(AzureAuthMethod::Cli.to_string(), "cli");
     }
 

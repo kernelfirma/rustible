@@ -42,9 +42,10 @@ impl TopologyQuery {
         let graph = topology.graph();
 
         // Find the leader node index.
-        let leader_idx = topology.index_map().values().find(|&&idx| {
-            graph[idx].role == NodeRole::Leader
-        });
+        let leader_idx = topology
+            .index_map()
+            .values()
+            .find(|&&idx| graph[idx].role == NodeRole::Leader);
 
         let leader_idx = match leader_idx {
             Some(&idx) => idx,
@@ -69,8 +70,14 @@ impl TopologyQuery {
             .index_map()
             .values()
             .filter_map(|&idx| {
-                let has_in = graph.neighbors_directed(idx, Direction::Incoming).next().is_some();
-                let has_out = graph.neighbors_directed(idx, Direction::Outgoing).next().is_some();
+                let has_in = graph
+                    .neighbors_directed(idx, Direction::Incoming)
+                    .next()
+                    .is_some();
+                let has_out = graph
+                    .neighbors_directed(idx, Direction::Outgoing)
+                    .next()
+                    .is_some();
                 if !has_in && !has_out {
                     Some(&graph[idx])
                 } else {
@@ -92,14 +99,47 @@ mod tests {
 
     fn build_topology() -> ClusterTopology {
         let mut topo = ClusterTopology::new();
-        topo.add_node(TopologyNode::new("leader", "Leader", NodeType::Controller, NodeRole::Leader));
-        topo.add_node(TopologyNode::new("w1", "Worker 1", NodeType::Worker, NodeRole::Follower));
-        topo.add_node(TopologyNode::new("w2", "Worker 2", NodeType::Worker, NodeRole::Follower));
-        topo.add_node(TopologyNode::new("gw", "Gateway", NodeType::Gateway, NodeRole::Observer));
-        topo.add_node(TopologyNode::new("orphan", "Orphan", NodeType::Storage, NodeRole::Observer));
+        topo.add_node(TopologyNode::new(
+            "leader",
+            "Leader",
+            NodeType::Controller,
+            NodeRole::Leader,
+        ));
+        topo.add_node(TopologyNode::new(
+            "w1",
+            "Worker 1",
+            NodeType::Worker,
+            NodeRole::Follower,
+        ));
+        topo.add_node(TopologyNode::new(
+            "w2",
+            "Worker 2",
+            NodeType::Worker,
+            NodeRole::Follower,
+        ));
+        topo.add_node(TopologyNode::new(
+            "gw",
+            "Gateway",
+            NodeType::Gateway,
+            NodeRole::Observer,
+        ));
+        topo.add_node(TopologyNode::new(
+            "orphan",
+            "Orphan",
+            NodeType::Storage,
+            NodeRole::Observer,
+        ));
 
-        topo.add_edge("leader", "w1", TopologyEdge::new(EdgeType::Control).with_latency(2));
-        topo.add_edge("leader", "w2", TopologyEdge::new(EdgeType::Control).with_latency(10));
+        topo.add_edge(
+            "leader",
+            "w1",
+            TopologyEdge::new(EdgeType::Control).with_latency(2),
+        );
+        topo.add_edge(
+            "leader",
+            "w2",
+            TopologyEdge::new(EdgeType::Control).with_latency(10),
+        );
         topo.add_edge("leader", "gw", TopologyEdge::new(EdgeType::Data));
         topo
     }

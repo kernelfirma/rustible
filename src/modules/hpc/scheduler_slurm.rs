@@ -10,8 +10,7 @@ use crate::modules::{
 };
 
 use super::scheduler::{
-    run_cmd, run_cmd_ok, HpcScheduler, JobInfo, QueueInfo, ServerInfo,
-    map_slurm_state,
+    map_slurm_state, run_cmd, run_cmd_ok, HpcScheduler, JobInfo, QueueInfo, ServerInfo,
 };
 
 /// Slurm backend for the unified HPC scheduler abstraction.
@@ -38,10 +37,7 @@ impl HpcScheduler for SlurmScheduler {
         if let Some(ref name) = job_name {
             let (ok, stdout, _) = run_cmd(
                 connection,
-                &format!(
-                    "squeue --noheader --name={} -o '%i|%T' 2>/dev/null",
-                    name
-                ),
+                &format!("squeue --noheader --name={} -o '%i|%T' 2>/dev/null", name),
                 context,
             )?;
             if ok && !stdout.trim().is_empty() {
@@ -123,16 +119,10 @@ impl HpcScheduler for SlurmScheduler {
             );
         }
 
-        run_cmd_ok(
-            connection,
-            &format!("scancel {}", job_id),
-            context,
-        )?;
+        run_cmd_ok(connection, &format!("scancel {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Cancelled job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Cancelled job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn job_status(&self, job_id: &str, context: &ModuleContext) -> ModuleResult<JobInfo> {
@@ -220,22 +210,14 @@ impl HpcScheduler for SlurmScheduler {
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
         if context.check_mode {
-            return Ok(
-                ModuleOutput::changed(format!("Would hold job {}", job_id))
-                    .with_data("job_id", serde_json::json!(job_id)),
-            );
+            return Ok(ModuleOutput::changed(format!("Would hold job {}", job_id))
+                .with_data("job_id", serde_json::json!(job_id)));
         }
 
-        run_cmd_ok(
-            connection,
-            &format!("scontrol hold {}", job_id),
-            context,
-        )?;
+        run_cmd_ok(connection, &format!("scontrol hold {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Held job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Held job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn release_job(&self, job_id: &str, context: &ModuleContext) -> ModuleResult<ModuleOutput> {
@@ -251,16 +233,10 @@ impl HpcScheduler for SlurmScheduler {
             );
         }
 
-        run_cmd_ok(
-            connection,
-            &format!("scontrol release {}", job_id),
-            context,
-        )?;
+        run_cmd_ok(connection, &format!("scontrol release {}", job_id), context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Released job {}", job_id))
-                .with_data("job_id", serde_json::json!(job_id)),
-        )
+        Ok(ModuleOutput::changed(format!("Released job {}", job_id))
+            .with_data("job_id", serde_json::json!(job_id)))
     }
 
     fn list_queues(&self, context: &ModuleContext) -> ModuleResult<Vec<QueueInfo>> {
@@ -282,19 +258,14 @@ impl HpcScheduler for SlurmScheduler {
                 continue;
             }
             let kv = parse_scontrol_oneliner(trimmed);
-            let name = kv
-                .get("PartitionName")
-                .cloned()
-                .unwrap_or_default();
+            let name = kv.get("PartitionName").cloned().unwrap_or_default();
             let state_raw = kv.get("State").cloned().unwrap_or_default();
             let state = if state_raw.to_uppercase() == "UP" {
                 "active".to_string()
             } else {
                 "inactive".to_string()
             };
-            let total_jobs = kv
-                .get("TotalNodes")
-                .and_then(|v| v.parse::<u32>().ok());
+            let total_jobs = kv.get("TotalNodes").and_then(|v| v.parse::<u32>().ok());
 
             queues.push(QueueInfo {
                 name,
@@ -399,11 +370,7 @@ impl HpcScheduler for SlurmScheduler {
             .as_ref()
             .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
 
-        let stdout = run_cmd_ok(
-            connection,
-            "scontrol show config 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "scontrol show config 2>/dev/null", context)?;
 
         let mut attributes = HashMap::new();
         for line in stdout.lines() {
@@ -412,10 +379,7 @@ impl HpcScheduler for SlurmScheduler {
                 continue;
             }
             if let Some((key, value)) = trimmed.split_once('=') {
-                attributes.insert(
-                    key.trim().to_string(),
-                    value.trim().to_string(),
-                );
+                attributes.insert(key.trim().to_string(), value.trim().to_string());
             }
         }
 

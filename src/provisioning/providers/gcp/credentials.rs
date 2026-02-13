@@ -185,8 +185,7 @@ mod tests {
 
     #[test]
     fn test_gcp_credentials_with_auth_method() {
-        let creds = GcpCredentials::new(None, None)
-            .with_auth_method(GcpAuthMethod::GcloudCli);
+        let creds = GcpCredentials::new(None, None).with_auth_method(GcpAuthMethod::GcloudCli);
         assert_eq!(creds.auth_method, GcpAuthMethod::GcloudCli);
     }
 
@@ -198,10 +197,8 @@ mod tests {
 
     #[test]
     fn test_provider_credentials_trait() {
-        let creds = GcpCredentials::new(
-            Some("my-project".to_string()),
-            Some("key-data".to_string()),
-        );
+        let creds =
+            GcpCredentials::new(Some("my-project".to_string()), Some("key-data".to_string()));
 
         assert_eq!(creds.credential_type(), "gcp");
         assert!(!creds.is_expired());

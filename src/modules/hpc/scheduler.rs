@@ -17,9 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
-use crate::modules::{
-    ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
-};
+use crate::modules::{ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult};
 
 // ---------------------------------------------------------------------------
 // Common types
@@ -276,12 +274,9 @@ pub fn resolve_scheduler(
 
     match scheduler_param.to_lowercase().as_str() {
         "auto" => {
-            let connection = context
-                .connection
-                .as_ref()
-                .ok_or_else(|| {
-                    ModuleError::ExecutionFailed("No connection available".to_string())
-                })?;
+            let connection = context.connection.as_ref().ok_or_else(|| {
+                ModuleError::ExecutionFailed("No connection available".to_string())
+            })?;
             detect_scheduler(connection, context)
         }
         #[cfg(feature = "slurm")]
@@ -409,10 +404,7 @@ mod tests {
 
     #[test]
     fn test_map_pbs_state_unknown() {
-        assert_eq!(
-            map_pbs_state("Z"),
-            JobState::Unknown("Z".to_string())
-        );
+        assert_eq!(map_pbs_state("Z"), JobState::Unknown("Z".to_string()));
     }
 
     // -- JobState Display + serde roundtrip --
@@ -426,10 +418,7 @@ mod tests {
         assert_eq!(JobState::Completed.to_string(), "completed");
         assert_eq!(JobState::Failed.to_string(), "failed");
         assert_eq!(JobState::Cancelled.to_string(), "cancelled");
-        assert_eq!(
-            JobState::Unknown("X".to_string()).to_string(),
-            "unknown(X)"
-        );
+        assert_eq!(JobState::Unknown("X".to_string()).to_string(), "unknown(X)");
     }
 
     #[test]

@@ -53,8 +53,8 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use super::{
-    DynamicInventoryPlugin, PluginConfig, PluginConfigError, PluginOption, PluginOptionType,
-    sanitize_group_name,
+    sanitize_group_name, DynamicInventoryPlugin, PluginConfig, PluginConfigError, PluginOption,
+    PluginOptionType,
 };
 use crate::inventory::group::Group;
 use crate::inventory::host::Host;
@@ -210,19 +210,13 @@ impl OpenstackPlugin {
     #[cfg(feature = "openstack")]
     async fn fetch_servers(&self) -> InventoryResult<Vec<OpenstackServer>> {
         let auth_url = self.auth_url().ok_or_else(|| {
-            InventoryError::DynamicInventoryFailed(
-                "OpenStack auth_url not configured".to_string(),
-            )
+            InventoryError::DynamicInventoryFailed("OpenStack auth_url not configured".to_string())
         })?;
         let username = self.username().ok_or_else(|| {
-            InventoryError::DynamicInventoryFailed(
-                "OpenStack username not configured".to_string(),
-            )
+            InventoryError::DynamicInventoryFailed("OpenStack username not configured".to_string())
         })?;
         let password = self.password().ok_or_else(|| {
-            InventoryError::DynamicInventoryFailed(
-                "OpenStack password not configured".to_string(),
-            )
+            InventoryError::DynamicInventoryFailed("OpenStack password not configured".to_string())
         })?;
         let project_name = self.project_name().ok_or_else(|| {
             InventoryError::DynamicInventoryFailed(
@@ -303,10 +297,7 @@ impl OpenstackPlugin {
 
         let compute_url = self.find_compute_endpoint(&auth_json)?;
 
-        tracing::info!(
-            "OpenStack plugin: Listing servers from {}",
-            compute_url
-        );
+        tracing::info!("OpenStack plugin: Listing servers from {}", compute_url);
 
         // List all servers with details
         let servers_url = format!("{}/servers/detail", compute_url.trim_end_matches('/'));
@@ -333,10 +324,7 @@ impl OpenstackPlugin {
         }
 
         let servers_json: serde_json::Value = servers_resp.json().await.map_err(|e| {
-            InventoryError::DynamicInventoryFailed(format!(
-                "Failed to parse Nova response: {}",
-                e
-            ))
+            InventoryError::DynamicInventoryFailed(format!("Failed to parse Nova response: {}", e))
         })?;
 
         self.parse_servers_response(&servers_json)
@@ -359,10 +347,7 @@ impl OpenstackPlugin {
 
     /// Find the compute (Nova) endpoint in the Keystone service catalog.
     #[cfg(feature = "openstack")]
-    fn find_compute_endpoint(
-        &self,
-        auth_json: &serde_json::Value,
-    ) -> InventoryResult<String> {
+    fn find_compute_endpoint(&self, auth_json: &serde_json::Value) -> InventoryResult<String> {
         let region = self.region();
 
         let catalog = auth_json
@@ -506,10 +491,8 @@ impl OpenstackPlugin {
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("fixed")
                                     .to_string();
-                                let version = a
-                                    .get("version")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(4) as u8;
+                                let version =
+                                    a.get("version").and_then(|v| v.as_u64()).unwrap_or(4) as u8;
                                 Some(OpenstackAddress {
                                     addr,
                                     addr_type,
@@ -562,10 +545,7 @@ impl OpenstackPlugin {
     }
 
     /// Convert parsed servers into an Inventory.
-    fn servers_to_inventory(
-        &self,
-        servers: Vec<OpenstackServer>,
-    ) -> InventoryResult<Inventory> {
+    fn servers_to_inventory(&self, servers: Vec<OpenstackServer>) -> InventoryResult<Inventory> {
         let mut inventory = Inventory::new();
         let mut groups_map: HashMap<String, Group> = HashMap::new();
 
@@ -774,10 +754,7 @@ impl OpenstackPlugin {
 
         // Security group groups
         for sg in &server.security_groups {
-            groups.push(format!(
-                "openstack_sg_{}",
-                sanitize_group_name(sg)
-            ));
+            groups.push(format!("openstack_sg_{}", sanitize_group_name(sg)));
         }
 
         // Process keyed_groups configuration
@@ -799,11 +776,7 @@ impl OpenstackPlugin {
     }
 
     /// Resolve a keyed group key to a value from server data.
-    fn resolve_keyed_group_key(
-        &self,
-        key: &str,
-        server: &OpenstackServer,
-    ) -> Option<String> {
+    fn resolve_keyed_group_key(&self, key: &str, server: &OpenstackServer) -> Option<String> {
         match key {
             "openstack_status" | "status" => Some(server.status.clone()),
             "openstack_az" | "availability_zone" => {
@@ -844,11 +817,7 @@ impl OpenstackPlugin {
     }
 
     /// Resolve a compose expression to a value from server data.
-    fn resolve_compose_expression(
-        &self,
-        expr: &str,
-        server: &OpenstackServer,
-    ) -> Option<String> {
+    fn resolve_compose_expression(&self, expr: &str, server: &OpenstackServer) -> Option<String> {
         match expr {
             "openstack_access_ip" | "access_ip" => server.access_ip(),
             "openstack_id" | "id" => Some(server.id.clone()),
@@ -945,12 +914,8 @@ impl DynamicInventoryPlugin for OpenstackPlugin {
                 .with_env_var("OS_PASSWORD"),
             PluginOption::required_string("project_name", "OpenStack project/tenant name")
                 .with_env_var("OS_PROJECT_NAME"),
-            PluginOption::optional_string(
-                "domain_name",
-                "Keystone domain name",
-                "Default",
-            )
-            .with_env_var("OS_USER_DOMAIN_NAME"),
+            PluginOption::optional_string("domain_name", "Keystone domain name", "Default")
+                .with_env_var("OS_USER_DOMAIN_NAME"),
             PluginOption::optional_string("region", "OpenStack region name", "")
                 .with_env_var("OS_REGION_NAME"),
             PluginOption {
@@ -1130,10 +1095,7 @@ mod tests {
             host.vars.get("openstack_status"),
             Some(&serde_yaml::Value::String("ACTIVE".to_string()))
         );
-        assert_eq!(
-            host.ansible_host,
-            Some("203.0.113.5".to_string())
-        );
+        assert_eq!(host.ansible_host, Some("203.0.113.5".to_string()));
     }
 
     #[test]

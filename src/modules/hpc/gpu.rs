@@ -15,8 +15,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -162,10 +162,7 @@ impl NvidiaGpuModule {
     }
 
     /// Generate Slurm GRES config lines from GPU inventory.
-    fn generate_gres_lines(
-        &self,
-        gpus: &[serde_json::Value],
-    ) -> Vec<String> {
+    fn generate_gres_lines(&self, gpus: &[serde_json::Value]) -> Vec<String> {
         gpus.iter()
             .filter_map(|gpu| {
                 let name = gpu["name"].as_str().unwrap_or("gpu");
@@ -277,9 +274,7 @@ impl Module for NvidiaGpuModule {
 
             if !svc_active || !svc_enabled {
                 if context.check_mode {
-                    changes.push(
-                        "Would enable and start nvidia-persistenced.service".to_string(),
-                    );
+                    changes.push("Would enable and start nvidia-persistenced.service".to_string());
                 } else {
                     run_cmd_ok(
                         connection,

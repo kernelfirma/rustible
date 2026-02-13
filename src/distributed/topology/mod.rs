@@ -17,8 +17,6 @@ pub mod query;
 pub mod renderer;
 
 pub use health::{ClusterHealthSummary, HealthAggregator, HealthCheck, NodeHealth};
-pub use model::{
-    ClusterTopology, EdgeType, NodeRole, NodeType, TopologyEdge, TopologyNode,
-};
+pub use model::{ClusterTopology, EdgeType, NodeRole, NodeType, TopologyEdge, TopologyNode};
 pub use query::TopologyQuery;
 pub use renderer::{RenderFormat, TopologyRenderer};

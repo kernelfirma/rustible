@@ -169,11 +169,9 @@ impl OpenStackProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ProvisioningError::AuthenticationError {
-                    provider: PROVIDER_NAME.to_string(),
-                    message: format!("Keystone auth failed: {}", e),
-                }
+            .map_err(|e| ProvisioningError::AuthenticationError {
+                provider: PROVIDER_NAME.to_string(),
+                message: format!("Keystone auth failed: {}", e),
             })?;
 
         if !resp.status().is_success() {
@@ -311,7 +309,10 @@ impl Provider for OpenStackProvider {
                 .get("auth_url")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
-                    ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: auth_url")
+                    ProvisioningError::provider_config(
+                        PROVIDER_NAME,
+                        "Missing required field: auth_url",
+                    )
                 })?
                 .to_string(),
         );
@@ -321,7 +322,10 @@ impl Provider for OpenStackProvider {
                 .get("username")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
-                    ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: username")
+                    ProvisioningError::provider_config(
+                        PROVIDER_NAME,
+                        "Missing required field: username",
+                    )
                 })?
                 .to_string(),
         );
@@ -331,7 +335,10 @@ impl Provider for OpenStackProvider {
                 .get("password")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
-                    ProvisioningError::provider_config(PROVIDER_NAME, "Missing required field: password")
+                    ProvisioningError::provider_config(
+                        PROVIDER_NAME,
+                        "Missing required field: password",
+                    )
                 })?
                 .to_string(),
         );
@@ -357,10 +364,12 @@ impl Provider for OpenStackProvider {
                 .to_string(),
         );
 
-        self.region = config
-            .region
-            .clone()
-            .or_else(|| settings.get("region").and_then(|v| v.as_str()).map(String::from));
+        self.region = config.region.clone().or_else(|| {
+            settings
+                .get("region")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        });
 
         if let Some(t) = settings.get("timeout").and_then(|v| v.as_u64()) {
             self.timeout_seconds = t;
@@ -392,7 +401,10 @@ impl Provider for OpenStackProvider {
             Arc::new(OpenStackNetworkResource),
         );
 
-        info!("OpenStack provider configured for auth_url: {}", self.auth_url.as_deref().unwrap_or("?"));
+        info!(
+            "OpenStack provider configured for auth_url: {}",
+            self.auth_url.as_deref().unwrap_or("?")
+        );
         Ok(())
     }
 
@@ -445,7 +457,10 @@ impl Provider for OpenStackProvider {
             auth_url: auth_url.clone(),
             username: self.username.clone().unwrap_or_default(),
             project_name: self.project_name.clone().unwrap_or_default(),
-            domain_name: self.domain_name.clone().unwrap_or_else(|| "Default".to_string()),
+            domain_name: self
+                .domain_name
+                .clone()
+                .unwrap_or_else(|| "Default".to_string()),
             token: self.token.clone(),
         };
 
@@ -832,25 +847,26 @@ impl Resource for OpenStackServerResource {
                 let mut modifications = HashMap::new();
 
                 // Check metadata changes
-                if let (Some(d_meta), Some(c_meta)) =
-                    (desired.get("metadata"), cur.get("metadata"))
+                if let (Some(d_meta), Some(c_meta)) = (desired.get("metadata"), cur.get("metadata"))
                 {
                     if d_meta != c_meta {
-                        modifications.insert(
-                            "metadata".to_string(),
-                            (c_meta.clone(), d_meta.clone()),
-                        );
+                        modifications
+                            .insert("metadata".to_string(), (c_meta.clone(), d_meta.clone()));
                     }
                 }
 
                 // Check name changes
-                if let (Some(d_name), Some(c_name)) =
-                    (desired.get("name").and_then(|v| v.as_str()), cur.get("name").and_then(|v| v.as_str()))
-                {
+                if let (Some(d_name), Some(c_name)) = (
+                    desired.get("name").and_then(|v| v.as_str()),
+                    cur.get("name").and_then(|v| v.as_str()),
+                ) {
                     if d_name != c_name {
                         modifications.insert(
                             "name".to_string(),
-                            (Value::String(c_name.to_string()), Value::String(d_name.to_string())),
+                            (
+                                Value::String(c_name.to_string()),
+                                Value::String(d_name.to_string()),
+                            ),
                         );
                     }
                 }
@@ -901,9 +917,7 @@ impl Resource for OpenStackServerResource {
         let name = config
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ProvisioningError::ValidationError("name is required".to_string())
-            })?;
+            .ok_or_else(|| ProvisioningError::ValidationError("name is required".to_string()))?;
 
         let flavor_ref = config
             .get("flavor")
@@ -1007,22 +1021,17 @@ impl Resource for OpenStackServerResource {
         Ok(ResourceResult::success(id, attrs))
     }
 
-    async fn destroy(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn destroy(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let url = format!("{}/servers/{}", Self::nova_url(ctx), id);
         info!("Destroying OpenStack server: {}", id);
         os_http_delete(&url, ctx).await?;
-        Ok(ResourceResult::success(id, serde_json::json!({"id": id, "status": "DELETED"})))
+        Ok(ResourceResult::success(
+            id,
+            serde_json::json!({"id": id, "status": "DELETED"}),
+        ))
     }
 
-    async fn import(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let read_result = self.read(id, ctx).await?;
         if !read_result.exists {
             return Err(ProvisioningError::ImportError {
@@ -1243,9 +1252,7 @@ impl Resource for OpenStackNetworkResource {
         let name = config
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ProvisioningError::ValidationError("name is required".to_string())
-            })?;
+            .ok_or_else(|| ProvisioningError::ValidationError("name is required".to_string()))?;
 
         let mut net_body = serde_json::json!({
             "network": {
@@ -1317,22 +1324,17 @@ impl Resource for OpenStackNetworkResource {
         Ok(ResourceResult::success(id, attrs))
     }
 
-    async fn destroy(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn destroy(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let url = format!("{}/v2.0/networks/{}", Self::neutron_url(ctx), id);
         info!("Destroying OpenStack network: {}", id);
         os_http_delete(&url, ctx).await?;
-        Ok(ResourceResult::success(id, serde_json::json!({"id": id, "status": "DELETED"})))
+        Ok(ResourceResult::success(
+            id,
+            serde_json::json!({"id": id, "status": "DELETED"}),
+        ))
     }
 
-    async fn import(
-        &self,
-        id: &str,
-        ctx: &ProviderContext,
-    ) -> ProvisioningResult<ResourceResult> {
+    async fn import(&self, id: &str, ctx: &ProviderContext) -> ProvisioningResult<ResourceResult> {
         let read_result = self.read(id, ctx).await?;
         if !read_result.exists {
             return Err(ProvisioningError::ImportError {
@@ -1445,7 +1447,10 @@ mod tests {
         let result = provider.configure(config).await;
         assert!(result.is_ok());
 
-        assert_eq!(provider.auth_url, Some("https://keystone:5000/v3".to_string()));
+        assert_eq!(
+            provider.auth_url,
+            Some("https://keystone:5000/v3".to_string())
+        );
         assert_eq!(provider.region, Some("RegionOne".to_string()));
 
         let ctx = provider.context();

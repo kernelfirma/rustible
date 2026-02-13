@@ -1239,13 +1239,15 @@ impl WorkspaceArgs {
             WorkspaceCommands::New { name } => {
                 ctx.output.banner("WORKSPACE NEW");
                 manager.create(name).await?;
-                ctx.output.info(&format!("Created and switched to workspace \"{}\".", name));
+                ctx.output
+                    .info(&format!("Created and switched to workspace \"{}\".", name));
                 Ok(0)
             }
             WorkspaceCommands::Select { name } => {
                 ctx.output.banner("WORKSPACE SELECT");
                 manager.select(name).await?;
-                ctx.output.info(&format!("Switched to workspace \"{}\".", name));
+                ctx.output
+                    .info(&format!("Switched to workspace \"{}\".", name));
                 Ok(0)
             }
             WorkspaceCommands::Delete { name, force } => {
@@ -1262,7 +1264,10 @@ impl WorkspaceArgs {
                 Ok(0)
             }
             WorkspaceCommands::Show => {
-                let current = manager.current().await.unwrap_or_else(|_| "default".to_string());
+                let current = manager
+                    .current()
+                    .await
+                    .unwrap_or_else(|_| "default".to_string());
                 ctx.output.info(&current);
                 Ok(0)
             }

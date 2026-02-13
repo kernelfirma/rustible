@@ -17,8 +17,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -123,8 +123,7 @@ impl SlurmInfoModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let mut cmd =
-            "sinfo --noheader -o '%n|%T|%c|%m|%P|%E|%O|%e'".to_string();
+        let mut cmd = "sinfo --noheader -o '%n|%T|%c|%m|%P|%E|%O|%e'".to_string();
         if let Some(partition) = params.get_string("partition")? {
             cmd.push_str(&format!(" -p {}", partition));
         }
@@ -135,9 +134,11 @@ impl SlurmInfoModule {
         let stdout = run_cmd_ok(connection, &cmd, context)?;
         let nodes = parse_sinfo_nodes(&stdout);
 
-        Ok(ModuleOutput::ok(format!("Gathered {} node(s)", nodes.len()))
-            .with_data("nodes", serde_json::json!(nodes))
-            .with_data("count", serde_json::json!(nodes.len())))
+        Ok(
+            ModuleOutput::ok(format!("Gathered {} node(s)", nodes.len()))
+                .with_data("nodes", serde_json::json!(nodes))
+                .with_data("count", serde_json::json!(nodes.len())),
+        )
     }
 
     fn gather_jobs(
@@ -146,8 +147,7 @@ impl SlurmInfoModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let mut cmd =
-            "squeue --noheader -o '%i|%j|%u|%T|%P|%D|%C|%l|%M|%R'".to_string();
+        let mut cmd = "squeue --noheader -o '%i|%j|%u|%T|%P|%D|%C|%l|%M|%R'".to_string();
         if let Some(partition) = params.get_string("partition")? {
             cmd.push_str(&format!(" -p {}", partition));
         }
@@ -172,8 +172,7 @@ impl SlurmInfoModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let mut cmd =
-            "sinfo --noheader -o '%R|%a|%F|%c|%m|%l|%G'".to_string();
+        let mut cmd = "sinfo --noheader -o '%R|%a|%F|%c|%m|%l|%G'".to_string();
         if let Some(partition) = params.get_string("partition")? {
             cmd.push_str(&format!(" -p {}", partition));
         }
@@ -225,11 +224,7 @@ impl SlurmInfoModule {
             "squeue --noheader -o '%T' | sort | uniq -c",
             context,
         )?;
-        let (_, part_out, _) = run_cmd(
-            connection,
-            "sinfo --noheader -o '%R' | sort -u",
-            context,
-        )?;
+        let (_, part_out, _) = run_cmd(connection, "sinfo --noheader -o '%R' | sort -u", context)?;
 
         let node_states = parse_uniq_counts(&node_out);
         let job_states = parse_uniq_counts(&job_out);
@@ -251,7 +246,14 @@ impl SlurmInfoModule {
 /// Format: NodeName|State|CPUs|Memory|Partition|Reason|Load|FreeMem
 fn parse_sinfo_nodes(output: &str) -> Vec<serde_json::Value> {
     let fields = [
-        "name", "state", "cpus", "memory", "partition", "reason", "load", "free_mem",
+        "name",
+        "state",
+        "cpus",
+        "memory",
+        "partition",
+        "reason",
+        "load",
+        "free_mem",
     ];
     parse_pipe_delimited(output, &fields)
 }

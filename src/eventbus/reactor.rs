@@ -62,7 +62,11 @@ pub struct ReactorRule {
 
 impl ReactorRule {
     /// Create a new enabled rule.
-    pub fn new(name: impl Into<String>, condition: ReactorCondition, action: ReactorAction) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        condition: ReactorCondition,
+        action: ReactorAction,
+    ) -> Self {
         Self {
             name: name.into(),
             condition,
@@ -98,12 +102,8 @@ impl ReactorCondition {
                 .get(key)
                 .and_then(|v| v.as_str())
                 .map_or(false, |v| v == value),
-            ReactorCondition::All(conditions) => {
-                conditions.iter().all(|c| c.matches(event))
-            }
-            ReactorCondition::Any(conditions) => {
-                conditions.iter().any(|c| c.matches(event))
-            }
+            ReactorCondition::All(conditions) => conditions.iter().all(|c| c.matches(event)),
+            ReactorCondition::Any(conditions) => conditions.iter().any(|c| c.matches(event)),
         }
     }
 }

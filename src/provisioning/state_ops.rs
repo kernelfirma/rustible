@@ -17,13 +17,16 @@ pub fn state_mv(
     source: &str,
     destination: &str,
 ) -> ProvisioningResult<()> {
-    let src_id = ResourceId::from_address(source)
-        .ok_or_else(|| ProvisioningError::ValidationError(format!("Invalid source address: {}", source)))?;
-    let dst_id = ResourceId::from_address(destination)
-        .ok_or_else(|| ProvisioningError::ValidationError(format!("Invalid destination address: {}", destination)))?;
+    let src_id = ResourceId::from_address(source).ok_or_else(|| {
+        ProvisioningError::ValidationError(format!("Invalid source address: {}", source))
+    })?;
+    let dst_id = ResourceId::from_address(destination).ok_or_else(|| {
+        ProvisioningError::ValidationError(format!("Invalid destination address: {}", destination))
+    })?;
 
     // Check source exists
-    let resource = state.get_resource(&src_id)
+    let resource = state
+        .get_resource(&src_id)
         .ok_or_else(|| ProvisioningError::ResourceNotInState(source.to_string()))?
         .clone();
 
@@ -77,7 +80,9 @@ pub fn state_replace_provider(
     }
 
     if count == 0 {
-        return Err(ProvisioningError::ProviderNotFound(from_provider.to_string()));
+        return Err(ProvisioningError::ProviderNotFound(
+            from_provider.to_string(),
+        ));
     }
 
     info!(
@@ -89,8 +94,8 @@ pub fn state_replace_provider(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::state::{ProvisioningState, ResourceId, ResourceState};
+    use super::*;
 
     fn sample_state() -> ProvisioningState {
         let mut state = ProvisioningState::new();
@@ -115,8 +120,12 @@ mod tests {
     fn test_state_mv_success() {
         let mut state = sample_state();
         state_mv(&mut state, "aws_vpc.main", "aws_vpc.production").unwrap();
-        assert!(state.get_resource(&ResourceId::new("aws_vpc", "main")).is_none());
-        assert!(state.get_resource(&ResourceId::new("aws_vpc", "production")).is_some());
+        assert!(state
+            .get_resource(&ResourceId::new("aws_vpc", "main"))
+            .is_none());
+        assert!(state
+            .get_resource(&ResourceId::new("aws_vpc", "production"))
+            .is_some());
     }
 
     #[test]

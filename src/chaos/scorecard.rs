@@ -140,14 +140,8 @@ impl ReliabilityScorecard {
         if failed > 0 {
             lines.push("  Failed scenarios:".to_string());
             for s in self.scenarios.iter().filter(|s| !s.passed) {
-                let detail = s
-                    .details
-                    .as_deref()
-                    .unwrap_or("no details");
-                lines.push(format!(
-                    "    - {} [{}]: {}",
-                    s.name, s.category, detail
-                ));
+                let detail = s.details.as_deref().unwrap_or("no details");
+                lines.push(format!("    - {} [{}]: {}", s.name, s.category, detail));
             }
         }
 
@@ -171,10 +165,7 @@ pub struct RegressionGate {
 
 impl RegressionGate {
     /// Creates a new regression gate.
-    pub fn new(
-        min_pass_rate: f64,
-        required_categories: Vec<ScenarioCategory>,
-    ) -> Self {
+    pub fn new(min_pass_rate: f64, required_categories: Vec<ScenarioCategory>) -> Self {
         Self {
             min_pass_rate,
             required_categories,
@@ -186,11 +177,7 @@ impl RegressionGate {
 mod tests {
     use super::*;
 
-    fn make_result(
-        name: &str,
-        category: ScenarioCategory,
-        passed: bool,
-    ) -> ScenarioResult {
+    fn make_result(name: &str, category: ScenarioCategory, passed: bool) -> ScenarioResult {
         ScenarioResult {
             name: name.to_string(),
             category,
@@ -248,10 +235,7 @@ mod tests {
             true,
         ));
 
-        let gate = RegressionGate::new(
-            0.5,
-            vec![ScenarioCategory::ConnectionResilience],
-        );
+        let gate = RegressionGate::new(0.5, vec![ScenarioCategory::ConnectionResilience]);
 
         assert!(sc.check_gate(&gate));
     }
@@ -285,16 +269,8 @@ mod tests {
             ScenarioCategory::ConnectionResilience,
             true,
         ));
-        sc.add_result(make_result(
-            "b",
-            ScenarioCategory::StateRecovery,
-            false,
-        ));
-        sc.add_result(make_result(
-            "c",
-            ScenarioCategory::LockContention,
-            false,
-        ));
+        sc.add_result(make_result("b", ScenarioCategory::StateRecovery, false));
+        sc.add_result(make_result("c", ScenarioCategory::LockContention, false));
         sc.add_result(make_result(
             "d",
             ScenarioCategory::PartitionTolerance,

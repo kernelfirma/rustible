@@ -27,8 +27,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -145,11 +145,7 @@ impl PbsQueueModule {
         name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<Option<serde_json::Value>> {
-        let (ok, stdout, _) = run_cmd(
-            connection,
-            "qstat -Q -f -F json 2>/dev/null",
-            context,
-        )?;
+        let (ok, stdout, _) = run_cmd(connection, "qstat -Q -f -F json 2>/dev/null", context)?;
         if !ok || stdout.trim().is_empty() {
             return Ok(None);
         }
@@ -167,11 +163,7 @@ impl PbsQueueModule {
         connection: &Arc<dyn Connection + Send + Sync>,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let stdout = run_cmd_ok(
-            connection,
-            "qstat -Q -f -F json 2>/dev/null",
-            context,
-        )?;
+        let stdout = run_cmd_ok(connection, "qstat -Q -f -F json 2>/dev/null", context)?;
         let queues = parse_pbs_json_queues(&stdout);
 
         let count = queues.as_object().map_or(0, |o| o.len());
@@ -190,10 +182,8 @@ impl PbsQueueModule {
     ) -> ModuleResult<ModuleOutput> {
         // Idempotency: check if queue already exists
         if let Some(existing) = self.get_queue_info(connection, name, context)? {
-            return Ok(
-                ModuleOutput::ok(format!("Queue '{}' already exists", name))
-                    .with_data("queue", existing),
-            );
+            return Ok(ModuleOutput::ok(format!("Queue '{}' already exists", name))
+                .with_data("queue", existing));
         }
 
         if context.check_mode {
@@ -221,11 +211,9 @@ impl PbsQueueModule {
 
         let current = self.get_queue_info(connection, name, context)?;
 
-        Ok(
-            ModuleOutput::changed(format!("Created queue '{}'", name))
-                .with_data("name", serde_json::json!(name))
-                .with_data("queue", serde_json::json!(current)),
-        )
+        Ok(ModuleOutput::changed(format!("Created queue '{}'", name))
+            .with_data("name", serde_json::json!(name))
+            .with_data("queue", serde_json::json!(current)))
     }
 
     fn action_delete(
@@ -236,10 +224,8 @@ impl PbsQueueModule {
     ) -> ModuleResult<ModuleOutput> {
         // Idempotency: check if queue exists
         if self.get_queue_info(connection, name, context)?.is_none() {
-            return Ok(
-                ModuleOutput::ok(format!("Queue '{}' does not exist", name))
-                    .with_data("name", serde_json::json!(name)),
-            );
+            return Ok(ModuleOutput::ok(format!("Queue '{}' does not exist", name))
+                .with_data("name", serde_json::json!(name)));
         }
 
         if context.check_mode {
@@ -255,10 +241,8 @@ impl PbsQueueModule {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Deleted queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Deleted queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn action_enable(
@@ -294,10 +278,8 @@ impl PbsQueueModule {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Enabled queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Enabled queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn action_disable(
@@ -333,10 +315,8 @@ impl PbsQueueModule {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Disabled queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Disabled queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn action_start(
@@ -372,10 +352,8 @@ impl PbsQueueModule {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Started queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Started queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn action_stop(
@@ -411,10 +389,8 @@ impl PbsQueueModule {
             context,
         )?;
 
-        Ok(
-            ModuleOutput::changed(format!("Stopped queue '{}'", name))
-                .with_data("name", serde_json::json!(name)),
-        )
+        Ok(ModuleOutput::changed(format!("Stopped queue '{}'", name))
+            .with_data("name", serde_json::json!(name)))
     }
 
     fn action_set_attributes(
@@ -424,22 +400,25 @@ impl PbsQueueModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let current = self.get_queue_info(connection, name, context)?.ok_or_else(|| {
-            ModuleError::ExecutionFailed(format!(
-                "Queue '{}' does not exist; cannot set attributes",
-                name
-            ))
-        })?;
+        let current = self
+            .get_queue_info(connection, name, context)?
+            .ok_or_else(|| {
+                ModuleError::ExecutionFailed(format!(
+                    "Queue '{}' does not exist; cannot set attributes",
+                    name
+                ))
+            })?;
 
         // Build desired attributes and compute diff
         let desired = build_queue_desired_attributes(params)?;
         let changes = compute_queue_changes(&current, &desired);
 
         if changes.is_empty() {
-            return Ok(
-                ModuleOutput::ok(format!("Queue '{}' attributes are already up to date", name))
-                    .with_data("queue", serde_json::json!(current)),
-            );
+            return Ok(ModuleOutput::ok(format!(
+                "Queue '{}' attributes are already up to date",
+                name
+            ))
+            .with_data("queue", serde_json::json!(current)));
         }
 
         if context.check_mode {
@@ -491,10 +470,7 @@ fn parse_pbs_json_queues(output: &str) -> serde_json::Value {
 }
 
 /// Build qmgr commands to set queue attributes from params.
-fn build_queue_attribute_commands(
-    name: &str,
-    params: &ModuleParams,
-) -> ModuleResult<Vec<String>> {
+fn build_queue_attribute_commands(name: &str, params: &ModuleParams) -> ModuleResult<Vec<String>> {
     let mut commands = Vec::new();
 
     let attr_map: &[(&str, &str)] = &[
@@ -537,9 +513,7 @@ fn build_queue_attribute_commands(
 }
 
 /// Build a map of desired PBS attribute names to values from params.
-fn build_queue_desired_attributes(
-    params: &ModuleParams,
-) -> ModuleResult<HashMap<String, String>> {
+fn build_queue_desired_attributes(params: &ModuleParams) -> ModuleResult<HashMap<String, String>> {
     let mut desired = HashMap::new();
 
     let attr_map: &[(&str, &str)] = &[
@@ -681,10 +655,7 @@ mod tests {
             serde_json::json!("72:00:00"),
         );
         params.insert("resources_max_ncpus".to_string(), serde_json::json!("128"));
-        params.insert(
-            "resources_max_mem".to_string(),
-            serde_json::json!("256gb"),
-        );
+        params.insert("resources_max_mem".to_string(), serde_json::json!("256gb"));
         params.insert(
             "resources_default_walltime".to_string(),
             serde_json::json!("01:00:00"),

@@ -13,8 +13,8 @@ use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
 use crate::modules::{
-    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
-    ParallelizationHint,
+    Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
@@ -151,10 +151,17 @@ impl Module for NfsServerModule {
                 return Ok(ModuleOutput::changed("Would remove NFS server"));
             }
             let _ = run_cmd(connection, &format!("systemctl stop {}", nfs_svc), context);
-            let _ = run_cmd(connection, &format!("systemctl disable {}", nfs_svc), context);
+            let _ = run_cmd(
+                connection,
+                &format!("systemctl disable {}", nfs_svc),
+                context,
+            );
             let remove_cmd = match os_family {
                 "rhel" => format!("dnf remove -y {}", nfs_pkg),
-                _ => format!("DEBIAN_FRONTEND=noninteractive apt-get remove -y {}", nfs_pkg),
+                _ => format!(
+                    "DEBIAN_FRONTEND=noninteractive apt-get remove -y {}",
+                    nfs_pkg
+                ),
             };
             run_cmd_ok(connection, &remove_cmd, context)?;
             return Ok(ModuleOutput::changed("Removed NFS server"));
@@ -182,11 +189,8 @@ impl Module for NfsServerModule {
         if let Some(exports) = params.get_vec_string("exports")? {
             if !exports.is_empty() {
                 let desired = exports.join("\n") + "\n";
-                let (_, current, _) = run_cmd(
-                    connection,
-                    "cat /etc/exports 2>/dev/null || true",
-                    context,
-                )?;
+                let (_, current, _) =
+                    run_cmd(connection, "cat /etc/exports 2>/dev/null || true", context)?;
 
                 if current.trim() != desired.trim() {
                     if context.check_mode {
@@ -345,18 +349,11 @@ impl Module for NfsClientModule {
         match state.as_str() {
             "mounted" => {
                 // Ensure mount point directory exists
-                let (dir_exists, _, _) = run_cmd(
-                    connection,
-                    &format!("test -d '{}'", mount_point),
-                    context,
-                )?;
+                let (dir_exists, _, _) =
+                    run_cmd(connection, &format!("test -d '{}'", mount_point), context)?;
                 if !dir_exists {
                     if !context.check_mode {
-                        run_cmd_ok(
-                            connection,
-                            &format!("mkdir -p '{}'", mount_point),
-                            context,
-                        )?;
+                        run_cmd_ok(connection, &format!("mkdir -p '{}'", mount_point), context)?;
                     }
                     changed = true;
                     changes.push(format!("Created mount point {}", mount_point));
@@ -394,11 +391,7 @@ impl Module for NfsClientModule {
                     if context.check_mode {
                         changes.push(format!("Would mount {}", mount_point));
                     } else {
-                        run_cmd_ok(
-                            connection,
-                            &format!("mount '{}'", mount_point),
-                            context,
-                        )?;
+                        run_cmd_ok(connection, &format!("mount '{}'", mount_point), context)?;
                         changed = true;
                         changes.push(format!("Mounted {}", mount_point));
                     }
@@ -415,11 +408,7 @@ impl Module for NfsClientModule {
                     if context.check_mode {
                         changes.push(format!("Would unmount {}", mount_point));
                     } else {
-                        run_cmd_ok(
-                            connection,
-                            &format!("umount '{}'", mount_point),
-                            context,
-                        )?;
+                        run_cmd_ok(connection, &format!("umount '{}'", mount_point), context)?;
                         changed = true;
                         changes.push(format!("Unmounted {}", mount_point));
                     }
@@ -439,10 +428,7 @@ impl Module for NfsClientModule {
                         } else {
                             run_cmd_ok(
                                 connection,
-                                &format!(
-                                    "sed -i '\\|{}:{}|d' /etc/fstab",
-                                    server, export_path
-                                ),
+                                &format!("sed -i '\\|{}:{}|d' /etc/fstab", server, export_path),
                                 context,
                             )?;
                             changed = true;

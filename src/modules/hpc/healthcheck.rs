@@ -115,11 +115,8 @@ impl Module for HpcHealthcheckModule {
         // --- NFS mount checks ---
         if should_run("nfs") {
             for mount in &nfs_mounts {
-                let (ok, _, stderr) = run_cmd_check(
-                    connection,
-                    &format!("mountpoint -q '{}'", mount),
-                    context,
-                );
+                let (ok, _, stderr) =
+                    run_cmd_check(connection, &format!("mountpoint -q '{}'", mount), context);
                 let entry = serde_json::json!({
                     "check": "nfs",
                     "mount": mount,
@@ -198,8 +195,7 @@ impl Module for HpcHealthcheckModule {
             let (ib_present, _, _) =
                 run_cmd_check(connection, "which ibstat >/dev/null 2>&1", context);
             if ib_present {
-                let (ok, stdout, stderr) =
-                    run_cmd_check(connection, "ibstat -s 2>&1", context);
+                let (ok, stdout, stderr) = run_cmd_check(connection, "ibstat -s 2>&1", context);
                 let entry = serde_json::json!({
                     "check": "infiniband",
                     "passed": ok,
@@ -230,11 +226,7 @@ impl Module for HpcHealthcheckModule {
             )));
         }
 
-        let msg = format!(
-            "HPC health check: {}/{} passed",
-            passed,
-            passed + failed
-        );
+        let msg = format!("HPC health check: {}/{} passed", passed, passed + failed);
 
         Ok(ModuleOutput::ok(msg).with_data("healthcheck", summary))
     }

@@ -168,12 +168,10 @@ impl FanoutController {
     pub fn tier_for_host(&self, _host: &str) -> String {
         match &self.config.tier_strategy {
             TierStrategy::Flat => "default".to_string(),
-            TierStrategy::Hierarchical { tiers } => {
-                tiers
-                    .first()
-                    .map(|t| t.name.clone())
-                    .unwrap_or_else(|| "default".to_string())
-            }
+            TierStrategy::Hierarchical { tiers } => tiers
+                .first()
+                .map(|t| t.name.clone())
+                .unwrap_or_else(|| "default".to_string()),
             TierStrategy::Geographic => "default".to_string(),
         }
     }

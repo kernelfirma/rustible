@@ -128,7 +128,11 @@ impl TopologyRenderer {
             ));
         }
 
-        out.push_str(&format!("\nTotal: {} node(s), {} edge(s)\n", topology.node_count(), topology.edge_count()));
+        out.push_str(&format!(
+            "\nTotal: {} node(s), {} edge(s)\n",
+            topology.node_count(),
+            topology.edge_count()
+        ));
         out
     }
 }
@@ -147,11 +151,19 @@ mod tests {
     fn sample_topology() -> ClusterTopology {
         let mut topo = ClusterTopology::new();
         topo.add_node(
-            TopologyNode::new("ctrl-1", "Controller 1", NodeType::Controller, NodeRole::Leader)
-                .with_address("10.0.0.1:9000"),
+            TopologyNode::new(
+                "ctrl-1",
+                "Controller 1",
+                NodeType::Controller,
+                NodeRole::Leader,
+            )
+            .with_address("10.0.0.1:9000"),
         );
         topo.add_node(TopologyNode::new(
-            "worker-1", "Worker 1", NodeType::Worker, NodeRole::Follower,
+            "worker-1",
+            "Worker 1",
+            NodeType::Worker,
+            NodeRole::Follower,
         ));
         topo.add_edge(
             "ctrl-1",

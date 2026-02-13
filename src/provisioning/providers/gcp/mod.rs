@@ -443,10 +443,8 @@ mod tests {
 
     #[test]
     fn test_provider_with_credentials() {
-        let creds = GcpCredentials::new(
-            Some("my-project".to_string()),
-            Some("key-data".to_string()),
-        );
+        let creds =
+            GcpCredentials::new(Some("my-project".to_string()), Some("key-data".to_string()));
         let provider = GcpProvider::new().with_credentials(creds);
         assert!(provider.is_configured());
     }
@@ -550,10 +548,7 @@ mod tests {
 
     #[test]
     fn test_context_when_configured() {
-        let creds = GcpCredentials::new(
-            Some("my-project".to_string()),
-            None,
-        );
+        let creds = GcpCredentials::new(Some("my-project".to_string()), None);
         let provider = GcpProvider::new()
             .with_region("europe-west1")
             .with_project("my-project")

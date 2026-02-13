@@ -62,8 +62,8 @@ pub fn apply_moved_blocks(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::state::{ProvisioningState, ResourceId, ResourceState};
+    use super::*;
 
     fn sample_state() -> ProvisioningState {
         let mut state = ProvisioningState::new();
@@ -83,8 +83,12 @@ mod tests {
         let blocks = vec![MovedBlock::new("aws_vpc.old", "aws_vpc.new")];
         let count = apply_moved_blocks(&mut state, &blocks).unwrap();
         assert_eq!(count, 1);
-        assert!(state.get_resource(&ResourceId::new("aws_vpc", "old")).is_none());
-        assert!(state.get_resource(&ResourceId::new("aws_vpc", "new")).is_some());
+        assert!(state
+            .get_resource(&ResourceId::new("aws_vpc", "old"))
+            .is_none());
+        assert!(state
+            .get_resource(&ResourceId::new("aws_vpc", "new"))
+            .is_some());
     }
 
     #[test]
@@ -106,6 +110,8 @@ mod tests {
         ];
         let count = apply_moved_blocks(&mut state, &blocks).unwrap();
         assert_eq!(count, 2);
-        assert!(state.get_resource(&ResourceId::new("aws_vpc", "final_name")).is_some());
+        assert!(state
+            .get_resource(&ResourceId::new("aws_vpc", "final_name"))
+            .is_some());
     }
 }
