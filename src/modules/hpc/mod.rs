@@ -86,6 +86,14 @@ pub mod pbs_job;
 pub mod pbs_queue;
 #[cfg(feature = "pbs")]
 pub mod pbs_server;
+pub mod scheduler;
+#[cfg(feature = "slurm")]
+pub mod scheduler_slurm;
+#[cfg(feature = "pbs")]
+pub mod scheduler_pbs;
+pub mod hpc_job;
+pub mod hpc_queue;
+pub mod hpc_server;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -129,4 +137,12 @@ pub use pbs_job::PbsJobModule;
 pub use pbs_queue::PbsQueueModule;
 #[cfg(feature = "pbs")]
 pub use pbs_server::PbsServerModule;
+pub use scheduler::{HpcScheduler, JobState, JobInfo, QueueInfo, ServerInfo};
+#[cfg(feature = "slurm")]
+pub use scheduler_slurm::SlurmScheduler;
+#[cfg(feature = "pbs")]
+pub use scheduler_pbs::PbsScheduler;
+pub use hpc_job::HpcJobModule;
+pub use hpc_queue::HpcQueueModule;
+pub use hpc_server::HpcServerModule;
 pub use toolchain::HpcToolchainModule;

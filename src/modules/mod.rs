@@ -1670,6 +1670,9 @@ impl ModuleRegistry {
                 hpc::LmodModule,
                 hpc::MpiModule,
                 hpc::HpcToolchainModule,
+                hpc::HpcJobModule,
+                hpc::HpcQueueModule,
+                hpc::HpcServerModule,
             ],
         );
 
