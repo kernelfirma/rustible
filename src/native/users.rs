@@ -282,14 +282,21 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
         }
     };
 
+    // On macOS, getgrouplist uses c_int for gid parameters;
+    // on Linux it uses gid_t (u32).
+    #[cfg(target_os = "macos")]
+    type GidArg = libc::c_int;
+    #[cfg(not(target_os = "macos"))]
+    type GidArg = libc::gid_t;
+
     unsafe {
         // Start with a reasonable buffer size
         let mut ngroups: libc::c_int = 32;
-        let mut groups: Vec<libc::gid_t> = vec![0; ngroups as usize];
+        let mut groups: Vec<GidArg> = vec![0; ngroups as usize];
 
         let result = libc::getgrouplist(
             c_name.as_ptr(),
-            primary_gid,
+            primary_gid as GidArg,
             groups.as_mut_ptr(),
             &mut ngroups,
         );
@@ -299,7 +306,7 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
             groups.resize(ngroups as usize, 0);
             libc::getgrouplist(
                 c_name.as_ptr(),
-                primary_gid,
+                primary_gid as GidArg,
                 groups.as_mut_ptr(),
                 &mut ngroups,
             );
@@ -310,7 +317,7 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
         // Convert GIDs to group names
         let mut group_names = Vec::new();
         for gid in groups {
-            if let Ok(Some(group)) = get_group_by_gid(gid) {
+            if let Ok(Some(group)) = get_group_by_gid(gid as u32) {
                 group_names.push(group.name);
             }
         }

@@ -163,33 +163,36 @@ impl WarewulfImageImporter {
     ///         ww_template: false
     /// ```
     pub fn import_from_yaml(&self, yaml_content: &str) -> MigrationResult<ImageImportResult> {
-        let config: YamlWarewulfConfig = serde_yaml::from_str(yaml_content)
-            .map_err(|e| MigrationError::ParseError(e.to_string()))?;
+        let config: YamlWarewulfConfig =
+            serde_yaml::from_str(yaml_content).map_err(|e| MigrationError::ParseError {
+                file: "warewulf-images.yaml".into(),
+                message: e.to_string(),
+            })?;
 
-        let mut report = MigrationReport::new("warewulf-images");
+        let mut report = MigrationReport::new("warewulf-images", "image import");
         let mut images = Vec::new();
         let mut overlays = Vec::new();
         let mut template_count: usize = 0;
-        let mut finding_idx: usize = 0;
 
         // Process images
         for (idx, yaml_img) in config.images.iter().enumerate() {
             let name = match &yaml_img.name {
                 Some(n) if !n.is_empty() => n.clone(),
                 _ => {
-                    finding_idx += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("IMG-E{:03}", finding_idx),
-                        severity: MigrationSeverity::Error,
-                        status: FindingStatus::Open,
-                        title: format!("Image at index {} has no name", idx),
-                        description: "Every image entry must have a non-empty 'name' field.".into(),
-                        category: DiagnosticCategory::Validation,
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Image at index {}", idx),
+                        target_item: None,
+                        status: FindingStatus::Divergent,
                         diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::IntegrityFailure,
                             severity: MigrationSeverity::Error,
-                            category: DiagnosticCategory::Validation,
-                            message: format!("Missing name for image at index {}", idx),
-                            source_object: None,
+                            source_path: None,
+                            source_field: Some("name".into()),
+                            message: format!(
+                                "Image at index {} has no name. Every image entry must have a non-empty 'name' field.",
+                                idx
+                            ),
+                            suggestion: None,
                         }],
                     });
                     continue;
@@ -198,16 +201,21 @@ impl WarewulfImageImporter {
 
             let container_name = yaml_img.container.clone().unwrap_or_default();
             if container_name.is_empty() {
-                finding_idx += 1;
-                report.add_finding(MigrationFinding {
-                    id: format!("IMG-W{:03}", finding_idx),
-                    severity: MigrationSeverity::Warning,
-                    status: FindingStatus::Open,
-                    title: format!("Image '{}' has no container reference", name),
-                    description: "The 'container' field is empty; image may not be pullable."
-                        .into(),
-                    category: DiagnosticCategory::FieldMapping,
-                    diagnostics: vec![],
+                report.findings.push(MigrationFinding {
+                    source_item: format!("Image '{}'", name),
+                    target_item: None,
+                    status: FindingStatus::PartiallyMapped,
+                    diagnostics: vec![MigrationDiagnostic {
+                        category: DiagnosticCategory::AttributeMismatch,
+                        severity: MigrationSeverity::Warning,
+                        source_path: None,
+                        source_field: Some("container".into()),
+                        message: format!(
+                            "Image '{}' has no container reference; image may not be pullable.",
+                            name
+                        ),
+                        suggestion: None,
+                    }],
                 });
             }
 
@@ -230,16 +238,21 @@ impl WarewulfImageImporter {
             let name = match &yaml_ovl.name {
                 Some(n) if !n.is_empty() => n.clone(),
                 _ => {
-                    finding_idx += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("OVL-E{:03}", finding_idx),
-                        severity: MigrationSeverity::Error,
-                        status: FindingStatus::Open,
-                        title: format!("Overlay at index {} has no name", idx),
-                        description: "Every overlay entry must have a non-empty 'name' field."
-                            .into(),
-                        category: DiagnosticCategory::Validation,
-                        diagnostics: vec![],
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Overlay at index {}", idx),
+                        target_item: None,
+                        status: FindingStatus::Divergent,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::IntegrityFailure,
+                            severity: MigrationSeverity::Error,
+                            source_path: None,
+                            source_field: Some("name".into()),
+                            message: format!(
+                                "Overlay at index {} has no name. Every overlay entry must have a non-empty 'name' field.",
+                                idx
+                            ),
+                            suggestion: None,
+                        }],
                     });
                     continue;
                 }
@@ -250,18 +263,21 @@ impl WarewulfImageImporter {
                 "runtime" => OverlayType::Runtime,
                 "custom" => OverlayType::Custom,
                 other => {
-                    finding_idx += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("OVL-W{:03}", finding_idx),
-                        severity: MigrationSeverity::Warning,
-                        status: FindingStatus::Open,
-                        title: format!("Unknown overlay type '{}' for '{}'", other, name),
-                        description: format!(
-                            "Overlay type '{}' is not recognised; defaulting to 'custom'.",
-                            other
-                        ),
-                        category: DiagnosticCategory::Unsupported,
-                        diagnostics: vec![],
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Overlay '{}'", name),
+                        target_item: None,
+                        status: FindingStatus::PartiallyMapped,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::UnsupportedField,
+                            severity: MigrationSeverity::Warning,
+                            source_path: None,
+                            source_field: Some("overlay_type".into()),
+                            message: format!(
+                                "Unknown overlay type '{}' for '{}'; defaulting to 'custom'.",
+                                other, name
+                            ),
+                            suggestion: None,
+                        }],
                     });
                     OverlayType::Custom
                 }
@@ -273,18 +289,21 @@ impl WarewulfImageImporter {
                 let dest_path = yaml_file.dest.clone().unwrap_or_default();
 
                 if source_path.is_empty() || dest_path.is_empty() {
-                    finding_idx += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("TPL-W{:03}", finding_idx),
-                        severity: MigrationSeverity::Warning,
-                        status: FindingStatus::Open,
-                        title: format!("Incomplete template file in overlay '{}'", name),
-                        description: format!(
-                            "source='{}', dest='{}' — both must be non-empty.",
-                            source_path, dest_path
-                        ),
-                        category: DiagnosticCategory::Validation,
-                        diagnostics: vec![],
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Template file in overlay '{}'", name),
+                        target_item: None,
+                        status: FindingStatus::Divergent,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::IntegrityFailure,
+                            severity: MigrationSeverity::Warning,
+                            source_path: None,
+                            source_field: None,
+                            message: format!(
+                                "Incomplete template file: source='{}', dest='{}' — both must be non-empty.",
+                                source_path, dest_path
+                            ),
+                            suggestion: None,
+                        }],
                     });
                     continue;
                 }
@@ -293,25 +312,20 @@ impl WarewulfImageImporter {
                 let is_ww = yaml_file.ww_template || source_path.ends_with(".ww");
 
                 if is_ww {
-                    finding_idx += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("TPL-I{:03}", finding_idx),
-                        severity: MigrationSeverity::Info,
-                        status: FindingStatus::Resolved,
-                        title: format!("Mapped .ww template to Jinja2: {}", source_path),
-                        description: format!(
-                            "Warewulf template '{}' will be referenced as a Jinja2 template at '{}'.",
-                            source_path, dest_path
-                        ),
-                        category: DiagnosticCategory::FieldMapping,
+                    report.findings.push(MigrationFinding {
+                        source_item: format!(".ww template: {}", source_path),
+                        target_item: Some(dest_path.clone()),
+                        status: FindingStatus::Mapped,
                         diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::AttributeMismatch,
                             severity: MigrationSeverity::Info,
-                            category: DiagnosticCategory::FieldMapping,
+                            source_path: Some(source_path.clone()),
+                            source_field: None,
                             message: format!(
                                 ".ww template '{}' -> Jinja2 ref '{}'",
                                 source_path, dest_path
                             ),
-                            source_object: Some(name.clone()),
+                            suggestion: None,
                         }],
                     });
                 }
@@ -330,6 +344,8 @@ impl WarewulfImageImporter {
                 template_files,
             });
         }
+
+        report.compute_summary();
 
         Ok(ImageImportResult {
             images,
@@ -407,7 +423,8 @@ overlays:
         assert!(result.overlays[1].template_files[0].is_ww_template);
 
         assert_eq!(result.template_count, 3);
-        assert_eq!(result.report.compute_outcome(5), MigrationOutcome::Success);
+        // Report should not have errors for valid input
+        assert_eq!(result.report.summary.errors, 0);
     }
 
     #[test]
@@ -431,8 +448,10 @@ overlays:
         assert_eq!(result.images.len(), 0);
         assert_eq!(result.overlays.len(), 0);
 
-        let summary = result.report.compute_summary();
-        assert_eq!(summary.errors, 2, "expected 2 errors for missing names");
+        assert_eq!(
+            result.report.summary.errors, 2,
+            "expected 2 errors for missing names"
+        );
     }
 
     #[test]
@@ -453,9 +472,8 @@ overlays:
         assert_eq!(result.overlays.len(), 1);
         assert_eq!(result.overlays[0].overlay_type, OverlayType::Custom);
 
-        let summary = result.report.compute_summary();
         assert!(
-            summary.warnings >= 1,
+            result.report.summary.warnings >= 1,
             "expected at least one warning for unknown overlay type"
         );
     }
@@ -469,6 +487,6 @@ overlays:
         assert!(result.images.is_empty());
         assert!(result.overlays.is_empty());
         assert_eq!(result.template_count, 0);
-        assert_eq!(result.report.compute_outcome(0), MigrationOutcome::Success);
+        assert_eq!(result.report.outcome, MigrationOutcome::Pass);
     }
 }

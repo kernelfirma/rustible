@@ -61,7 +61,10 @@ impl XcatHierarchyImporter {
         yaml: &str,
     ) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
         let hierarchy: XcatHierarchy = serde_yaml::from_str(yaml).map_err(|e| {
-            crate::migration::MigrationError::ParseError(format!("xCAT hierarchy YAML: {}", e))
+            crate::migration::MigrationError::ParseError {
+                file: "xcat-hierarchy.yaml".into(),
+                message: format!("xCAT hierarchy YAML: {}", e),
+            }
         })?;
 
         self.import(&hierarchy)
@@ -73,8 +76,7 @@ impl XcatHierarchyImporter {
         hierarchy: &XcatHierarchy,
     ) -> crate::migration::MigrationResult<(HierarchyImportResult, MigrationReport)> {
         let mut groups = Vec::new();
-        let mut report =
-            MigrationReport::new("xCAT Hierarchy Import", "xCAT", "Rustible Inventory");
+        let mut report = MigrationReport::new("xCAT Hierarchy Import", "hierarchy import");
 
         // Top-level management group
         let mut mgmt_children = Vec::new();
@@ -130,68 +132,75 @@ impl XcatHierarchyImporter {
         }
 
         // Validation finding
-        report.add_finding(MigrationFinding {
-            name: "Node Uniqueness".into(),
+        report.findings.push(MigrationFinding {
+            source_item: "Node Uniqueness".into(),
+            target_item: None,
             status: if duplicates.is_empty() {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else {
-                FindingStatus::Fail
+                FindingStatus::Divergent
             },
-            severity: MigrationSeverity::Error,
             diagnostics: duplicates
                 .iter()
                 .map(|d| MigrationDiagnostic {
-                    category: DiagnosticCategory::ResourceMismatch,
+                    category: DiagnosticCategory::OutputMismatch,
                     severity: MigrationSeverity::Error,
+                    source_path: None,
+                    source_field: None,
                     message: format!("Duplicate node: {}", d),
-                    context: None,
+                    suggestion: None,
                 })
                 .collect(),
         });
 
         // Service node coverage
-        report.add_finding(MigrationFinding {
-            name: "Service Node Coverage".into(),
+        report.findings.push(MigrationFinding {
+            source_item: "Service Node Coverage".into(),
+            target_item: None,
             status: if hierarchy.unassigned_nodes.is_empty() {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else {
-                FindingStatus::Partial
+                FindingStatus::PartiallyMapped
             },
-            severity: MigrationSeverity::Warning,
             diagnostics: if hierarchy.unassigned_nodes.is_empty() {
                 vec![]
             } else {
                 vec![MigrationDiagnostic {
-                    category: DiagnosticCategory::Other("unassigned".into()),
+                    category: DiagnosticCategory::SemanticDivergence,
                     severity: MigrationSeverity::Warning,
+                    source_path: None,
+                    source_field: None,
                     message: format!(
                         "{} nodes not assigned to any service node",
                         hierarchy.unassigned_nodes.len()
                     ),
-                    context: Some(hierarchy.unassigned_nodes.join(", ")),
+                    suggestion: Some(hierarchy.unassigned_nodes.join(", ")),
                 }]
             },
         });
 
         // Hierarchy structure finding
-        report.add_finding(MigrationFinding {
-            name: "Hierarchy Structure".into(),
-            status: FindingStatus::Pass,
-            severity: MigrationSeverity::Info,
+        report.findings.push(MigrationFinding {
+            source_item: "Hierarchy Structure".into(),
+            target_item: None,
+            status: FindingStatus::Matched,
             diagnostics: vec![MigrationDiagnostic {
-                category: DiagnosticCategory::Other("structure".into()),
+                category: DiagnosticCategory::CompatibilityGap,
                 severity: MigrationSeverity::Info,
+                source_path: None,
+                source_field: None,
                 message: format!(
                     "Imported {} service nodes, {} compute nodes from management node '{}'",
                     hierarchy.service_nodes.len(),
                     compute_count,
                     hierarchy.management_node
                 ),
-                context: None,
+                suggestion: None,
             }],
         });
 
-        report.compute_outcome(80.0);
+        report.compute_summary();
+        report.compute_outcome(0.8);
 
         let result = HierarchyImportResult {
             groups,
@@ -212,6 +221,7 @@ impl XcatHierarchyImporter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::migration::MigrationOutcome;
 
     #[test]
     fn test_basic_hierarchy_import() {
@@ -231,10 +241,7 @@ unassigned_nodes: []
         assert_eq!(result.service_node_count, 2);
         assert_eq!(result.compute_node_count, 5);
         assert_eq!(result.unassigned_count, 0);
-        assert_eq!(
-            report.outcome,
-            Some(crate::migration::MigrationOutcome::Pass)
-        );
+        assert_eq!(report.outcome, MigrationOutcome::Pass);
     }
 
     #[test]

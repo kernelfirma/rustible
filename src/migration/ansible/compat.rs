@@ -256,7 +256,7 @@ impl AnsibleCompatVerifier {
 
         let result = self.compute_result(&checks);
         let mut report = self.build_report(&result);
-        report.compute_outcome(self.threshold);
+        report.compute_outcome(self.threshold / 100.0);
         Ok(report)
     }
 

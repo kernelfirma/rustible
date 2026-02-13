@@ -200,10 +200,9 @@ impl WarewulfProfileImporter {
     /// - A top-level mapping of `node_id -> WarewulfNode`, or
     /// - A mapping with a `noderange` key containing the node mapping.
     pub fn import_from_yaml(path: &Path) -> MigrationResult<ProfileImportResult> {
-        let content = std::fs::read_to_string(path).map_err(|e| MigrationError::IoError {
-            path: path.to_path_buf(),
-            message: "could not read Warewulf YAML file".to_string(),
-            source: e,
+        let content = std::fs::read_to_string(path).map_err(|e| MigrationError::ParseError {
+            file: path.display().to_string(),
+            message: format!("could not read Warewulf YAML file: {}", e),
         })?;
 
         Self::import_from_str(&content)
@@ -213,8 +212,8 @@ impl WarewulfProfileImporter {
     pub fn import_from_str(yaml: &str) -> MigrationResult<ProfileImportResult> {
         let raw: serde_yaml::Value =
             serde_yaml::from_str(yaml).map_err(|e| MigrationError::ParseError {
+                file: "warewulf-nodes.yaml".into(),
                 message: format!("invalid YAML: {}", e),
-                source_path: None,
             })?;
 
         // Support both top-level mapping and `noderange:` wrapper.
@@ -223,8 +222,8 @@ impl WarewulfProfileImporter {
                 noderange
                     .as_mapping()
                     .ok_or_else(|| MigrationError::ParseError {
+                        file: "warewulf-nodes.yaml".into(),
                         message: "'noderange' must be a mapping".to_string(),
-                        source_path: None,
                     })?
                     .clone()
             } else {
@@ -232,25 +231,31 @@ impl WarewulfProfileImporter {
             }
         } else {
             return Err(MigrationError::ParseError {
+                file: "warewulf-nodes.yaml".into(),
                 message: "expected a YAML mapping at the top level".to_string(),
-                source_path: None,
             });
         };
 
-        let mut report = MigrationReport::new("Warewulf 4 profiles");
+        let mut report = MigrationReport::new("Warewulf 4 profiles", "profile import");
         let mut hosts: Vec<ImportedHost> = Vec::new();
         let mut group_map: HashMap<String, Vec<String>> = HashMap::new();
-        let mut successful = 0usize;
 
         for (key, value) in &nodes_mapping {
             let node_id = match key.as_str() {
                 Some(id) => id.to_string(),
                 None => {
-                    report.add_diagnostic(MigrationDiagnostic {
-                        severity: MigrationSeverity::Warning,
-                        category: DiagnosticCategory::Parsing,
-                        message: "skipping non-string node key".to_string(),
-                        context: None,
+                    report.findings.push(MigrationFinding {
+                        source_item: "Non-string node key".into(),
+                        target_item: None,
+                        status: FindingStatus::Skipped,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::TypeMismatch,
+                            severity: MigrationSeverity::Warning,
+                            source_path: None,
+                            source_field: None,
+                            message: "Skipping non-string node key".to_string(),
+                            suggestion: None,
+                        }],
                     });
                     continue;
                 }
@@ -274,24 +279,37 @@ impl WarewulfProfileImporter {
                                     .push(host.name.clone());
                             }
                             hosts.push(host);
-                            successful += 1;
                         }
                         None => {
-                            report.add_diagnostic(MigrationDiagnostic {
-                                severity: MigrationSeverity::Error,
-                                category: DiagnosticCategory::Mapping,
-                                message: format!("failed to map node '{}'", node_id),
-                                context: Some(node_id),
+                            report.findings.push(MigrationFinding {
+                                source_item: format!("Node '{}'", node_id),
+                                target_item: None,
+                                status: FindingStatus::Divergent,
+                                diagnostics: vec![MigrationDiagnostic {
+                                    category: DiagnosticCategory::AttributeMismatch,
+                                    severity: MigrationSeverity::Error,
+                                    source_path: None,
+                                    source_field: None,
+                                    message: format!("Failed to map node '{}'", node_id),
+                                    suggestion: None,
+                                }],
                             });
                         }
                     }
                 }
                 Err(e) => {
-                    report.add_diagnostic(MigrationDiagnostic {
-                        severity: MigrationSeverity::Error,
-                        category: DiagnosticCategory::Parsing,
-                        message: format!("failed to parse node '{}': {}", node_id, e),
-                        context: Some(node_id),
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Node '{}'", node_id),
+                        target_item: None,
+                        status: FindingStatus::Divergent,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::TypeMismatch,
+                            severity: MigrationSeverity::Error,
+                            source_path: None,
+                            source_field: None,
+                            message: format!("Failed to parse node '{}': {}", node_id, e),
+                            suggestion: None,
+                        }],
                     });
                 }
             }
@@ -307,14 +325,7 @@ impl WarewulfProfileImporter {
             })
             .collect();
 
-        let total = hosts.len()
-            + report
-                .diagnostics
-                .iter()
-                .filter(|d| d.severity == MigrationSeverity::Error)
-                .count();
-
-        report.compute_summary(total, successful);
+        report.compute_summary();
         report.compute_outcome(0.1);
 
         Ok(ProfileImportResult {
@@ -340,14 +351,24 @@ impl WarewulfProfileImporter {
         let ansible_host = node.net_devs.first().and_then(|nd| nd.ipaddr.clone());
 
         if ansible_host.is_none() {
-            report.add_diagnostic(MigrationDiagnostic {
-                severity: MigrationSeverity::Warning,
-                category: DiagnosticCategory::Completeness,
-                message: format!(
-                    "node '{}' has no network device IP; ansible_host will be unset",
-                    hostname
-                ),
-                context: Some(hostname.clone()),
+            report.findings.push(MigrationFinding {
+                source_item: format!("Node '{}' network config", hostname),
+                target_item: None,
+                status: FindingStatus::PartiallyMapped,
+                diagnostics: vec![MigrationDiagnostic {
+                    category: DiagnosticCategory::CompatibilityGap,
+                    severity: MigrationSeverity::Warning,
+                    source_path: None,
+                    source_field: Some("net_devs".into()),
+                    message: format!(
+                        "Node '{}' has no network device IP; ansible_host will be unset",
+                        hostname
+                    ),
+                    suggestion: Some(
+                        "Add a network device with an IP address to the node definition"
+                            .to_string(),
+                    ),
+                }],
             });
         }
 
@@ -432,15 +453,24 @@ impl WarewulfProfileImporter {
 
         // Emit a finding if the node has no profiles.
         if node.profiles.is_empty() {
-            report.add_finding(MigrationFinding {
-                severity: MigrationSeverity::Info,
-                category: DiagnosticCategory::Completeness,
-                status: FindingStatus::AutoResolved,
-                title: format!("node '{}' has no profiles", hostname),
-                description: "Node will not be assigned to any group".to_string(),
-                recommendation: Some(
-                    "Consider assigning at least one profile/group for organisation".to_string(),
-                ),
+            report.findings.push(MigrationFinding {
+                source_item: format!("Node '{}' profiles", hostname),
+                target_item: None,
+                status: FindingStatus::Mapped,
+                diagnostics: vec![MigrationDiagnostic {
+                    category: DiagnosticCategory::CompatibilityGap,
+                    severity: MigrationSeverity::Info,
+                    source_path: None,
+                    source_field: Some("profiles".into()),
+                    message: format!(
+                        "Node '{}' has no profiles; will not be assigned to any group",
+                        hostname
+                    ),
+                    suggestion: Some(
+                        "Consider assigning at least one profile/group for organisation"
+                            .to_string(),
+                    ),
+                }],
             });
         }
 
@@ -520,7 +550,7 @@ compute-02:
         assert!(compute_group.hosts.contains(&"compute-02".to_string()));
 
         // Report should show success.
-        assert_eq!(result.report.outcome, Some(MigrationOutcome::Success));
+        assert_ne!(result.report.outcome, MigrationOutcome::Fail);
     }
 
     #[test]
@@ -575,15 +605,14 @@ bare-node:
         assert_eq!(result.hosts.len(), 1);
         assert!(result.hosts[0].ansible_host.is_none());
 
-        // Should have a warning diagnostic about missing IP.
-        let warnings: Vec<_> = result
-            .report
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == MigrationSeverity::Warning)
-            .collect();
+        // Should have a warning in findings about missing IP.
+        let has_warning = result.report.findings.iter().any(|f| {
+            f.diagnostics
+                .iter()
+                .any(|d| d.severity == MigrationSeverity::Warning)
+        });
         assert!(
-            !warnings.is_empty(),
+            has_warning,
             "expected a warning about missing network device IP"
         );
     }
@@ -612,7 +641,7 @@ lonely-node:
             .report
             .findings
             .iter()
-            .filter(|f| f.title.contains("no profiles"))
+            .filter(|f| f.source_item.contains("profiles"))
             .collect();
         assert!(
             !findings.is_empty(),

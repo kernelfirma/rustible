@@ -152,8 +152,7 @@ impl XcatObjectImporter {
     pub fn import(&self, objects: &[XcatObject]) -> ObjectImportResult {
         let mut hosts = Vec::new();
         let mut group_members: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut report = MigrationReport::new("xCAT lsdef objects");
-        let mut finding_counter = 0usize;
+        let mut report = MigrationReport::new("xCAT lsdef objects", "object import");
 
         for obj in objects {
             let obj_type = obj.object_type.as_ref().or(self.default_type.as_ref());
@@ -194,38 +193,39 @@ impl XcatObjectImporter {
                     }
                 }
                 Some(other_type) => {
-                    finding_counter += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("XCAT-{:04}", finding_counter),
-                        severity: MigrationSeverity::Warning,
-                        status: FindingStatus::Open,
-                        title: format!("Unsupported object type: {:?}", other_type),
-                        description: format!(
-                            "Object '{}' has type {:?} which is not mapped to inventory",
-                            obj.name, other_type
-                        ),
-                        category: DiagnosticCategory::Unsupported,
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Object '{}' ({:?})", obj.name, other_type),
+                        target_item: None,
+                        status: FindingStatus::Skipped,
                         diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::UnsupportedField,
                             severity: MigrationSeverity::Warning,
-                            category: DiagnosticCategory::Unsupported,
-                            message: format!("Skipping {:?} object '{}'", other_type, obj.name),
-                            source_object: Some(obj.name.clone()),
+                            source_path: None,
+                            source_field: Some("objtype".into()),
+                            message: format!(
+                                "Object '{}' has type {:?} which is not mapped to inventory",
+                                obj.name, other_type
+                            ),
+                            suggestion: None,
                         }],
                     });
                 }
                 None => {
-                    finding_counter += 1;
-                    report.add_finding(MigrationFinding {
-                        id: format!("XCAT-{:04}", finding_counter),
-                        severity: MigrationSeverity::Warning,
-                        status: FindingStatus::Open,
-                        title: "Unknown object type".into(),
-                        description: format!(
-                            "Object '{}' has no determinable type; skipping",
-                            obj.name
-                        ),
-                        category: DiagnosticCategory::Unsupported,
-                        diagnostics: vec![],
+                    report.findings.push(MigrationFinding {
+                        source_item: format!("Object '{}'", obj.name),
+                        target_item: None,
+                        status: FindingStatus::Skipped,
+                        diagnostics: vec![MigrationDiagnostic {
+                            category: DiagnosticCategory::UnsupportedField,
+                            severity: MigrationSeverity::Warning,
+                            source_path: None,
+                            source_field: Some("objtype".into()),
+                            message: format!(
+                                "Object '{}' has no determinable type; skipping",
+                                obj.name
+                            ),
+                            suggestion: None,
+                        }],
                     });
                 }
             }
@@ -444,10 +444,12 @@ Object name: testnet
 
         assert!(result.hosts.is_empty());
         assert!(!result.report.findings.is_empty());
-        assert_eq!(
-            result.report.findings[0].severity,
-            MigrationSeverity::Warning
-        );
+        // The finding should have a warning diagnostic
+        let has_warning = result.report.findings[0]
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == MigrationSeverity::Warning);
+        assert!(has_warning);
     }
 
     #[test]
