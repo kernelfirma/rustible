@@ -95,10 +95,6 @@ impl CheckArgs {
             distribution_strategy: "adaptive".to_string(),
         };
 
-        ctx.output.banner("CHECK MODE - DRY RUN");
-        ctx.output
-            .warning("No changes will be made to the target systems");
-
         run_args.execute(ctx).await
     }
 }
