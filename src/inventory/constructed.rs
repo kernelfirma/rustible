@@ -623,93 +623,58 @@ impl ExpressionEvaluator {
     // Parser helper functions
     fn parse_is_defined(expr: &str) -> Option<&str> {
         // Pattern: "var is defined"
-        static RE: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+defined$").expect("Invalid regex"));
-        RE.captures(expr).map(|c| c.get(1).unwrap().as_str())
+        let parts: Vec<&str> = expr.split_whitespace().collect();
+        if parts.len() == 3 && parts[1] == "is" && parts[2] == "defined" {
+            if Self::is_valid_var_path(parts[0]) {
+                return Some(parts[0]);
+            }
+        }
+        None
     }
 
     fn parse_is_not_defined(expr: &str) -> Option<&str> {
         // Pattern: "var is not defined" or "var is undefined"
-        static RE_NOT_DEFINED: Lazy<Regex> = Lazy::new(|| {
-            Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+not\s+defined$").expect("Invalid regex")
-        });
-        if let Some(caps) = RE_NOT_DEFINED.captures(expr) {
-            return Some(caps.get(1).unwrap().as_str());
+        let parts: Vec<&str> = expr.split_whitespace().collect();
+        if parts.len() == 4 && parts[1] == "is" && parts[2] == "not" && parts[3] == "defined" {
+            if Self::is_valid_var_path(parts[0]) {
+                return Some(parts[0]);
+            }
+        } else if parts.len() == 3 && parts[1] == "is" && parts[2] == "undefined" {
+            if Self::is_valid_var_path(parts[0]) {
+                return Some(parts[0]);
+            }
         }
-
-        static RE_UNDEFINED: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"^(\w+(?:\.\w+)*)\s+is\s+undefined$").expect("Invalid regex"));
-        RE_UNDEFINED
-            .captures(expr)
-            .map(|c| c.get(1).unwrap().as_str())
+        None
     }
 
     fn parse_in_operator(expr: &str) -> Option<(&str, &str)> {
         // Pattern: "'item' in collection" or "item in collection"
-        static RE: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"^(.+?)\s+in\s+(.+)$").expect("Invalid regex"));
-        RE.captures(expr).map(|c| {
-            (
-                c.get(1).unwrap().as_str().trim(),
-                c.get(2).unwrap().as_str().trim(),
-            )
-        })
+        if let Some((idx, op)) = Self::find_operator(expr, &["in"], true) {
+            return Some((expr[..idx].trim(), expr[idx + op.len()..].trim()));
+        }
+        None
     }
 
     fn parse_comparison(expr: &str) -> Option<(&str, &str, &str)> {
         // Pattern: "left op right" where op is ==, !=, <, >, <=, >=
-        static RE: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"^(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+)$").expect("Invalid regex"));
-        RE.captures(expr).map(|c| {
-            (
-                c.get(1).unwrap().as_str().trim(),
-                c.get(2).unwrap().as_str(),
-                c.get(3).unwrap().as_str().trim(),
-            )
-        })
+        // Note: order matters for multi-char operators
+        static OPS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
+        if let Some((idx, op)) = Self::find_operator(expr, OPS, false) {
+            return Some((expr[..idx].trim(), op, expr[idx + op.len()..].trim()));
+        }
+        None
     }
 
     fn parse_and_operator(expr: &str) -> Option<(&str, &str)> {
-        // Split on ' and ' (word boundary)
-        Self::split_logical_operator(expr, " and ")
+        if let Some((idx, op)) = Self::find_operator(expr, &["and"], true) {
+            return Some((expr[..idx].trim(), expr[idx + op.len()..].trim()));
+        }
+        None
     }
 
     fn parse_or_operator(expr: &str) -> Option<(&str, &str)> {
-        // Split on ' or ' (word boundary)
-        Self::split_logical_operator(expr, " or ")
-    }
-
-    fn split_logical_operator<'a>(expr: &'a str, op: &str) -> Option<(&'a str, &'a str)> {
-        // Find the operator, avoiding splitting inside quotes or parentheses
-        let mut depth: usize = 0;
-        let mut in_quote = false;
-        let mut quote_char = ' ';
-
-        let op_bytes = op.as_bytes();
-        let expr_bytes = expr.as_bytes();
-
-        for i in 0..expr.len().saturating_sub(op.len()) {
-            let ch = expr_bytes[i] as char;
-
-            if in_quote {
-                if ch == quote_char {
-                    in_quote = false;
-                }
-                continue;
-            }
-
-            match ch {
-                '"' | '\'' => {
-                    in_quote = true;
-                    quote_char = ch;
-                }
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' | '}' => depth = depth.saturating_sub(1),
-                _ if depth == 0 && &expr_bytes[i..i + op.len()] == op_bytes => {
-                    return Some((expr[..i].trim(), expr[i + op.len()..].trim()));
-                }
-                _ => {}
-            }
+        if let Some((idx, op)) = Self::find_operator(expr, &["or"], true) {
+            return Some((expr[..idx].trim(), expr[idx + op.len()..].trim()));
         }
         None
     }
@@ -718,6 +683,8 @@ impl ExpressionEvaluator {
         let expr = expr.trim();
         if let Some(stripped) = expr.strip_prefix("not ") {
             Some(stripped.trim())
+        } else if let Some(stripped) = expr.strip_prefix("not(") {
+            Some(expr[3..].trim())
         } else if let Some(stripped) = expr.strip_prefix('!') {
             Some(stripped.trim())
         } else {
@@ -817,6 +784,80 @@ impl ExpressionEvaluator {
                 op
             ))),
         }
+    }
+
+    /// Helper to find the index of an operator in a string, respecting quotes and nesting.
+    /// Returns the (start_index, operator_str) of the first matching operator.
+    fn find_operator<'a>(expr: &'a str, ops: &[&'a str], require_boundary: bool) -> Option<(usize, &'a str)> {
+        let mut depth: usize = 0;
+        let mut in_quote = false;
+        let mut quote_char = ' ';
+        let expr_bytes = expr.as_bytes();
+        let len = expr.len();
+
+        for i in 0..len {
+            let c = expr_bytes[i] as char;
+
+            if in_quote {
+                if c == quote_char {
+                    in_quote = false;
+                }
+                continue;
+            }
+
+            match c {
+                '"' | '\'' => {
+                    in_quote = true;
+                    quote_char = c;
+                }
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => depth = depth.saturating_sub(1),
+                _ => {
+                    if depth == 0 {
+                        // Check for operators at this position
+                        for op in ops {
+                            if expr[i..].starts_with(op) {
+                                // Check boundaries if required
+                                if require_boundary {
+                                    let before = if i == 0 { true } else {
+                                        let prev = expr_bytes[i-1] as char;
+                                        prev.is_whitespace() || "()[]{}".contains(prev)
+                                    };
+                                    let after = if i + op.len() == len { true } else {
+                                        let next = expr_bytes[i+op.len()] as char;
+                                        next.is_whitespace() || "()[]{}".contains(next)
+                                    };
+
+                                    if !before || !after {
+                                        continue;
+                                    }
+                                }
+                                return Some((i, op));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if a string is a valid variable path (e.g., "var", "nested.var")
+    fn is_valid_var_path(s: &str) -> bool {
+        if s.is_empty() || s.starts_with('.') || s.ends_with('.') {
+            return false;
+        }
+        for part in s.split('.') {
+            if part.is_empty() {
+                return false;
+            }
+            for c in part.chars() {
+                if !c.is_alphanumeric() && c != '_' {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     fn is_truthy(value: &serde_yaml::Value) -> bool {
@@ -1320,6 +1361,30 @@ mod tests {
         assert!(evaluator
             .evaluate_bool("not environment == 'staging'", &hostvars)
             .unwrap());
+
+        // Test with extra whitespace (previously failed)
+        assert!(evaluator
+            .evaluate_bool(
+                "environment  ==  'production'  and  region  ==  'us-east-1'",
+                &hostvars
+            )
+            .unwrap());
+
+        // Test not(expr)
+        assert!(evaluator
+            .evaluate_bool("not(environment == 'staging')", &hostvars)
+            .unwrap());
+    }
+
+    #[test]
+    fn test_expression_evaluator_quoting_edge_cases() {
+        let evaluator = ExpressionEvaluator::new(false);
+        let mut hostvars = create_test_hostvars();
+        hostvars.insert("val_with_in".to_string(), serde_yaml::Value::String("foo in bar".to_string()));
+
+        // Find 'in' correctly (ignore inside quotes)
+        // This checks if parser correctly identifies the 'in' operator and not the 'in' inside the string
+        assert!(evaluator.evaluate_bool("'foo in bar' == val_with_in", &hostvars).unwrap());
     }
 
     #[test]
