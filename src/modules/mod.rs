@@ -73,6 +73,35 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
+/// Dangerous patterns that indicate command injection.
+/// Used by `validate_command_args`.
+static DANGEROUS_COMMAND_PATTERNS: &[(&str, &str)] = &[
+    ("$(", "command substitution $()"),
+    ("${", "variable expansion ${}"),
+    ("`", "backtick command substitution"),
+    ("&&", "command chaining &&"),
+    ("||", "command chaining ||"),
+    (";", "command separator ;"),
+    ("|", "pipe operator"),
+    (">", "output redirection"),
+    ("<", "input redirection"),
+    ("\n", "newline (multi-line command)"),
+    ("\r", "carriage return"),
+    ("&", "background execution &"),
+    ("{", "brace expansion {"),
+    ("}", "brace expansion }"),
+    ("(", "subshell ("),
+    (")", "subshell )"),
+    ("[", "globbing ["),
+    ("]", "globbing ]"),
+    ("*", "globbing *"),
+    ("?", "globbing ?"),
+    ("!", "history expansion !"),
+    ("\\", "shell escaping \\"),
+    ("$", "variable expansion $"),
+    ("#", "shell comment #"),
+];
+
 /// Regex pattern for validating package names.
 /// Allows alphanumeric characters, dots, underscores, plus signs, and hyphens.
 static PACKAGE_NAME_REGEX: Lazy<Regex> =
@@ -389,35 +418,17 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ));
     }
 
-    // Dangerous patterns that indicate command injection
-    let dangerous_patterns = [
-        ("$(", "command substitution $()"),
-        ("${", "variable expansion ${}"),
-        ("`", "backtick command substitution"),
-        ("&&", "command chaining &&"),
-        ("||", "command chaining ||"),
-        (";", "command separator ;"),
-        ("|", "pipe operator"),
-        (">", "output redirection"),
-        ("<", "input redirection"),
-        ("\n", "newline (multi-line command)"),
-        ("\r", "carriage return"),
-        ("&", "background execution &"),
-        ("{", "brace expansion {"),
-        ("}", "brace expansion }"),
-        ("(", "subshell ("),
-        (")", "subshell )"),
-        ("[", "globbing ["),
-        ("]", "globbing ]"),
-        ("*", "globbing *"),
-        ("?", "globbing ?"),
-        ("!", "history expansion !"),
-        ("\\", "shell escaping \\"),
-        ("$", "variable expansion $"),
-        ("#", "shell comment #"),
-    ];
+    // Optimization: Fast path for valid args (O(N) byte scan)
+    // Check for any dangerous character in a single pass.
+    // All dangerous patterns in the list below contain at least one of these characters.
+    if !args.bytes().any(|b| matches!(b,
+        b'$' | b'`' | b'&' | b'|' | b';' | b'>' | b'<' | b'\n' | b'\r' |
+        b'{' | b'}' | b'(' | b')' | b'[' | b']' | b'*' | b'?' | b'!' | b'\\' | b'#'
+    )) {
+        return Ok(());
+    }
 
-    for (pattern, description) in dangerous_patterns {
+    for (pattern, description) in DANGEROUS_COMMAND_PATTERNS {
         if args.contains(pattern) {
             return Err(ModuleError::InvalidParameter(format!(
                 "Command arguments contain potentially dangerous pattern: {} ({})",
@@ -2474,5 +2485,25 @@ mod tests {
         // Verify it appears in modules_by_category
         let logic_modules = registry.modules_by_category(ModuleCategory::Logic);
         assert!(logic_modules.contains(&"test"));
+    }
+
+    #[test]
+    fn test_validate_command_args_fast_path_coverage() {
+        // Verify that the fast-path check in validate_command_args covers all dangerous patterns.
+        // If a new pattern is added to DANGEROUS_COMMAND_PATTERNS, it must contain at least one
+        // of the characters checked in the fast path.
+        for (pattern, description) in super::DANGEROUS_COMMAND_PATTERNS {
+            let covered = pattern.bytes().any(|b| matches!(b,
+                b'$' | b'`' | b'&' | b'|' | b';' | b'>' | b'<' | b'\n' | b'\r' |
+                b'{' | b'}' | b'(' | b')' | b'[' | b']' | b'*' | b'?' | b'!' | b'\\' | b'#'
+            ));
+
+            assert!(
+                covered,
+                "Pattern '{}' ({}) is NOT covered by the fast-path check in validate_command_args. \
+                 Please update the byte scan in validate_command_args to include a character from this pattern.",
+                pattern, description
+            );
+        }
     }
 }
