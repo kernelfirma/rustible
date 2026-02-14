@@ -245,12 +245,12 @@ impl PinnedHostKey {
 
         // Simple wildcard matching
         if self.host_pattern.contains('*') {
-            let pattern = self
-                .host_pattern
-                .replace('.', r"\.")
-                .replace('*', ".*")
-                .replace('?', ".");
-            regex::Regex::new(&format!("^{}$", pattern))
+            // Escape the pattern first to treat all chars literals except wildcards
+            let escaped = regex::escape(&self.host_pattern);
+            // Convert escaped wildcards back to regex wildcards
+            let pattern = escaped.replace(r"\*", ".*").replace(r"\?", ".");
+
+            crate::utils::get_regex(&format!("^{}$", pattern))
                 .map(|re| re.is_match(host))
                 .unwrap_or(false)
         } else {
@@ -649,8 +649,9 @@ fn host_matches(pattern: &str, host: &str, port: u16) -> bool {
         }
         // Wildcard matching
         if p.contains('*') {
-            let regex_pattern = p.replace('.', r"\.").replace('*', ".*").replace('?', ".");
-            if let Ok(re) = regex::Regex::new(&format!("^{}$", regex_pattern)) {
+            let escaped = regex::escape(p);
+            let regex_pattern = escaped.replace(r"\*", ".*").replace(r"\?", ".");
+            if let Ok(re) = crate::utils::get_regex(&format!("^{}$", regex_pattern)) {
                 if re.is_match(host) {
                     return true;
                 }
@@ -842,11 +843,9 @@ impl NetworkIsolation {
         // Wildcard matching for domain names
         for entry in set {
             if entry.contains('*') {
-                let pattern = entry
-                    .replace('.', r"\.")
-                    .replace('*', ".*")
-                    .replace('?', ".");
-                if let Ok(re) = regex::Regex::new(&format!("^{}$", pattern)) {
+                let escaped = regex::escape(entry);
+                let pattern = escaped.replace(r"\*", ".*").replace(r"\?", ".");
+                if let Ok(re) = crate::utils::get_regex(&format!("^{}$", pattern)) {
                     if re.is_match(host) {
                         return true;
                     }
