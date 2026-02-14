@@ -123,7 +123,8 @@ impl OutputFormatter {
             return;
         }
 
-        let line = "─".repeat(title.len() + 4);
+        let width = measure_text_width(title);
+        let line = "─".repeat(width + 4);
         if self.use_color {
             println!("\n{}", line.bright_blue());
             println!("{}", format!("  {}  ", title).bright_blue().bold());
@@ -141,12 +142,13 @@ impl OutputFormatter {
             return;
         }
 
+        let width = measure_text_width(title);
         if self.use_color {
             println!("\n{}", title.cyan().bold());
-            println!("{}", "-".repeat(title.len()).cyan());
+            println!("{}", "-".repeat(width).cyan());
         } else {
             println!("\n{}", title);
-            println!("{}", "-".repeat(title.len()));
+            println!("{}", "-".repeat(width));
         }
     }
 
@@ -157,7 +159,7 @@ impl OutputFormatter {
         }
 
         let header = format!("PLAY [{}]", play_name);
-        let stars = "*".repeat(80_usize.saturating_sub(header.len()));
+        let stars = "*".repeat(80_usize.saturating_sub(measure_text_width(&header)));
 
         if self.use_color {
             println!(
@@ -177,7 +179,7 @@ impl OutputFormatter {
         }
 
         let header = format!("TASK [{}]", task_name);
-        let stars = "*".repeat(80_usize.saturating_sub(header.len()));
+        let stars = "*".repeat(80_usize.saturating_sub(measure_text_width(&header)));
 
         if self.use_color {
             println!(
@@ -1186,6 +1188,34 @@ fn format_duration(duration: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_text_width_calculation() {
+        // Basic ASCII
+        assert_eq!(measure_text_width("test"), 4);
+        assert_eq!("test".len(), 4);
+
+        // Emoji (rocket is 4 bytes, 2 columns wide)
+        let rocket = "🚀";
+        assert_eq!(rocket.len(), 4);
+        assert_eq!(measure_text_width(rocket), 2);
+
+        // Mixed
+        let mixed = "Start 🚀";
+        assert_eq!(mixed.len(), 5 + 1 + 4); // 10 bytes
+        assert_eq!(measure_text_width(mixed), 5 + 1 + 2); // 8 columns
+
+        // Verify that our fix logic would work correctly
+        // Banner line length should be visual width + 4
+        let title = "Start 🚀";
+        let width = measure_text_width(title);
+        let line = "─".repeat(width + 4);
+        assert_eq!(measure_text_width(&line), 12); // 8 + 4 = 12
+
+        // The text line "  Start 🚀  "
+        // 2 spaces + 8 visual width + 2 spaces = 12 visual width
+        // So the line matches the text visual width
+    }
 
     #[test]
     fn test_task_status_display() {
