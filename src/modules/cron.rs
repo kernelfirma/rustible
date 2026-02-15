@@ -318,6 +318,17 @@ impl CronModule {
         }
         Ok(())
     }
+
+    /// Validate that a parameter does not contain newlines to prevent CRLF injection
+    fn validate_no_newlines(value: &str, param_name: &str) -> ModuleResult<()> {
+        if value.contains('\n') || value.contains('\r') {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Invalid {} value: newlines are not allowed",
+                param_name
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl Module for CronModule {
@@ -349,13 +360,23 @@ impl Module for CronModule {
         })?;
 
         let name = params.get_string_required("name")?;
+        Self::validate_no_newlines(&name, "name")?;
+
         let state_str = params
             .get_string("state")?
             .unwrap_or_else(|| "present".to_string());
         let state = CronState::from_str(&state_str)?;
 
         let job_cmd = params.get_string("job")?;
+        if let Some(ref job) = job_cmd {
+            Self::validate_no_newlines(job, "job")?;
+        }
+
         let user = params.get_string("user")?;
+        if let Some(ref u) = user {
+            Self::validate_no_newlines(u, "user")?;
+        }
+
         let minute = params
             .get_string("minute")?
             .unwrap_or_else(|| "*".to_string());

@@ -84,10 +84,12 @@ mod tests {
         let module = CronModule;
         let mut params: ModuleParams = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("test_job"));
-        // Inject RUSTIBLE_EOF into the job command
+        // Use a safe job command that includes the target string but no newlines
+        // (Newlines are now forbidden by validation, so we test that even with safe content,
+        // the heredoc mechanism is robust)
         params.insert(
             "job".to_string(),
-            serde_json::json!("/bin/true\nRUSTIBLE_EOF\ntouch /tmp/pwned"),
+            serde_json::json!("/bin/true RUSTIBLE_EOF touch /tmp/pwned"),
         );
         params.insert("state".to_string(), serde_json::json!("present"));
 
@@ -114,9 +116,8 @@ mod tests {
                 assert!(delimiter.starts_with("RUSTIBLE_EOF_"));
                 assert_ne!(delimiter, "RUSTIBLE_EOF");
 
-                // Verify the payload is present but harmlessly wrapped
-                // It should appear as text within the heredoc
-                assert!(cmd.contains("RUSTIBLE_EOF\ntouch /tmp/pwned"));
+                // Verify the payload is present
+                assert!(cmd.contains("/bin/true RUSTIBLE_EOF touch /tmp/pwned"));
 
                 // Verify the content is followed by the delimiter (closing the heredoc)
                 assert!(
