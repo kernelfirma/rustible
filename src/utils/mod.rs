@@ -112,8 +112,10 @@ pub fn parse_bool(s: &str) -> Option<bool> {
 /// ```
 pub fn shell_escape(s: &str) -> Cow<'_, str> {
     let mut safe = true;
-    for c in s.chars() {
-        if !(c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '+')) {
+    // Iterate over bytes to avoid UTF-8 decoding overhead.
+    // Safe characters are all ASCII, so any multi-byte char (>= 128) is unsafe.
+    for b in s.bytes() {
+        if !(b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'/' | b':' | b'+')) {
             safe = false;
             break;
         }
@@ -288,6 +290,14 @@ mod tests {
         assert_eq!(shell_escape("foo|bar"), "'foo|bar'");
         assert_eq!(shell_escape("foo>bar"), "'foo>bar'");
         assert_eq!(shell_escape("foo&bar"), "'foo&bar'");
+    }
+
+    #[test]
+    fn test_shell_escape_unicode() {
+        // Unicode characters should be quoted for safety
+        assert_eq!(shell_escape("café"), "'café'");
+        assert_eq!(shell_escape("こんにちは"), "'こんにちは'");
+        assert_eq!(shell_escape("emoji🔐"), "'emoji🔐'");
     }
 
     #[test]
