@@ -166,16 +166,46 @@ impl Module for LmodModule {
         let mut changed = false;
         let mut changes: Vec<String> = Vec::new();
 
-        // Install Lmod packages
+        let install_method = params
+            .get_string("install_method")?
+            .unwrap_or_else(|| "package".to_string());
+        let rebuild_cache = params.get_bool_or("rebuild_cache", false);
+
+        // Install Lmod
         let check_cmd = match os_family {
             "rhel" => "rpm -q Lmod >/dev/null 2>&1",
             _ => "dpkg -s lmod >/dev/null 2>&1",
         };
-        let (installed, _, _) = run_cmd(connection, check_cmd, context)?;
+        let (pkg_installed, _, _) = run_cmd(connection, check_cmd, context)?;
+        // Also check for source install
+        let (src_installed, _, _) = run_cmd(
+            connection,
+            "test -f /usr/local/lmod/lmod/init/bash",
+            context,
+        )?;
+        let installed = pkg_installed || src_installed;
 
         if !installed {
             if context.check_mode {
-                changes.push("Would install Lmod packages".to_string());
+                changes.push(format!("Would install Lmod via {}", install_method));
+            } else if install_method == "source" {
+                // Install from source: download, build, install
+                let build_deps = match os_family {
+                    "rhel" => "dnf install -y lua lua-posix lua-filesystem gcc make tcl",
+                    _ => "DEBIAN_FRONTEND=noninteractive apt-get install -y lua5.3 liblua5.3-dev lua-posix lua-filesystem tcl make",
+                };
+                run_cmd_ok(connection, build_deps, context)?;
+                let version = "8.7.30";
+                run_cmd_ok(
+                    connection,
+                    &format!(
+                        "cd /tmp && curl -sL https://github.com/TACC/Lmod/archive/{}.tar.gz | tar xz && cd Lmod-{} && ./configure --prefix=/usr/local && make install",
+                        version, version
+                    ),
+                    context,
+                )?;
+                changed = true;
+                changes.push(format!("Installed Lmod {} from source", version));
             } else {
                 let install_cmd = match os_family {
                     "rhel" => "dnf install -y epel-release && dnf install -y Lmod",
@@ -245,6 +275,24 @@ impl Module for LmodModule {
             }
         }
 
+        // Rebuild spider cache
+        if rebuild_cache {
+            if context.check_mode {
+                changes.push("Would rebuild Lmod spider cache".to_string());
+            } else {
+                // Try both standard install paths
+                let (ok, _, _) = run_cmd(
+                    connection,
+                    "/usr/share/lmod/lmod/libexec/update_lmod_system_cache_files 2>/dev/null || /usr/local/lmod/lmod/libexec/update_lmod_system_cache_files 2>/dev/null",
+                    context,
+                )?;
+                if ok {
+                    changed = true;
+                    changes.push("Rebuilt Lmod spider cache".to_string());
+                }
+            }
+        }
+
         if context.check_mode && !changes.is_empty() {
             return Ok(ModuleOutput::changed(format!(
                 "Would apply {} Lmod changes",
@@ -275,6 +323,50 @@ impl Module for LmodModule {
         m.insert("state", serde_json::json!("present"));
         m.insert("modulepath", serde_json::json!(null));
         m.insert("profile_script", serde_json::json!(true));
+        m.insert("install_method", serde_json::json!("package"));
+        m.insert("rebuild_cache", serde_json::json!(false));
         m
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_metadata() {
+        let module = LmodModule;
+        assert_eq!(module.name(), "lmod");
+        assert!(!module.description().is_empty());
+    }
+
+    #[test]
+    fn test_optional_params() {
+        let module = LmodModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("state"));
+        assert!(optional.contains_key("modulepath"));
+        assert!(optional.contains_key("profile_script"));
+        assert!(optional.contains_key("install_method"));
+        assert!(optional.contains_key("rebuild_cache"));
+    }
+
+    #[test]
+    fn test_required_params_empty() {
+        let module = LmodModule;
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_detect_os_family() {
+        assert_eq!(
+            detect_os_family("ID=rocky\nVERSION_ID=\"9.0\""),
+            Some("rhel")
+        );
+        assert_eq!(
+            detect_os_family("ID=ubuntu\nVERSION_ID=\"22.04\""),
+            Some("debian")
+        );
+        assert_eq!(detect_os_family("ID=unknown"), None);
     }
 }
