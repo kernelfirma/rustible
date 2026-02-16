@@ -176,7 +176,7 @@ pub use scheduler_slurm::SlurmScheduler;
 #[cfg(feature = "slurm")]
 pub use slurm::{SlurmConfigModule, SlurmOpsModule};
 #[cfg(feature = "slurm")]
-pub use slurm_account::SlurmAccountModule;
+pub use slurm_account::{SlurmAccountModule, SlurmQosModule};
 #[cfg(feature = "slurm")]
 pub use slurm_info::SlurmInfoModule;
 #[cfg(feature = "slurm")]

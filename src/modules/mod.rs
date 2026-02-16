@@ -1685,6 +1685,7 @@ impl ModuleRegistry {
                 hpc::SlurmInfoModule,
                 hpc::SlurmQueueModule,
                 hpc::SlurmAccountModule,
+                hpc::SlurmQosModule,
                 hpc::SlurmrestdModule,
                 hpc::SlurmNodeModule,
                 hpc::SlurmPartitionModule,
