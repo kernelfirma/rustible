@@ -47,6 +47,8 @@
 
 pub mod boot_profile;
 pub mod common;
+#[cfg(feature = "gpu")]
+pub mod cuda;
 pub mod discovery;
 pub mod facts;
 #[cfg(feature = "parallel_fs")]
@@ -119,6 +121,8 @@ pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
 pub use common::HpcBaselineModule;
+#[cfg(feature = "gpu")]
+pub use cuda::CudaToolkitModule;
 pub use discovery::HpcDiscoveryModule;
 pub use facts::HpcFactsModule;
 #[cfg(feature = "parallel_fs")]
