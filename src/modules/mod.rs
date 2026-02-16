@@ -1705,6 +1705,7 @@ impl ModuleRegistry {
             Hpc: [
                 hpc::NvidiaGpuModule,
                 hpc::NvidiaDriverModule,
+                hpc::CudaToolkitModule,
             ],
         );
 
