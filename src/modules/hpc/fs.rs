@@ -401,6 +401,24 @@ impl Module for BeegfsClientModule {
             .unwrap_or_else(|| "present".to_string());
         let mount_point = params.get_string_required("mount_point")?;
         let mgmtd_host = params.get_string_required("mgmtd_host")?;
+        let repo_url = params.get_string("repo_url")?;
+        let conn_test = params.get_bool_or("conn_test", false);
+
+        // Parse optional tuning as a map of sysctl-style tuning overrides
+        let tuning: Option<HashMap<String, String>> = match params.get("tuning") {
+            Some(serde_json::Value::Object(map)) => {
+                let mut t = HashMap::new();
+                for (k, v) in map {
+                    let val_str = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string().trim_matches('"').to_string(),
+                    };
+                    t.insert(k.clone(), val_str);
+                }
+                Some(t)
+            }
+            _ => None,
+        };
 
         // Parse optional client_conf as a map of key/value overrides
         let client_conf: Option<HashMap<String, String>> = match params.get("client_conf") {
@@ -503,6 +521,29 @@ impl Module for BeegfsClientModule {
         }
 
         // -- state=present --
+
+        // Step 0: Setup BeeGFS repository if repo_url is provided
+        if let Some(ref url) = repo_url {
+            if !context.check_mode {
+                let repo_cmd = match os_family {
+                    "rhel" => format!(
+                        "cat > /etc/yum.repos.d/beegfs.repo << 'REPOEOF'\n[beegfs]\nname=BeeGFS\nbaseurl={}\nenabled=1\ngpgcheck=0\nREPOEOF",
+                        url
+                    ),
+                    _ => format!(
+                        "echo 'deb [trusted=yes] {} ./' > /etc/apt/sources.list.d/beegfs.list && apt-get update -qq",
+                        url
+                    ),
+                };
+                let (repo_ok, _, _) = run_cmd(connection, &repo_cmd, context)?;
+                if repo_ok {
+                    changed = true;
+                    changes.push(format!("Configured BeeGFS repository: {}", url));
+                }
+            } else {
+                changes.push(format!("Would configure BeeGFS repository: {}", url));
+            }
+        }
 
         // Step 1: Install BeeGFS packages
         let check_cmd = match os_family {
@@ -733,7 +774,61 @@ impl Module for BeegfsClientModule {
             }
         }
 
-        // Step 6: Health check (non-fatal)
+        // Step 6: Apply tuning parameters
+        if let Some(ref tune_map) = tuning {
+            for (key, value) in tune_map {
+                if !context.check_mode {
+                    let proc_path = format!(
+                        "/proc/fs/beegfs/{}/tune_{}",
+                        mount_point.trim_start_matches('/').replace('/', "_"),
+                        key
+                    );
+                    let (_, current, _) = run_cmd(
+                        connection,
+                        &format!("cat '{}' 2>/dev/null || echo '__MISSING__'", proc_path),
+                        context,
+                    )?;
+                    if current.trim() != value {
+                        let (ok, _, _) = run_cmd(
+                            connection,
+                            &format!("echo '{}' > '{}' 2>/dev/null", value, proc_path),
+                            context,
+                        )?;
+                        if ok {
+                            changed = true;
+                            changes.push(format!("Set tuning {} = {}", key, value));
+                        }
+                    }
+                } else {
+                    changes.push(format!("Would set tuning {} = {}", key, value));
+                }
+            }
+        }
+
+        // Step 7: Connection test
+        if conn_test {
+            if !context.check_mode {
+                let (test_ok, test_stdout, _) = run_cmd(
+                    connection,
+                    &format!(
+                        "beegfs-ctl --conntest --mount='{}' 2>&1 | tail -5",
+                        mount_point
+                    ),
+                    context,
+                )?;
+                if !test_ok {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "BeeGFS connection test failed for {}: {}",
+                        mount_point,
+                        test_stdout.trim()
+                    )));
+                }
+            } else {
+                changes.push(format!("Would run connection test on {}", mount_point));
+            }
+        }
+
+        // Step 8: Health check (non-fatal)
         let mut health_status = serde_json::json!("unknown");
         if !context.check_mode && is_mounted {
             let (health_ok, health_stdout, _) =
@@ -781,6 +876,81 @@ impl Module for BeegfsClientModule {
         let mut m = HashMap::new();
         m.insert("state", serde_json::json!("present"));
         m.insert("client_conf", serde_json::json!({}));
+        m.insert("repo_url", serde_json::json!(null));
+        m.insert("tuning", serde_json::json!({}));
+        m.insert("conn_test", serde_json::json!(false));
         m
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lustre_module_name_and_description() {
+        let module = LustreClientModule;
+        assert_eq!(module.name(), "lustre_client");
+        assert!(!module.description().is_empty());
+    }
+
+    #[test]
+    fn test_lustre_required_params() {
+        let module = LustreClientModule;
+        let required = module.required_params();
+        assert!(required.contains(&"nid"));
+        assert!(required.contains(&"fs_name"));
+        assert!(required.contains(&"mount_point"));
+    }
+
+    #[test]
+    fn test_lustre_optional_params() {
+        let module = LustreClientModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("state"));
+    }
+
+    #[test]
+    fn test_lustre_parallelization_hint() {
+        let module = LustreClientModule;
+        assert!(matches!(
+            module.parallelization_hint(),
+            ParallelizationHint::HostExclusive
+        ));
+    }
+
+    #[test]
+    fn test_beegfs_module_name_and_description() {
+        let module = BeegfsClientModule;
+        assert_eq!(module.name(), "beegfs_client");
+        assert!(!module.description().is_empty());
+    }
+
+    #[test]
+    fn test_beegfs_required_params() {
+        let module = BeegfsClientModule;
+        let required = module.required_params();
+        assert!(required.contains(&"mount_point"));
+        assert!(required.contains(&"mgmtd_host"));
+    }
+
+    #[test]
+    fn test_beegfs_optional_params() {
+        let module = BeegfsClientModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("state"));
+        assert!(optional.contains_key("client_conf"));
+        assert!(optional.contains_key("repo_url"));
+        assert!(optional.contains_key("tuning"));
+        assert!(optional.contains_key("conn_test"));
+    }
+
+    #[test]
+    fn test_beegfs_parallelization_hint() {
+        let module = BeegfsClientModule;
+        assert!(matches!(
+            module.parallelization_hint(),
+            ParallelizationHint::HostExclusive
+        ));
     }
 }
