@@ -159,7 +159,7 @@ impl OutputFormatter {
         }
 
         let header = format!("PLAY [{}]", play_name);
-        let stars = "*".repeat(80_usize.saturating_sub(measure_text_width(&header)));
+        let stars = "─".repeat(80_usize.saturating_sub(measure_text_width(&header)));
 
         if self.use_color {
             println!(
@@ -179,7 +179,7 @@ impl OutputFormatter {
         }
 
         let header = format!("TASK [{}]", task_name);
-        let stars = "*".repeat(80_usize.saturating_sub(measure_text_width(&header)));
+        let stars = "─".repeat(80_usize.saturating_sub(measure_text_width(&header)));
 
         if self.use_color {
             println!(
@@ -326,7 +326,7 @@ impl OutputFormatter {
         }
 
         let header = "PLAY RECAP";
-        let stars = "*".repeat(80 - header.len());
+        let stars = "─".repeat(80_usize.saturating_sub(measure_text_width(header)));
 
         if self.use_color {
             println!(
