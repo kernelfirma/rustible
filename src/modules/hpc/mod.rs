@@ -92,6 +92,8 @@ pub mod pbs_queue;
 #[cfg(feature = "pbs")]
 pub mod pbs_server;
 pub mod power;
+#[cfg(feature = "bare_metal")]
+pub mod pxe;
 #[cfg(feature = "redfish")]
 pub mod redfish;
 pub mod scheduler;
@@ -168,6 +170,8 @@ pub use pbs_queue::PbsQueueModule;
 #[cfg(feature = "pbs")]
 pub use pbs_server::PbsServerModule;
 pub use power::HpcPowerModule;
+#[cfg(feature = "bare_metal")]
+pub use pxe::{PxeHostModule, PxeProfileModule};
 #[cfg(feature = "redfish")]
 pub use redfish::{RedfishInfoModule, RedfishPowerModule};
 pub use scheduler::{HpcScheduler, JobInfo, JobState, QueueInfo, ServerInfo};

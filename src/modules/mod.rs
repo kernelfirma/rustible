@@ -1748,6 +1748,14 @@ impl ModuleRegistry {
             ],
         );
 
+        #[cfg(feature = "bare_metal")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::PxeProfileModule,
+                hpc::PxeHostModule,
+            ],
+        );
+
         registry
     }
 
