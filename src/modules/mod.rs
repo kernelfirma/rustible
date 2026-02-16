@@ -1687,6 +1687,7 @@ impl ModuleRegistry {
                 hpc::SlurmAccountModule,
                 hpc::SlurmrestdModule,
                 hpc::SlurmNodeModule,
+                hpc::SlurmPartitionModule,
             ],
         );
 
