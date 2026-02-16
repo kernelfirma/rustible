@@ -61,6 +61,8 @@ pub mod hpc_server;
 pub mod ib_validate;
 pub mod image_pipeline;
 pub mod lmod;
+#[cfg(feature = "parallel_fs")]
+pub mod lustre_mount;
 pub mod mpi;
 pub mod munge;
 pub mod nfs;
@@ -112,6 +114,8 @@ pub use hpc_server::HpcServerModule;
 pub use ib_validate::IbValidateModule;
 pub use image_pipeline::ImagePipelineModule;
 pub use lmod::LmodModule;
+#[cfg(feature = "parallel_fs")]
+pub use lustre_mount::LustreMountModule;
 pub use mpi::MpiModule;
 pub use munge::MungeModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
