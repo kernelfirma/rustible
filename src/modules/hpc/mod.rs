@@ -58,6 +58,8 @@ pub mod hpc_job;
 pub mod hpc_queue;
 pub mod hpc_server;
 #[cfg(feature = "ofed")]
+pub mod ib_partition;
+#[cfg(feature = "ofed")]
 pub mod ib_validate;
 pub mod image_pipeline;
 pub mod ipmi;
@@ -127,6 +129,8 @@ pub use healthcheck::HpcHealthcheckModule;
 pub use hpc_job::HpcJobModule;
 pub use hpc_queue::HpcQueueModule;
 pub use hpc_server::HpcServerModule;
+#[cfg(feature = "ofed")]
+pub use ib_partition::IbPartitionModule;
 #[cfg(feature = "ofed")]
 pub use ib_validate::IbValidateModule;
 pub use image_pipeline::ImagePipelineModule;
