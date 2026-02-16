@@ -94,6 +94,8 @@ pub mod slurm_info;
 #[cfg(feature = "slurm")]
 pub mod slurm_job;
 #[cfg(feature = "slurm")]
+pub mod slurm_node;
+#[cfg(feature = "slurm")]
 pub mod slurm_queue;
 #[cfg(feature = "slurm")]
 pub mod slurmrestd;
@@ -147,6 +149,8 @@ pub use slurm_account::SlurmAccountModule;
 pub use slurm_info::SlurmInfoModule;
 #[cfg(feature = "slurm")]
 pub use slurm_job::SlurmJobModule;
+#[cfg(feature = "slurm")]
+pub use slurm_node::SlurmNodeModule;
 #[cfg(feature = "slurm")]
 pub use slurm_queue::SlurmQueueModule;
 #[cfg(feature = "slurm")]
