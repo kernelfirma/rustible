@@ -1738,6 +1738,8 @@ impl ModuleRegistry {
         register_modules!(registry,
             Hpc: [
                 hpc::KerberosClientModule,
+                hpc::SssdConfigModule,
+                hpc::SssdDomainModule,
             ],
         );
 
