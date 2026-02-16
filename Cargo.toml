@@ -46,6 +46,8 @@ ofed = []
 parallel_fs = []
 # Identity management (Kerberos, SSSD)
 identity = []
+# Bare-metal provisioning (PXE, Warewulf)
+bare_metal = []
 # OpenStack cloud provider
 openstack = []
 # Bare-metal BMC management via Redfish/IPMI
@@ -67,7 +69,7 @@ full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
 # Full feature set with all HPC support
-full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere", "identity"]
+full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere", "identity", "bare_metal"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 
