@@ -1753,6 +1753,8 @@ impl ModuleRegistry {
             Hpc: [
                 hpc::PxeProfileModule,
                 hpc::PxeHostModule,
+                hpc::WarewulfNodeModule,
+                hpc::WarewulfImageModule,
             ],
         );
 
