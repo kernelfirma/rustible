@@ -60,6 +60,7 @@ pub mod hpc_server;
 #[cfg(feature = "ofed")]
 pub mod ib_validate;
 pub mod image_pipeline;
+pub mod ipmi;
 pub mod lmod;
 #[cfg(feature = "parallel_fs")]
 pub mod lustre_mount;
@@ -113,6 +114,7 @@ pub use hpc_server::HpcServerModule;
 #[cfg(feature = "ofed")]
 pub use ib_validate::IbValidateModule;
 pub use image_pipeline::ImagePipelineModule;
+pub use ipmi::{IpmiBootModule, IpmiPowerModule};
 pub use lmod::LmodModule;
 #[cfg(feature = "parallel_fs")]
 pub use lustre_mount::LustreMountModule;

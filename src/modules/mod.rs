@@ -1671,6 +1671,8 @@ impl ModuleRegistry {
                 hpc::HpcJobModule,
                 hpc::HpcQueueModule,
                 hpc::HpcServerModule,
+                hpc::IpmiPowerModule,
+                hpc::IpmiBootModule,
             ],
         );
 
