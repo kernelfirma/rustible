@@ -318,6 +318,17 @@ impl CronModule {
         }
         Ok(())
     }
+
+    /// Validate that a string contains no newlines (CRLF injection prevention)
+    fn validate_no_newlines(value: &str, param_name: &str) -> ModuleResult<()> {
+        if value.contains('\n') || value.contains('\r') {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} cannot contain newlines (CRLF injection risk)",
+                param_name
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl Module for CronModule {
@@ -335,6 +346,26 @@ impl Module for CronModule {
 
     fn required_params(&self) -> &[&'static str] {
         &["name"]
+    }
+
+    fn validate_params(&self, params: &ModuleParams) -> ModuleResult<()> {
+        if let Some(name) = params.get_string("name")? {
+            Self::validate_no_newlines(&name, "name")?;
+        }
+
+        if let Some(job) = params.get_string("job")? {
+            Self::validate_no_newlines(&job, "job")?;
+        }
+
+        if let Some(user) = params.get_string("user")? {
+            Self::validate_no_newlines(&user, "user")?;
+        }
+
+        if let Some(special_time) = params.get_string("special_time")? {
+            Self::validate_no_newlines(&special_time, "special_time")?;
+        }
+
+        Ok(())
     }
 
     fn execute(

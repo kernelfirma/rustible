@@ -85,3 +85,8 @@
 **Vulnerability:** The `UserModule` was constructing `useradd` and `usermod` commands by joining the `groups` list with commas and injecting it directly into the shell command string (e.g., `-G group1,group2`). This allowed an attacker to inject shell metacharacters (e.g., `; rm -rf /`) via a malicious group name, leading to arbitrary command execution.
 **Learning:** Even when some arguments are escaped (like `name` or `home`), missing escaping on any user-controlled input that is part of a shell command string compromises the entire command. String concatenation for shell commands is inherently risky.
 **Prevention:** Always use `shell_escape` on *all* user-provided strings before incorporating them into a shell command. For list parameters (like `groups`), ensure the *joined* result is escaped if it is treated as a single shell argument, or escape individual elements if they are separate arguments.
+
+## 2025-06-03 - CRLF Injection in Cron Module
+**Vulnerability:** The `cron` module constructed crontab entries by directly interpolating the `name`, `job`, and `user` parameters into a formatted string. This allowed an attacker to inject newline characters (`\n`), creating new crontab entries (CRLF injection) and potentially executing arbitrary commands or disrupting existing jobs.
+**Learning:** When generating configuration files or formatted strings where newlines are significant delimiters (like crontabs), user input must be strictly validated to prevent injection of delimiters.
+**Prevention:** Strictly validate all input parameters that are interpolated into line-based formats. Reject inputs containing `\n` or `\r`.
