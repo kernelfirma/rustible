@@ -122,6 +122,8 @@ pub mod slurmrestd;
 #[cfg(feature = "identity")]
 pub mod sssd;
 pub mod toolchain;
+#[cfg(feature = "bare_metal")]
+pub mod warewulf;
 
 pub use boot_profile::BootProfileModule;
 pub use common::HpcBaselineModule;
@@ -200,3 +202,5 @@ pub use slurmrestd::SlurmrestdModule;
 #[cfg(feature = "identity")]
 pub use sssd::{SssdConfigModule, SssdDomainModule};
 pub use toolchain::HpcToolchainModule;
+#[cfg(feature = "bare_metal")]
+pub use warewulf::{WarewulfImageModule, WarewulfNodeModule};
