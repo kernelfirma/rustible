@@ -109,6 +109,8 @@ pub mod slurm_partition;
 pub mod slurm_queue;
 #[cfg(feature = "slurm")]
 pub mod slurmrestd;
+#[cfg(feature = "identity")]
+pub mod sssd;
 pub mod toolchain;
 
 pub use boot_profile::BootProfileModule;
@@ -175,4 +177,6 @@ pub use slurm_partition::SlurmPartitionModule;
 pub use slurm_queue::SlurmQueueModule;
 #[cfg(feature = "slurm")]
 pub use slurmrestd::SlurmrestdModule;
+#[cfg(feature = "identity")]
+pub use sssd::{SssdConfigModule, SssdDomainModule};
 pub use toolchain::HpcToolchainModule;
