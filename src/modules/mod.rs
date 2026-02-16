@@ -1714,6 +1714,7 @@ impl ModuleRegistry {
                 hpc::RdmaStackModule,
                 hpc::IbValidateModule,
                 hpc::IpoibModule,
+                hpc::OpensmConfigModule,
             ],
         );
 

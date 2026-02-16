@@ -75,6 +75,8 @@ pub mod nfs;
 pub mod nvidia_driver;
 #[cfg(feature = "ofed")]
 pub mod ofed;
+#[cfg(feature = "ofed")]
+pub mod opensm;
 #[cfg(feature = "slurm")]
 pub mod partition_policy;
 #[cfg(feature = "pbs")]
@@ -143,6 +145,8 @@ pub use nfs::{NfsClientModule, NfsServerModule};
 pub use nvidia_driver::NvidiaDriverModule;
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
+#[cfg(feature = "ofed")]
+pub use opensm::OpensmConfigModule;
 #[cfg(feature = "slurm")]
 pub use partition_policy::PartitionPolicyModule;
 #[cfg(feature = "pbs")]
