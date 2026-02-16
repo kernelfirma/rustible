@@ -438,6 +438,179 @@ fn build_user_properties(params: &ModuleParams) -> ModuleResult<String> {
     Ok(props.join(" "))
 }
 
+/// Slurm QoS (Quality of Service) management module.
+///
+/// Manage Slurm QoS definitions via sacctmgr.
+///
+/// # Parameters
+///
+/// - `name` (required): QoS name
+/// - `state` (optional): "present" (default) or "absent"
+/// - `priority` (optional): QoS priority value
+/// - `max_jobs_per_user` (optional): Max concurrent jobs per user
+/// - `max_submit_per_user` (optional): Max submitted jobs per user
+/// - `max_wall` (optional): Max wall time (e.g., "7-00:00:00")
+/// - `max_tres_per_user` (optional): Max TRES per user (e.g., "cpu=100,mem=500G")
+/// - `preempt` (optional): Comma-separated QoS names that this QoS can preempt
+/// - `preempt_mode` (optional): Preempt mode (e.g., "cancel", "requeue", "suspend")
+/// - `grace_time` (optional): Grace time in seconds before preemption
+pub struct SlurmQosModule;
+
+impl Module for SlurmQosModule {
+    fn name(&self) -> &'static str {
+        "slurm_qos"
+    }
+
+    fn description(&self) -> &'static str {
+        "Manage Slurm QoS definitions (sacctmgr)"
+    }
+
+    fn parallelization_hint(&self) -> ParallelizationHint {
+        ParallelizationHint::GlobalExclusive
+    }
+
+    fn execute(
+        &self,
+        params: &ModuleParams,
+        context: &ModuleContext,
+    ) -> ModuleResult<ModuleOutput> {
+        let connection = context
+            .connection
+            .as_ref()
+            .ok_or_else(|| ModuleError::ExecutionFailed("No connection available".to_string()))?;
+
+        let name = params.get_string_required("name")?;
+        let state = params
+            .get_string("state")?
+            .unwrap_or_else(|| "present".to_string());
+
+        // Check if QoS exists
+        let (ok, stdout, _) = run_cmd(
+            connection,
+            &format!(
+                "sacctmgr --noheader --parsable2 list qos where name={} format=Name",
+                name
+            ),
+            context,
+        )?;
+        let qos_exists = ok && !stdout.trim().is_empty();
+
+        if state == "absent" {
+            if !qos_exists {
+                return Ok(ModuleOutput::ok(format!("QoS '{}' does not exist", name))
+                    .with_data("name", serde_json::json!(name)));
+            }
+            if context.check_mode {
+                return Ok(
+                    ModuleOutput::changed(format!("Would delete QoS '{}'", name))
+                        .with_data("name", serde_json::json!(name)),
+                );
+            }
+            run_cmd_ok(
+                connection,
+                &format!("sacctmgr --immediate delete qos where name={}", name),
+                context,
+            )?;
+            return Ok(ModuleOutput::changed(format!("Deleted QoS '{}'", name))
+                .with_data("name", serde_json::json!(name)));
+        }
+
+        // state=present
+        let props = build_qos_properties(params)?;
+
+        if qos_exists {
+            if props.is_empty() {
+                return Ok(ModuleOutput::ok(format!("QoS '{}' already exists", name))
+                    .with_data("name", serde_json::json!(name)));
+            }
+            if context.check_mode {
+                return Ok(ModuleOutput::changed(format!(
+                    "Would update QoS '{}' with: {}",
+                    name, props
+                ))
+                .with_data("name", serde_json::json!(name)));
+            }
+            run_cmd_ok(
+                connection,
+                &format!(
+                    "sacctmgr --immediate modify qos where name={} set {}",
+                    name, props
+                ),
+                context,
+            )?;
+            return Ok(ModuleOutput::changed(format!("Updated QoS '{}'", name))
+                .with_data("name", serde_json::json!(name))
+                .with_data("properties", serde_json::json!(props)));
+        }
+
+        // Create new QoS
+        if context.check_mode {
+            return Ok(
+                ModuleOutput::changed(format!("Would create QoS '{}'", name))
+                    .with_data("name", serde_json::json!(name)),
+            );
+        }
+
+        let mut cmd = format!("sacctmgr --immediate add qos {}", name);
+        if !props.is_empty() {
+            cmd.push(' ');
+            cmd.push_str(&props);
+        }
+        run_cmd_ok(connection, &cmd, context)?;
+
+        Ok(ModuleOutput::changed(format!("Created QoS '{}'", name))
+            .with_data("name", serde_json::json!(name)))
+    }
+
+    fn required_params(&self) -> &[&'static str] {
+        &["name"]
+    }
+
+    fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
+        let mut m = HashMap::new();
+        m.insert("state", serde_json::json!("present"));
+        m.insert("priority", serde_json::json!(null));
+        m.insert("max_jobs_per_user", serde_json::json!(null));
+        m.insert("max_submit_per_user", serde_json::json!(null));
+        m.insert("max_wall", serde_json::json!(null));
+        m.insert("max_tres_per_user", serde_json::json!(null));
+        m.insert("preempt", serde_json::json!(null));
+        m.insert("preempt_mode", serde_json::json!(null));
+        m.insert("grace_time", serde_json::json!(null));
+        m
+    }
+}
+
+/// Build sacctmgr QoS property string from params.
+fn build_qos_properties(params: &ModuleParams) -> ModuleResult<String> {
+    let mut props = Vec::new();
+    if let Some(v) = params.get_string("priority")? {
+        props.push(format!("Priority={}", v));
+    }
+    if let Some(v) = params.get_string("max_jobs_per_user")? {
+        props.push(format!("MaxJobsPerUser={}", v));
+    }
+    if let Some(v) = params.get_string("max_submit_per_user")? {
+        props.push(format!("MaxSubmitJobsPerUser={}", v));
+    }
+    if let Some(v) = params.get_string("max_wall")? {
+        props.push(format!("MaxWall={}", v));
+    }
+    if let Some(v) = params.get_string("max_tres_per_user")? {
+        props.push(format!("MaxTRESPerUser={}", v));
+    }
+    if let Some(v) = params.get_string("preempt")? {
+        props.push(format!("Preempt={}", v));
+    }
+    if let Some(v) = params.get_string("preempt_mode")? {
+        props.push(format!("PreemptMode={}", v));
+    }
+    if let Some(v) = params.get_string("grace_time")? {
+        props.push(format!("GraceTime={}", v));
+    }
+    Ok(props.join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,6 +678,54 @@ mod tests {
     fn test_build_user_properties_empty() {
         let params = ModuleParams::new();
         let props = build_user_properties(&params).unwrap();
+        assert!(props.is_empty());
+    }
+
+    #[test]
+    fn test_qos_module_metadata() {
+        let module = SlurmQosModule;
+        assert_eq!(module.name(), "slurm_qos");
+        assert!(!module.description().is_empty());
+    }
+
+    #[test]
+    fn test_qos_required_params() {
+        let module = SlurmQosModule;
+        let required = module.required_params();
+        assert!(required.contains(&"name"));
+    }
+
+    #[test]
+    fn test_qos_optional_params() {
+        let module = SlurmQosModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("state"));
+        assert!(optional.contains_key("priority"));
+        assert!(optional.contains_key("max_jobs_per_user"));
+        assert!(optional.contains_key("preempt"));
+        assert!(optional.contains_key("preempt_mode"));
+        assert!(optional.contains_key("grace_time"));
+    }
+
+    #[test]
+    fn test_build_qos_properties() {
+        let mut params = ModuleParams::new();
+        params.insert("priority".to_string(), serde_json::json!("100"));
+        params.insert("max_jobs_per_user".to_string(), serde_json::json!("10"));
+        params.insert("max_wall".to_string(), serde_json::json!("2-00:00:00"));
+        params.insert("preempt_mode".to_string(), serde_json::json!("cancel"));
+
+        let props = build_qos_properties(&params).unwrap();
+        assert!(props.contains("Priority=100"));
+        assert!(props.contains("MaxJobsPerUser=10"));
+        assert!(props.contains("MaxWall=2-00:00:00"));
+        assert!(props.contains("PreemptMode=cancel"));
+    }
+
+    #[test]
+    fn test_build_qos_properties_empty() {
+        let params = ModuleParams::new();
+        let props = build_qos_properties(&params).unwrap();
         assert!(props.is_empty());
     }
 }
