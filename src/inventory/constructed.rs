@@ -788,7 +788,11 @@ impl ExpressionEvaluator {
 
     /// Helper to find the index of an operator in a string, respecting quotes and nesting.
     /// Returns the (start_index, operator_str) of the first matching operator.
-    fn find_operator<'a>(expr: &'a str, ops: &[&'a str], require_boundary: bool) -> Option<(usize, &'a str)> {
+    fn find_operator<'a>(
+        expr: &'a str,
+        ops: &[&'a str],
+        require_boundary: bool,
+    ) -> Option<(usize, &'a str)> {
         let mut depth: usize = 0;
         let mut in_quote = false;
         let mut quote_char = ' ';
@@ -819,12 +823,16 @@ impl ExpressionEvaluator {
                             if expr[i..].starts_with(op) {
                                 // Check boundaries if required
                                 if require_boundary {
-                                    let before = if i == 0 { true } else {
-                                        let prev = expr_bytes[i-1] as char;
+                                    let before = if i == 0 {
+                                        true
+                                    } else {
+                                        let prev = expr_bytes[i - 1] as char;
                                         prev.is_whitespace() || "()[]{}".contains(prev)
                                     };
-                                    let after = if i + op.len() == len { true } else {
-                                        let next = expr_bytes[i+op.len()] as char;
+                                    let after = if i + op.len() == len {
+                                        true
+                                    } else {
+                                        let next = expr_bytes[i + op.len()] as char;
                                         next.is_whitespace() || "()[]{}".contains(next)
                                     };
 
@@ -1380,11 +1388,16 @@ mod tests {
     fn test_expression_evaluator_quoting_edge_cases() {
         let evaluator = ExpressionEvaluator::new(false);
         let mut hostvars = create_test_hostvars();
-        hostvars.insert("val_with_in".to_string(), serde_yaml::Value::String("foo in bar".to_string()));
+        hostvars.insert(
+            "val_with_in".to_string(),
+            serde_yaml::Value::String("foo in bar".to_string()),
+        );
 
         // Find 'in' correctly (ignore inside quotes)
         // This checks if parser correctly identifies the 'in' operator and not the 'in' inside the string
-        assert!(evaluator.evaluate_bool("'foo in bar' == val_with_in", &hostvars).unwrap());
+        assert!(evaluator
+            .evaluate_bool("'foo in bar' == val_with_in", &hostvars)
+            .unwrap());
     }
 
     #[test]

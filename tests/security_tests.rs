@@ -2577,10 +2577,10 @@ mod shell_command_injection {
 mod user_injection_prevention {
     use super::*;
     use async_trait::async_trait;
-    use rustible::modules::user::UserModule;
     use rustible::connection::{
         CommandResult, Connection, ConnectionResult, ExecuteOptions, FileStat, TransferOptions,
     };
+    use rustible::modules::user::UserModule;
     use std::sync::{Arc, Mutex};
 
     // Mock Connection to capture commands
@@ -2612,12 +2612,19 @@ mod user_injection_prevention {
             command: &str,
             _options: Option<ExecuteOptions>,
         ) -> ConnectionResult<CommandResult> {
-            self.executed_commands.lock().unwrap().push(command.to_string());
+            self.executed_commands
+                .lock()
+                .unwrap()
+                .push(command.to_string());
 
             // Mock responses for user existence checks
             if command.starts_with("id ") {
                 // User doesn't exist
-                return Ok(CommandResult::failure(1, "".to_string(), "no such user".to_string()));
+                return Ok(CommandResult::failure(
+                    1,
+                    "".to_string(),
+                    "no such user".to_string(),
+                ));
             }
 
             Ok(CommandResult::success("".to_string(), "".to_string()))
@@ -2641,11 +2648,18 @@ mod user_injection_prevention {
             Ok(())
         }
 
-        async fn download(&self, _remote_path: &std::path::Path, _local_path: &std::path::Path) -> ConnectionResult<()> {
+        async fn download(
+            &self,
+            _remote_path: &std::path::Path,
+            _local_path: &std::path::Path,
+        ) -> ConnectionResult<()> {
             Ok(())
         }
 
-        async fn download_content(&self, _remote_path: &std::path::Path) -> ConnectionResult<Vec<u8>> {
+        async fn download_content(
+            &self,
+            _remote_path: &std::path::Path,
+        ) -> ConnectionResult<Vec<u8>> {
             Ok(Vec::new())
         }
 
@@ -2658,7 +2672,9 @@ mod user_injection_prevention {
         }
 
         async fn stat(&self, _path: &std::path::Path) -> ConnectionResult<FileStat> {
-            Err(rustible::connection::ConnectionError::ExecutionFailed("Not implemented".to_string()))
+            Err(rustible::connection::ConnectionError::ExecutionFailed(
+                "Not implemented".to_string(),
+            ))
         }
 
         async fn close(&self) -> ConnectionResult<()> {
@@ -2674,23 +2690,30 @@ mod user_injection_prevention {
 
         let mut params = ModuleParams::new();
         params.insert("name".to_string(), serde_json::json!("testuser"));
-        params.insert("groups".to_string(), serde_json::json!(["safe_group", "malicious; echo pwned"]));
+        params.insert(
+            "groups".to_string(),
+            serde_json::json!(["safe_group", "malicious; echo pwned"]),
+        );
         params.insert("state".to_string(), serde_json::json!("present"));
 
-        let context = ModuleContext::builder()
-            .connection(conn)
-            .build()
-            .unwrap();
+        let context = ModuleContext::builder().connection(conn).build().unwrap();
 
         // UserModule::execute is synchronous but blocks on async calls
         let _ = module.execute(&params, &context);
 
         let commands = mock_conn.executed_commands.lock().unwrap();
-        let create_cmd = commands.iter().find(|c| c.contains("useradd")).expect("useradd command not found");
+        let create_cmd = commands
+            .iter()
+            .find(|c| c.contains("useradd"))
+            .expect("useradd command not found");
 
         let group_arg_part = "safe_group,malicious; echo pwned";
         let secure_pattern = format!("-G '{}'", group_arg_part.replace("'", "'\''"));
 
-        assert!(create_cmd.contains(&secure_pattern), "Command did not contain securely escaped group argument. Got: {}", create_cmd);
+        assert!(
+            create_cmd.contains(&secure_pattern),
+            "Command did not contain securely escaped group argument. Got: {}",
+            create_cmd
+        );
     }
 }

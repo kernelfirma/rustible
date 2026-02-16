@@ -1,9 +1,8 @@
-
 use async_trait::async_trait;
 use rustible::connection::{
     CommandResult, Connection, ConnectionResult, ExecuteOptions, FileStat, TransferOptions,
 };
-use rustible::modules::{Module, ModuleContext, ModuleParams, user::UserModule};
+use rustible::modules::{user::UserModule, Module, ModuleContext, ModuleParams};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -49,7 +48,11 @@ impl Connection for MockConnection {
         // Or if it's "useradd", return success.
 
         if command.starts_with("id ") {
-             return Ok(CommandResult::failure(1, "".to_string(), "no such user".to_string()));
+            return Ok(CommandResult::failure(
+                1,
+                "".to_string(),
+                "no such user".to_string(),
+            ));
         }
 
         Ok(CommandResult::success("".to_string(), "".to_string()))
@@ -90,7 +93,9 @@ impl Connection for MockConnection {
     }
 
     async fn stat(&self, _path: &Path) -> ConnectionResult<FileStat> {
-        Err(rustible::connection::ConnectionError::ConnectionFailed("Not implemented".to_string()))
+        Err(rustible::connection::ConnectionError::ConnectionFailed(
+            "Not implemented".to_string(),
+        ))
     }
 
     async fn close(&self) -> ConnectionResult<()> {
@@ -106,10 +111,12 @@ async fn test_user_module_command_injection_in_groups() {
     let mut params: ModuleParams = HashMap::new();
     params.insert("name".to_string(), serde_json::json!("testuser"));
     // Malicious group name containing command injection
-    params.insert("groups".to_string(), serde_json::json!(["safe_group", "wheel; touch /tmp/pwned"]));
+    params.insert(
+        "groups".to_string(),
+        serde_json::json!(["safe_group", "wheel; touch /tmp/pwned"]),
+    );
 
-    let context = ModuleContext::default()
-        .with_connection(connection.clone());
+    let context = ModuleContext::default().with_connection(connection.clone());
 
     // Execute module
     let _ = module.execute(&params, &context);
@@ -121,7 +128,10 @@ async fn test_user_module_command_injection_in_groups() {
     // 1. "id 'testuser'" (to check existence)
     // 2. "useradd ... -G safe_group,wheel; touch /tmp/pwned ... 'testuser'"
 
-    let useradd_cmd = commands.iter().find(|cmd| cmd.contains("useradd")).expect("No useradd command found");
+    let useradd_cmd = commands
+        .iter()
+        .find(|cmd| cmd.contains("useradd"))
+        .expect("No useradd command found");
     println!("Executed command: {}", useradd_cmd);
 
     // Verify INJECTION logic:
@@ -143,7 +153,12 @@ async fn test_user_module_command_injection_in_groups() {
     // Expected: ... -G 'safe_group,wheel; touch /tmp/pwned' ...
 
     let expected_escaped_arg = "'safe_group,wheel; touch /tmp/pwned'";
-    assert!(useradd_cmd.contains(expected_escaped_arg), "Command should contain the escaped groups list: '{}', found: '{}'", expected_escaped_arg, useradd_cmd);
+    assert!(
+        useradd_cmd.contains(expected_escaped_arg),
+        "Command should contain the escaped groups list: '{}', found: '{}'",
+        expected_escaped_arg,
+        useradd_cmd
+    );
 
     // Ensure it does NOT contain the unescaped semicolon part exposed
     // This double checks that we didn't just append the escaped version while leaving the unescaped one
