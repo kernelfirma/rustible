@@ -1713,6 +1713,7 @@ impl ModuleRegistry {
             Hpc: [
                 hpc::RdmaStackModule,
                 hpc::IbValidateModule,
+                hpc::IpoibModule,
             ],
         );
 
