@@ -1725,6 +1725,14 @@ impl ModuleRegistry {
             ],
         );
 
+        #[cfg(feature = "redfish")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::RedfishPowerModule,
+                hpc::RedfishInfoModule,
+            ],
+        );
+
         registry
     }
 

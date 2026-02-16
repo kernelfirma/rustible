@@ -80,6 +80,8 @@ pub mod pbs_queue;
 #[cfg(feature = "pbs")]
 pub mod pbs_server;
 pub mod power;
+#[cfg(feature = "redfish")]
+pub mod redfish;
 pub mod scheduler;
 #[cfg(feature = "slurm")]
 pub mod scheduler_orchestration;
@@ -140,6 +142,8 @@ pub use pbs_queue::PbsQueueModule;
 #[cfg(feature = "pbs")]
 pub use pbs_server::PbsServerModule;
 pub use power::HpcPowerModule;
+#[cfg(feature = "redfish")]
+pub use redfish::{RedfishInfoModule, RedfishPowerModule};
 pub use scheduler::{HpcScheduler, JobInfo, JobState, QueueInfo, ServerInfo};
 #[cfg(feature = "slurm")]
 pub use scheduler_orchestration::SchedulerOrchestrationModule;
