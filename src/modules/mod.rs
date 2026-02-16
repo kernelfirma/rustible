@@ -1704,6 +1704,7 @@ impl ModuleRegistry {
         register_modules!(registry,
             Hpc: [
                 hpc::NvidiaGpuModule,
+                hpc::NvidiaDriverModule,
             ],
         );
 

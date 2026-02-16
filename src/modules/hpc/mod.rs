@@ -67,6 +67,8 @@ pub mod lustre_mount;
 pub mod mpi;
 pub mod munge;
 pub mod nfs;
+#[cfg(feature = "gpu")]
+pub mod nvidia_driver;
 #[cfg(feature = "ofed")]
 pub mod ofed;
 #[cfg(feature = "slurm")]
@@ -125,6 +127,8 @@ pub use lustre_mount::LustreMountModule;
 pub use mpi::MpiModule;
 pub use munge::MungeModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
+#[cfg(feature = "gpu")]
+pub use nvidia_driver::NvidiaDriverModule;
 #[cfg(feature = "ofed")]
 pub use ofed::RdmaStackModule;
 #[cfg(feature = "slurm")]
