@@ -72,6 +72,8 @@ pub mod kerberos;
 pub mod lmod;
 #[cfg(feature = "parallel_fs")]
 pub mod lustre_mount;
+#[cfg(feature = "parallel_fs")]
+pub mod lustre_ost;
 pub mod mpi;
 pub mod munge;
 pub mod nfs;
@@ -146,6 +148,8 @@ pub use kerberos::KerberosClientModule;
 pub use lmod::LmodModule;
 #[cfg(feature = "parallel_fs")]
 pub use lustre_mount::LustreMountModule;
+#[cfg(feature = "parallel_fs")]
+pub use lustre_ost::LustreOstModule;
 pub use mpi::MpiModule;
 pub use munge::MungeModule;
 pub use nfs::{NfsClientModule, NfsServerModule};
