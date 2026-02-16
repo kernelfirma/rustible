@@ -1716,6 +1716,7 @@ impl ModuleRegistry {
             Hpc: [
                 hpc::LustreClientModule,
                 hpc::BeegfsClientModule,
+                hpc::LustreMountModule,
             ],
         );
 
