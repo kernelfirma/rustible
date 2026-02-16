@@ -63,6 +63,8 @@ pub mod image_pipeline;
 pub mod ipmi;
 #[cfg(feature = "ofed")]
 pub mod ipoib;
+#[cfg(feature = "identity")]
+pub mod kerberos;
 pub mod lmod;
 #[cfg(feature = "parallel_fs")]
 pub mod lustre_mount;
@@ -127,6 +129,8 @@ pub use image_pipeline::ImagePipelineModule;
 pub use ipmi::{IpmiBootModule, IpmiPowerModule};
 #[cfg(feature = "ofed")]
 pub use ipoib::IpoibModule;
+#[cfg(feature = "identity")]
+pub use kerberos::KerberosClientModule;
 pub use lmod::LmodModule;
 #[cfg(feature = "parallel_fs")]
 pub use lustre_mount::LustreMountModule;

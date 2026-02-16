@@ -44,6 +44,8 @@ gpu = []
 ofed = []
 # Parallel filesystem clients (Lustre, BeeGFS)
 parallel_fs = []
+# Identity management (Kerberos, SSSD)
+identity = []
 # OpenStack cloud provider
 openstack = []
 # Bare-metal BMC management via Redfish/IPMI
@@ -65,7 +67,7 @@ full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
 # Full feature set with all HPC support
-full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere"]
+full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere", "identity"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 

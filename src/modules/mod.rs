@@ -1734,6 +1734,13 @@ impl ModuleRegistry {
             ],
         );
 
+        #[cfg(feature = "identity")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::KerberosClientModule,
+            ],
+        );
+
         registry
     }
 
