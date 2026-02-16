@@ -1718,6 +1718,7 @@ impl ModuleRegistry {
                 hpc::IpoibModule,
                 hpc::OpensmConfigModule,
                 hpc::IbPartitionModule,
+                hpc::IbDiagnosticsModule,
             ],
         );
 
