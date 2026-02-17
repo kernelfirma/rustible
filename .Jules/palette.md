@@ -48,3 +48,7 @@
 ## 2024-03-24 - [Clean Interactive Loops]
 **Learning:** Reprinting a growing list of items in an interactive loop (like adding variables) without clearing the previous iteration's output causes "scroll spam" that clutters the terminal and pushes context off-screen.
 **Action:** Use `term.clear_last_lines(n)` to refresh the list in-place, creating a stable TUI-like experience even within a simple CLI loop. Ensure output streams (stdout vs stderr) are consistent to make clearing work reliably.
+
+## 2026-07-28 - [Box Drawing for Modern Aesthetics]
+**Learning:** Legacy CLI tools often use ASCII characters (like `*`) for separators, which can feel dated. Replacing them with Unicode box-drawing characters (like `─`) creates a cleaner, more continuous visual flow that matches modern design sensibilities without sacrificing terminal compatibility.
+**Action:** Replace repeated ASCII separator characters with their Unicode box-drawing equivalents (`─`, `━`, `═`) in headers and banners to improve visual polish.
