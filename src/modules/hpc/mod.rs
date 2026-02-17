@@ -45,6 +45,8 @@
 //! - Unsupported OS → `ModuleError::Unsupported` with clear message
 //! - Missing prerequisites → `ModuleError::ExecutionFailed` with install hint
 
+#[cfg(feature = "parallel_fs")]
+pub mod beegfs_target;
 pub mod boot_profile;
 pub mod common;
 #[cfg(feature = "gpu")]
@@ -72,6 +74,8 @@ pub mod ipoib;
 #[cfg(feature = "identity")]
 pub mod kerberos;
 pub mod lmod;
+#[cfg(feature = "lsf")]
+pub mod lsf;
 #[cfg(feature = "parallel_fs")]
 pub mod lustre_mount;
 #[cfg(feature = "parallel_fs")]
@@ -127,6 +131,8 @@ pub mod toolchain;
 #[cfg(feature = "bare_metal")]
 pub mod warewulf;
 
+#[cfg(feature = "parallel_fs")]
+pub use beegfs_target::BeegfsTargetModule;
 pub use boot_profile::BootProfileModule;
 pub use common::HpcBaselineModule;
 #[cfg(feature = "gpu")]
@@ -154,6 +160,8 @@ pub use ipoib::IpoibModule;
 #[cfg(feature = "identity")]
 pub use kerberos::KerberosClientModule;
 pub use lmod::LmodModule;
+#[cfg(feature = "lsf")]
+pub use lsf::{LsfHostModule, LsfPolicyModule, LsfQueueModule};
 #[cfg(feature = "parallel_fs")]
 pub use lustre_mount::LustreMountModule;
 #[cfg(feature = "parallel_fs")]

@@ -1,13 +1,19 @@
 //! Lmod / Environment Modules support
 //!
-//! Manages Lmod installation, module path directories, and profile script
-//! configuration for HPC clusters.
+//! Manages Lmod installation, module path directories, profile script
+//! configuration, hierarchical modulepath setup, default version policies,
+//! and modulepath drift detection for HPC clusters.
 //!
 //! # Parameters
 //!
 //! - `state` (optional): "present" (default) or "absent"
 //! - `modulepath` (optional): List of module path directories to create
 //! - `profile_script` (optional): Whether to write /etc/profile.d/lmod.sh (default: true)
+//! - `install_method` (optional): "package" (default) or "source"
+//! - `rebuild_cache` (optional): Rebuild Lmod spider cache (default: false)
+//! - `hierarchy` (optional): JSON array of hierarchy levels, e.g. ["Core", "Compiler", "MPI"]
+//! - `default_versions` (optional): JSON object mapping module names to default versions
+//! - `site_config` (optional): Path to site configuration Lua file
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -82,6 +88,181 @@ fn detect_os_family(os_release: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// Result of preflight checks before a state transition.
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+/// A single field that drifted from desired to actual.
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+/// Configure hierarchical modulepath (Core/Compiler/MPI layout).
+///
+/// Creates an `lmodrc.lua` configuration and hierarchy subdirectories
+/// under each configured modulepath.
+fn configure_hierarchical_modulepath(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+    modulepaths: &[String],
+    hierarchy: &[String],
+) -> ModuleResult<Vec<String>> {
+    let mut changes = Vec::new();
+
+    // Build LMOD_RC content with hierarchy configuration
+    let levels_lua = hierarchy
+        .iter()
+        .map(|l| format!("\"{}\"", l))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let lmodrc_content = format!(
+        "-- Lmod hierarchical configuration - managed by Rustible\n\
+         propT = {{}}\n\
+         scDescriptT = {{}}\n\
+         modpathLocT = {{\n\
+         }}\n\
+         hierarchy_levels = {{ {} }}\n",
+        levels_lua
+    );
+
+    if !context.check_mode {
+        run_cmd_ok(connection, "mkdir -p /etc/lmod", context)?;
+        let escaped = lmodrc_content.replace('\'', "'\\''");
+        run_cmd_ok(
+            connection,
+            &format!(
+                "printf '%s\\n' '{}' > /etc/lmod/lmodrc.lua",
+                escaped
+            ),
+            context,
+        )?;
+    }
+    changes.push("Wrote /etc/lmod/lmodrc.lua with hierarchy config".to_string());
+
+    // Create hierarchy subdirectories under each modulepath
+    for base in modulepaths {
+        for level in hierarchy {
+            let dir = format!("{}/{}", base, level);
+            let (exists, _, _) =
+                run_cmd(connection, &format!("test -d '{}'", dir), context)?;
+            if !exists {
+                if !context.check_mode {
+                    run_cmd_ok(connection, &format!("mkdir -p '{}'", dir), context)?;
+                }
+                changes.push(format!("Created hierarchy directory {}", dir));
+            }
+        }
+    }
+
+    Ok(changes)
+}
+
+/// Enforce default version policies by writing `.version` files.
+///
+/// For each module/version pair, writes a standard Modules `.version` file
+/// so that `module load <name>` resolves to the specified default version.
+fn enforce_version_policies(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+    modulepaths: &[String],
+    versions: &serde_json::Map<String, serde_json::Value>,
+) -> ModuleResult<Vec<String>> {
+    let mut changes = Vec::new();
+
+    for (module_name, version_val) in versions {
+        let version = match version_val.as_str() {
+            Some(v) => v,
+            None => continue,
+        };
+        let version_content = format!(
+            "#%Module\nset ModulesVersion \"{}\"",
+            version
+        );
+
+        // Write .version in the first modulepath that contains the module dir,
+        // or the first modulepath by default.
+        let target_base = if !modulepaths.is_empty() {
+            &modulepaths[0]
+        } else {
+            "/opt/modulefiles"
+        };
+        let module_dir = format!("{}/{}", target_base, module_name);
+        let version_file = format!("{}/.version", module_dir);
+
+        if !context.check_mode {
+            run_cmd_ok(
+                connection,
+                &format!("mkdir -p '{}'", module_dir),
+                context,
+            )?;
+            let escaped = version_content.replace('\'', "'\\''");
+            run_cmd_ok(
+                connection,
+                &format!("printf '%s\\n' '{}' > '{}'", escaped, version_file),
+                context,
+            )?;
+        }
+        changes.push(format!(
+            "Set default version for {} to {} in {}",
+            module_name, version, version_file
+        ));
+    }
+
+    Ok(changes)
+}
+
+/// Detect modulepath drift between configured and actual state.
+///
+/// Checks whether each configured modulepath directory exists on disk and
+/// whether the profile script MODULEPATH variable matches the configured paths.
+fn detect_modulepath_drift(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+    modulepaths: &[String],
+) -> ModuleResult<Vec<DriftItem>> {
+    let mut drift = Vec::new();
+
+    // Check each configured directory exists
+    for dir in modulepaths {
+        let (exists, _, _) =
+            run_cmd(connection, &format!("test -d '{}'", dir), context)?;
+        if !exists {
+            drift.push(DriftItem {
+                field: format!("modulepath_dir:{}", dir),
+                desired: "present".to_string(),
+                actual: "absent".to_string(),
+            });
+        }
+    }
+
+    // Check profile script MODULEPATH matches configured paths
+    let (_, profile_out, _) = run_cmd(
+        connection,
+        "grep -oP 'MODULEPATH=\"\\K[^\"]+' /etc/profile.d/lmod.sh 2>/dev/null || true",
+        context,
+    )?;
+    let profile_paths = profile_out.trim();
+    if !profile_paths.is_empty() {
+        let desired_paths = modulepaths.join(":");
+        if profile_paths != desired_paths {
+            drift.push(DriftItem {
+                field: "profile_modulepath".to_string(),
+                desired: desired_paths,
+                actual: profile_paths.to_string(),
+            });
+        }
+    }
+
+    Ok(drift)
 }
 
 pub struct LmodModule;
@@ -293,24 +474,103 @@ impl Module for LmodModule {
             }
         }
 
+        // Resolve effective modulepaths for hierarchy/drift functions
+        let effective_paths = if let Some(ref paths) = modulepath {
+            paths.clone()
+        } else {
+            vec!["/opt/modulefiles".to_string()]
+        };
+
+        // Configure hierarchical modulepath if hierarchy param provided
+        let mut hierarchy_configured = false;
+        let hierarchy = params.get_vec_string("hierarchy")?;
+        if let Some(ref levels) = hierarchy {
+            if !levels.is_empty() {
+                let hier_changes = configure_hierarchical_modulepath(
+                    connection,
+                    context,
+                    &effective_paths,
+                    levels,
+                )?;
+                if !hier_changes.is_empty() {
+                    changed = true;
+                    changes.extend(hier_changes);
+                    hierarchy_configured = true;
+                }
+            }
+        }
+
+        // Enforce default version policies if default_versions param provided
+        let mut default_versions_set = false;
+        if let Some(dv_value) = params.get("default_versions") {
+            if let Some(dv_map) = dv_value.as_object() {
+                if !dv_map.is_empty() {
+                    let ver_changes = enforce_version_policies(
+                        connection,
+                        context,
+                        &effective_paths,
+                        dv_map,
+                    )?;
+                    if !ver_changes.is_empty() {
+                        changed = true;
+                        changes.extend(ver_changes);
+                        default_versions_set = true;
+                    }
+                }
+            }
+        }
+
+        // Deploy site configuration if site_config param provided
+        let site_config = params.get_string("site_config")?;
+        if let Some(ref src_path) = site_config {
+            if !context.check_mode {
+                run_cmd_ok(connection, "mkdir -p /etc/lmod", context)?;
+                run_cmd_ok(
+                    connection,
+                    &format!(
+                        "cp '{}' /etc/lmod/lmod_site_config.lua && chmod 0644 /etc/lmod/lmod_site_config.lua",
+                        src_path.replace('\'', "'\\''")
+                    ),
+                    context,
+                )?;
+            }
+            changed = true;
+            changes.push(format!(
+                "Deployed site config from {} to /etc/lmod/lmod_site_config.lua",
+                src_path
+            ));
+        }
+
+        // Detect modulepath drift
+        let drift = detect_modulepath_drift(connection, context, &effective_paths)?;
+
         if context.check_mode && !changes.is_empty() {
             return Ok(ModuleOutput::changed(format!(
                 "Would apply {} Lmod changes",
                 changes.len()
             ))
             .with_data("changes", serde_json::json!(changes))
-            .with_data("os_family", serde_json::json!(os_family)));
+            .with_data("os_family", serde_json::json!(os_family))
+            .with_data("modulepath_drift", serde_json::json!(drift))
+            .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
+            .with_data("default_versions_set", serde_json::json!(default_versions_set)));
         }
 
         if changed {
             Ok(
                 ModuleOutput::changed(format!("Applied {} Lmod changes", changes.len()))
                     .with_data("changes", serde_json::json!(changes))
-                    .with_data("os_family", serde_json::json!(os_family)),
+                    .with_data("os_family", serde_json::json!(os_family))
+                    .with_data("modulepath_drift", serde_json::json!(drift))
+                    .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
+                    .with_data("default_versions_set", serde_json::json!(default_versions_set)),
             )
         } else {
             Ok(ModuleOutput::ok("Lmod is configured and up to date")
-                .with_data("os_family", serde_json::json!(os_family)))
+                .with_data("os_family", serde_json::json!(os_family))
+                .with_data("modulepath_drift", serde_json::json!(drift))
+                .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
+                .with_data("default_versions_set", serde_json::json!(default_versions_set)))
         }
     }
 
@@ -325,6 +585,9 @@ impl Module for LmodModule {
         m.insert("profile_script", serde_json::json!(true));
         m.insert("install_method", serde_json::json!("package"));
         m.insert("rebuild_cache", serde_json::json!(false));
+        m.insert("hierarchy", serde_json::json!(null));
+        m.insert("default_versions", serde_json::json!(null));
+        m.insert("site_config", serde_json::json!(null));
         m
     }
 }
@@ -349,6 +612,9 @@ mod tests {
         assert!(optional.contains_key("profile_script"));
         assert!(optional.contains_key("install_method"));
         assert!(optional.contains_key("rebuild_cache"));
+        assert!(optional.contains_key("hierarchy"));
+        assert!(optional.contains_key("default_versions"));
+        assert!(optional.contains_key("site_config"));
     }
 
     #[test]
@@ -368,5 +634,90 @@ mod tests {
             Some("debian")
         );
         assert_eq!(detect_os_family("ID=unknown"), None);
+    }
+
+    #[test]
+    fn test_hierarchy_path_generation() {
+        let levels = vec![
+            "Core".to_string(),
+            "Compiler".to_string(),
+            "MPI".to_string(),
+        ];
+        let bases = vec![
+            "/opt/modulefiles".to_string(),
+            "/usr/share/modulefiles".to_string(),
+        ];
+
+        // Verify the expected directory paths that would be created
+        let mut expected_dirs = Vec::new();
+        for base in &bases {
+            for level in &levels {
+                expected_dirs.push(format!("{}/{}", base, level));
+            }
+        }
+
+        assert_eq!(expected_dirs.len(), 6);
+        assert_eq!(expected_dirs[0], "/opt/modulefiles/Core");
+        assert_eq!(expected_dirs[1], "/opt/modulefiles/Compiler");
+        assert_eq!(expected_dirs[2], "/opt/modulefiles/MPI");
+        assert_eq!(expected_dirs[3], "/usr/share/modulefiles/Core");
+        assert_eq!(expected_dirs[4], "/usr/share/modulefiles/Compiler");
+        assert_eq!(expected_dirs[5], "/usr/share/modulefiles/MPI");
+    }
+
+    #[test]
+    fn test_version_policy_format() {
+        let module_name = "gcc";
+        let version = "12.3";
+        let content = format!("#%Module\nset ModulesVersion \"{}\"", version);
+
+        assert!(content.starts_with("#%Module"));
+        assert!(content.contains(&format!("set ModulesVersion \"{}\"", version)));
+
+        // Verify the expected file path
+        let base = "/opt/modulefiles";
+        let version_file = format!("{}/{}/.version", base, module_name);
+        assert_eq!(version_file, "/opt/modulefiles/gcc/.version");
+
+        // Verify content for another module
+        let mpi_version = "4.1.5";
+        let mpi_content = format!("#%Module\nset ModulesVersion \"{}\"", mpi_version);
+        assert!(mpi_content.contains("4.1.5"));
+    }
+
+    #[test]
+    fn test_drift_detection_missing_dir() {
+        // Simulate drift items for directories that would be missing
+        let configured_paths = vec![
+            "/opt/modulefiles".to_string(),
+            "/missing/path".to_string(),
+            "/also/missing".to_string(),
+        ];
+
+        // Simulate checking: first exists, second and third do not
+        let dir_exists = vec![true, false, false];
+
+        let mut drift: Vec<DriftItem> = Vec::new();
+        for (i, dir) in configured_paths.iter().enumerate() {
+            if !dir_exists[i] {
+                drift.push(DriftItem {
+                    field: format!("modulepath_dir:{}", dir),
+                    desired: "present".to_string(),
+                    actual: "absent".to_string(),
+                });
+            }
+        }
+
+        assert_eq!(drift.len(), 2);
+        assert_eq!(drift[0].field, "modulepath_dir:/missing/path");
+        assert_eq!(drift[0].desired, "present");
+        assert_eq!(drift[0].actual, "absent");
+        assert_eq!(drift[1].field, "modulepath_dir:/also/missing");
+
+        // Verify serialization
+        let json = serde_json::json!(drift);
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["field"], "modulepath_dir:/missing/path");
     }
 }

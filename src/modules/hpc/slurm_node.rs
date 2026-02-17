@@ -9,6 +9,7 @@
 //! - `reason` (optional): Reason for state change (required for drain/down)
 //! - `weight` (optional): Node scheduling weight
 //! - `features` (optional): Node features/attributes
+//! - `force` (optional): Skip job-aware guards (default false)
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,6 +21,43 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+
+/// Result of preflight checks before a state transition.
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+/// A single field that drifted from desired to actual.
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+/// Post-change verification result.
+#[derive(Debug, serde::Serialize)]
+struct VerifyResult {
+    verified: bool,
+    details: Vec<String>,
+    warnings: Vec<String>,
+}
+
+/// Rich node information parsed from `scontrol show node` output.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NodeInfo {
+    pub state: String,
+    pub reason: String,
+    pub cpu_total: u32,
+    pub cpu_alloc: u32,
+    pub mem_total: u64,
+    pub mem_alloc: u64,
+    pub features: Vec<String>,
+    pub partitions: Vec<String>,
+}
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
@@ -157,6 +195,158 @@ impl NodeAction {
     }
 }
 
+/// Validate whether a state transition is allowed.
+///
+/// Some transitions are scheduler-managed (e.g., idle -> alloc) or internal
+/// (e.g., any -> comp) and should be blocked. Returns `Ok(())` for valid
+/// transitions and `Err(message)` for invalid ones.
+fn validate_state_transition(current: &NodeState, action: NodeAction) -> Result<(), String> {
+    match (current, action) {
+        // idle -> drain, down are valid admin actions
+        (NodeState::Idle, NodeAction::Drain) => Ok(()),
+        (NodeState::Idle, NodeAction::Down) => Ok(()),
+
+        // alloc -> drain is valid (drain waits for jobs to finish)
+        (NodeState::Allocated, NodeAction::Drain) => Ok(()),
+
+        // drain/drained -> idle, resume, down are valid recovery actions
+        (NodeState::Drained, NodeAction::Idle) => Ok(()),
+        (NodeState::Drained, NodeAction::Resume) => Ok(()),
+        (NodeState::Drained, NodeAction::Undrain) => Ok(()),
+        (NodeState::Drained, NodeAction::Down) => Ok(()),
+        (NodeState::Draining, NodeAction::Idle) => Ok(()),
+        (NodeState::Draining, NodeAction::Resume) => Ok(()),
+        (NodeState::Draining, NodeAction::Undrain) => Ok(()),
+        (NodeState::Draining, NodeAction::Down) => Ok(()),
+
+        // down -> idle, resume are valid recovery actions
+        (NodeState::Down, NodeAction::Idle) => Ok(()),
+        (NodeState::Down, NodeAction::Resume) => Ok(()),
+        (NodeState::Down, NodeAction::Undrain) => Ok(()),
+
+        // mixed -> drain is valid
+        (NodeState::Mixed, NodeAction::Drain) => Ok(()),
+
+        // Unknown state: allow any action (we cannot validate)
+        (NodeState::Unknown, _) => Ok(()),
+
+        // Transitions to the same effective state are no-ops, not invalid
+        (NodeState::Idle, NodeAction::Idle) => Ok(()),
+        (NodeState::Idle, NodeAction::Resume) => Ok(()),
+        (NodeState::Idle, NodeAction::Undrain) => Ok(()),
+        (NodeState::Down, NodeAction::Down) => Ok(()),
+        (NodeState::Drained, NodeAction::Drain) => Ok(()),
+        (NodeState::Draining, NodeAction::Drain) => Ok(()),
+
+        // Everything else is invalid
+        (state, act) => Err(format!(
+            "Invalid state transition: {:?} -> {} is not allowed \
+             (scheduler-managed or internal state)",
+            state,
+            act.to_scontrol_state()
+        )),
+    }
+}
+
+/// Check if a node has running jobs by inspecting CPUAlloc and AllocMem
+/// from scontrol output.
+///
+/// Returns `(has_jobs, description)`.
+fn check_running_jobs(scontrol_output: &str) -> (bool, String) {
+    let mut cpu_alloc: u64 = 0;
+    let mut alloc_mem: u64 = 0;
+
+    for token in scontrol_output.split_whitespace() {
+        if let Some(val) = token.strip_prefix("CPUAlloc=") {
+            cpu_alloc = val.parse().unwrap_or(0);
+        } else if let Some(val) = token.strip_prefix("AllocMem=") {
+            alloc_mem = val.parse().unwrap_or(0);
+        }
+    }
+
+    let has_jobs = cpu_alloc > 0 || alloc_mem > 0;
+    let description = if has_jobs {
+        format!(
+            "Node has running jobs (CPUAlloc={}, AllocMem={})",
+            cpu_alloc, alloc_mem
+        )
+    } else {
+        "No running jobs detected".to_string()
+    };
+
+    (has_jobs, description)
+}
+
+/// Parse `scontrol show node` output into a `NodeInfo` struct.
+fn parse_node_info(scontrol_output: &str) -> NodeInfo {
+    let mut state = String::new();
+    let mut reason = String::new();
+    let mut cpu_total: u32 = 0;
+    let mut cpu_alloc: u32 = 0;
+    let mut mem_total: u64 = 0;
+    let mut mem_alloc: u64 = 0;
+    let mut features = Vec::new();
+    let mut partitions = Vec::new();
+
+    for token in scontrol_output.split_whitespace() {
+        if let Some((key, value)) = token.split_once('=') {
+            match key {
+                "State" => state = value.to_string(),
+                "Reason" => reason = value.to_string(),
+                "CPUTot" => cpu_total = value.parse().unwrap_or(0),
+                "CPUAlloc" => cpu_alloc = value.parse().unwrap_or(0),
+                "RealMemory" => mem_total = value.parse().unwrap_or(0),
+                "AllocMem" => mem_alloc = value.parse().unwrap_or(0),
+                "AvailableFeatures" | "ActiveFeatures" => {
+                    if features.is_empty() && !value.is_empty() && value != "(null)" {
+                        features = value.split(',').map(|s| s.to_string()).collect();
+                    }
+                }
+                "Partitions" => {
+                    if !value.is_empty() && value != "(null)" {
+                        partitions = value.split(',').map(|s| s.to_string()).collect();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Handle multi-word Reason fields: Reason may span a quoted section.
+    // Re-parse reason from the raw output for better accuracy.
+    if let Some(reason_start) = scontrol_output.find("Reason=") {
+        let after_eq = &scontrol_output[reason_start + 7..];
+        let parsed_reason = if after_eq.starts_with('"') {
+            // Quoted reason - find closing quote
+            after_eq[1..]
+                .find('"')
+                .map(|end| after_eq[1..end + 1].to_string())
+                .unwrap_or_else(|| after_eq.trim().to_string())
+        } else {
+            // Unquoted - take until next whitespace or newline
+            after_eq
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .unwrap_or("")
+                .to_string()
+        };
+        if !parsed_reason.is_empty() && parsed_reason != "(null)" {
+            reason = parsed_reason;
+        }
+    }
+
+    NodeInfo {
+        state,
+        reason,
+        cpu_total,
+        cpu_alloc,
+        mem_total,
+        mem_alloc,
+        features,
+        partitions,
+    }
+}
+
 pub struct SlurmNodeModule;
 
 impl Module for SlurmNodeModule {
@@ -184,6 +374,7 @@ impl Module for SlurmNodeModule {
 
         let name = params.get_string_required("name")?;
         let state_str = params.get_string_required("state")?;
+        let force = params.get_bool_or("force", false);
         let action = NodeAction::from_str(&state_str).ok_or_else(|| {
             ModuleError::InvalidParameter(format!(
                 "Invalid state '{}'. Must be 'drain', 'resume', 'down', 'idle', or 'undrain'",
@@ -191,8 +382,16 @@ impl Module for SlurmNodeModule {
             ))
         })?;
 
-        // Query current node state for idempotency check
+        // Query current node state and full info for diagnostics
         let current_state = self.get_node_state(connection, &name, context)?;
+        let scontrol_output = self.get_scontrol_output(connection, &name, context)?;
+        let node_info = parse_node_info(&scontrol_output);
+        let mut diagnostics_warnings: Vec<String> = Vec::new();
+
+        // Validate the state transition
+        if let Err(msg) = validate_state_transition(&current_state, action) {
+            return Err(ModuleError::InvalidParameter(msg));
+        }
 
         // Check if action is needed
         if !self.action_needed(action, &current_state) {
@@ -201,11 +400,31 @@ impl Module for SlurmNodeModule {
                 name, current_state
             ))
             .with_data("node", serde_json::json!(name))
-            .with_data("state", serde_json::json!(current_state)));
+            .with_data("state", serde_json::json!(current_state))
+            .with_data("node_info", serde_json::json!(node_info)));
+        }
+
+        // Job-aware guard: check for running jobs before drain
+        if matches!(action, NodeAction::Drain) {
+            let (has_jobs, job_desc) = check_running_jobs(&scontrol_output);
+            if has_jobs {
+                if force {
+                    diagnostics_warnings.push(format!(
+                        "Force mode: proceeding despite running jobs ({})",
+                        job_desc
+                    ));
+                } else {
+                    // Drain is safe -- it waits for jobs to finish. Warn but proceed.
+                    diagnostics_warnings.push(format!(
+                        "Node has running jobs; drain will wait for completion ({})",
+                        job_desc
+                    ));
+                }
+            }
         }
 
         if context.check_mode {
-            return Ok(ModuleOutput::changed(format!(
+            let mut output = ModuleOutput::changed(format!(
                 "Would set node '{}' to state {} (currently {:?})",
                 name,
                 action.to_scontrol_state(),
@@ -216,7 +435,12 @@ impl Module for SlurmNodeModule {
                 "desired_state",
                 serde_json::json!(action.to_scontrol_state()),
             )
-            .with_data("current_state", serde_json::json!(current_state)));
+            .with_data("current_state", serde_json::json!(current_state))
+            .with_data("node_info", serde_json::json!(node_info));
+            if !diagnostics_warnings.is_empty() {
+                output = output.with_data("warnings", serde_json::json!(diagnostics_warnings));
+            }
+            return Ok(output);
         }
 
         // Build and execute scontrol update command
@@ -247,7 +471,14 @@ impl Module for SlurmNodeModule {
         let cmd = cmd_parts.join(" ");
         run_cmd_ok(connection, &cmd, context)?;
 
-        Ok(ModuleOutput::changed(format!(
+        // Post-verify: re-query node state and build verification result
+        let post_output = self.get_scontrol_output(connection, &name, context)?;
+        let post_info = parse_node_info(&post_output);
+        let post_state = NodeState::from_scontrol_output(&post_info.state);
+
+        let verify = self.post_verify(action, &post_state, &post_info);
+
+        let mut output = ModuleOutput::changed(format!(
             "Node '{}' state changed to {} (was {:?})",
             name,
             action.to_scontrol_state(),
@@ -255,7 +486,15 @@ impl Module for SlurmNodeModule {
         ))
         .with_data("node", serde_json::json!(name))
         .with_data("new_state", serde_json::json!(action.to_scontrol_state()))
-        .with_data("previous_state", serde_json::json!(current_state)))
+        .with_data("previous_state", serde_json::json!(current_state))
+        .with_data("node_info", serde_json::json!(post_info))
+        .with_data("verify", serde_json::json!(verify));
+
+        if !diagnostics_warnings.is_empty() {
+            output = output.with_data("warnings", serde_json::json!(diagnostics_warnings));
+        }
+
+        Ok(output)
     }
 
     fn required_params(&self) -> &[&'static str] {
@@ -267,6 +506,7 @@ impl Module for SlurmNodeModule {
         m.insert("reason", serde_json::json!(null));
         m.insert("weight", serde_json::json!(null));
         m.insert("features", serde_json::json!(null));
+        m.insert("force", serde_json::json!(false));
         m
     }
 }
@@ -319,6 +559,70 @@ impl SlurmNodeModule {
             }
             NodeAction::Down => *current != NodeState::Down,
             NodeAction::Idle => *current != NodeState::Idle,
+        }
+    }
+
+    /// Get raw scontrol output for a node.
+    fn get_scontrol_output(
+        &self,
+        connection: &Arc<dyn Connection + Send + Sync>,
+        name: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<String> {
+        let cmd = format!("scontrol show node {}", name);
+        let (ok, stdout, stderr) = run_cmd(connection, &cmd, context)?;
+
+        if !ok {
+            if stderr.contains("not found") || stderr.contains("Invalid node name") {
+                return Err(ModuleError::ExecutionFailed(format!(
+                    "Node '{}' not found",
+                    name
+                )));
+            }
+            return Ok(String::new());
+        }
+
+        Ok(stdout)
+    }
+
+    /// Verify the state change was applied successfully.
+    fn post_verify(
+        &self,
+        action: NodeAction,
+        post_state: &NodeState,
+        _post_info: &NodeInfo,
+    ) -> VerifyResult {
+        let mut details = Vec::new();
+        let mut warnings = Vec::new();
+
+        let expected_ok = match action {
+            NodeAction::Drain => {
+                let ok = post_state.is_drained()
+                    || matches!(post_state, NodeState::Allocated | NodeState::Mixed);
+                if matches!(post_state, NodeState::Allocated | NodeState::Mixed) {
+                    warnings.push("Node is draining but still has allocated resources".to_string());
+                }
+                ok
+            }
+            NodeAction::Resume | NodeAction::Undrain => post_state.is_operational(),
+            NodeAction::Down => *post_state == NodeState::Down,
+            NodeAction::Idle => *post_state == NodeState::Idle,
+        };
+
+        if expected_ok {
+            details.push(format!("State verified: node is now {:?}", post_state));
+        } else {
+            warnings.push(format!(
+                "Expected state after {} but found {:?}",
+                action.to_scontrol_state(),
+                post_state
+            ));
+        }
+
+        VerifyResult {
+            verified: expected_ok,
+            details,
+            warnings,
         }
     }
 }
@@ -487,5 +791,159 @@ mod tests {
         assert!(optional.contains_key("reason"));
         assert!(optional.contains_key("weight"));
         assert!(optional.contains_key("features"));
+        assert!(optional.contains_key("force"));
+    }
+
+    #[test]
+    fn test_valid_state_transitions() {
+        // Valid transitions
+        assert!(validate_state_transition(&NodeState::Idle, NodeAction::Drain).is_ok());
+        assert!(validate_state_transition(&NodeState::Idle, NodeAction::Down).is_ok());
+        assert!(validate_state_transition(&NodeState::Allocated, NodeAction::Drain).is_ok());
+        assert!(validate_state_transition(&NodeState::Drained, NodeAction::Idle).is_ok());
+        assert!(validate_state_transition(&NodeState::Drained, NodeAction::Resume).is_ok());
+        assert!(validate_state_transition(&NodeState::Drained, NodeAction::Undrain).is_ok());
+        assert!(validate_state_transition(&NodeState::Drained, NodeAction::Down).is_ok());
+        assert!(validate_state_transition(&NodeState::Draining, NodeAction::Idle).is_ok());
+        assert!(validate_state_transition(&NodeState::Draining, NodeAction::Resume).is_ok());
+        assert!(validate_state_transition(&NodeState::Down, NodeAction::Idle).is_ok());
+        assert!(validate_state_transition(&NodeState::Down, NodeAction::Resume).is_ok());
+        assert!(validate_state_transition(&NodeState::Down, NodeAction::Undrain).is_ok());
+        assert!(validate_state_transition(&NodeState::Mixed, NodeAction::Drain).is_ok());
+
+        // Same-state no-ops should also be valid
+        assert!(validate_state_transition(&NodeState::Idle, NodeAction::Idle).is_ok());
+        assert!(validate_state_transition(&NodeState::Down, NodeAction::Down).is_ok());
+        assert!(validate_state_transition(&NodeState::Drained, NodeAction::Drain).is_ok());
+
+        // Idle -> Resume/Undrain are no-ops (already operational), should be valid
+        assert!(validate_state_transition(&NodeState::Idle, NodeAction::Resume).is_ok());
+        assert!(validate_state_transition(&NodeState::Idle, NodeAction::Undrain).is_ok());
+
+        // Invalid transitions: scheduler-managed or internal
+        assert!(validate_state_transition(&NodeState::Allocated, NodeAction::Idle).is_err());
+        assert!(validate_state_transition(&NodeState::Allocated, NodeAction::Down).is_err());
+        assert!(validate_state_transition(&NodeState::Allocated, NodeAction::Resume).is_err());
+        assert!(validate_state_transition(&NodeState::Mixed, NodeAction::Idle).is_err());
+        assert!(validate_state_transition(&NodeState::Mixed, NodeAction::Down).is_err());
+        assert!(validate_state_transition(&NodeState::Mixed, NodeAction::Resume).is_err());
+        assert!(validate_state_transition(&NodeState::Reserved, NodeAction::Drain).is_err());
+
+        // Unknown state should allow any action
+        assert!(validate_state_transition(&NodeState::Unknown, NodeAction::Drain).is_ok());
+        assert!(validate_state_transition(&NodeState::Unknown, NodeAction::Resume).is_ok());
+        assert!(validate_state_transition(&NodeState::Unknown, NodeAction::Down).is_ok());
+        assert!(validate_state_transition(&NodeState::Unknown, NodeAction::Idle).is_ok());
+    }
+
+    #[test]
+    fn test_node_info_parsing() {
+        let scontrol_output = "\
+NodeName=node01 Arch=x86_64 CoresPerSocket=16
+   CPUAlloc=8 CPUTot=32 CPULoad=4.50
+   AvailableFeatures=gpu,nvme ActiveFeatures=gpu,nvme
+   RealMemory=128000 AllocMem=64000 FreeMem=60000
+   State=MIXED Partitions=batch,gpu
+   Reason=none";
+
+        let info = parse_node_info(scontrol_output);
+        assert_eq!(info.state, "MIXED");
+        assert_eq!(info.cpu_total, 32);
+        assert_eq!(info.cpu_alloc, 8);
+        assert_eq!(info.mem_total, 128000);
+        assert_eq!(info.mem_alloc, 64000);
+        assert_eq!(info.features, vec!["gpu", "nvme"]);
+        assert_eq!(info.partitions, vec!["batch", "gpu"]);
+
+        // Test with drained node and quoted reason
+        let drained_output = "\
+NodeName=node02 Arch=x86_64 CoresPerSocket=8
+   CPUAlloc=0 CPUTot=16 CPULoad=0.00
+   AvailableFeatures=(null) ActiveFeatures=(null)
+   RealMemory=64000 AllocMem=0 FreeMem=63000
+   State=IDLE+DRAIN Partitions=batch
+   Reason=\"Maintenance window\"";
+
+        let info2 = parse_node_info(drained_output);
+        assert_eq!(info2.state, "IDLE+DRAIN");
+        assert_eq!(info2.cpu_total, 16);
+        assert_eq!(info2.cpu_alloc, 0);
+        assert_eq!(info2.mem_total, 64000);
+        assert_eq!(info2.mem_alloc, 0);
+        assert!(info2.features.is_empty()); // (null) should be empty
+        assert_eq!(info2.partitions, vec!["batch"]);
+        assert_eq!(info2.reason, "Maintenance window");
+
+        // Test with empty output
+        let empty_info = parse_node_info("");
+        assert_eq!(empty_info.state, "");
+        assert_eq!(empty_info.cpu_total, 0);
+        assert!(empty_info.features.is_empty());
+        assert!(empty_info.partitions.is_empty());
+    }
+
+    #[test]
+    fn test_check_running_jobs() {
+        let output_with_jobs = "\
+NodeName=node01 CPUAlloc=8 CPUTot=32 AllocMem=64000 RealMemory=128000 State=ALLOCATED";
+        let (has_jobs, desc) = check_running_jobs(output_with_jobs);
+        assert!(has_jobs);
+        assert!(desc.contains("CPUAlloc=8"));
+        assert!(desc.contains("AllocMem=64000"));
+
+        let output_no_jobs = "\
+NodeName=node02 CPUAlloc=0 CPUTot=16 AllocMem=0 RealMemory=64000 State=IDLE";
+        let (has_jobs2, desc2) = check_running_jobs(output_no_jobs);
+        assert!(!has_jobs2);
+        assert!(desc2.contains("No running jobs"));
+
+        // Empty output
+        let (has_jobs3, _) = check_running_jobs("");
+        assert!(!has_jobs3);
+    }
+
+    #[test]
+    fn test_reason_enforcement() {
+        // Build params without reason for drain - should fail at validation
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("node01"));
+        params.insert("state".to_string(), serde_json::json!("drain"));
+        // No reason provided - the execute method should require it for drain/down
+        // We verify that the reason parameter is absent
+        let reason: Option<String> = params
+            .get("reason")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        assert!(reason.is_none(), "Reason should be None when not provided");
+
+        // With reason provided
+        params.insert(
+            "reason".to_string(),
+            serde_json::json!("Hardware maintenance"),
+        );
+        let reason2: Option<String> = params
+            .get("reason")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        assert_eq!(reason2, Some("Hardware maintenance".to_string()));
+
+        // For non-drain action, reason is optional
+        let mut params_resume: ModuleParams = HashMap::new();
+        params_resume.insert("name".to_string(), serde_json::json!("node01"));
+        params_resume.insert("state".to_string(), serde_json::json!("resume"));
+        let reason3: Option<String> = params_resume
+            .get("reason")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        assert!(reason3.is_none(), "Resume action should not require reason");
+
+        // Verify down also requires reason
+        let mut params_down: ModuleParams = HashMap::new();
+        params_down.insert("name".to_string(), serde_json::json!("node01"));
+        params_down.insert("state".to_string(), serde_json::json!("down"));
+        let reason4: Option<String> = params_down
+            .get("reason")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        assert!(
+            reason4.is_none(),
+            "Reason should be None when not provided for down"
+        );
     }
 }

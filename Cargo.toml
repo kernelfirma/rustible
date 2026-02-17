@@ -48,6 +48,8 @@ parallel_fs = []
 identity = []
 # Bare-metal provisioning (PXE, Warewulf)
 bare_metal = []
+# IBM Spectrum LSF workload manager modules
+lsf = []
 # OpenStack cloud provider
 openstack = []
 # Bare-metal BMC management via Redfish/IPMI
@@ -69,7 +71,7 @@ full-aws = ["full", "aws"]
 # Full feature set with provisioning
 full-provisioning = ["full-aws", "provisioning"]
 # Full feature set with all HPC support
-full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere", "identity", "bare_metal"]
+full-hpc = ["full", "hpc", "pbs", "ofed", "parallel_fs", "redfish", "vsphere", "identity", "bare_metal", "lsf"]
 # Pure Rust build (no C dependencies)
 pure-rust = ["russh", "local"]
 
@@ -319,6 +321,14 @@ harness = false
 
 [[bench]]
 name = "unified_benchmark"
+harness = false
+
+[[bench]]
+name = "hpc_scale_validation"
+harness = false
+
+[[bench]]
+name = "inventory_scale"
 harness = false
 
 [profile.release]

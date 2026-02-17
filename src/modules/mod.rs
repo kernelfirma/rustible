@@ -1729,6 +1729,7 @@ impl ModuleRegistry {
                 hpc::BeegfsClientModule,
                 hpc::LustreMountModule,
                 hpc::LustreOstModule,
+                hpc::BeegfsTargetModule,
             ],
         );
 
@@ -1756,6 +1757,15 @@ impl ModuleRegistry {
                 hpc::PxeHostModule,
                 hpc::WarewulfNodeModule,
                 hpc::WarewulfImageModule,
+            ],
+        );
+
+        #[cfg(feature = "lsf")]
+        register_modules!(registry,
+            Hpc: [
+                hpc::LsfQueueModule,
+                hpc::LsfHostModule,
+                hpc::LsfPolicyModule,
             ],
         );
 

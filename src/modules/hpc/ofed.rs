@@ -10,6 +10,7 @@
 //! - `kernel_modules` (optional): list of kernel modules to load (default: ["ib_uverbs", "rdma_ucm", "ib_umad"])
 //! - `sysctl` (optional): map of network sysctl overrides for RDMA tuning
 //! - `ipoib` (optional): bool (default: false) - enable IP over InfiniBand
+//! - `reboot_coordination` (optional): bool (default: true) - coordinate reboot after OFED install/upgrade
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -85,6 +86,266 @@ fn detect_os_family(os_release: &str) -> Option<&'static str> {
     }
     None
 }
+
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct VerifyResult {
+    verified: bool,
+    details: Vec<String>,
+    warnings: Vec<String>,
+}
+
+/// Parse OFED version from `ofed_info -s` output.
+///
+/// Extracts the major.minor version from strings like
+/// "MLNX_OFED_LINUX-5.8-1.0.1.1:" returning "5.8".
+fn parse_ofed_version(ofed_info_output: &str) -> Option<String> {
+    let trimmed = ofed_info_output.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Find the version portion after "MLNX_OFED_LINUX-" or similar prefix
+    let version_part = if let Some(pos) = trimmed.find("MLNX_OFED") {
+        let after_prefix = &trimmed[pos..];
+        // Skip to first dash after the prefix text
+        if let Some(dash_pos) = after_prefix.find('-') {
+            &after_prefix[dash_pos + 1..]
+        } else {
+            return None;
+        }
+    } else {
+        // Try to parse as a bare version string
+        trimmed
+    };
+
+    // Extract major.minor from the version portion (e.g., "5.8-1.0.1.1:" -> "5.8")
+    let mut parts = version_part.split(|c: char| !c.is_ascii_digit() && c != '.');
+    let first_segment = parts.next()?;
+    let mut dot_parts = first_segment.split('.');
+    let major = dot_parts.next()?;
+    let minor = dot_parts.next()?;
+
+    // Validate that both are numeric
+    if major.parse::<u32>().is_err() || minor.parse::<u32>().is_err() {
+        return None;
+    }
+
+    Some(format!("{}.{}", major, minor))
+}
+
+/// Parse kernel major.minor version from a `uname -r` output string.
+///
+/// Example: "5.15.0-75-generic" -> Some((5, 15))
+fn parse_kernel_major_minor(uname_r: &str) -> Option<(u32, u32)> {
+    let trimmed = uname_r.trim();
+    let mut parts = trimmed.split('.');
+    let major: u32 = parts.next()?.parse().ok()?;
+    let minor: u32 = parts.next()?.parse().ok()?;
+    Some((major, minor))
+}
+
+/// Check OFED version compatibility against the running kernel version.
+///
+/// Known compatibility ranges:
+/// - MLNX_OFED 5.x: kernels 4.15 - 5.15
+/// - MLNX_OFED 23.x: kernels 5.4 - 6.2
+/// - MLNX_OFED 24.x: kernels 5.15 - 6.8
+fn check_compat_matrix(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+) -> ModuleResult<PreflightResult> {
+    let mut warnings: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    // Get OFED version
+    let (ofed_ok, ofed_stdout, _) =
+        run_cmd(connection, "ofed_info -s 2>/dev/null || true", context)?;
+    let ofed_version = if ofed_ok {
+        parse_ofed_version(&ofed_stdout)
+    } else {
+        None
+    };
+
+    // Get kernel version
+    let kernel_stdout = run_cmd_ok(connection, "uname -r", context)?;
+    let kernel_version = parse_kernel_major_minor(&kernel_stdout);
+
+    if let (Some(ref ofed_ver), Some((k_major, k_minor))) = (&ofed_version, kernel_version) {
+        let ofed_major: u32 = ofed_ver
+            .split('.')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        let kernel_ver = (k_major, k_minor);
+
+        let compatible = match ofed_major {
+            5 => kernel_ver >= (4, 15) && kernel_ver <= (5, 15),
+            23 => kernel_ver >= (5, 4) && kernel_ver <= (6, 2),
+            24 => kernel_ver >= (5, 15) && kernel_ver <= (6, 8),
+            _ => {
+                warnings.push(format!(
+                    "Unknown OFED major version {}; cannot verify kernel compatibility",
+                    ofed_major
+                ));
+                true // Assume compatible for unknown versions
+            }
+        };
+
+        if !compatible {
+            warnings.push(format!(
+                "OFED {} may not be compatible with kernel {}.{}; \
+                 check Mellanox compatibility matrix",
+                ofed_ver, k_major, k_minor
+            ));
+        }
+    } else {
+        if ofed_version.is_none() {
+            warnings
+                .push("Could not determine OFED version; skipping compatibility check".to_string());
+        }
+        if kernel_version.is_none() {
+            errors.push("Could not determine kernel version".to_string());
+        }
+    }
+
+    let passed = errors.is_empty();
+    Ok(PreflightResult {
+        passed,
+        warnings,
+        errors,
+    })
+}
+
+/// Check for active RDMA connections before upgrading OFED.
+///
+/// Inspects port state via sysfs and saves the current OFED version
+/// for potential rollback information.
+fn guarded_upgrade(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+) -> ModuleResult<PreflightResult> {
+    let mut warnings: Vec<String> = Vec::new();
+    let errors: Vec<String> = Vec::new();
+
+    // Check for active RDMA connections via sysfs port state
+    let (_, port_state_output, _) = run_cmd(
+        connection,
+        "cat /sys/class/infiniband/*/ports/*/state 2>/dev/null || true",
+        context,
+    )?;
+
+    let active_count = port_state_output
+        .lines()
+        .filter(|line| line.contains("ACTIVE"))
+        .count();
+
+    if active_count > 0 {
+        warnings.push(format!(
+            "Found {} active RDMA port(s); upgrading OFED may disrupt connections",
+            active_count
+        ));
+    }
+
+    // Try rdma link show as a secondary check
+    let (rdma_ok, rdma_stdout, _) =
+        run_cmd(connection, "rdma link show 2>/dev/null || true", context)?;
+    if rdma_ok {
+        let active_links = rdma_stdout
+            .lines()
+            .filter(|line| line.contains("state ACTIVE"))
+            .count();
+        if active_links > 0 && active_count == 0 {
+            warnings.push(format!(
+                "rdma link show reports {} active link(s)",
+                active_links
+            ));
+        }
+    }
+
+    // Save current OFED version for rollback info
+    let (_, ofed_info, _) = run_cmd(
+        connection,
+        "ofed_info -s 2>/dev/null || echo 'unknown'",
+        context,
+    )?;
+    let current_version = ofed_info.trim().to_string();
+    if current_version != "unknown" {
+        warnings.push(format!(
+            "Current OFED version before upgrade: {}; save for rollback if needed",
+            current_version
+        ));
+    }
+
+    let passed = errors.is_empty();
+    Ok(PreflightResult {
+        passed,
+        warnings,
+        errors,
+    })
+}
+
+/// After OFED install/upgrade that requires a reboot, create a reboot marker
+/// file and provide reboot instructions.
+fn coordinate_reboot(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    context: &ModuleContext,
+) -> ModuleResult<VerifyResult> {
+    let mut details: Vec<String> = Vec::new();
+    let warnings: Vec<String> = Vec::new();
+
+    if context.check_mode {
+        details.push(format!(
+            "Would create reboot marker at {}",
+            REBOOT_MARKER_PATH
+        ));
+        details.push("Would schedule reboot coordination for OFED changes".to_string());
+        return Ok(VerifyResult {
+            verified: true,
+            details,
+            warnings,
+        });
+    }
+
+    // Create the reboot marker file
+    let marker_content = "ofed-upgrade";
+    run_cmd_ok(
+        connection,
+        &format!(
+            "printf '%s\\n' '{}' > {}",
+            marker_content, REBOOT_MARKER_PATH
+        ),
+        context,
+    )?;
+    details.push(format!("Created reboot marker at {}", REBOOT_MARKER_PATH));
+    details.push(
+        "Reboot required to complete OFED installation/upgrade; \
+         schedule maintenance window and reboot the node"
+            .to_string(),
+    );
+
+    Ok(VerifyResult {
+        verified: true,
+        details,
+        warnings,
+    })
+}
+
+const REBOOT_MARKER_PATH: &str = "/var/run/rustible-reboot-required";
 
 const DEFAULT_KERNEL_MODULES: &[&str] = &["ib_uverbs", "rdma_ucm", "ib_umad"];
 
@@ -173,6 +434,7 @@ impl Module for RdmaStackModule {
                 .collect()
         });
         let ipoib = params.get_bool_or("ipoib", false);
+        let reboot_coordination = params.get_bool_or("reboot_coordination", true);
 
         // Detect OS family
         let os_stdout = run_cmd_ok(connection, "cat /etc/os-release", context)?;
@@ -189,6 +451,21 @@ impl Module for RdmaStackModule {
 
         let mut changed = false;
         let mut changes: Vec<String> = Vec::new();
+        let mut all_warnings: Vec<String> = Vec::new();
+
+        // --- Compatibility matrix preflight check ---
+        let compat_result = check_compat_matrix(connection, context)?;
+        all_warnings.extend(compat_result.warnings);
+        if !compat_result.errors.is_empty() {
+            return Err(ModuleError::ExecutionFailed(format!(
+                "Compatibility preflight failed: {}",
+                compat_result.errors.join("; ")
+            )));
+        }
+
+        // --- Guarded upgrade check ---
+        let upgrade_result = guarded_upgrade(connection, context)?;
+        all_warnings.extend(upgrade_result.warnings);
 
         // --- Install base RDMA packages ---
         let base_packages: Vec<&str> = match os_family {
@@ -339,27 +616,46 @@ impl Module for RdmaStackModule {
             }
         }
 
+        // --- Reboot coordination ---
+        let mut reboot_info: Option<VerifyResult> = None;
+        if changed && reboot_coordination {
+            let reboot_result = coordinate_reboot(connection, context)?;
+            reboot_info = Some(reboot_result);
+        }
+
         // --- Build output ---
         if context.check_mode && !changes.is_empty() {
-            return Ok(ModuleOutput::changed(format!(
-                "Would apply {} RDMA stack changes",
-                changes.len()
-            ))
-            .with_data("changes", serde_json::json!(changes))
-            .with_data("os_family", serde_json::json!(os_family)));
+            let mut output =
+                ModuleOutput::changed(format!("Would apply {} RDMA stack changes", changes.len()))
+                    .with_data("changes", serde_json::json!(changes))
+                    .with_data("os_family", serde_json::json!(os_family));
+            if !all_warnings.is_empty() {
+                output = output.with_data("warnings", serde_json::json!(all_warnings));
+            }
+            return Ok(output);
         }
 
         if changed {
-            Ok(
+            let mut output =
                 ModuleOutput::changed(format!("Applied {} RDMA stack changes", changes.len()))
                     .with_data("changes", serde_json::json!(changes))
                     .with_data("os_family", serde_json::json!(os_family))
-                    .with_data("kernel_modules", serde_json::json!(all_modules)),
-            )
+                    .with_data("kernel_modules", serde_json::json!(all_modules));
+            if !all_warnings.is_empty() {
+                output = output.with_data("warnings", serde_json::json!(all_warnings));
+            }
+            if let Some(ref reboot) = reboot_info {
+                output = output.with_data("reboot_coordination", serde_json::json!(reboot));
+            }
+            Ok(output)
         } else {
-            Ok(ModuleOutput::ok("RDMA stack is installed and configured")
+            let mut output = ModuleOutput::ok("RDMA stack is installed and configured")
                 .with_data("os_family", serde_json::json!(os_family))
-                .with_data("kernel_modules", serde_json::json!(all_modules)))
+                .with_data("kernel_modules", serde_json::json!(all_modules));
+            if !all_warnings.is_empty() {
+                output = output.with_data("warnings", serde_json::json!(all_warnings));
+            }
+            Ok(output)
         }
     }
 
@@ -377,6 +673,119 @@ impl Module for RdmaStackModule {
         );
         m.insert("sysctl", serde_json::json!(null));
         m.insert("ipoib", serde_json::json!(false));
+        m.insert("reboot_coordination", serde_json::json!(true));
         m
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_metadata() {
+        let module = RdmaStackModule;
+        assert_eq!(module.name(), "rdma_stack");
+        assert!(!module.description().is_empty());
+    }
+
+    #[test]
+    fn test_optional_params_include_reboot_coordination() {
+        let module = RdmaStackModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("reboot_coordination"));
+        assert_eq!(optional["reboot_coordination"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn test_ofed_version_parsing() {
+        // Standard MLNX_OFED_LINUX format
+        assert_eq!(
+            parse_ofed_version("MLNX_OFED_LINUX-5.8-1.0.1.1:"),
+            Some("5.8".to_string())
+        );
+        assert_eq!(
+            parse_ofed_version("MLNX_OFED_LINUX-23.10-1.1.9.0:"),
+            Some("23.10".to_string())
+        );
+        assert_eq!(
+            parse_ofed_version("MLNX_OFED_LINUX-24.04-0.6.6.0:"),
+            Some("24.04".to_string())
+        );
+
+        // With leading/trailing whitespace
+        assert_eq!(
+            parse_ofed_version("  MLNX_OFED_LINUX-5.4-3.5.8.0:  \n"),
+            Some("5.4".to_string())
+        );
+
+        // Invalid / missing output
+        assert_eq!(parse_ofed_version(""), None);
+        assert_eq!(parse_ofed_version("not-a-version"), None);
+    }
+
+    #[test]
+    fn test_kernel_version_parsing() {
+        assert_eq!(parse_kernel_major_minor("5.15.0-75-generic"), Some((5, 15)));
+        assert_eq!(
+            parse_kernel_major_minor("4.18.0-477.10.1.el8_8.x86_64"),
+            Some((4, 18))
+        );
+        assert_eq!(parse_kernel_major_minor("6.2.0-26-generic"), Some((6, 2)));
+        assert_eq!(
+            parse_kernel_major_minor("  5.4.0-150-generic\n"),
+            Some((5, 4))
+        );
+
+        // Invalid
+        assert_eq!(parse_kernel_major_minor(""), None);
+        assert_eq!(parse_kernel_major_minor("not-a-kernel"), None);
+    }
+
+    #[test]
+    fn test_compat_matrix_kernel_ofed() {
+        // MLNX_OFED 5.x: kernels 4.15 - 5.15
+        // Compatible combos
+        assert!(is_compat(5, (4, 15)));
+        assert!(is_compat(5, (5, 4)));
+        assert!(is_compat(5, (5, 15)));
+        // Incompatible combos
+        assert!(!is_compat(5, (4, 14)));
+        assert!(!is_compat(5, (5, 16)));
+        assert!(!is_compat(5, (6, 0)));
+
+        // MLNX_OFED 23.x: kernels 5.4 - 6.2
+        assert!(is_compat(23, (5, 4)));
+        assert!(is_compat(23, (5, 15)));
+        assert!(is_compat(23, (6, 2)));
+        assert!(!is_compat(23, (5, 3)));
+        assert!(!is_compat(23, (6, 3)));
+
+        // MLNX_OFED 24.x: kernels 5.15 - 6.8
+        assert!(is_compat(24, (5, 15)));
+        assert!(is_compat(24, (6, 1)));
+        assert!(is_compat(24, (6, 8)));
+        assert!(!is_compat(24, (5, 14)));
+        assert!(!is_compat(24, (6, 9)));
+    }
+
+    /// Helper for testing compatibility matrix logic without a connection.
+    fn is_compat(ofed_major: u32, kernel_ver: (u32, u32)) -> bool {
+        match ofed_major {
+            5 => kernel_ver >= (4, 15) && kernel_ver <= (5, 15),
+            23 => kernel_ver >= (5, 4) && kernel_ver <= (6, 2),
+            24 => kernel_ver >= (5, 15) && kernel_ver <= (6, 8),
+            _ => true,
+        }
+    }
+
+    #[test]
+    fn test_reboot_marker_path() {
+        assert_eq!(REBOOT_MARKER_PATH, "/var/run/rustible-reboot-required");
+        // Verify it is an absolute path
+        assert!(REBOOT_MARKER_PATH.starts_with('/'));
+        // Verify it contains the expected identifier
+        assert!(REBOOT_MARKER_PATH.contains("rustible"));
+        assert!(REBOOT_MARKER_PATH.contains("reboot"));
     }
 }
