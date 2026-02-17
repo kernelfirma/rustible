@@ -1395,6 +1395,149 @@ impl RunArgs {
                     .unwrap_or("<file>");
                 format!("will insert/update block in {}", path)
             }
+            "archive" => {
+                let path = args
+                    .and_then(|a| a.get("path"))
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("<path>");
+                let dest = args
+                    .and_then(|a| a.get("dest"))
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("<dest>");
+                format!("will archive {} to {}", path, dest)
+            }
+            "unarchive" => {
+                let src = args
+                    .and_then(|a| a.get("src"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("<src>");
+                let dest = args
+                    .and_then(|a| a.get("dest"))
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("<dest>");
+                format!("will extract {} to {}", src, dest)
+            }
+            "cron" => {
+                let name = args
+                    .and_then(|a| a.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("<name>");
+                let state = args
+                    .and_then(|a| a.get("state"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("present");
+                format!("will ensure cron job '{}' is {}", name, state)
+            }
+            "uri" => {
+                let url = args
+                    .and_then(|a| a.get("url"))
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("<url>");
+                let method = args
+                    .and_then(|a| a.get("method"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("GET");
+                format!("will perform {} request to {}", method, url)
+            }
+            "wait_for" => {
+                if let Some(port) = args.and_then(|a| a.get("port")) {
+                    format!("will wait for port {}", Self::yaml_value_to_string(port))
+                } else if let Some(path) = args.and_then(|a| a.get("path")).and_then(|p| p.as_str())
+                {
+                    format!("will wait for path {}", path)
+                } else {
+                    "will wait for condition".to_string()
+                }
+            }
+            "fail" => {
+                let msg = args
+                    .and_then(|a| a.get("msg"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Failed as requested");
+                format!("will fail with message: {}", msg)
+            }
+            "assert" => {
+                let that = args
+                    .and_then(|a| a.get("that"))
+                    .map(|t| Self::yaml_value_to_string(t))
+                    .unwrap_or_else(|| "<condition>".to_string());
+                format!("will assert that {}", that)
+            }
+            "pause" => {
+                let seconds = args.and_then(|a| a.get("seconds"));
+                let minutes = args.and_then(|a| a.get("minutes"));
+                let prompt = args.and_then(|a| a.get("prompt")).and_then(|p| p.as_str());
+
+                if let Some(p) = prompt {
+                    format!("will pause with prompt: {}", p)
+                } else if let Some(s) = seconds {
+                    format!("will pause for {} seconds", Self::yaml_value_to_string(s))
+                } else if let Some(m) = minutes {
+                    format!("will pause for {} minutes", Self::yaml_value_to_string(m))
+                } else {
+                    "will pause".to_string()
+                }
+            }
+            "script" => {
+                let script = args
+                    .and_then(|a| {
+                        a.get("script")
+                            .or_else(|| a.get("free_form"))
+                            .or_else(|| a.get("_raw_params"))
+                            .and_then(|s| s.as_str())
+                    })
+                    .unwrap_or("<script>");
+                format!("will run script {}", script)
+            }
+            "mount" => {
+                let path = args
+                    .and_then(|a| a.get("path"))
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("<path>");
+                let state = args
+                    .and_then(|a| a.get("state"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("mounted");
+                format!("will ensure mount {} is {}", path, state)
+            }
+            "systemd_unit" => {
+                let name = args
+                    .and_then(|a| a.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("<unit>");
+                let state = args
+                    .and_then(|a| a.get("state"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("started");
+                format!("will ensure systemd unit {} is {}", name, state)
+            }
+            "hostname" => {
+                let name = args
+                    .and_then(|a| a.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("<hostname>");
+                format!("will set hostname to {}", name)
+            }
+            "sysctl" => {
+                let name = args
+                    .and_then(|a| a.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("<param>");
+                let value = args
+                    .and_then(|a| a.get("value"))
+                    .map(|v| Self::yaml_value_to_string(v))
+                    .unwrap_or_default();
+                let state = args
+                    .and_then(|a| a.get("state"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("present");
+
+                if state == "absent" {
+                    format!("will ensure sysctl {} is absent", name)
+                } else {
+                    format!("will set sysctl {} to {}", name, value)
+                }
+            }
             _ => format!("will execute {} module", module),
         }
     }
@@ -2347,5 +2490,207 @@ mod tests {
         let cmd_value = serde_yaml::Value::String("install {{ package_name }}".to_string());
         let desc = run_args.get_action_description("command", Some(&cmd_value), &vars);
         assert_eq!(desc, "will execute: install nginx");
+    }
+
+    #[test]
+    fn test_get_action_description_new_modules() {
+        let run_args = RunArgs::try_parse_from(["run", "playbook.yml"]).unwrap();
+        let vars = IndexMap::new();
+
+        // Archive
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("path".to_string()),
+            serde_yaml::Value::String("/src".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("dest".to_string()),
+            serde_yaml::Value::String("/dest.tar.gz".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("archive", Some(&val), &vars),
+            "will archive /src to /dest.tar.gz"
+        );
+
+        // Unarchive
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("src".to_string()),
+            serde_yaml::Value::String("/src.tar.gz".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("dest".to_string()),
+            serde_yaml::Value::String("/dest".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("unarchive", Some(&val), &vars),
+            "will extract /src.tar.gz to /dest"
+        );
+
+        // Cron
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("name".to_string()),
+            serde_yaml::Value::String("backup".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("state".to_string()),
+            serde_yaml::Value::String("present".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("cron", Some(&val), &vars),
+            "will ensure cron job 'backup' is present"
+        );
+
+        // Uri
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("url".to_string()),
+            serde_yaml::Value::String("http://example.com".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("method".to_string()),
+            serde_yaml::Value::String("POST".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("uri", Some(&val), &vars),
+            "will perform POST request to http://example.com"
+        );
+
+        // Wait_for (port)
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("port".to_string()),
+            serde_yaml::Value::Number(8080.into()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("wait_for", Some(&val), &vars),
+            "will wait for port 8080"
+        );
+
+        // Wait_for (path)
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("path".to_string()),
+            serde_yaml::Value::String("/tmp/file".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("wait_for", Some(&val), &vars),
+            "will wait for path /tmp/file"
+        );
+
+        // Fail
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("msg".to_string()),
+            serde_yaml::Value::String("error".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("fail", Some(&val), &vars),
+            "will fail with message: error"
+        );
+
+        // Assert
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("that".to_string()),
+            serde_yaml::Value::String("x == y".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("assert", Some(&val), &vars),
+            "will assert that x == y"
+        );
+
+        // Pause
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("seconds".to_string()),
+            serde_yaml::Value::Number(10.into()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("pause", Some(&val), &vars),
+            "will pause for 10 seconds"
+        );
+
+        // Script
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("script".to_string()),
+            serde_yaml::Value::String("myscript.sh".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("script", Some(&val), &vars),
+            "will run script myscript.sh"
+        );
+
+        // Mount
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("path".to_string()),
+            serde_yaml::Value::String("/mnt/data".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("state".to_string()),
+            serde_yaml::Value::String("mounted".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("mount", Some(&val), &vars),
+            "will ensure mount /mnt/data is mounted"
+        );
+
+        // Systemd_unit
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("name".to_string()),
+            serde_yaml::Value::String("nginx".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("state".to_string()),
+            serde_yaml::Value::String("restarted".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("systemd_unit", Some(&val), &vars),
+            "will ensure systemd unit nginx is restarted"
+        );
+
+        // Hostname
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("name".to_string()),
+            serde_yaml::Value::String("myserver".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("hostname", Some(&val), &vars),
+            "will set hostname to myserver"
+        );
+
+        // Sysctl
+        let mut args = serde_yaml::Mapping::new();
+        args.insert(
+            serde_yaml::Value::String("name".to_string()),
+            serde_yaml::Value::String("vm.swappiness".to_string()),
+        );
+        args.insert(
+            serde_yaml::Value::String("value".to_string()),
+            serde_yaml::Value::String("10".to_string()),
+        );
+        let val = serde_yaml::Value::Mapping(args);
+        assert_eq!(
+            run_args.get_action_description("sysctl", Some(&val), &vars),
+            "will set sysctl vm.swappiness to 10"
+        );
     }
 }
