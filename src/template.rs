@@ -18,6 +18,7 @@ use minijinja::{Environment, ErrorKind};
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
 use serde_json::Value as JsonValue;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -324,19 +325,19 @@ impl TemplateEngine {
     ///
     /// # Errors
     /// Returns an error if any template rendering fails.
-    pub fn render_value(
+    pub fn render_value<'a>(
         &self,
-        value: &JsonValue,
+        value: &'a JsonValue,
         vars: &IndexMap<String, JsonValue>,
-    ) -> Result<JsonValue> {
+    ) -> Result<Cow<'a, JsonValue>> {
         match value {
             // Non-templatable primitives - fast path
-            JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) => Ok(value.clone()),
+            JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) => Ok(Cow::Borrowed(value)),
 
             JsonValue::String(s) => {
                 // Fast path: no template syntax
                 if !Self::is_template(s) {
-                    return Ok(value.clone());
+                    return Ok(Cow::Borrowed(value));
                 }
 
                 let templated = self.render_with_indexmap(s, vars)?;
@@ -349,27 +350,70 @@ impl TemplateEngine {
                     || templated.parse::<f64>().is_ok()
                 {
                     if let Ok(parsed) = serde_json::from_str::<JsonValue>(&templated) {
-                        return Ok(parsed);
+                        return Ok(Cow::Owned(parsed));
                     }
                 }
-                Ok(JsonValue::String(templated))
+                Ok(Cow::Owned(JsonValue::String(templated)))
             }
 
             JsonValue::Array(arr) => {
-                let templated: Result<Vec<_>> =
-                    arr.iter().map(|v| self.render_value(v, vars)).collect();
-                Ok(JsonValue::Array(templated?))
+                let mut results = Vec::with_capacity(arr.len());
+                let mut any_changed = false;
+
+                for v in arr {
+                    let res = self.render_value(v, vars)?;
+                    if matches!(res, Cow::Owned(_)) {
+                        any_changed = true;
+                    }
+                    results.push(res);
+                }
+
+                if !any_changed {
+                    return Ok(Cow::Borrowed(value));
+                }
+
+                let new_arr = results.into_iter().map(|c| c.into_owned()).collect();
+                Ok(Cow::Owned(JsonValue::Array(new_arr)))
             }
 
             JsonValue::Object(obj) => {
-                let mut result = serde_json::Map::new();
+                let mut new_entries = Vec::with_capacity(obj.len());
+                let mut any_changed = false;
+
                 for (k, v) in obj {
-                    // Template both keys and values
-                    let templated_key = self.render_with_indexmap(k, vars)?;
-                    let templated_value = self.render_value(v, vars)?;
-                    result.insert(templated_key, templated_value);
+                    let key_changed = Self::is_template(k);
+                    let rendered_key = if key_changed {
+                        self.render_with_indexmap(k, vars)?
+                    } else {
+                        String::new()
+                    };
+
+                    if key_changed {
+                        any_changed = true;
+                    }
+
+                    let val_res = self.render_value(v, vars)?;
+                    if matches!(val_res, Cow::Owned(_)) {
+                        any_changed = true;
+                    }
+
+                    new_entries.push((k, rendered_key, key_changed, val_res));
                 }
-                Ok(JsonValue::Object(result))
+
+                if !any_changed {
+                    return Ok(Cow::Borrowed(value));
+                }
+
+                let mut map = serde_json::Map::with_capacity(obj.len());
+                for (k, rendered_key, key_changed, val_res) in new_entries {
+                    let key = if key_changed {
+                        rendered_key
+                    } else {
+                        k.clone()
+                    };
+                    map.insert(key, val_res.into_owned());
+                }
+                Ok(Cow::Owned(JsonValue::Object(map)))
             }
         }
     }
@@ -1491,7 +1535,10 @@ mod tests {
 
         let value = JsonValue::String("Hello {{ name }}".to_string());
         let result = engine.render_value(&value, &vars).unwrap();
-        assert_eq!(result, JsonValue::String("Hello test".to_string()));
+        assert_eq!(
+            result.into_owned(),
+            JsonValue::String("Hello test".to_string())
+        );
     }
 
     #[test]

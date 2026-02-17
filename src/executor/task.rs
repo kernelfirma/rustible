@@ -1362,7 +1362,7 @@ impl Task {
         let engine = get_engine();
         for (key, value) in &self.args {
             let templated = engine.render_value(value, &vars)?;
-            result.insert(key.clone(), templated);
+            result.insert(key.clone(), templated.into_owned());
         }
 
         Ok(result)
