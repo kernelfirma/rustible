@@ -7,6 +7,10 @@
 //! - `check` (required): Diagnostic type - "link_health", "topology", "counters", "full"
 //! - `port_filter` (optional): Filter results by port/HCA
 //! - `output_dir` (optional): Directory to store diagnostic reports
+//! - `auto_drain` (optional, default false): Automatically drain node on failure
+//! - `threshold_symbol_errors` (optional, default 10): Threshold for SymbolErrorCounter
+//! - `threshold_link_downed` (optional, default 5): Threshold for LinkDownedCounter
+//! - `drain_reason` (optional): Custom reason string for drain command
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,6 +21,148 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct VerifyResult {
+    verified: bool,
+    details: Vec<String>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct CounterVerdict {
+    counter_name: String,
+    value: u64,
+    threshold: u64,
+    status: String,
+}
+
+/// Default thresholds for IB error counters.
+fn default_thresholds() -> HashMap<String, u64> {
+    let mut m = HashMap::new();
+    m.insert("SymbolErrorCounter".to_string(), 10);
+    m.insert("LinkDownedCounter".to_string(), 5);
+    m.insert("RcvErrors".to_string(), 100);
+    m.insert("PortRcvConstraintErrors".to_string(), 50);
+    m
+}
+
+/// Compare each counter value against its threshold and return a verdict per counter.
+///
+/// Status is "fail" if value >= threshold, "warn" if value >= 80% of threshold,
+/// otherwise "pass".
+fn apply_thresholds(
+    counters: &HashMap<String, u64>,
+    thresholds: &HashMap<String, u64>,
+) -> Vec<CounterVerdict> {
+    let mut verdicts = Vec::new();
+    for (name, &threshold) in thresholds {
+        let value = counters.get(name).copied().unwrap_or(0);
+        let status = if value >= threshold {
+            "fail".to_string()
+        } else if value as f64 >= threshold as f64 * 0.8 {
+            "warn".to_string()
+        } else {
+            "pass".to_string()
+        };
+        verdicts.push(CounterVerdict {
+            counter_name: name.clone(),
+            value,
+            threshold,
+            status,
+        });
+    }
+    // Sort for deterministic output
+    verdicts.sort_by(|a, b| a.counter_name.cmp(&b.counter_name));
+    verdicts
+}
+
+/// Aggregate per-counter verdicts into an overall verdict.
+///
+/// If any counter is "fail" the overall verdict is "fail".
+/// If any counter is "warn" the overall verdict is "warn".
+/// Otherwise the overall verdict is "pass".
+fn generate_verdict(
+    counters: &HashMap<String, u64>,
+    thresholds: &HashMap<String, u64>,
+) -> (String, Vec<CounterVerdict>) {
+    let verdicts = apply_thresholds(counters, thresholds);
+    let overall = if verdicts.iter().any(|v| v.status == "fail") {
+        "fail".to_string()
+    } else if verdicts.iter().any(|v| v.status == "warn") {
+        "warn".to_string()
+    } else {
+        "pass".to_string()
+    };
+    (overall, verdicts)
+}
+
+/// Build a Slurm drain command for the given hostname when auto_drain is enabled
+/// and the overall verdict is "fail".
+///
+/// Returns `Some(command_string)` if a drain should be triggered, `None` otherwise.
+fn trigger_drain(
+    auto_drain: bool,
+    overall_verdict: &str,
+    hostname: &str,
+    drain_reason: &str,
+) -> Option<String> {
+    if auto_drain && overall_verdict == "fail" {
+        Some(format!(
+            "scontrol update NodeName={} State=DRAIN Reason=\"IB health check failed: {}\"",
+            hostname, drain_reason
+        ))
+    } else {
+        None
+    }
+}
+
+/// Parse `ibqueryerrors` output to extract counter name/value pairs.
+fn parse_counter_values(output: &str) -> HashMap<String, u64> {
+    let mut counters = HashMap::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        // ibqueryerrors output format: "CounterName:...Value" or similar patterns
+        for counter_name in &[
+            "SymbolErrorCounter",
+            "LinkDownedCounter",
+            "RcvErrors",
+            "PortRcvConstraintErrors",
+        ] {
+            if trimmed.contains(counter_name) {
+                // Try to extract a numeric value from the line
+                if let Some(val) = extract_counter_value(trimmed) {
+                    let entry = counters.entry(counter_name.to_string()).or_insert(0);
+                    *entry += val;
+                }
+            }
+        }
+    }
+    counters
+}
+
+/// Extract a numeric value from a counter line.
+fn extract_counter_value(line: &str) -> Option<u64> {
+    // Look for patterns like "....:42" or ".... 42"
+    line.split_whitespace()
+        .rev()
+        .chain(line.rsplit(':').next())
+        .find_map(|part| part.trim().parse::<u64>().ok())
+}
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
@@ -119,6 +265,16 @@ impl Module for IbDiagnosticsModule {
         let output_dir = params
             .get_string("output_dir")?
             .unwrap_or_else(|| "/tmp/ib_diagnostics".to_string());
+        let auto_drain = params.get_bool_or("auto_drain", false);
+        let threshold_symbol_errors = params
+            .get_u32("threshold_symbol_errors")?
+            .unwrap_or(10) as u64;
+        let threshold_link_downed = params
+            .get_u32("threshold_link_downed")?
+            .unwrap_or(5) as u64;
+        let drain_reason = params
+            .get_string("drain_reason")?
+            .unwrap_or_else(|| "IB diagnostics threshold exceeded".to_string());
 
         let check = DiagnosticCheck::from_str(&check_str).ok_or_else(|| {
             ModuleError::InvalidParameter(format!(
@@ -181,24 +337,66 @@ impl Module for IbDiagnosticsModule {
             }
         }
 
-        let summary = if issues.is_empty() && errors.is_empty() {
-            "IB diagnostics completed successfully. No issues detected.".to_string()
-        } else if !issues.is_empty() {
-            format!(
-                "IB diagnostics completed. {} issue(s) detected: {}",
-                issues.len(),
-                issues.join(", ")
-            )
+        // Build custom thresholds from params (override defaults)
+        let mut thresholds = default_thresholds();
+        thresholds.insert("SymbolErrorCounter".to_string(), threshold_symbol_errors);
+        thresholds.insert("LinkDownedCounter".to_string(), threshold_link_downed);
+
+        // Parse counters and generate verdicts if counter data is available
+        let counter_values = results
+            .get("ibqueryerrors")
+            .map(|output| parse_counter_values(output))
+            .unwrap_or_default();
+
+        let (overall_verdict, counter_verdicts) =
+            generate_verdict(&counter_values, &thresholds);
+
+        // Optionally trigger drain
+        let drain_cmd = if auto_drain && overall_verdict == "fail" {
+            // Get hostname from the remote node
+            let hostname = run_cmd_ok(connection, "hostname -s", context)
+                .unwrap_or_else(|_| "unknown".to_string())
+                .trim()
+                .to_string();
+            trigger_drain(true, &overall_verdict, &hostname, &drain_reason)
         } else {
-            format!("IB diagnostics completed with {} error(s)", errors.len())
+            None
         };
 
-        Ok(ModuleOutput::ok(summary)
+        let summary = if issues.is_empty() && errors.is_empty() {
+            format!(
+                "IB diagnostics completed successfully. Verdict: {}",
+                overall_verdict
+            )
+        } else if !issues.is_empty() {
+            format!(
+                "IB diagnostics completed. {} issue(s) detected: {}. Verdict: {}",
+                issues.len(),
+                issues.join(", "),
+                overall_verdict
+            )
+        } else {
+            format!(
+                "IB diagnostics completed with {} error(s). Verdict: {}",
+                errors.len(),
+                overall_verdict
+            )
+        };
+
+        let mut output = ModuleOutput::ok(summary)
             .with_data("check", serde_json::json!(check))
             .with_data("output_dir", serde_json::json!(output_dir))
             .with_data("issues", serde_json::json!(issues))
             .with_data("errors", serde_json::json!(errors))
-            .with_data("results", serde_json::json!(results)))
+            .with_data("results", serde_json::json!(results))
+            .with_data("verdict", serde_json::json!(overall_verdict))
+            .with_data("counter_verdicts", serde_json::json!(counter_verdicts));
+
+        if let Some(ref cmd) = drain_cmd {
+            output = output.with_data("drain_command", serde_json::json!(cmd));
+        }
+
+        Ok(output)
     }
 
     fn required_params(&self) -> &[&'static str] {
@@ -209,6 +407,10 @@ impl Module for IbDiagnosticsModule {
         let mut m = HashMap::new();
         m.insert("port_filter", serde_json::json!(null));
         m.insert("output_dir", serde_json::json!("/tmp/ib_diagnostics"));
+        m.insert("auto_drain", serde_json::json!(false));
+        m.insert("threshold_symbol_errors", serde_json::json!(10));
+        m.insert("threshold_link_downed", serde_json::json!(5));
+        m.insert("drain_reason", serde_json::json!(null));
         m
     }
 }
@@ -269,5 +471,194 @@ mod tests {
         let full = DiagnosticCheck::Full;
         assert!(full.to_commands().len() >= 4);
         assert!(full.to_commands().contains(&"ibdiagnet"));
+    }
+
+    #[test]
+    fn test_threshold_application() {
+        let mut counters = HashMap::new();
+        counters.insert("SymbolErrorCounter".to_string(), 15);
+        counters.insert("LinkDownedCounter".to_string(), 3);
+        counters.insert("RcvErrors".to_string(), 85);
+        counters.insert("PortRcvConstraintErrors".to_string(), 10);
+
+        let thresholds = default_thresholds();
+        let verdicts = apply_thresholds(&counters, &thresholds);
+
+        assert_eq!(verdicts.len(), 4);
+
+        // SymbolErrorCounter: 15 >= 10 -> fail
+        let sym = verdicts
+            .iter()
+            .find(|v| v.counter_name == "SymbolErrorCounter")
+            .unwrap();
+        assert_eq!(sym.status, "fail");
+        assert_eq!(sym.value, 15);
+        assert_eq!(sym.threshold, 10);
+
+        // LinkDownedCounter: 3 < 4 (80% of 5) -> pass
+        let link = verdicts
+            .iter()
+            .find(|v| v.counter_name == "LinkDownedCounter")
+            .unwrap();
+        assert_eq!(link.status, "pass");
+
+        // RcvErrors: 85 >= 80 (80% of 100) -> warn
+        let rcv = verdicts
+            .iter()
+            .find(|v| v.counter_name == "RcvErrors")
+            .unwrap();
+        assert_eq!(rcv.status, "warn");
+
+        // PortRcvConstraintErrors: 10 < 40 (80% of 50) -> pass
+        let port = verdicts
+            .iter()
+            .find(|v| v.counter_name == "PortRcvConstraintErrors")
+            .unwrap();
+        assert_eq!(port.status, "pass");
+    }
+
+    #[test]
+    fn test_threshold_application_with_custom_thresholds() {
+        let mut counters = HashMap::new();
+        counters.insert("SymbolErrorCounter".to_string(), 8);
+
+        let mut thresholds = HashMap::new();
+        thresholds.insert("SymbolErrorCounter".to_string(), 10);
+
+        let verdicts = apply_thresholds(&counters, &thresholds);
+        assert_eq!(verdicts.len(), 1);
+
+        // 8 >= 8.0 (80% of 10) -> warn
+        let v = &verdicts[0];
+        assert_eq!(v.status, "warn");
+        assert_eq!(v.value, 8);
+    }
+
+    #[test]
+    fn test_threshold_application_missing_counter() {
+        // Counter not present in map defaults to 0
+        let counters: HashMap<String, u64> = HashMap::new();
+        let mut thresholds = HashMap::new();
+        thresholds.insert("SymbolErrorCounter".to_string(), 10);
+
+        let verdicts = apply_thresholds(&counters, &thresholds);
+        assert_eq!(verdicts.len(), 1);
+        assert_eq!(verdicts[0].value, 0);
+        assert_eq!(verdicts[0].status, "pass");
+    }
+
+    #[test]
+    fn test_verdict_aggregation() {
+        // Case 1: All pass
+        let counters_pass: HashMap<String, u64> = HashMap::new();
+        let thresholds = default_thresholds();
+        let (overall, _) = generate_verdict(&counters_pass, &thresholds);
+        assert_eq!(overall, "pass");
+
+        // Case 2: One counter in warn range
+        let mut counters_warn = HashMap::new();
+        counters_warn.insert("RcvErrors".to_string(), 85); // 85 >= 80 (80% of 100)
+        let (overall, verdicts) = generate_verdict(&counters_warn, &thresholds);
+        assert_eq!(overall, "warn");
+        assert!(verdicts.iter().any(|v| v.status == "warn"));
+
+        // Case 3: One counter in fail range
+        let mut counters_fail = HashMap::new();
+        counters_fail.insert("SymbolErrorCounter".to_string(), 15); // 15 >= 10
+        let (overall, verdicts) = generate_verdict(&counters_fail, &thresholds);
+        assert_eq!(overall, "fail");
+        assert!(verdicts.iter().any(|v| v.status == "fail"));
+
+        // Case 4: Both warn and fail -> overall fail
+        let mut counters_mixed = HashMap::new();
+        counters_mixed.insert("SymbolErrorCounter".to_string(), 15); // fail
+        counters_mixed.insert("RcvErrors".to_string(), 85); // warn
+        let (overall, _) = generate_verdict(&counters_mixed, &thresholds);
+        assert_eq!(overall, "fail");
+    }
+
+    #[test]
+    fn test_drain_command_generation() {
+        // auto_drain=true and verdict=fail -> should produce command
+        let cmd = trigger_drain(true, "fail", "node01", "IB diagnostics threshold exceeded");
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("scontrol update NodeName=node01 State=DRAIN"));
+        assert!(cmd_str.contains("IB health check failed: IB diagnostics threshold exceeded"));
+
+        // auto_drain=true but verdict is not fail -> no command
+        let cmd = trigger_drain(true, "warn", "node01", "threshold exceeded");
+        assert!(cmd.is_none());
+
+        let cmd = trigger_drain(true, "pass", "node01", "threshold exceeded");
+        assert!(cmd.is_none());
+
+        // auto_drain=false and verdict=fail -> no command
+        let cmd = trigger_drain(false, "fail", "node01", "threshold exceeded");
+        assert!(cmd.is_none());
+    }
+
+    #[test]
+    fn test_drain_command_custom_reason() {
+        let cmd = trigger_drain(true, "fail", "gpu-node-05", "custom failure reason");
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("NodeName=gpu-node-05"));
+        assert!(cmd_str.contains("IB health check failed: custom failure reason"));
+    }
+
+    #[test]
+    fn test_counter_verdict_structure() {
+        let verdict = CounterVerdict {
+            counter_name: "SymbolErrorCounter".to_string(),
+            value: 15,
+            threshold: 10,
+            status: "fail".to_string(),
+        };
+
+        // Test serialization
+        let json = serde_json::to_value(&verdict).unwrap();
+        assert_eq!(json["counter_name"], "SymbolErrorCounter");
+        assert_eq!(json["value"], 15);
+        assert_eq!(json["threshold"], 10);
+        assert_eq!(json["status"], "fail");
+
+        // Test clone
+        let cloned = verdict.clone();
+        assert_eq!(cloned.counter_name, "SymbolErrorCounter");
+        assert_eq!(cloned.value, 15);
+    }
+
+    #[test]
+    fn test_counter_verdict_serialization_all_statuses() {
+        for status in &["pass", "warn", "fail"] {
+            let verdict = CounterVerdict {
+                counter_name: "TestCounter".to_string(),
+                value: 42,
+                threshold: 100,
+                status: status.to_string(),
+            };
+            let json_str = serde_json::to_string(&verdict).unwrap();
+            assert!(json_str.contains(&format!("\"status\":\"{}\"", status)));
+        }
+    }
+
+    #[test]
+    fn test_optional_params_include_new_fields() {
+        let module = IbDiagnosticsModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("auto_drain"));
+        assert!(optional.contains_key("threshold_symbol_errors"));
+        assert!(optional.contains_key("threshold_link_downed"));
+        assert!(optional.contains_key("drain_reason"));
+    }
+
+    #[test]
+    fn test_default_thresholds() {
+        let t = default_thresholds();
+        assert_eq!(t.get("SymbolErrorCounter"), Some(&10));
+        assert_eq!(t.get("LinkDownedCounter"), Some(&5));
+        assert_eq!(t.get("RcvErrors"), Some(&100));
+        assert_eq!(t.get("PortRcvConstraintErrors"), Some(&50));
     }
 }
