@@ -149,18 +149,95 @@ This directory contains documentation for all Rustible modules. Modules are the 
 | [win_service](win_service.md) | Manage Windows services |
 | [win_user](win_user.md) | Manage Windows user accounts |
 
-### HPC (feature flag: `hpc`)
+### HPC Core (feature flag: `hpc`)
 | Module | Description |
 |--------|-------------|
-| [beegfs_client](beegfs_client.md) | Manage BeeGFS filesystem client |
-| [hpc_baseline](hpc_baseline.md) | Apply HPC baseline configuration |
+| [hpc_baseline](hpc_baseline.md) | Apply HPC baseline configuration (limits, sysctl, directories) |
+| [munge](munge.md) | Manage MUNGE authentication service |
+| [hpc_nfs](hpc_nfs.md) | Manage NFS server and client for HPC shared storage |
+| [hpc_facts](hpc_facts.md) | Gather HPC-specific facts (CPU, NUMA, GPU, InfiniBand) |
+| [hpc_healthcheck](hpc_healthcheck.md) | Validate HPC node health and readiness |
 | [lmod](lmod.md) | Manage Lmod environment modules |
+| [mpi](mpi.md) | Manage MPI library installations (OpenMPI, Intel MPI) |
+| [hpc_toolchain](hpc_toolchain.md) | Manage HPC compiler and toolchain installations |
+| [hpc_discovery](hpc_discovery.md) | Discover and inventory HPC cluster resources |
+| [hpc_power](hpc_power.md) | Manage HPC node power states |
+| [boot_profile](boot_profile.md) | Manage HPC node boot profiles and configurations |
+| [image_pipeline](image_pipeline.md) | Manage HPC node image build pipelines |
+| [ipmi_power](ipmi_power.md) | IPMI-based power control for bare-metal nodes |
+| [ipmi_boot](ipmi_boot.md) | IPMI-based boot device management |
+| [hpc_scheduler](hpc_scheduler.md) | Abstract scheduler interface (scheduler-agnostic) |
+| [hpc_job](hpc_job.md) | Abstract job management (scheduler-agnostic) |
+| [hpc_queue](hpc_queue.md) | Abstract queue management (scheduler-agnostic) |
+| [hpc_server](hpc_server.md) | Abstract scheduler server management |
+
+### HPC Slurm (feature flag: `slurm`)
+| Module | Description |
+|--------|-------------|
+| [slurm_config](slurm_config.md) | Manage Slurm configuration files |
+| [slurm_ops](slurm_ops.md) | Manage Slurm daemon operations |
+| [slurm_node](slurm_node.md) | Manage Slurm compute node state |
+| [slurm_partition](slurm_partition.md) | Manage Slurm partition definitions |
+| [slurm_account](slurm_account.md) | Manage Slurm accounts via sacctmgr |
+| [slurm_qos](slurm_qos.md) | Manage Slurm QoS definitions |
+| [slurm_job](slurm_job.md) | Manage Slurm job submission and control |
+| [slurm_queue](slurm_queue.md) | Query and manage Slurm job queues |
+| [slurm_info](slurm_info.md) | Gather Slurm cluster information |
+| [slurmrestd](slurmrestd.md) | Manage Slurm REST API daemon |
+| [scheduler_orchestration](scheduler_orchestration.md) | Orchestrate complex Slurm scheduling workflows |
+| [partition_policy](partition_policy.md) | Manage Slurm partition access policies |
+
+### HPC PBS (feature flag: `pbs`)
+| Module | Description |
+|--------|-------------|
+| [pbs_job](pbs_job.md) | Manage PBS Pro job submission and control |
+| [pbs_queue](pbs_queue.md) | Manage PBS Pro queue definitions |
+| [pbs_server](pbs_server.md) | Manage PBS Pro server configuration |
+
+### HPC GPU (feature flag: `gpu`)
+| Module | Description |
+|--------|-------------|
+| [nvidia_gpu](nvidia_gpu.md) | Manage NVIDIA GPU configuration and monitoring |
+| [nvidia_driver](nvidia_driver.md) | Manage NVIDIA driver installation lifecycle |
+| [cuda](cuda.md) | Manage CUDA toolkit installation |
+
+### HPC OFED / InfiniBand (feature flag: `ofed`)
+| Module | Description |
+|--------|-------------|
+| [rdma_stack](rdma_stack.md) | Manage RDMA/InfiniBand/OFED stack |
+| [opensm](opensm.md) | Manage OpenSM subnet manager configuration |
+| [ib_partition](ib_partition.md) | Manage InfiniBand partition keys |
+| [ib_diagnostics](ib_diagnostics.md) | Run InfiniBand fabric diagnostics |
+| [ipoib](ipoib.md) | Manage IPoIB (IP over InfiniBand) interfaces |
+
+### HPC Parallel Filesystems (feature flag: `parallel_fs`)
+| Module | Description |
+|--------|-------------|
 | [lustre_client](lustre_client.md) | Manage Lustre filesystem client |
-| [mpi](mpi.md) | Manage MPI installations |
-| [nvidia_gpu](nvidia_gpu.md) | Manage NVIDIA GPU configuration |
-| [rdma_stack](rdma_stack.md) | Manage RDMA/InfiniBand stack |
-| [slurm_config](slurm_config.md) | Manage Slurm configuration |
-| [slurm_ops](slurm_ops.md) | Manage Slurm operations |
+| [lustre_mount](lustre_mount.md) | Manage Lustre mounts with LNet awareness |
+| [lustre_ost](lustre_ost.md) | Manage Lustre OST lifecycle |
+| [beegfs_client](beegfs_client.md) | Manage BeeGFS filesystem client |
+
+### HPC Identity (feature flag: `identity`)
+| Module | Description |
+|--------|-------------|
+| [kerberos](kerberos.md) | Manage Kerberos client configuration |
+| [sssd_config](sssd_config.md) | Manage SSSD service configuration |
+| [sssd_domain](sssd_domain.md) | Manage SSSD domain definitions |
+
+### HPC Bare-Metal (feature flag: `bare_metal`)
+| Module | Description |
+|--------|-------------|
+| [pxe_profile](pxe_profile.md) | Manage PXE boot profiles |
+| [pxe_host](pxe_host.md) | Manage PXE host registrations |
+| [warewulf_node](warewulf_node.md) | Manage Warewulf node definitions |
+| [warewulf_image](warewulf_image.md) | Manage Warewulf VNFS images |
+
+### HPC Redfish (feature flag: `redfish`)
+| Module | Description |
+|--------|-------------|
+| [redfish_power](redfish_power.md) | Manage server power via Redfish BMC |
+| [redfish_info](redfish_info.md) | Gather server hardware info via Redfish |
 
 ### Flow Control
 | Module | Description |

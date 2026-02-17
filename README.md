@@ -124,7 +124,15 @@ rustible init <PATH>          # Initialize new project
 
 **Network devices** (feature flag): ios_config, eos_config, junos_config, nxos_config
 
-**HPC** (feature flag): slurm_config, nvidia_gpu, lmod, mpi, rdma_stack, lustre_client
+**HPC** (feature flag): Comprehensive HPC cluster management including:
+  - *Scheduler*: slurm_config, slurm_ops, slurm_node, slurm_partition, slurm_account, slurm_qos, slurm_job, slurm_queue, slurm_info, slurmrestd, pbs_job, pbs_queue, pbs_server, scheduler_orchestration, partition_policy
+  - *GPU*: nvidia_gpu, nvidia_driver, cuda
+  - *InfiniBand/OFED*: rdma_stack, opensm, ib_partition, ib_diagnostics, ipoib
+  - *Parallel Filesystems*: lustre_client, lustre_mount, lustre_ost, beegfs_client
+  - *Identity*: kerberos, sssd_config, sssd_domain
+  - *Bare-Metal Provisioning*: pxe_profile, pxe_host, warewulf_node, warewulf_image
+  - *BMC/IPMI*: redfish_power, redfish_info, ipmi_power, ipmi_boot
+  - *Infrastructure*: hpc_baseline, lmod, mpi, munge, hpc_nfs, hpc_facts, hpc_healthcheck, hpc_toolchain, hpc_discovery, hpc_power, boot_profile, image_pipeline
 
 **Windows** (feature flag): win_copy, win_feature, win_service, win_package, win_user
 
@@ -164,18 +172,21 @@ cargo build --features docker,kubernetes,aws
 | `gpu` | GPU management modules (NVIDIA) |
 | `ofed` | InfiniBand/RDMA/OFED support |
 | `parallel_fs` | Parallel filesystem clients (Lustre, BeeGFS) |
+| `pbs` | PBS Pro workload manager modules |
+| `identity` | Kerberos and SSSD identity management |
+| `bare_metal` | PXE boot and Warewulf bare-metal provisioning |
 | `distributed` | Distributed execution support |
 | `api` | REST API server |
 | `provisioning` | Infrastructure provisioning (requires AWS) |
 | `full` | All core features enabled |
 | `full-cloud` | All features plus all cloud providers |
 | `full-aws` | All features plus AWS |
-| `full-hpc` | All features plus HPC support |
+| `full-hpc` | All features plus full HPC (hpc, pbs, ofed, parallel_fs, redfish, vsphere, identity, bare_metal) |
 | `pure-rust` | Minimal pure Rust build (no C deps) |
 | `ssh2-backend` | Legacy SSH via libssh2 (C dependency) |
 | `startup-warmup` | Background warmup of lazy components |
 | `openstack` | OpenStack cloud provider (stub/experimental) |
-| `redfish` | Bare-metal BMC management via Redfish/IPMI (stub/experimental) |
+| `redfish` | Bare-metal BMC management via Redfish/IPMI |
 | `database` | Database modules (PostgreSQL, MySQL) (stub/experimental) |
 | `winrm` | Windows Remote Management (stub/experimental) |
 | `azure` | Azure cloud modules (stub/experimental) |

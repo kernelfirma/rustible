@@ -1,20 +1,22 @@
 # Rustible Module Health Dashboard
 
-> **Generated:** 2026-01-03
-> **Total Modules:** 76
-> **Average Health Score:** 72/100
+> **Generated:** 2026-02-17
+> **Total Modules:** 125
+> **Average Health Score:** 68/100
 
 ## Summary Statistics
 
 | Metric | Value |
 |--------|-------|
-| **Total Modules** | 76 |
-| **With Tests** | 23 (30%) |
-| **Excellent Docs** | 12 (16%) |
-| **Good Docs** | 28 (37%) |
-| **Partial Docs** | 24 (32%) |
-| **Missing Docs** | 12 (16%) |
-| **Recently Updated (7d)** | 22 |
+| **Total Modules** | 125 |
+| **Core Modules** | 76 |
+| **HPC Modules** | 49 |
+| **With Tests** | 23 (18%) |
+| **Excellent Docs** | 12 (10%) |
+| **Good Docs** | 28 (22%) |
+| **Partial Docs** | 73 (58%) |
+| **Missing Docs** | 12 (10%) |
+| **Recently Updated (7d)** | 49 |
 
 ## Health Score Legend
 
@@ -224,6 +226,106 @@
 
 ---
 
+## HPC Modules (49)
+
+> **Note:** HPC modules were added in PRs #587-#635. Health scores are listed as **N/A** pending formal assessment. All modules include `//!` doc comments and support check mode.
+
+### Core HPC (17 modules, feature: `hpc`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/common (hpc_baseline) | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/munge | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/nfs | N/A | ~600 | No | Partial | 2026-01 |
+| hpc/healthcheck | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/facts | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/lmod | N/A | ~700 | No | Partial | 2026-02 |
+| hpc/mpi | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/ipmi | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/power | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/toolchain | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/discovery | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/boot_profile | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/image_pipeline | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/scheduler | N/A | ~300 | No | Partial | 2026-01 |
+| hpc/hpc_job | N/A | ~350 | No | Partial | 2026-01 |
+| hpc/hpc_queue | N/A | ~350 | No | Partial | 2026-01 |
+| hpc/hpc_server | N/A | ~350 | No | Partial | 2026-01 |
+
+### Slurm Modules (12 modules, feature: `slurm`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/slurm (config+ops) | N/A | ~800 | No | Partial | 2026-01 |
+| hpc/slurm_node | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/slurm_partition | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/slurm_account | N/A | ~600 | No | Partial | 2026-01 |
+| hpc/slurm_job | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/slurm_queue | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/slurm_info | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/slurmrestd | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/scheduler_slurm | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/scheduler_orchestration | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/partition_policy | N/A | ~450 | No | Partial | 2026-01 |
+
+### PBS Modules (4 modules, feature: `pbs`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/pbs_job | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/pbs_queue | N/A | ~450 | No | Partial | 2026-01 |
+| hpc/pbs_server | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/scheduler_pbs | N/A | ~350 | No | Partial | 2026-01 |
+
+### GPU Modules (3 modules, feature: `gpu`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/gpu (nvidia_gpu) | N/A | ~600 | No | Partial | 2026-01 |
+| hpc/nvidia_driver | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/cuda | N/A | ~500 | No | Partial | 2026-02 |
+
+### OFED / InfiniBand Modules (6 modules, feature: `ofed`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/ofed (rdma_stack) | N/A | ~600 | No | Partial | 2026-01 |
+| hpc/opensm | N/A | ~500 | No | Partial | 2026-02 |
+| hpc/ib_partition | N/A | ~500 | No | Partial | 2026-02 |
+| hpc/ib_diagnostics | N/A | ~500 | No | Partial | 2026-02 |
+| hpc/ib_validate | N/A | ~400 | No | Partial | 2026-01 |
+| hpc/ipoib | N/A | ~450 | No | Partial | 2026-02 |
+
+### Parallel Filesystem Modules (3 modules, feature: `parallel_fs`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/fs (lustre_client, beegfs_client) | N/A | ~800 | No | Partial | 2026-02 |
+| hpc/lustre_mount | N/A | ~500 | No | Partial | 2026-01 |
+| hpc/lustre_ost | N/A | ~500 | No | Partial | 2026-02 |
+
+### Identity Modules (2 modules, feature: `identity`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/kerberos | N/A | ~500 | No | Partial | 2026-02 |
+| hpc/sssd | N/A | ~600 | No | Partial | 2026-02 |
+
+### Bare-Metal Provisioning Modules (2 modules, feature: `bare_metal`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/pxe | N/A | ~600 | No | Partial | 2026-02 |
+| hpc/warewulf | N/A | ~600 | No | Partial | 2026-02 |
+
+### Redfish/BMC Module (1 module, feature: `redfish`)
+
+| Module | Health | Lines | Tests | Docs Status | Last Updated |
+|--------|--------|-------|-------|-------------|--------------|
+| hpc/redfish | N/A | ~500 | No | Partial | 2026-02 |
+
+---
+
 ## Priority Improvements
 
 ### Critical (Score < 50)
@@ -272,7 +374,7 @@ known_hosts, package, pause, pip, selinux, service, shell, stat,
 systemd_unit, timezone, ufw, uri, user, wait_for, yum
 ```
 
-### Modules WITHOUT Tests (53)
+### Modules WITHOUT Tests (102)
 
 ```
 Core: assert, blockinfile, copy, cron, debug, facts, file, hostname,
@@ -292,6 +394,14 @@ Network: common, eos_config, ios_config, junos_config, nxos_config
 Windows: win_copy, win_feature, win_package, win_service, win_user
 
 Database: mysql_*, postgresql_*, pool, mod
+
+HPC: All 49 HPC modules (common, munge, nfs, healthcheck, facts, lmod, mpi,
+     ipmi, power, toolchain, discovery, boot_profile, image_pipeline,
+     scheduler, hpc_job, hpc_queue, hpc_server, slurm*, pbs_*, gpu,
+     nvidia_driver, cuda, ofed, opensm, ib_partition, ib_diagnostics,
+     ib_validate, ipoib, fs, lustre_mount, lustre_ost, kerberos, sssd,
+     pxe, warewulf, redfish, partition_policy, scheduler_orchestration,
+     slurmrestd)
 ```
 
 ---
@@ -346,4 +456,4 @@ where:
 
 ---
 
-*Last updated: 2026-01-03*
+*Last updated: 2026-02-17*
