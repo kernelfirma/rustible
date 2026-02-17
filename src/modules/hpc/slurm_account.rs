@@ -15,10 +15,12 @@
 //! - `max_wall` (optional): Maximum wall time per job
 //! - `fairshare` (optional): Fairshare value
 //! - `cluster` (optional): Cluster name (defaults to current)
+//! - `validate_policies` (optional, default true): Run policy validation preflight
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use regex::Regex;
 use tokio::runtime::Handle;
 
 use crate::connection::{Connection, ExecuteOptions};
@@ -26,6 +28,30 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+
+/// Result of policy validation preflight checks.
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+/// A single field that differs between desired and actual state.
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+/// Result of post-change verification.
+#[derive(Debug, serde::Serialize)]
+struct VerifyResult {
+    verified: bool,
+    details: Vec<String>,
+    warnings: Vec<String>,
+}
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
@@ -96,6 +122,18 @@ impl Module for SlurmAccountModule {
         let action = params.get_string_required("action")?;
         let account = params.get_string_required("account")?;
 
+        // Policy validation preflight for create/update actions
+        let should_validate = params.get_bool_or("validate_policies", true);
+        if should_validate && (action == "create" || action == "update") {
+            let preflight = validate_policies(params)?;
+            if !preflight.passed {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Policy validation failed: {}",
+                    preflight.errors.join("; ")
+                )));
+            }
+        }
+
         match action.as_str() {
             "create" => self.action_create(connection, &account, params, context),
             "update" => self.action_update(connection, &account, params, context),
@@ -124,6 +162,7 @@ impl Module for SlurmAccountModule {
         m.insert("max_wall", serde_json::json!(null));
         m.insert("fairshare", serde_json::json!(null));
         m.insert("cluster", serde_json::json!(null));
+        m.insert("validate_policies", serde_json::json!(true));
         m
     }
 }
@@ -222,8 +261,13 @@ impl SlurmAccountModule {
             )));
         }
 
-        let props = build_account_properties(params)?;
-        if props.is_empty() {
+        // Get current properties from the cluster for drift detection
+        let current_props = get_account_properties(connection, account, context)?;
+
+        // Build desired properties map from params
+        let desired = build_desired_properties(params)?;
+
+        if desired.is_empty() {
             return Ok(ModuleOutput::ok(format!(
                 "No properties to update for account '{}'",
                 account
@@ -231,31 +275,51 @@ impl SlurmAccountModule {
             .with_data("account", serde_json::json!(account)));
         }
 
-        if context.check_mode {
-            return Ok(ModuleOutput::changed(format!(
-                "Would update account '{}' with: {}",
-                account, props
+        // Drift-aware reconciliation: only modify fields that actually differ
+        let drift = reconcile_account(&desired, &current_props);
+
+        if drift.is_empty() {
+            return Ok(ModuleOutput::ok(format!(
+                "Account '{}' is already in desired state",
+                account
             ))
             .with_data("account", serde_json::json!(account)));
         }
 
-        let mut cmd = format!(
-            "sacctmgr --immediate modify account where name={} set {}",
-            account, props
-        );
-        if let Some(cluster) = params.get_string("cluster")? {
-            cmd = format!(
-                "sacctmgr --immediate modify account where name={} cluster={} set {}",
-                account, cluster, props
-            );
+        // Build effective diff summary for output
+        let diff_summary = compute_effective_diff(&drift, &current_props);
+
+        if context.check_mode {
+            return Ok(ModuleOutput::changed(format!(
+                "Would update account '{}': {}",
+                account, diff_summary
+            ))
+            .with_data("account", serde_json::json!(account))
+            .with_data("drift", serde_json::json!(drift))
+            .with_data("diff_summary", serde_json::json!(diff_summary)));
         }
+
+        // Build sacctmgr set clause only from drifted fields
+        let set_clause = build_set_clause_from_drift(&drift);
+        let cmd = if let Some(cluster) = params.get_string("cluster")? {
+            format!(
+                "sacctmgr --immediate modify account where name={} cluster={} set {}",
+                account, cluster, set_clause
+            )
+        } else {
+            format!(
+                "sacctmgr --immediate modify account where name={} set {}",
+                account, set_clause
+            )
+        };
 
         run_cmd_ok(connection, &cmd, context)?;
 
         Ok(
             ModuleOutput::changed(format!("Updated account '{}'", account))
                 .with_data("account", serde_json::json!(account))
-                .with_data("properties", serde_json::json!(props)),
+                .with_data("drift", serde_json::json!(drift))
+                .with_data("diff_summary", serde_json::json!(diff_summary)),
         )
     }
 
@@ -436,6 +500,274 @@ fn build_user_properties(params: &ModuleParams) -> ModuleResult<String> {
         props.push(format!("MaxWall={}", max_wall));
     }
     Ok(props.join(" "))
+}
+
+/// Parse sacctmgr show account output into a property map.
+///
+/// Uses `--noheader --parsable2` format which outputs fields separated by `|`
+/// without a trailing separator. Fields:
+/// Account|Description|Organization|ParentName|Fairshare|MaxJobs|MaxSubmitJobs|MaxWall
+fn get_account_properties(
+    connection: &Arc<dyn Connection + Send + Sync>,
+    account: &str,
+    context: &ModuleContext,
+) -> ModuleResult<HashMap<String, String>> {
+    let cmd = format!(
+        "sacctmgr --noheader --parsable2 show account where name={} \
+         format=Account,Description,Organization,ParentName,Fairshare,MaxJobs,MaxSubmitJobs,MaxWall \
+         withassoc",
+        account
+    );
+    let (ok, stdout, _) = run_cmd(connection, &cmd, context)?;
+
+    let mut result = HashMap::new();
+    if !ok || stdout.trim().is_empty() {
+        return Ok(result);
+    }
+
+    // parsable2 format uses '|' as separator, no trailing '|'
+    let headers = [
+        "account",
+        "description",
+        "organization",
+        "parent",
+        "fairshare",
+        "maxjobs",
+        "maxsubmitjobs",
+        "maxwall",
+    ];
+
+    // Take the first non-empty line (first association row)
+    if let Some(line) = stdout.lines().find(|l| !l.trim().is_empty()) {
+        let fields: Vec<&str> = line.split('|').collect();
+        for (i, header) in headers.iter().enumerate() {
+            if let Some(val) = fields.get(i) {
+                let val = val.trim();
+                if !val.is_empty() {
+                    result.insert(header.to_string(), val.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Build a map of desired properties from module params.
+///
+/// Returns normalized field names (lowercase) mapped to values, matching
+/// the keys produced by `get_account_properties`.
+fn build_desired_properties(params: &ModuleParams) -> ModuleResult<HashMap<String, String>> {
+    let mut desired = HashMap::new();
+
+    if let Some(org) = params.get_string("organization")? {
+        desired.insert("organization".to_string(), org);
+    }
+    if let Some(desc) = params.get_string("description")? {
+        desired.insert("description".to_string(), desc);
+    }
+    if let Some(parent) = params.get_string("parent")? {
+        desired.insert("parent".to_string(), parent);
+    }
+    if let Some(fairshare) = params.get_string("fairshare")? {
+        desired.insert("fairshare".to_string(), fairshare);
+    }
+    if let Some(max_jobs) = params.get_string("max_jobs")? {
+        desired.insert("maxjobs".to_string(), max_jobs);
+    }
+    if let Some(max_submit) = params.get_string("max_submit")? {
+        desired.insert("maxsubmitjobs".to_string(), max_submit);
+    }
+    if let Some(max_wall) = params.get_string("max_wall")? {
+        desired.insert("maxwall".to_string(), max_wall);
+    }
+
+    Ok(desired)
+}
+
+/// Compare desired properties against current properties and return drift items.
+///
+/// Only properties that actually differ are returned. Fields that match
+/// (case-insensitive comparison for text fields) are not included.
+fn reconcile_account(
+    desired: &HashMap<String, String>,
+    current: &HashMap<String, String>,
+) -> Vec<DriftItem> {
+    let mut drift = Vec::new();
+
+    for (field, desired_val) in desired {
+        let actual_val = current.get(field).cloned().unwrap_or_default();
+        if !values_match(desired_val, &actual_val) {
+            drift.push(DriftItem {
+                field: field.clone(),
+                desired: desired_val.clone(),
+                actual: actual_val,
+            });
+        }
+    }
+
+    // Sort for deterministic output
+    drift.sort_by(|a, b| a.field.cmp(&b.field));
+    drift
+}
+
+/// Check if two property values match (case-insensitive for text fields).
+fn values_match(desired: &str, actual: &str) -> bool {
+    desired.eq_ignore_ascii_case(actual)
+}
+
+/// Map normalized field names back to sacctmgr property names for the set clause.
+fn field_to_sacctmgr(field: &str) -> &str {
+    match field {
+        "organization" => "Organization",
+        "description" => "Description",
+        "parent" => "parent",
+        "fairshare" => "fairshare",
+        "maxjobs" => "MaxJobs",
+        "maxsubmitjobs" => "MaxSubmitJobs",
+        "maxwall" => "MaxWall",
+        _ => field,
+    }
+}
+
+/// Build a sacctmgr `set` clause from drift items only.
+fn build_set_clause_from_drift(drift: &[DriftItem]) -> String {
+    drift
+        .iter()
+        .map(|d| format!("{}={}", field_to_sacctmgr(&d.field), d.desired))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Validate accounting policy parameters.
+///
+/// Checks:
+/// - `max_jobs`: must be a positive integer
+/// - `max_submit`: must be a positive integer, and >= max_jobs if both set
+/// - `max_wall`: must match time format `\d+(-\d+:\d+(:\d+)?)?` or be -1 (unlimited)
+/// - `fairshare`: must be a positive integer or 1 (default)
+fn validate_policies(params: &ModuleParams) -> ModuleResult<PreflightResult> {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    let max_jobs_val = params.get_string("max_jobs")?;
+    let max_submit_val = params.get_string("max_submit")?;
+    let max_wall_val = params.get_string("max_wall")?;
+    let fairshare_val = params.get_string("fairshare")?;
+
+    // Validate max_jobs
+    let mut max_jobs_num: Option<i64> = None;
+    if let Some(ref val) = max_jobs_val {
+        match val.parse::<i64>() {
+            Ok(n) if n > 0 => {
+                max_jobs_num = Some(n);
+            }
+            Ok(n) => {
+                errors.push(format!("max_jobs must be a positive integer, got {}", n));
+            }
+            Err(_) => {
+                errors.push(format!(
+                    "max_jobs must be a positive integer, got '{}'",
+                    val
+                ));
+            }
+        }
+    }
+
+    // Validate max_submit
+    if let Some(ref val) = max_submit_val {
+        match val.parse::<i64>() {
+            Ok(n) if n > 0 => {
+                // Check max_submit >= max_jobs if both set
+                if let Some(mj) = max_jobs_num {
+                    if n < mj {
+                        errors.push(format!("max_submit ({}) must be >= max_jobs ({})", n, mj));
+                    }
+                }
+            }
+            Ok(n) => {
+                errors.push(format!("max_submit must be a positive integer, got {}", n));
+            }
+            Err(_) => {
+                errors.push(format!(
+                    "max_submit must be a positive integer, got '{}'",
+                    val
+                ));
+            }
+        }
+    }
+
+    // Validate max_wall
+    if let Some(ref val) = max_wall_val {
+        if val != "-1" {
+            // Slurm time formats: minutes, minutes:seconds, hours:minutes:seconds,
+            // days-hours, days-hours:minutes, days-hours:minutes:seconds
+            let wall_re = Regex::new(r"^\d+(-\d+:\d+(:\d+)?)?$").expect("invalid regex");
+            if !wall_re.is_match(val) {
+                errors.push(format!(
+                    "max_wall must match time format (e.g. '60', '7-00:00:00') or '-1' for unlimited, got '{}'",
+                    val
+                ));
+            }
+        }
+    }
+
+    // Validate fairshare
+    if let Some(ref val) = fairshare_val {
+        match val.parse::<i64>() {
+            Ok(n) if n > 0 => {}
+            Ok(n) => {
+                errors.push(format!("fairshare must be a positive integer, got {}", n));
+            }
+            Err(_) => {
+                errors.push(format!(
+                    "fairshare must be a positive integer, got '{}'",
+                    val
+                ));
+            }
+        }
+    }
+
+    // Warnings for common misconfigurations
+    if max_jobs_val.is_some() && max_submit_val.is_none() {
+        warnings.push(
+            "max_jobs is set but max_submit is not; users may be unable to queue jobs beyond max_jobs"
+                .to_string(),
+        );
+    }
+
+    let passed = errors.is_empty();
+    Ok(PreflightResult {
+        passed,
+        warnings,
+        errors,
+    })
+}
+
+/// Compute an effective diff summary showing before/after for each changed field.
+///
+/// Includes inherited parent context when available in current properties.
+fn compute_effective_diff(drift: &[DriftItem], current_props: &HashMap<String, String>) -> String {
+    let mut lines = Vec::new();
+
+    // Include parent context if available
+    if let Some(parent) = current_props.get("parent") {
+        lines.push(format!("parent_account: {}", parent));
+    }
+
+    for item in drift {
+        let actual_display = if item.actual.is_empty() {
+            "(unset)".to_string()
+        } else {
+            item.actual.clone()
+        };
+        lines.push(format!(
+            "{}: '{}' -> '{}'",
+            item.field, actual_display, item.desired
+        ));
+    }
+
+    lines.join(", ")
 }
 
 /// Slurm QoS (Quality of Service) management module.
@@ -727,5 +1059,367 @@ mod tests {
         let params = ModuleParams::new();
         let props = build_qos_properties(&params).unwrap();
         assert!(props.is_empty());
+    }
+
+    // --- SCH-03 enhancement tests ---
+
+    #[test]
+    fn test_account_property_parsing() {
+        // Simulate parsable2 output from sacctmgr with '|' separator
+        // Format: Account|Description|Organization|ParentName|Fairshare|MaxJobs|MaxSubmitJobs|MaxWall
+        let output = "physics|Physics department|Physics|root|100|50|200|7-00:00:00";
+
+        let headers = [
+            "account",
+            "description",
+            "organization",
+            "parent",
+            "fairshare",
+            "maxjobs",
+            "maxsubmitjobs",
+            "maxwall",
+        ];
+
+        let mut result = HashMap::new();
+        let fields: Vec<&str> = output.split('|').collect();
+        for (i, header) in headers.iter().enumerate() {
+            if let Some(val) = fields.get(i) {
+                let val = val.trim();
+                if !val.is_empty() {
+                    result.insert(header.to_string(), val.to_string());
+                }
+            }
+        }
+
+        assert_eq!(result.get("account").unwrap(), "physics");
+        assert_eq!(result.get("description").unwrap(), "Physics department");
+        assert_eq!(result.get("organization").unwrap(), "Physics");
+        assert_eq!(result.get("parent").unwrap(), "root");
+        assert_eq!(result.get("fairshare").unwrap(), "100");
+        assert_eq!(result.get("maxjobs").unwrap(), "50");
+        assert_eq!(result.get("maxsubmitjobs").unwrap(), "200");
+        assert_eq!(result.get("maxwall").unwrap(), "7-00:00:00");
+    }
+
+    #[test]
+    fn test_account_property_parsing_partial() {
+        // Some fields may be empty in parsable2 output
+        let output = "physics||Physics||1|||";
+
+        let headers = [
+            "account",
+            "description",
+            "organization",
+            "parent",
+            "fairshare",
+            "maxjobs",
+            "maxsubmitjobs",
+            "maxwall",
+        ];
+
+        let mut result = HashMap::new();
+        let fields: Vec<&str> = output.split('|').collect();
+        for (i, header) in headers.iter().enumerate() {
+            if let Some(val) = fields.get(i) {
+                let val = val.trim();
+                if !val.is_empty() {
+                    result.insert(header.to_string(), val.to_string());
+                }
+            }
+        }
+
+        assert_eq!(result.get("account").unwrap(), "physics");
+        assert_eq!(result.get("organization").unwrap(), "Physics");
+        assert_eq!(result.get("fairshare").unwrap(), "1");
+        assert!(!result.contains_key("description"));
+        assert!(!result.contains_key("parent"));
+        assert!(!result.contains_key("maxjobs"));
+    }
+
+    #[test]
+    fn test_policy_validation_valid() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("50"));
+        params.insert("max_submit".to_string(), serde_json::json!("200"));
+        params.insert("max_wall".to_string(), serde_json::json!("7-00:00:00"));
+        params.insert("fairshare".to_string(), serde_json::json!("100"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_policy_validation_max_jobs_negative() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("-5"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("max_jobs")));
+    }
+
+    #[test]
+    fn test_policy_validation_max_jobs_zero() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("0"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("max_jobs")));
+    }
+
+    #[test]
+    fn test_policy_validation_max_jobs_non_numeric() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("abc"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("max_jobs")));
+    }
+
+    #[test]
+    fn test_policy_validation_max_submit_less_than_max_jobs() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("100"));
+        params.insert("max_submit".to_string(), serde_json::json!("50"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("max_submit") && e.contains("max_jobs")));
+    }
+
+    #[test]
+    fn test_policy_validation_max_submit_equal_max_jobs() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("50"));
+        params.insert("max_submit".to_string(), serde_json::json!("50"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_policy_validation_max_wall_invalid_format() {
+        let mut params = ModuleParams::new();
+        params.insert("max_wall".to_string(), serde_json::json!("invalid"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("max_wall")));
+    }
+
+    #[test]
+    fn test_policy_validation_max_wall_unlimited() {
+        let mut params = ModuleParams::new();
+        params.insert("max_wall".to_string(), serde_json::json!("-1"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_policy_validation_max_wall_minutes_only() {
+        let mut params = ModuleParams::new();
+        params.insert("max_wall".to_string(), serde_json::json!("120"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_policy_validation_max_wall_days_hours_minutes() {
+        let mut params = ModuleParams::new();
+        params.insert("max_wall".to_string(), serde_json::json!("7-00:00:00"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_policy_validation_max_wall_days_hours_minutes_no_seconds() {
+        let mut params = ModuleParams::new();
+        params.insert("max_wall".to_string(), serde_json::json!("1-12:30"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_policy_validation_fairshare_invalid() {
+        let mut params = ModuleParams::new();
+        params.insert("fairshare".to_string(), serde_json::json!("0"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("fairshare")));
+    }
+
+    #[test]
+    fn test_policy_validation_fairshare_default() {
+        let mut params = ModuleParams::new();
+        params.insert("fairshare".to_string(), serde_json::json!("1"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_policy_validation_warning_max_jobs_without_max_submit() {
+        let mut params = ModuleParams::new();
+        params.insert("max_jobs".to_string(), serde_json::json!("10"));
+
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+        assert!(!result.warnings.is_empty());
+        assert!(result.warnings.iter().any(|w| w.contains("max_submit")));
+    }
+
+    #[test]
+    fn test_policy_validation_empty_params() {
+        let params = ModuleParams::new();
+        let result = validate_policies(&params).unwrap();
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_drift_detection_no_drift() {
+        let mut desired = HashMap::new();
+        desired.insert("organization".to_string(), "Physics".to_string());
+        desired.insert("fairshare".to_string(), "100".to_string());
+
+        let mut current = HashMap::new();
+        current.insert("organization".to_string(), "Physics".to_string());
+        current.insert("fairshare".to_string(), "100".to_string());
+
+        let drift = reconcile_account(&desired, &current);
+        assert!(drift.is_empty());
+    }
+
+    #[test]
+    fn test_drift_detection_case_insensitive() {
+        let mut desired = HashMap::new();
+        desired.insert("organization".to_string(), "physics".to_string());
+
+        let mut current = HashMap::new();
+        current.insert("organization".to_string(), "Physics".to_string());
+
+        let drift = reconcile_account(&desired, &current);
+        assert!(drift.is_empty());
+    }
+
+    #[test]
+    fn test_drift_detection_with_changes() {
+        let mut desired = HashMap::new();
+        desired.insert("organization".to_string(), "Chemistry".to_string());
+        desired.insert("fairshare".to_string(), "200".to_string());
+        desired.insert("maxjobs".to_string(), "50".to_string());
+
+        let mut current = HashMap::new();
+        current.insert("organization".to_string(), "Physics".to_string());
+        current.insert("fairshare".to_string(), "100".to_string());
+        current.insert("maxjobs".to_string(), "50".to_string());
+
+        let drift = reconcile_account(&desired, &current);
+        assert_eq!(drift.len(), 2);
+        assert!(drift.iter().any(|d| d.field == "organization"
+            && d.desired == "Chemistry"
+            && d.actual == "Physics"));
+        assert!(drift
+            .iter()
+            .any(|d| d.field == "fairshare" && d.desired == "200" && d.actual == "100"));
+    }
+
+    #[test]
+    fn test_drift_detection_new_field() {
+        let mut desired = HashMap::new();
+        desired.insert("maxjobs".to_string(), "50".to_string());
+
+        let current = HashMap::new(); // No current properties
+
+        let drift = reconcile_account(&desired, &current);
+        assert_eq!(drift.len(), 1);
+        assert_eq!(drift[0].field, "maxjobs");
+        assert_eq!(drift[0].desired, "50");
+        assert!(drift[0].actual.is_empty());
+    }
+
+    #[test]
+    fn test_build_set_clause_from_drift() {
+        let drift = vec![
+            DriftItem {
+                field: "fairshare".to_string(),
+                desired: "200".to_string(),
+                actual: "100".to_string(),
+            },
+            DriftItem {
+                field: "maxjobs".to_string(),
+                desired: "50".to_string(),
+                actual: "25".to_string(),
+            },
+        ];
+
+        let clause = build_set_clause_from_drift(&drift);
+        assert!(clause.contains("fairshare=200"));
+        assert!(clause.contains("MaxJobs=50"));
+    }
+
+    #[test]
+    fn test_compute_effective_diff() {
+        let drift = vec![DriftItem {
+            field: "fairshare".to_string(),
+            desired: "200".to_string(),
+            actual: "100".to_string(),
+        }];
+
+        let mut current = HashMap::new();
+        current.insert("parent".to_string(), "root".to_string());
+
+        let summary = compute_effective_diff(&drift, &current);
+        assert!(summary.contains("parent_account: root"));
+        assert!(summary.contains("fairshare: '100' -> '200'"));
+    }
+
+    #[test]
+    fn test_compute_effective_diff_unset_field() {
+        let drift = vec![DriftItem {
+            field: "maxjobs".to_string(),
+            desired: "50".to_string(),
+            actual: String::new(),
+        }];
+
+        let current = HashMap::new();
+
+        let summary = compute_effective_diff(&drift, &current);
+        assert!(summary.contains("maxjobs: '(unset)' -> '50'"));
+    }
+
+    #[test]
+    fn test_build_desired_properties() {
+        let mut params = ModuleParams::new();
+        params.insert("organization".to_string(), serde_json::json!("Physics"));
+        params.insert("max_jobs".to_string(), serde_json::json!("50"));
+        params.insert("max_submit".to_string(), serde_json::json!("200"));
+
+        let desired = build_desired_properties(&params).unwrap();
+        assert_eq!(desired.get("organization").unwrap(), "Physics");
+        assert_eq!(desired.get("maxjobs").unwrap(), "50");
+        assert_eq!(desired.get("maxsubmitjobs").unwrap(), "200");
+        assert!(!desired.contains_key("fairshare"));
+    }
+
+    #[test]
+    fn test_validate_policies_param_in_optional_params() {
+        let module = SlurmAccountModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("validate_policies"));
     }
 }
