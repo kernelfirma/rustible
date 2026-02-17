@@ -318,6 +318,17 @@ impl CronModule {
         }
         Ok(())
     }
+
+    /// Validate that a string does not contain newlines to prevent injection
+    fn validate_no_newlines(value: &str, param_name: &str) -> ModuleResult<()> {
+        if value.contains('\n') || value.contains('\r') {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} cannot contain newlines",
+                param_name
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl Module for CronModule {
@@ -349,13 +360,23 @@ impl Module for CronModule {
         })?;
 
         let name = params.get_string_required("name")?;
+        Self::validate_no_newlines(&name, "name")?;
+
         let state_str = params
             .get_string("state")?
             .unwrap_or_else(|| "present".to_string());
         let state = CronState::from_str(&state_str)?;
 
         let job_cmd = params.get_string("job")?;
+        if let Some(ref j) = job_cmd {
+            Self::validate_no_newlines(j, "job")?;
+        }
+
         let user = params.get_string("user")?;
+        if let Some(ref u) = user {
+            Self::validate_no_newlines(u, "user")?;
+        }
+
         let minute = params
             .get_string("minute")?
             .unwrap_or_else(|| "*".to_string());
@@ -374,6 +395,7 @@ impl Module for CronModule {
 
         // Validate special_time if provided
         if let Some(ref st) = special_time {
+            Self::validate_no_newlines(st, "special_time")?;
             if !SPECIAL_TIME_REGEX.is_match(st) {
                 return Err(ModuleError::InvalidParameter(format!(
                     "Invalid special_time '{}'. Valid values: @reboot, @yearly, @annually, @monthly, @weekly, @daily, @midnight, @hourly",
@@ -592,5 +614,16 @@ mod tests {
         assert_eq!(module.name(), "cron");
         assert_eq!(module.classification(), ModuleClassification::RemoteCommand);
         assert_eq!(module.required_params(), &["name"]);
+    }
+
+    #[test]
+    fn test_validate_no_newlines() {
+        assert!(CronModule::validate_no_newlines("test", "name").is_ok());
+        assert!(CronModule::validate_no_newlines("test_123", "name").is_ok());
+
+        // Test newline injection
+        assert!(CronModule::validate_no_newlines("test\n", "name").is_err());
+        assert!(CronModule::validate_no_newlines("test\rinjection", "name").is_err());
+        assert!(CronModule::validate_no_newlines("multi\nline", "name").is_err());
     }
 }
