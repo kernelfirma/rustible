@@ -25,6 +25,14 @@ use crate::modules::{
     ParallelizationHint, ParamExt,
 };
 
+/// Result of a preflight validation check on resource policies.
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
     if context.r#become {
@@ -344,6 +352,180 @@ fn compute_server_changes(
     changes
 }
 
+/// Parse `qstat -Bf` text output into a HashMap of attribute name to value.
+///
+/// The output format is:
+/// ```text
+/// Server: hostname
+///     server_state = Active
+///     scheduling = True
+///     default_queue = batch
+///     resources_max.ncpus = 1024
+/// ```
+///
+/// Continuation lines are indented further than attribute lines and are
+/// appended to the previous attribute value.
+fn get_server_attributes(output: &str) -> HashMap<String, String> {
+    let mut attrs = HashMap::new();
+    let mut current_key: Option<String> = None;
+
+    for line in output.lines() {
+        // Skip the "Server: <hostname>" header
+        if line.trim().starts_with("Server:") {
+            continue;
+        }
+
+        // Skip blank lines
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Check for new attribute line with " = " separator
+        if let Some((key, value)) = line.split_once(" = ") {
+            let key = key.trim().to_string();
+            let value = value.trim().to_string();
+            current_key = Some(key.clone());
+            attrs.insert(key, value);
+        } else if line.starts_with("\t\t") || line.starts_with("        ") {
+            // Continuation line: append to previous attribute value
+            if let Some(ref key) = current_key {
+                if let Some(existing) = attrs.get_mut(key) {
+                    existing.push(' ');
+                    existing.push_str(line.trim());
+                }
+            }
+        }
+    }
+
+    attrs
+}
+
+/// Validate resource policy settings from a set of server attributes.
+///
+/// Checks:
+/// - `max_run` must be a positive integer if present
+/// - Any `resources_max.*` values must follow valid PBS resource format
+///   (e.g. walltime as HH:MM:SS, memory with unit suffix, integers for ncpus)
+///
+/// Returns a `PreflightResult` with `passed = true` if all validations pass.
+fn validate_resource_policies(attrs: &HashMap<String, String>) -> PreflightResult {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    // Validate max_run: must be a positive integer
+    if let Some(max_run) = attrs.get("max_run") {
+        match max_run.parse::<i64>() {
+            Ok(val) if val <= 0 => {
+                errors.push(format!(
+                    "max_run must be a positive integer, got '{}'",
+                    max_run
+                ));
+            }
+            Err(_) => {
+                errors.push(format!(
+                    "max_run must be a positive integer, got '{}'",
+                    max_run
+                ));
+            }
+            Ok(_) => {}
+        }
+    }
+
+    // Validate resources_max.* entries
+    for (key, value) in attrs {
+        if !key.starts_with("resources_max.") {
+            continue;
+        }
+
+        let resource_name = key.strip_prefix("resources_max.").unwrap_or(key);
+
+        match resource_name {
+            "walltime" => {
+                // Walltime format: HH:MM:SS or similar colon-separated
+                let parts: Vec<&str> = value.split(':').collect();
+                if parts.len() < 2 || parts.len() > 3 {
+                    errors.push(format!(
+                        "{} has invalid walltime format '{}'; expected HH:MM:SS",
+                        key, value
+                    ));
+                } else {
+                    for part in &parts {
+                        if part.parse::<u32>().is_err() {
+                            errors.push(format!(
+                                "{} has invalid walltime component '{}' in '{}'",
+                                key, part, value
+                            ));
+                            break;
+                        }
+                    }
+                }
+            }
+            "ncpus" | "nodect" | "mpiprocs" => {
+                // Must be a positive integer
+                match value.parse::<i64>() {
+                    Ok(val) if val <= 0 => {
+                        errors.push(format!(
+                            "{} must be a positive integer, got '{}'",
+                            key, value
+                        ));
+                    }
+                    Err(_) => {
+                        errors.push(format!(
+                            "{} must be a positive integer, got '{}'",
+                            key, value
+                        ));
+                    }
+                    Ok(_) => {}
+                }
+            }
+            "mem" | "pmem" | "vmem" | "pvmem" => {
+                // Memory format: number followed by unit (kb, mb, gb, tb, b, or w)
+                let lower = value.to_lowercase();
+                let has_valid_suffix = lower.ends_with("kb")
+                    || lower.ends_with("mb")
+                    || lower.ends_with("gb")
+                    || lower.ends_with("tb")
+                    || lower.ends_with('b')
+                    || lower.ends_with('w');
+                if !has_valid_suffix {
+                    errors.push(format!(
+                        "{} has invalid memory format '{}'; expected number with unit (e.g. 256gb)",
+                        key, value
+                    ));
+                } else {
+                    // Strip the suffix and check the numeric part
+                    let numeric_part = lower
+                        .trim_end_matches("kb")
+                        .trim_end_matches("mb")
+                        .trim_end_matches("gb")
+                        .trim_end_matches("tb")
+                        .trim_end_matches('b')
+                        .trim_end_matches('w');
+                    if numeric_part.parse::<u64>().is_err() {
+                        errors.push(format!(
+                            "{} has invalid memory value '{}'; numeric part '{}' is not valid",
+                            key, value, numeric_part
+                        ));
+                    }
+                }
+            }
+            _ => {
+                // Unknown resource type, issue a warning but do not error
+                warnings.push(format!(
+                    "Unknown resource type '{}' with value '{}'; skipping validation",
+                    key, value
+                ));
+            }
+        }
+    }
+
+    PreflightResult {
+        passed: errors.is_empty(),
+        warnings,
+        errors,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,5 +633,169 @@ set server node_fail_requeue = True
         let changes = compute_server_changes(&current, &desired);
         assert_eq!(changes.len(), 1);
         assert_eq!(changes.get("max_run"), Some(&"100".to_string()));
+    }
+
+    #[test]
+    fn test_server_attribute_parsing() {
+        let output = r#"Server: pbs-server.example.com
+    server_state = Active
+    scheduling = True
+    default_queue = batch
+    total_jobs = 42
+    resources_max.ncpus = 1024
+    resources_max.mem = 4096gb
+    resources_default.walltime = 01:00:00
+    node_fail_requeue = True
+    max_run = 500
+"#;
+        let attrs = get_server_attributes(output);
+        assert_eq!(attrs.get("server_state"), Some(&"Active".to_string()));
+        assert_eq!(attrs.get("scheduling"), Some(&"True".to_string()));
+        assert_eq!(attrs.get("default_queue"), Some(&"batch".to_string()));
+        assert_eq!(attrs.get("total_jobs"), Some(&"42".to_string()));
+        assert_eq!(attrs.get("resources_max.ncpus"), Some(&"1024".to_string()));
+        assert_eq!(attrs.get("resources_max.mem"), Some(&"4096gb".to_string()));
+        assert_eq!(
+            attrs.get("resources_default.walltime"),
+            Some(&"01:00:00".to_string())
+        );
+        assert_eq!(attrs.get("node_fail_requeue"), Some(&"True".to_string()));
+        assert_eq!(attrs.get("max_run"), Some(&"500".to_string()));
+    }
+
+    #[test]
+    fn test_server_attribute_parsing_empty() {
+        let attrs = get_server_attributes("");
+        assert!(attrs.is_empty());
+    }
+
+    #[test]
+    fn test_server_attribute_parsing_header_only() {
+        let output = "Server: pbs-server.example.com\n";
+        let attrs = get_server_attributes(output);
+        assert!(attrs.is_empty());
+    }
+
+    #[test]
+    fn test_server_attribute_parsing_multiline_value() {
+        let output = "Server: pbs-server\n    acl_roots = root@host1,\n\t\troot@host2\n    scheduling = True\n";
+        let attrs = get_server_attributes(output);
+        assert_eq!(
+            attrs.get("acl_roots"),
+            Some(&"root@host1, root@host2".to_string())
+        );
+        assert_eq!(attrs.get("scheduling"), Some(&"True".to_string()));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_all_valid() {
+        let mut attrs = HashMap::new();
+        attrs.insert("max_run".to_string(), "100".to_string());
+        attrs.insert(
+            "resources_max.walltime".to_string(),
+            "168:00:00".to_string(),
+        );
+        attrs.insert("resources_max.ncpus".to_string(), "128".to_string());
+        attrs.insert("resources_max.mem".to_string(), "256gb".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_resource_policy_validation_invalid_max_run() {
+        let mut attrs = HashMap::new();
+        attrs.insert("max_run".to_string(), "-5".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].contains("max_run"));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_non_numeric_max_run() {
+        let mut attrs = HashMap::new();
+        attrs.insert("max_run".to_string(), "abc".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].contains("max_run"));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_invalid_walltime() {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "resources_max.walltime".to_string(),
+            "not-a-time".to_string(),
+        );
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("walltime")));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_invalid_ncpus() {
+        let mut attrs = HashMap::new();
+        attrs.insert("resources_max.ncpus".to_string(), "0".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("ncpus")));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_invalid_memory_format() {
+        let mut attrs = HashMap::new();
+        attrs.insert("resources_max.mem".to_string(), "256".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("mem")));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_unknown_resource_warns() {
+        let mut attrs = HashMap::new();
+        attrs.insert("resources_max.custom_thing".to_string(), "42".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(result.passed);
+        assert_eq!(result.warnings.len(), 1);
+        assert!(result.warnings[0].contains("custom_thing"));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_empty() {
+        let attrs = HashMap::new();
+        let result = validate_resource_policies(&attrs);
+        assert!(result.passed);
+        assert!(result.errors.is_empty());
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_resource_policy_validation_zero_max_run() {
+        let mut attrs = HashMap::new();
+        attrs.insert("max_run".to_string(), "0".to_string());
+
+        let result = validate_resource_policies(&attrs);
+        assert!(!result.passed);
+        assert!(result.errors[0].contains("positive integer"));
+    }
+
+    #[test]
+    fn test_resource_policy_validation_valid_memory_units() {
+        // Test various valid memory units
+        for unit in &["kb", "mb", "gb", "tb", "b", "w"] {
+            let mut attrs = HashMap::new();
+            attrs.insert("resources_max.mem".to_string(), format!("256{}", unit));
+            let result = validate_resource_policies(&attrs);
+            assert!(result.passed, "Memory with unit '{}' should be valid", unit);
+        }
     }
 }

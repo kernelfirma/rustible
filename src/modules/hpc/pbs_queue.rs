@@ -19,6 +19,7 @@
 //! - `priority` (optional): Queue priority value
 //! - `acl_groups` (optional): Comma-separated ACL groups
 //! - `attributes` (optional): JSON object of arbitrary queue attributes
+//! - `pbs_flavor` (optional): PBS flavor override ("openpbs" or "pbspro", auto-detect if unset)
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,6 +31,30 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+
+/// Result of a preflight check before applying changes.
+#[derive(Debug, serde::Serialize)]
+struct PreflightResult {
+    passed: bool,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
+
+/// A single configuration drift item between desired and actual state.
+#[derive(Debug, serde::Serialize)]
+struct DriftItem {
+    field: String,
+    desired: String,
+    actual: String,
+}
+
+/// Result of a post-apply verification step.
+#[derive(Debug, serde::Serialize)]
+struct VerifyResult {
+    verified: bool,
+    details: Vec<String>,
+    warnings: Vec<String>,
+}
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
@@ -134,6 +159,7 @@ impl Module for PbsQueueModule {
         m.insert("priority", serde_json::json!(null));
         m.insert("acl_groups", serde_json::json!(null));
         m.insert("attributes", serde_json::json!(null));
+        m.insert("pbs_flavor", serde_json::json!(null));
         m
     }
 }
@@ -575,6 +601,97 @@ fn compute_queue_changes(
     changes
 }
 
+/// Parse `qstat -Qf <queue_name>` text output into a HashMap of attribute name to value.
+///
+/// The output format is:
+/// ```text
+/// Queue: batch
+///     queue_type = Execution
+///     enabled = True
+///     started = True
+///     resources_max.walltime = 168:00:00
+///     resources_max.ncpus = 128
+/// ```
+///
+/// Continuation lines are indented further than the attribute lines and are
+/// appended to the previous attribute value.
+fn get_queue_attributes(output: &str) -> HashMap<String, String> {
+    let mut attrs = HashMap::new();
+    let mut current_key: Option<String> = None;
+
+    for line in output.lines() {
+        // Skip the "Queue: <name>" header line
+        if line.trim().starts_with("Queue:") {
+            continue;
+        }
+
+        // Skip blank lines
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Check if this is a new attribute line (has " = " separator)
+        // Attribute lines are indented with spaces/tabs and contain " = "
+        if let Some((key, value)) = line.split_once(" = ") {
+            let key = key.trim().to_string();
+            let value = value.trim().to_string();
+            current_key = Some(key.clone());
+            attrs.insert(key, value);
+        } else if line.starts_with("\t\t") || line.starts_with("        ") {
+            // Continuation line: append to previous attribute value
+            if let Some(ref key) = current_key {
+                if let Some(existing) = attrs.get_mut(key) {
+                    existing.push(' ');
+                    existing.push_str(line.trim());
+                }
+            }
+        }
+    }
+
+    attrs
+}
+
+/// Compare desired queue attributes against the current state retrieved via
+/// `get_queue_attributes`. Only attributes that differ are returned as `DriftItem`s,
+/// meaning the caller only needs to run `qmgr` commands for drifted fields.
+fn reconcile_queue(
+    desired: &HashMap<String, String>,
+    current: &HashMap<String, String>,
+) -> Vec<DriftItem> {
+    let mut drifts = Vec::new();
+
+    for (key, desired_val) in desired {
+        let actual_val = current.get(key).cloned().unwrap_or_default();
+        if actual_val != *desired_val {
+            drifts.push(DriftItem {
+                field: key.clone(),
+                desired: desired_val.clone(),
+                actual: actual_val,
+            });
+        }
+    }
+
+    // Sort for deterministic output
+    drifts.sort_by(|a, b| a.field.cmp(&b.field));
+    drifts
+}
+
+/// Detect whether the system runs OpenPBS or PBS Pro by inspecting the output of
+/// `qstat --version`. Returns `"openpbs"`, `"pbspro"`, or `"unknown"`.
+///
+/// When `version_output` is provided (e.g. from a cached command result), parsing
+/// is done purely from the string without running a command.
+fn detect_pbs_flavor(version_output: &str) -> String {
+    let lower = version_output.to_lowercase();
+    if lower.contains("openpbs") {
+        "openpbs".to_string()
+    } else if lower.contains("pbspro") || lower.contains("pbs pro") {
+        "pbspro".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -715,5 +832,121 @@ mod tests {
         let changes = compute_queue_changes(&current, &desired);
         assert_eq!(changes.len(), 1);
         assert_eq!(changes.get("max_run"), Some(&"50".to_string()));
+    }
+
+    #[test]
+    fn test_pbs_flavor_detection() {
+        // OpenPBS detection
+        let openpbs_output = "pbs_version = 23.06.06\nOpenPBS\n";
+        assert_eq!(detect_pbs_flavor(openpbs_output), "openpbs");
+
+        // PBS Pro detection
+        let pbspro_output = "pbs_version = 2022.1.1\nPBSPro\n";
+        assert_eq!(detect_pbs_flavor(pbspro_output), "pbspro");
+
+        // PBS Pro with space
+        let pbspro_space = "pbs_version = 2022.1.1\nPBS Pro 2022.1\n";
+        assert_eq!(detect_pbs_flavor(pbspro_space), "pbspro");
+
+        // Unknown variant
+        let unknown_output = "some other scheduler version 1.0\n";
+        assert_eq!(detect_pbs_flavor(unknown_output), "unknown");
+
+        // Empty input
+        assert_eq!(detect_pbs_flavor(""), "unknown");
+
+        // Case insensitivity
+        let mixed_case = "pbs_version = 23.06\nOPENPBS version 23.06\n";
+        assert_eq!(detect_pbs_flavor(mixed_case), "openpbs");
+    }
+
+    #[test]
+    fn test_queue_attribute_parsing() {
+        let output = r#"Queue: batch
+    queue_type = Execution
+    enabled = True
+    started = True
+    resources_max.walltime = 168:00:00
+    resources_max.ncpus = 128
+    resources_max.mem = 256gb
+    Priority = 100
+    acl_groups = admin,research
+"#;
+        let attrs = get_queue_attributes(output);
+        assert_eq!(attrs.get("queue_type"), Some(&"Execution".to_string()));
+        assert_eq!(attrs.get("enabled"), Some(&"True".to_string()));
+        assert_eq!(attrs.get("started"), Some(&"True".to_string()));
+        assert_eq!(
+            attrs.get("resources_max.walltime"),
+            Some(&"168:00:00".to_string())
+        );
+        assert_eq!(attrs.get("resources_max.ncpus"), Some(&"128".to_string()));
+        assert_eq!(attrs.get("resources_max.mem"), Some(&"256gb".to_string()));
+        assert_eq!(attrs.get("Priority"), Some(&"100".to_string()));
+        assert_eq!(attrs.get("acl_groups"), Some(&"admin,research".to_string()));
+    }
+
+    #[test]
+    fn test_queue_attribute_parsing_empty() {
+        let attrs = get_queue_attributes("");
+        assert!(attrs.is_empty());
+    }
+
+    #[test]
+    fn test_queue_attribute_parsing_multiline_value() {
+        // Continuation lines are indented further (double tab or 8+ spaces)
+        let output =
+            "Queue: batch\n    queue_type = Execution\n    comment = This is a long\n\t\tcomment that spans lines\n    enabled = True\n";
+        let attrs = get_queue_attributes(output);
+        assert_eq!(
+            attrs.get("comment"),
+            Some(&"This is a long comment that spans lines".to_string())
+        );
+        assert_eq!(attrs.get("enabled"), Some(&"True".to_string()));
+    }
+
+    #[test]
+    fn test_reconcile_queue_no_drift() {
+        let mut desired = HashMap::new();
+        desired.insert("enabled".to_string(), "True".to_string());
+        desired.insert("started".to_string(), "True".to_string());
+
+        let mut current = HashMap::new();
+        current.insert("enabled".to_string(), "True".to_string());
+        current.insert("started".to_string(), "True".to_string());
+
+        let drifts = reconcile_queue(&desired, &current);
+        assert!(drifts.is_empty());
+    }
+
+    #[test]
+    fn test_reconcile_queue_with_drift() {
+        let mut desired = HashMap::new();
+        desired.insert("enabled".to_string(), "True".to_string());
+        desired.insert("Priority".to_string(), "200".to_string());
+
+        let mut current = HashMap::new();
+        current.insert("enabled".to_string(), "True".to_string());
+        current.insert("Priority".to_string(), "100".to_string());
+
+        let drifts = reconcile_queue(&desired, &current);
+        assert_eq!(drifts.len(), 1);
+        assert_eq!(drifts[0].field, "Priority");
+        assert_eq!(drifts[0].desired, "200");
+        assert_eq!(drifts[0].actual, "100");
+    }
+
+    #[test]
+    fn test_reconcile_queue_missing_attribute() {
+        let mut desired = HashMap::new();
+        desired.insert("max_run".to_string(), "50".to_string());
+
+        let current = HashMap::new();
+
+        let drifts = reconcile_queue(&desired, &current);
+        assert_eq!(drifts.len(), 1);
+        assert_eq!(drifts[0].field, "max_run");
+        assert_eq!(drifts[0].desired, "50");
+        assert_eq!(drifts[0].actual, "");
     }
 }
