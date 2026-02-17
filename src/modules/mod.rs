@@ -389,6 +389,21 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ));
     }
 
+    // Fast path: scan for characters that are known to be safe.
+    // If the string contains only safe characters, we can skip the detailed check.
+    // This avoids checking 24 patterns for every safe string (O(N) vs O(M*N)).
+    //
+    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @, %
+    let is_safe = args.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+        b'+' | b'=' | b',' | b'@' | b'%'
+    ));
+
+    if is_safe {
+        return Ok(());
+    }
+
     // Dangerous patterns that indicate command injection
     let dangerous_patterns = [
         ("$(", "command substitution $()"),
