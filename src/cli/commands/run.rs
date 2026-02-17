@@ -478,12 +478,21 @@ impl RunArgs {
         }
 
         // Display banner
+        let mode_suffix = if self.plan {
+            " [PLAN]"
+        } else if ctx.check_mode {
+            " [CHECK]"
+        } else {
+            ""
+        };
+
         ctx.output.banner(&format!(
-            "PLAYBOOK: {}",
+            "PLAYBOOK: {}{}",
             self.playbook
                 .file_name()
                 .unwrap_or_default()
-                .to_string_lossy()
+                .to_string_lossy(),
+            mode_suffix
         ));
 
         // Load playbook using executor's Playbook parser
@@ -566,7 +575,7 @@ impl RunArgs {
         // "Plan mode is implemented on top of executor or clearly separated as non-executing"
         if self.plan {
             ctx.output
-                .plan("WARNING: Running in PLAN MODE - showing execution plan only");
+                .warning("Running in PLAN MODE - showing execution plan only");
             let playbook_content = std::fs::read_to_string(&self.playbook)?;
             let playbook_yaml: serde_yaml::Value = serde_yaml::from_str(&playbook_content)?;
             let mut plan_lines: Vec<String> = Vec::new();
