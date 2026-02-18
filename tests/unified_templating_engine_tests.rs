@@ -54,7 +54,7 @@ fn test_render_value_recursively() {
         .expect("render_value should succeed");
 
     assert_eq!(
-        rendered,
+        *rendered,
         json!({
             "greeting": "hi alex",
             "nested": { "role": "admin" },

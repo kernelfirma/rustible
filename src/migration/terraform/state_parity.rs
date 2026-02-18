@@ -471,7 +471,7 @@ mod tests {
             "outputs": {"ip": "10.0.0.1"}
         }"#;
 
-        let validator = TerraformStateValidator::new(80.0);
+        let validator = TerraformStateValidator::new(0.8);
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
@@ -497,7 +497,7 @@ mod tests {
             "outputs": {}
         }"#;
 
-        let validator = TerraformStateValidator::new(80.0);
+        let validator = TerraformStateValidator::new(0.8);
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
@@ -510,7 +510,7 @@ mod tests {
         let tf = r#"{"version": 4, "resources": [], "outputs": {}}"#;
         let r = r#"{"resources": [], "outputs": {}}"#;
 
-        let validator = TerraformStateValidator::new(80.0);
+        let validator = TerraformStateValidator::new(0.8);
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
