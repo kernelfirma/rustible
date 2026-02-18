@@ -820,7 +820,7 @@ impl ConnectionFactory {
             ConnectionType::WinRm { host, port, user } => {
                 let conn = winrm::WinRmConnectionBuilder::new(host)
                     .port(*port)
-                    .auth(winrm::WinRmAuth::negotiate(user, ""))
+                    .auth(winrm::WinRmAuth::ntlm(user, ""))
                     .connect()
                     .await?;
                 Ok(Arc::new(conn))
@@ -1345,6 +1345,15 @@ impl ConnectionBuilder {
                             .to_string(),
                     ))
                 }
+            }
+            #[cfg(feature = "winrm")]
+            ConnectionType::WinRm { host, port, user } => {
+                let conn = winrm::WinRmConnectionBuilder::new(&host)
+                    .port(port)
+                    .auth(winrm::WinRmAuth::ntlm(&user, ""))
+                    .connect()
+                    .await?;
+                Ok(Arc::new(conn))
             }
         }
     }
