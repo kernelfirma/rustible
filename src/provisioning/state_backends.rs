@@ -1201,9 +1201,9 @@ impl LockBackend for AzureBlobLeaseLock {
                     id: lease_id,
                     operation: "unknown".to_string(),
                     who: "unknown".to_string(),
-                    version: "1".to_string(),
-                    created: chrono::Utc::now(),
-                    info: "Azure Blob Lease".to_string(),
+                    created_at: chrono::Utc::now(),
+                    expires_at: None,
+                    info: Some("Azure Blob Lease".to_string()),
                 }));
             }
         }
