@@ -135,6 +135,9 @@ use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
 use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
+use dialoguer::theme::ColorfulTheme;
+use console::Term;
+
 /// Errors that can occur during playbook and task execution.
 ///
 /// This enum covers all error conditions that may arise during the
@@ -327,6 +330,12 @@ pub struct ExecutorConfig {
     pub workers: usize,
     /// Distribution strategy for work assignment (default: "adaptive").
     pub distribution_strategy: String,
+
+    /// Enable step-by-step confirmation for tasks (default: false).
+    ///
+    /// When enabled, the executor prompts for confirmation before running each task.
+    /// Similar to Ansible's `--step` option.
+    pub step: bool,
 }
 
 impl Default for ExecutorConfig {
@@ -350,6 +359,7 @@ impl Default for ExecutorConfig {
             distributed: false,
             workers: 1,
             distribution_strategy: "adaptive".to_string(),
+            step: false,
         }
     }
 }
@@ -906,6 +916,8 @@ impl Executor {
             rescued_blocks.insert(h.clone(), HashSet::new());
         }
 
+        let mut step_mode = self.config.step;
+
         for task in tasks {
             // Determine which hosts should run this task based on block state
             let active_hosts: Vec<_> = hosts
@@ -964,6 +976,47 @@ impl Executor {
                     break;
                 }
                 continue;
+            }
+
+            if step_mode {
+                let term = Term::stderr();
+                let prompt = format!("Perform task: {}?", task.name);
+                let mut continue_outer_loop = false;
+
+                loop {
+                    let input: String = dialoguer::Input::with_theme(&ColorfulTheme::default())
+                        .with_prompt(&prompt)
+                        .default("y".to_string())
+                        .interact_on(&term)
+                        .map_err(|e| ExecutorError::IoError(e.into()))?;
+
+                    match input.trim().to_lowercase().as_str() {
+                        "y" | "yes" => break,
+                        "n" | "no" => {
+                            // Skip this task
+                            for h in hosts {
+                                if let Some(res) = results.get_mut(h) {
+                                     res.stats.skipped += 1;
+                                }
+                            }
+                            continue_outer_loop = true;
+                            break;
+                        },
+                        "c" | "cont" | "continue" => {
+                            step_mode = false;
+                            break;
+                        },
+                        "a" | "abort" => {
+                            return Err(ExecutorError::Other("Execution aborted by user".to_string()));
+                        },
+                        _ => {
+                            println!("Invalid option. Options: [y]es, [n]o, [c]ontinue, [a]bort");
+                            continue;
+                        }
+                    }
+                }
+
+                if continue_outer_loop { continue; }
             }
 
             // Run task on all active hosts in parallel (limited by semaphore)
