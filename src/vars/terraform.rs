@@ -252,10 +252,8 @@ impl TerraformVarImporter {
             } => {
                 #[cfg(feature = "aws")]
                 {
-                    use aws_types::region::Region;
-
-                    let config = aws_config::from_env()
-                        .region(Region::new(region))
+                    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                        .region(aws_sdk_s3::config::Region::new(region))
                         .load()
                         .await;
                     let client = aws_sdk_s3::Client::new(&config);
