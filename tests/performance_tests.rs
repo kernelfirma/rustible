@@ -54,7 +54,7 @@ fn create_test_inventory(num_hosts: usize, num_groups: usize) -> Inventory {
 
         for v in 0..10 {
             group.set_var(
-                &format!("group_var_{}", v),
+                format!("group_var_{}", v),
                 serde_yaml::Value::String(format!("value_{}", v)),
             );
         }
@@ -73,7 +73,7 @@ fn create_test_inventory(num_hosts: usize, num_groups: usize) -> Inventory {
 
         for v in 0..5 {
             host.set_var(
-                &format!("host_var_{}", v),
+                format!("host_var_{}", v),
                 serde_yaml::Value::String(format!("host_value_{}", v)),
             );
         }

@@ -46,8 +46,10 @@ use crate::template::get_engine;
 /// Status of a task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TaskStatus {
     /// Task completed successfully without changes
+    #[default]
     Ok,
     /// Task completed successfully with changes
     Changed,
@@ -59,11 +61,6 @@ pub enum TaskStatus {
     Unreachable,
 }
 
-impl Default for TaskStatus {
-    fn default() -> Self {
-        TaskStatus::Ok
-    }
-}
 
 /// Result of executing a task
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -369,12 +366,7 @@ impl From<crate::playbook::Task> for Task {
             // Standard loop or with_items - expect array
             if let Some(arr) = v.as_array() {
                 Some(LoopSource::Items(arr.clone()))
-            } else if let Some(s) = v.as_str() {
-                // Could be a template string like "{{ my_list }}"
-                Some(LoopSource::Template(s.to_string()))
-            } else {
-                None
-            }
+            } else { v.as_str().map(|s| LoopSource::Template(s.to_string())) }
         } else if let Some(v) = pt.with_dict {
             // with_dict - convert dict to list of {key, value} objects
             if let Some(obj) = v.as_object() {
@@ -844,7 +836,7 @@ impl Task {
         {
             let mut rt = runtime.write().await;
             let mut vars_to_clear = vec![self.loop_var.as_str(), "ansible_loop"];
-            if let Some(ref idx_var) = index_var {
+            if let Some(idx_var) = index_var {
                 vars_to_clear.push(idx_var.as_str());
             }
             rt.remove_task_vars(&vars_to_clear);
@@ -1049,8 +1041,7 @@ impl Task {
         // Synthesize per-item results from the single batched result
         let per_item_results: Vec<RegisteredResult> = items
             .iter()
-            .enumerate()
-            .map(|(_i, item)| {
+            .map(|item| {
                 let mut reg = result.to_registered(None, None);
                 reg.data.insert("item".to_string(), item.clone());
                 reg
@@ -2687,11 +2678,10 @@ fn find_operator_outside_parens(expr: &str, op: &str) -> Option<usize> {
             b'(' => depth += 1,
             b')' => depth -= 1,
             _ => {
-                if depth == 0 && i + op_bytes.len() <= bytes.len() {
-                    if &bytes[i..i + op_bytes.len()] == op_bytes {
+                if depth == 0 && i + op_bytes.len() <= bytes.len()
+                    && &bytes[i..i + op_bytes.len()] == op_bytes {
                         last_match = Some(i);
                     }
-                }
             }
         }
         i += 1;
@@ -3031,7 +3021,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
 
     // Handle comparison operators (check >= and <= before > and <)
     if let Some(pos) = find_operator_outside_parens(expr, " >= ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 4..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(compare_values(&left, &right)
@@ -3040,7 +3030,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     }
 
     if let Some(pos) = find_operator_outside_parens(expr, " <= ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 4..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(compare_values(&left, &right)
@@ -3049,7 +3039,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     }
 
     if let Some(pos) = find_operator_outside_parens(expr, " > ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 3..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(compare_values(&left, &right)
@@ -3058,7 +3048,7 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
     }
 
     if let Some(pos) = find_operator_outside_parens(expr, " < ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 3..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(compare_values(&left, &right)
@@ -3068,14 +3058,14 @@ fn evaluate_expression(expr: &str, vars: &IndexMap<String, JsonValue>) -> Execut
 
     // Handle equality operators
     if let Some(pos) = find_operator_outside_parens(expr, " == ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 4..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(left == right);
     }
 
     if let Some(pos) = find_operator_outside_parens(expr, " != ") {
-        let left = evaluate_variable_expression(&expr[..pos].trim(), vars)?;
+        let left = evaluate_variable_expression(expr[..pos].trim(), vars)?;
         let right_str = expr[pos + 4..].trim();
         let right = parse_value(right_str, vars)?;
         return Ok(left != right);

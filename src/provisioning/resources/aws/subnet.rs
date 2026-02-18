@@ -1304,7 +1304,7 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let resource = AwsSubnetResource::default();
+        let resource = AwsSubnetResource;
         assert_eq!(resource.resource_type(), "aws_subnet");
     }
 }

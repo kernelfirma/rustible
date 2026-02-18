@@ -942,7 +942,7 @@ mod limit_from_file {
         writeln!(hosts_file, "web01").unwrap();
         writeln!(hosts_file, "# Another comment").unwrap();
         writeln!(hosts_file, "web02").unwrap();
-        writeln!(hosts_file, "").unwrap(); // Empty line
+        writeln!(hosts_file).unwrap(); // Empty line
 
         rustible_cmd()
             .arg("-i")

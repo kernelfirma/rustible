@@ -544,12 +544,12 @@ mod tests {
         use crate::utils::shell_escape;
 
         let remote_path = "/tmp/.ansible_script_123.tmp";
-        let args = vec!["arg1", "arg with space"];
+        let args = ["arg1", "arg with space"];
         let chdir = Some("/tmp/dir with space");
         let executable = Some("/bin/bash");
 
         // Logic from execute()
-        let exec_cmd = if let Some(ref exec) = executable {
+        let exec_cmd = if let Some(exec) = executable {
             let parts = shell_words::split(exec).unwrap();
             let safe_exec = parts
                 .iter()
@@ -557,7 +557,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(" ");
 
-            if let Some(ref dir) = chdir {
+            if let Some(dir) = chdir {
                 format!(
                     "cd {} && {} {} {}",
                     shell_escape(dir),
@@ -626,12 +626,12 @@ mod tests {
         use crate::utils::shell_escape;
 
         let remote_path = "/tmp/.ansible_script_123.tmp";
-        let args = vec!["arg1"];
+        let args = ["arg1"];
         let chdir: Option<&str> = None;
         let executable = Some("perl -e 'print \"pwned\"' #"); // This passes validation!
 
         // Logic from execute() that we want to test/fix
-        let exec_cmd = if let Some(ref exec) = executable {
+        let exec_cmd = if let Some(exec) = executable {
             // New secure logic
             let parts = shell_words::split(exec).unwrap();
             let safe_exec = parts
@@ -643,7 +643,7 @@ mod tests {
             format!(
                 "{} {} {}",
                 safe_exec,
-                shell_escape(&remote_path),
+                shell_escape(remote_path),
                 args.iter()
                     .map(|a| shell_escape(a))
                     .collect::<Vec<_>>()

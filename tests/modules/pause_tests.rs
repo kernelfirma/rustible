@@ -170,7 +170,7 @@ fn test_pause_duration_display() {
         };
 
         assert!(
-            display.contains(&expected_pattern.replace("(s)", "(s)")),
+            display.contains(expected_pattern),
             "Duration {} should display as '{}'",
             secs,
             expected_pattern
@@ -298,17 +298,17 @@ fn test_pause_interactive_detection() {
     use std::io::IsTerminal;
     let is_tty = std::io::stdin().is_terminal();
     // This test just verifies the terminal detection works
-    assert!(is_tty || !is_tty); // Always true, just testing the function call
+    let _ = is_tty; // Just testing the terminal detection function call
 }
 
 #[test]
 fn test_pause_user_input_empty() {
     // Test empty input handling
-    let user_input = "";
+    let user_input: String = String::new();
     let message = if user_input.is_empty() {
-        "Paused for user confirmation"
+        "Paused for user confirmation".to_string()
     } else {
-        &format!("User input received: {} characters", user_input.len())
+        format!("User input received: {} characters", user_input.len())
     };
 
     assert_eq!(message, "Paused for user confirmation");
@@ -316,7 +316,7 @@ fn test_pause_user_input_empty() {
 
 #[test]
 fn test_pause_user_input_with_content() {
-    let user_input = "yes";
+    let user_input: String = "yes".to_string();
     let message = if user_input.is_empty() {
         "Paused for user confirmation".to_string()
     } else {

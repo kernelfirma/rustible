@@ -625,7 +625,7 @@ impl Module for IbPartitionModule {
                 .collect();
             let new_conf: String = new_entries
                 .iter()
-                .map(|e| format_partition_line_simple(e))
+                .map(format_partition_line_simple)
                 .collect::<Vec<_>>()
                 .join("\n");
             let new_conf = format!("{}\n", new_conf);
@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn test_partition_line_format() {
         let pkey = "0x7fff";
-        let members = vec!["node1".to_string(), "node2".to_string()];
+        let members = ["node1".to_string(), "node2".to_string()];
         let members_str = members.join(",");
         let line = format!("{}={}\n", pkey, members_str);
         assert!(line.contains("0x7fff"));

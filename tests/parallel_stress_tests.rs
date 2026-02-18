@@ -25,7 +25,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use tokio::sync::Semaphore;
+
+// Import the Connection trait so we can call .execute() / .close() on connections
+use rustible::connection::{Connection, ConnectionConfig, HostConfig};
 
 mod common;
 
@@ -35,6 +37,7 @@ struct ParallelTestConfig {
     ssh_user: String,
     ssh_key_path: PathBuf,
     hosts: Vec<String>,
+    #[allow(dead_code)]
     inventory_path: Option<PathBuf>,
 }
 
@@ -79,6 +82,15 @@ impl ParallelTestConfig {
             false
         }
     }
+
+    /// Build a HostConfig for SSH connections using the test configuration.
+    fn host_config(&self, host: &str) -> HostConfig {
+        HostConfig::new()
+            .hostname(host)
+            .port(22)
+            .user(&self.ssh_user)
+            .identity_file(self.ssh_key_path.to_string_lossy())
+    }
 }
 
 // =============================================================================
@@ -93,7 +105,7 @@ async fn test_linear_strategy_task_ordering() {
     }
 
     // Track execution order
-    let execution_log: Arc<Mutex<Vec<(String, String, Instant)>>> =
+    let _execution_log: Arc<Mutex<Vec<(String, String, Instant)>>> =
         Arc::new(Mutex::new(Vec::new()));
 
     let hosts: Vec<_> = config.hosts.iter().take(5).cloned().collect();
@@ -130,23 +142,22 @@ async fn test_linear_strategy_task_ordering() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     // Execute with linear strategy
+    let executor_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 5,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..executor_config
     };
 
+    let executor = rustible::executor::Executor::new(executor_config);
+
     let start = Instant::now();
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
     let total_time = start.elapsed();
 
     println!("Linear strategy execution completed in {:?}", total_time);
@@ -170,7 +181,7 @@ async fn test_free_strategy_independent_execution() {
     let hosts: Vec<_> = config.hosts.iter().take(5).cloned().collect();
 
     // Track when each host starts and finishes
-    let host_timings: Arc<Mutex<HashMap<String, (Instant, Instant)>>> =
+    let _host_timings: Arc<Mutex<HashMap<String, (Instant, Instant)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
     // Create playbook with a task that has variable duration
@@ -195,22 +206,21 @@ async fn test_free_strategy_independent_execution() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
+    let executor_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 10, // More forks than hosts to allow full parallelism
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Free,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..executor_config
     };
 
+    let executor = rustible::executor::Executor::new(executor_config);
+
     let start = Instant::now();
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
     let total_time = start.elapsed();
 
     println!("Free strategy execution completed in {:?}", total_time);
@@ -266,21 +276,19 @@ async fn test_host_pinned_strategy_affinity() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
+    let executor_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 5,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::HostPinned,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..executor_config
     };
 
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let result = executor.run_playbook(&playbook).await;
 
     assert!(
         result.is_ok(),
@@ -301,8 +309,8 @@ async fn test_fork_limit_enforcement() {
     }
 
     // Track concurrent connections
-    let concurrent_count = Arc::new(AtomicUsize::new(0));
-    let max_concurrent = Arc::new(AtomicUsize::new(0));
+    let _concurrent_count = Arc::new(AtomicUsize::new(0));
+    let _max_concurrent = Arc::new(AtomicUsize::new(0));
 
     let hosts: Vec<_> = config.hosts.iter().take(10).cloned().collect();
 
@@ -327,23 +335,22 @@ async fn test_fork_limit_enforcement() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     let fork_limit = 3;
+    let executor_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: fork_limit, // Limit to 3 concurrent
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Free,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..executor_config
     };
 
+    let executor = rustible::executor::Executor::new(executor_config);
+
     let start = Instant::now();
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
     let total_time = start.elapsed();
 
     assert!(
@@ -386,7 +393,7 @@ async fn test_fork_limit_with_different_values() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     let playbook = common::PlaybookBuilder::new("Fork Comparison Test")
         .add_play(
@@ -404,21 +411,19 @@ async fn test_fork_limit_with_different_values() {
     let mut results = vec![];
 
     for forks in [1, 2, 3, 6] {
+        let base_config = common::test_executor_config();
         let executor_config = rustible::executor::ExecutorConfig {
             forks,
-            check_mode: false,
-            diff_mode: false,
-            verbosity: 0,
             strategy: rustible::executor::ExecutionStrategy::Free,
             task_timeout: 60,
             gather_facts: false,
-            extra_vars: HashMap::new(),
-            ..Default::default()
+            ..base_config
         };
 
+        let executor = rustible::executor::Executor::new(executor_config);
+
         let start = Instant::now();
-        let result =
-            rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+        let result = executor.run_playbook(&playbook).await;
         let elapsed = start.elapsed();
 
         assert!(result.is_ok());
@@ -456,7 +461,7 @@ async fn test_serial_execution_batching() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     // Test with serial: 3 (batches of 3)
     let playbook = common::PlaybookBuilder::new("Serial Batch Test")
@@ -473,19 +478,17 @@ async fn test_serial_execution_batching() {
         )
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 10, // High forks, but serial should limit it
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let result = executor.run_playbook(&playbook).await;
 
     assert!(
         result.is_ok(),
@@ -514,7 +517,7 @@ async fn test_handler_deduplication_parallel() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     // Multiple tasks notify the same handler
     let playbook = common::PlaybookBuilder::new("Handler Deduplication Test")
@@ -541,31 +544,35 @@ async fn test_handler_deduplication_parallel() {
                 )
                 .add_handler(rustible::executor::task::Handler {
                     name: "common handler".to_string(),
-                    task: common::TaskBuilder::new("Common Handler", "command")
-                        .arg(
-                            "cmd",
-                            "echo handler >> /tmp/rustible_handler_test_$(hostname)",
-                        )
-                        .build(),
+                    module: "command".to_string(),
+                    args: {
+                        let mut args = indexmap::IndexMap::new();
+                        args.insert(
+                            "cmd".to_string(),
+                            serde_json::json!(
+                                "echo handler >> /tmp/rustible_handler_test_$(hostname)"
+                            ),
+                        );
+                        args
+                    },
+                    when: None,
                     listen: vec![],
                 })
                 .build(),
         )
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 5,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let result = executor.run_playbook(&playbook).await;
 
     assert!(
         result.is_ok(),
@@ -602,7 +609,7 @@ async fn test_high_host_count_stress() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     let playbook = common::PlaybookBuilder::new("High Host Count Stress")
         .add_play(
@@ -617,20 +624,19 @@ async fn test_high_host_count_stress() {
         )
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 20, // High parallelism
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Free,
         task_timeout: 60,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
+    let executor = rustible::executor::Executor::new(executor_config);
+
     let start = Instant::now();
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
     let elapsed = start.elapsed();
 
     assert!(
@@ -663,14 +669,14 @@ async fn test_many_tasks_stress() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     // Build playbook with many tasks
     let mut play_builder = common::PlayBuilder::new("Many tasks stress", "all").gather_facts(false);
 
     for i in 0..50 {
         play_builder = play_builder.add_task(
-            common::TaskBuilder::new(&format!("Task {}", i), "command")
+            common::TaskBuilder::new(format!("Task {}", i), "command")
                 .arg("cmd", format!("echo task_{}", i))
                 .build(),
         );
@@ -680,20 +686,19 @@ async fn test_many_tasks_stress() {
         .add_play(play_builder.build())
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 5,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 120,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
+    let executor = rustible::executor::Executor::new(executor_config);
+
     let start = Instant::now();
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
     let elapsed = start.elapsed();
 
     assert!(
@@ -733,17 +738,19 @@ async fn test_rapid_reconnection_stress() {
 
     let start = Instant::now();
 
-    for i in 0..connection_count {
-        let ssh_config = rustible::connection::SshConfig {
-            host: host.clone(),
-            port: 22,
-            user: config.ssh_user.clone(),
-            private_key_path: Some(config.ssh_key_path.clone()),
-            timeout: Duration::from_secs(10),
-            ..Default::default()
-        };
+    let global_config = ConnectionConfig::default();
+    let host_config = config.host_config(&host);
 
-        match rustible::connection::SshConnection::connect(ssh_config).await {
+    for i in 0..connection_count {
+        match rustible::connection::SshConnection::connect(
+            &host,
+            22,
+            &config.ssh_user,
+            Some(host_config.clone()),
+            &global_config,
+        )
+        .await
+        {
             Ok(conn) => {
                 // Quick command
                 if conn.execute("echo ok", None).await.is_ok() {
@@ -800,7 +807,7 @@ async fn test_partial_host_failure() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     let playbook = common::PlaybookBuilder::new("Partial Failure Test")
         .add_play(
@@ -815,26 +822,38 @@ async fn test_partial_host_failure() {
         )
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 5,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Free,
         task_timeout: 10, // Short timeout for unreachable host
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let result = executor.run_playbook(&playbook).await;
 
     // Should complete with some failures
     match result {
-        Ok(stats) => {
-            println!("Stats: ok={}, unreachable={}", stats.ok, stats.unreachable);
-            assert!(stats.unreachable >= 1, "Should have at least 1 unreachable");
-            assert!(stats.ok >= 2, "Should have at least 2 successful");
+        Ok(host_results) => {
+            let mut total_ok = 0usize;
+            let mut total_unreachable = 0usize;
+            for hr in host_results.values() {
+                total_ok += hr.stats.ok;
+                if hr.unreachable {
+                    total_unreachable += 1;
+                }
+            }
+            println!(
+                "Stats: ok={}, unreachable={}",
+                total_ok, total_unreachable
+            );
+            assert!(
+                total_unreachable >= 1,
+                "Should have at least 1 unreachable"
+            );
+            assert!(total_ok >= 2, "Should have at least 2 successful");
         }
         Err(e) => {
             // Complete failure is acceptable if unreachable count is tracked
@@ -864,7 +883,7 @@ async fn test_max_fail_percentage() {
             .host_var(host, "ansible_host", serde_json::json!(host))
             .host_var(host, "ansible_user", serde_json::json!(config.ssh_user));
     }
-    let inventory = inventory_builder.build();
+    let _inventory = inventory_builder.build();
 
     let playbook = common::PlaybookBuilder::new("Max Fail Percentage Test")
         .add_play(
@@ -880,21 +899,20 @@ async fn test_max_fail_percentage() {
         )
         .build();
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 10,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Free,
         task_timeout: 5,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
+
+    let executor = rustible::executor::Executor::new(executor_config);
 
     // With 5 hosts and 2 unreachable (40%), we exceed 30% threshold
     // Execution should fail or report the threshold breach
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let result = executor.run_playbook(&playbook).await;
 
     // Result depends on implementation - may abort early or complete with failure stats
     println!("Max fail percentage result: {:?}", result);
@@ -911,49 +929,61 @@ async fn test_connection_pool_concurrent_stress() {
         return;
     }
 
-    let pool = Arc::new(rustible::connection::ConnectionPool::new(10));
+    let pool = rustible::connection::AsyncConnectionPool::new(10);
     let hosts: Vec<_> = config.hosts.iter().take(5).cloned().collect();
 
     let successful = Arc::new(AtomicUsize::new(0));
     let failed = Arc::new(AtomicUsize::new(0));
+
+    let global_config = Arc::new(ConnectionConfig::default());
 
     let mut handles = vec![];
 
     // Spawn many concurrent tasks all trying to use the pool
     for iteration in 0..20 {
         for (i, host) in hosts.iter().enumerate() {
-            let pool = Arc::clone(&pool);
+            let pool = pool.clone();
             let successful = Arc::clone(&successful);
             let failed = Arc::clone(&failed);
             let host = host.clone();
             let user = config.ssh_user.clone();
-            let key_path = config.ssh_key_path.clone();
+            let host_cfg = config.host_config(&host);
+            let global_cfg = Arc::clone(&global_config);
 
             handles.push(tokio::spawn(async move {
-                let ssh_config = rustible::connection::SshConfig {
-                    host: host.clone(),
-                    port: 22,
-                    user: user.clone(),
-                    private_key_path: Some(key_path),
-                    timeout: Duration::from_secs(30),
-                    ..Default::default()
-                };
-
                 let pool_key = format!("ssh://{}@{}:22", user, host);
 
-                match pool
-                    .get_or_create(&pool_key, || {
-                        Box::pin(async {
-                            rustible::connection::SshConnection::connect(ssh_config.clone()).await
-                        })
-                    })
-                    .await
-                {
-                    Ok(conn) => {
+                // Try to get from pool first
+                if let Some(conn) = pool.get(&pool_key).await {
+                    if conn.is_alive().await {
                         let result = conn
                             .execute(&format!("echo iter_{}_host_{}", iteration, i), None)
                             .await;
-                        pool.return_connection(conn).await;
+                        if result.is_ok() {
+                            successful.fetch_add(1, Ordering::SeqCst);
+                        } else {
+                            failed.fetch_add(1, Ordering::SeqCst);
+                        }
+                        return;
+                    }
+                }
+
+                // Create new connection
+                match rustible::connection::SshConnection::connect(
+                    &host,
+                    22,
+                    &user,
+                    Some(host_cfg),
+                    &global_cfg,
+                )
+                .await
+                {
+                    Ok(conn) => {
+                        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(conn);
+                        let result = conn
+                            .execute(&format!("echo iter_{}_host_{}", iteration, i), None)
+                            .await;
+                        pool.put(pool_key, conn).await;
 
                         if result.is_ok() {
                             successful.fetch_add(1, Ordering::SeqCst);
@@ -1001,65 +1031,64 @@ async fn test_connection_pool_exhaustion() {
     }
 
     // Small pool to test exhaustion behavior
-    let pool = Arc::new(rustible::connection::ConnectionPool::new(2));
+    let pool = rustible::connection::AsyncConnectionPool::new(2);
     let host = config
         .hosts
         .first()
         .expect("Need at least one host")
         .clone();
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
-
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(&host);
     let pool_key = format!("ssh://{}@{}:22", config.ssh_user, host);
 
     // Get connections up to pool limit
-    let conn1 = pool
-        .get_or_create(&pool_key, || {
-            Box::pin(async {
-                rustible::connection::SshConnection::connect(ssh_config.clone()).await
-            })
-        })
-        .await
-        .expect("Failed to get conn1");
+    let conn1 = rustible::connection::SshConnection::connect(
+        &host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg.clone()),
+        &global_config,
+    )
+    .await
+    .expect("Failed to get conn1");
+    let conn1: Arc<dyn Connection + Send + Sync> = Arc::new(conn1);
+    pool.put(pool_key.clone(), conn1.clone()).await;
 
-    let conn2 = pool
-        .get_or_create(&pool_key, || {
-            Box::pin(async {
-                rustible::connection::SshConnection::connect(ssh_config.clone()).await
-            })
-        })
-        .await
-        .expect("Failed to get conn2");
+    let conn2 = rustible::connection::SshConnection::connect(
+        &host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg.clone()),
+        &global_config,
+    )
+    .await
+    .expect("Failed to get conn2");
+    let conn2: Arc<dyn Connection + Send + Sync> = Arc::new(conn2);
+    pool.put(format!("{}/2", pool_key), conn2.clone()).await;
 
     // Pool should handle this - either create new or wait/error
     // Behavior depends on implementation
-    let result = pool
-        .get_or_create(&pool_key, || {
-            Box::pin(async {
-                rustible::connection::SshConnection::connect(ssh_config.clone()).await
-            })
-        })
-        .await;
+    let conn3_result = rustible::connection::SshConnection::connect(
+        &host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg.clone()),
+        &global_config,
+    )
+    .await;
 
-    // Return connections
-    pool.return_connection(conn1).await;
-    pool.return_connection(conn2).await;
+    // Remove connections from pool
+    pool.remove(&pool_key).await;
+    pool.remove(&format!("{}/2", pool_key)).await;
 
-    // Should now be able to get a connection
-    let conn3 = pool
-        .get_or_create(&pool_key, || {
-            Box::pin(async {
-                rustible::connection::SshConnection::connect(ssh_config.clone()).await
-            })
-        })
-        .await
-        .expect("Should get connection after return");
+    // Should now be able to add a connection
+    if let Ok(conn3) = conn3_result {
+        let conn3: Arc<dyn Connection + Send + Sync> = Arc::new(conn3);
+        pool.put(pool_key.clone(), conn3.clone()).await;
+        conn3.close().await.ok();
+    }
 
-    conn3.close().await.ok();
+    conn1.close().await.ok();
+    conn2.close().await.ok();
 }

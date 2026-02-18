@@ -18,7 +18,6 @@ use std::io::Write;
 use tempfile::{tempdir, NamedTempFile};
 
 // Re-export serde_json for JSON parsing tests
-use serde_json;
 
 // Helper to get a command for testing
 fn rustible_cmd() -> Command {

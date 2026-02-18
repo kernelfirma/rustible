@@ -78,7 +78,8 @@ fn generate_nested_includes(depth: usize, temp_dir: &std::path::Path) -> Vec<Pat
 }
 
 /// Generate a playbook with serial execution
-fn generate_serial_playbook(batch_size: usize, num_hosts: usize) -> String {
+#[allow(dead_code)]
+fn generate_serial_playbook(batch_size: usize, _num_hosts: usize) -> String {
     format!(
         r#"
 - name: Serial execution test
@@ -128,6 +129,7 @@ fn generate_plan_mode_playbook(num_tasks: usize) -> String {
 }
 
 /// Generate inventory for testing
+#[allow(dead_code)]
 fn generate_test_inventory(num_hosts: usize) -> String {
     let mut yaml = "all:\n  hosts:\n".to_string();
     for i in 0..num_hosts {
@@ -405,7 +407,7 @@ fn bench_serial_spec_calculation(c: &mut Criterion) {
     // Progressive batch sizes [1, 5, 10, 25%]
     group.bench_function("progressive", |b| {
         b.iter(|| {
-            let progressive = vec![1, 5, 10, 25];
+            let progressive = [1, 5, 10, 25];
             let mut remaining = total_hosts;
             let mut batches = Vec::new();
             let mut idx = 0;

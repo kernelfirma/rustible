@@ -43,8 +43,8 @@ fn create_larger_test_state(resource_count: usize) -> ProvisioningState {
     let mut state = ProvisioningState::new();
     for i in 0..resource_count {
         let resource = ResourceState::new(
-            ResourceId::new("aws_instance", &format!("server_{}", i)),
-            &format!("i-{:08x}", i),
+            ResourceId::new("aws_instance", format!("server_{}", i)),
+            format!("i-{:08x}", i),
             "aws",
             json!({
                 "ami": "ami-12345678",

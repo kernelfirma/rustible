@@ -10,6 +10,7 @@
 //! - Check mode works identically
 
 use assert_cmd::Command;
+#[allow(unused_imports)]
 use predicates::prelude::*;
 use rustible::executor::playbook::Playbook;
 use rustible::executor::runtime::RuntimeContext;
@@ -164,7 +165,7 @@ fn test_executor_api_matches_cli_pattern() {
     let mut runtime = RuntimeContext::new();
     runtime.add_host("localhost".to_string(), None);
 
-    let executor = Executor::with_runtime(config, runtime);
+    let _executor = Executor::with_runtime(config, runtime);
 
     // Verify playbook structure
     assert_eq!(playbook.plays.len(), 1);
@@ -251,7 +252,7 @@ fn test_run_with_tags_cli() {
     // The untagged task should be skipped
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Either explicitly skipped or just not shown
-    let has_skip_indicator =
+    let _has_skip_indicator =
         stdout.contains("skipped") || !stdout.contains("Untagged task") || stdout.contains("skip");
 
     // This is a soft assertion - tag filtering may work differently
@@ -443,7 +444,7 @@ fn test_run_recap_stats_format_cli() {
         || stdout.contains("localhost");
 
     assert!(
-        has_stats || stdout.len() > 0,
+        has_stats || !stdout.is_empty(),
         "Expected recap stats in output, got: {}",
         stdout
     );

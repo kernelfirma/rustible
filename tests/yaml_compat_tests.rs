@@ -616,11 +616,11 @@ fn test_empty_collections() {
         assert!(dict.is_empty(), "Empty dict should be empty");
     }
 
-    assert!(play.vars.get("null_value").map_or(false, |v| v.is_null()));
+    assert!(play.vars.get("null_value").is_some_and(|v| v.is_null()));
     assert!(play
         .vars
         .get("explicit_null")
-        .map_or(false, |v| v.is_null()));
+        .is_some_and(|v| v.is_null()));
 }
 
 // ============================================================================
@@ -850,13 +850,13 @@ fn test_numeric_strings_vs_numbers() {
     assert!(play
         .vars
         .get("actual_number")
-        .map_or(false, |v| v.is_number()));
+        .is_some_and(|v| v.is_number()));
 
     // string_number should be a string
     assert!(play
         .vars
         .get("string_number")
-        .map_or(false, |v| v.is_string()));
+        .is_some_and(|v| v.is_string()));
 }
 
 // ============================================================================

@@ -44,10 +44,10 @@
 //! - Memory usage exceeds threshold (100MB per 100 connections)
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::io::Read;
 use std::net::TcpStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
 
 // ============================================================================
 // Configuration
@@ -95,7 +95,7 @@ fn whoami() -> String {
 
 fn expand_path(path: &str) -> String {
     if path.starts_with("~/") {
-        if let Some(home) = std::env::var("HOME").ok() {
+        if let Ok(home) = std::env::var("HOME") {
             return path.replacen("~", &home, 1);
         }
     }
@@ -110,6 +110,7 @@ fn expand_path(path: &str) -> String {
 const MIN_PIPELINING_SPEEDUP: f64 = 2.0;
 
 /// Maximum allowed regression percentage from baseline
+#[allow(dead_code)]
 const MAX_REGRESSION_PERCENT: f64 = 10.0;
 
 /// Target speedup for pipelining (good performance)
@@ -123,6 +124,7 @@ const EXCELLENT_PIPELINING_SPEEDUP: f64 = 5.0;
 // ============================================================================
 
 /// Simulates SSH command execution latency
+#[allow(dead_code)]
 fn simulate_ssh_command(command: &str) -> Duration {
     // Typical SSH command latency: 5-50ms depending on network
     let base_latency = Duration::from_millis(10);

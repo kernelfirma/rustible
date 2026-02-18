@@ -434,7 +434,7 @@ async fn validate_playbook(playbook: &std::path::Path, ctx: &mut CommandContext)
                                 .unwrap_or("unnamed");
 
                             // Check that task has at least one module
-                            let has_module = task.as_mapping().map_or(false, |m| {
+                            let has_module = task.as_mapping().is_some_and(|m| {
                                 m.keys().any(|k| {
                                     let key = k.as_str().unwrap_or("");
                                     !matches!(

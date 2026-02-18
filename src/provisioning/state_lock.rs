@@ -883,14 +883,14 @@ impl StateLockManager {
     // Internal: Create a backend reference for lock guards
     fn backend_ref(&self) -> BackendRef<'_> {
         BackendRef {
-            backend: &self.backend,
+            backend: &*self.backend,
         }
     }
 }
 
 // Internal wrapper for backend reference in lock guards
 struct BackendRef<'a> {
-    backend: &'a Box<dyn LockBackend>,
+    backend: &'a dyn LockBackend,
 }
 
 impl<'a> BackendRef<'a> {

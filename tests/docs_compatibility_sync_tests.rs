@@ -22,6 +22,7 @@ pub enum FeatureStatus {
 }
 
 impl FeatureStatus {
+    #[allow(dead_code)]
     fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "stable" => Some(Self::Stable),
@@ -65,6 +66,7 @@ impl Feature {
         }
     }
 
+    #[allow(dead_code)]
     fn deprecated(mut self, version: &str) -> Self {
         self.version_deprecated = Some(version.to_string());
         self
@@ -617,9 +619,7 @@ fn module_status_from_cell(cell: &str, subsection: &str) -> FeatureStatus {
 
     if subsection_lower.contains("aws cloud modules") && status == FeatureStatus::Stable {
         status = FeatureStatus::Beta;
-    } else if subsection_lower.contains("experimental") {
-        status = FeatureStatus::Experimental;
-    } else if subsection_lower.contains("disabled") {
+    } else if subsection_lower.contains("experimental") || subsection_lower.contains("disabled") {
         status = FeatureStatus::Experimental;
     }
 
@@ -1140,8 +1140,8 @@ impl<'a> SyncChecker<'a> {
 
         // Check all features/modules that should be in matrix
         for feature in &self.registry.features {
-            if feature.status.should_be_in_matrix() {
-                if !self.docs.matrix_entries.contains_key(&feature.name) {
+            if feature.status.should_be_in_matrix()
+                && !self.docs.matrix_entries.contains_key(&feature.name) {
                     issues.push(SyncIssue {
                         item_type: "matrix".to_string(),
                         name: feature.name.clone(),
@@ -1149,7 +1149,6 @@ impl<'a> SyncChecker<'a> {
                         severity: SyncSeverity::Error,
                     });
                 }
-            }
         }
 
         for module in &self.registry.modules {
@@ -1232,6 +1231,7 @@ impl<'a> SyncChecker<'a> {
         issues
     }
 
+    #[allow(dead_code)]
     fn error_count(&self) -> usize {
         self.check_all()
             .iter()
@@ -1572,7 +1572,7 @@ fn test_ci_guard_core_features_stable() {
     for name in &core_features {
         let feature = registry
             .get_feature(name)
-            .expect(&format!("Missing core feature: {}", name));
+            .unwrap_or_else(|| panic!("Missing core feature: {}", name));
         assert_eq!(
             feature.status,
             FeatureStatus::Stable,
@@ -1590,7 +1590,7 @@ fn test_ci_guard_core_modules_stable() {
     for name in &core_modules {
         let module = registry
             .get_module(name)
-            .expect(&format!("Missing core module: {}", name));
+            .unwrap_or_else(|| panic!("Missing core module: {}", name));
         assert_eq!(
             module.status,
             FeatureStatus::Stable,

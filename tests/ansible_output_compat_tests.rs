@@ -979,7 +979,7 @@ mod color_compatibility {
             let has_failure = statuses
                 .iter()
                 .any(|s| *s == "failed" || *s == "unreachable");
-            let has_changes = statuses.iter().any(|s| *s == "changed");
+            let has_changes = statuses.contains(&"changed");
 
             let color = if has_failure {
                 "red"

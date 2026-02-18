@@ -23,7 +23,7 @@
 
 #[cfg(feature = "docker")]
 use bollard::image::{
-    BuildImageOptions, CreateImageOptions, ListImagesOptions, RemoveImageOptions, TagImageOptions,
+    BuildImageOptions, CreateImageOptions, RemoveImageOptions, TagImageOptions,
 };
 #[cfg(feature = "docker")]
 use bollard::Docker;
@@ -273,7 +273,7 @@ impl DockerImageModule {
 
     /// Build image from Dockerfile
     async fn build_image(docker: &Docker, config: &ImageConfig) -> ModuleResult<()> {
-        use std::io::Read;
+        
         use tar::Builder;
 
         let build_path = config.build.path.as_ref().ok_or_else(|| {

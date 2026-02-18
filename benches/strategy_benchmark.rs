@@ -33,9 +33,8 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
 
@@ -49,6 +48,7 @@ use rustible::strategy::Strategy;
 
 /// Simulated task execution result
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct MockTaskResult {
     status: MockTaskStatus,
     changed: bool,
@@ -56,6 +56,7 @@ struct MockTaskResult {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 enum MockTaskStatus {
     Ok,
     Changed,
@@ -72,6 +73,7 @@ impl MockTaskResult {
         }
     }
 
+    #[allow(dead_code)]
     fn changed() -> Self {
         Self {
             status: MockTaskStatus::Changed,
@@ -91,6 +93,7 @@ impl MockTaskResult {
 
 /// Simulated host state for execution tracking
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct HostState {
     name: String,
     failed: bool,
@@ -123,6 +126,7 @@ impl HostState {
 
 /// Simple task representation
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct MockTask {
     name: String,
     fail_on_host: Option<String>,
@@ -536,7 +540,7 @@ fn bench_host_failure_handling(c: &mut Criterion) {
     });
 
     // 50% failure rate (10 hosts fail)
-    let mut tasks_50_pct_fail: Vec<MockTask> = (0..10)
+    let tasks_50_pct_fail: Vec<MockTask> = (0..10)
         .map(|i| {
             let mut task = MockTask::new(&format!("task_{}", i));
             if i == 0 {
@@ -820,8 +824,8 @@ fn bench_semaphore_overhead(c: &mut Criterion) {
         b.to_async(&rt).iter(|| {
             let sem = sem.clone();
             async move {
-                let permit = sem.acquire().await.unwrap();
-                black_box(permit);
+                let _permit = sem.acquire().await.unwrap();
+                black_box(());
             }
         })
     });

@@ -27,8 +27,8 @@ use std::collections::HashMap;
 use std::hint::black_box as bb;
 
 // Import Rustible types - use prelude for common types
-use rustible::inventory::{Group, Host, Inventory};
-use rustible::playbook::{Play, Playbook, Task};
+use rustible::inventory::Inventory;
+use rustible::playbook::{Playbook, Task};
 use rustible::vars::Variables;
 
 // ============================================================================
@@ -144,7 +144,7 @@ fn bench_task_cloning_overhead(c: &mut Criterion) {
 
     group.bench_function("clone_batch_100", |b| {
         b.iter(|| {
-            let cloned: Vec<Task> = tasks.iter().cloned().collect();
+            let cloned: Vec<Task> = tasks.to_vec();
             black_box(cloned)
         })
     });

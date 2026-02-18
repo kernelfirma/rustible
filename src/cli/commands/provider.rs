@@ -6,7 +6,7 @@
 use super::CommandContext;
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Provider command arguments
 #[derive(Args, Debug, Clone)]
@@ -180,7 +180,7 @@ async fn execute_install(args: &InstallArgs, ctx: &CommandContext) -> Result<i32
 /// Install provider from URL
 async fn install_from_url(
     url: &str,
-    providers_path: &PathBuf,
+    providers_path: &Path,
     args: &InstallArgs,
     ctx: &CommandContext,
 ) -> Result<i32> {
@@ -228,7 +228,7 @@ async fn install_from_url(
 /// Install provider from local path
 async fn install_from_path(
     path: &str,
-    providers_path: &PathBuf,
+    providers_path: &Path,
     args: &InstallArgs,
     ctx: &CommandContext,
 ) -> Result<i32> {
@@ -366,8 +366,8 @@ fn verify_provider_archive(path: &PathBuf) -> Result<()> {
 
 /// Install a provider from an archive
 fn install_provider_archive(
-    archive_path: &PathBuf,
-    providers_path: &PathBuf,
+    archive_path: &Path,
+    providers_path: &Path,
     ctx: &CommandContext,
 ) -> Result<()> {
     // Open and extract the archive
@@ -446,10 +446,8 @@ fn find_content_dir(dir: &std::path::Path) -> Result<PathBuf> {
     // Check one level deep
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if entry.path().join("manifest.json").exists() {
-                return Ok(entry.path());
-            }
+        if entry.file_type()?.is_dir() && entry.path().join("manifest.json").exists() {
+            return Ok(entry.path());
         }
     }
 
@@ -776,7 +774,7 @@ fn verify_checksums(
         }
 
         // Parse "checksum  filename" or "checksum filename"
-        let parts: Vec<&str> = line.splitn(2, |c| c == ' ' || c == '\t').collect();
+        let parts: Vec<&str> = line.splitn(2, [' ', '\t']).collect();
         if parts.len() != 2 {
             continue;
         }

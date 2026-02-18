@@ -76,12 +76,10 @@ fn offset_for_line_col(source: &str, line: usize, column: usize) -> Option<(usiz
     for (idx, raw_line) in source.lines().enumerate() {
         let current_line = idx + 1;
         if current_line == line {
-            let mut col_offset = 0usize;
-            for (cidx, _) in raw_line.char_indices() {
+            for (col_offset, (cidx, _)) in raw_line.char_indices().enumerate() {
                 if col_offset + 1 == column {
                     return Some((offset + cidx, line, column));
                 }
-                col_offset += 1;
             }
             return Some((offset + raw_line.len(), line, column));
         }
@@ -384,6 +382,12 @@ pub struct ErrorCodeInfo {
 /// Registry of known error codes.
 pub struct ErrorCodeRegistry {
     codes: HashMap<String, ErrorCodeInfo>,
+}
+
+impl Default for ErrorCodeRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ErrorCodeRegistry {

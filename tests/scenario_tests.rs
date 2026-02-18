@@ -2672,17 +2672,17 @@ async fn test_scenario_multi_tier_application() {
     let results = executor.run_playbook(&playbook).await.unwrap();
 
     // Verify all tiers deployed successfully
-    assert!(results.get("lb1").is_some());
+    assert!(results.contains_key("lb1"));
     for host in ["web1", "web2", "web3"] {
-        assert!(results.get(host).is_some());
+        assert!(results.contains_key(host));
     }
     for host in ["app1", "app2"] {
-        assert!(results.get(host).is_some());
+        assert!(results.contains_key(host));
     }
     for host in ["db1", "db2"] {
-        assert!(results.get(host).is_some());
+        assert!(results.contains_key(host));
     }
-    assert!(results.get("mon1").is_some());
+    assert!(results.contains_key("mon1"));
 
     // Verify no failures
     for (host, result) in &results {

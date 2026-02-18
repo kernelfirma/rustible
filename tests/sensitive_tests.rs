@@ -379,7 +379,7 @@ mod vault_protection {
 
         // But when logged, it should be masked
         // Test that the decrypted string isn't accidentally exposed
-        let log_output = format!("Loaded variables from vault");
+        let log_output = "Loaded variables from vault".to_string();
         assert!(
             !log_output.contains("ultra_secret_database_password"),
             "Decrypted vault content should not appear in logs"
@@ -908,7 +908,7 @@ mod callback_output {
     fn test_yaml_output_sanitized() {
         let secret = "yaml_secret_value";
 
-        let yaml_output = serde_yaml::to_value(&serde_json::json!({
+        let yaml_output = serde_yaml::to_value(serde_json::json!({
             "vars": {
                 "db_password": secret
             }
@@ -1066,8 +1066,7 @@ mod edge_cases {
 
             // Parsing should work
             let result: Result<serde_yaml::Value, _> = serde_yaml::from_str(&yaml);
-            if result.is_ok() {
-                let value = result.unwrap();
+            if let Ok(value) = result {
                 let masked = mask_sensitive_vars(&value, &["password"]);
                 let display = serde_yaml::to_string(&masked).unwrap();
 
@@ -1303,7 +1302,7 @@ fn sanitize_json_output(value: &serde_json::Value) -> serde_json::Value {
             serde_json::Value::Object(new_map)
         }
         serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(|v| sanitize_json_output(v)).collect())
+            serde_json::Value::Array(arr.iter().map(sanitize_json_output).collect())
         }
         _ => value.clone(),
     }

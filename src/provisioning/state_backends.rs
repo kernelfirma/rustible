@@ -461,7 +461,7 @@ impl GcsBackend {
     }
 
     /// Inject an access token (useful for tests)
-    pub fn with_access_token(mut self, token: impl Into<String>) -> Self {
+    pub fn with_access_token(self, token: impl Into<String>) -> Self {
         *self.access_token.write() = Some(token.into());
         self
     }
@@ -1102,7 +1102,7 @@ impl LockBackend for AzureBlobLeaseLock {
             .header("x-ms-lease-action", "acquire")
             .header(
                 "x-ms-lease-duration",
-                timeout.as_secs().min(60).max(15).to_string(),
+                timeout.as_secs().clamp(15, 60).to_string(),
             )
             .header("x-ms-proposed-lease-id", &info.id)
             .send()

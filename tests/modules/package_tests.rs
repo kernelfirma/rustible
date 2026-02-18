@@ -255,7 +255,7 @@ fn test_package_with_use_parameter() {
     params.insert("name".to_string(), serde_json::json!("nginx"));
     params.insert("use".to_string(), serde_json::json!("apt"));
 
-    assert!(params.get("use").is_some());
+    assert!(params.contains_key("use"));
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn test_package_with_update_cache() {
     params.insert("name".to_string(), serde_json::json!("nginx"));
     params.insert("update_cache".to_string(), serde_json::json!(true));
 
-    assert!(params.get("update_cache").is_some());
+    assert!(params.contains_key("update_cache"));
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn test_package_list_parameter() {
         serde_json::json!(["nginx", "vim", "curl"]),
     );
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 // ============================================================================

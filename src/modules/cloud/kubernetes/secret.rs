@@ -43,7 +43,7 @@
 //! ```
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Diff, Module, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde_json::json;

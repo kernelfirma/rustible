@@ -170,7 +170,7 @@ impl SshConnection {
         })?;
 
         // Check key against known_hosts
-        match known_hosts.check_port(host, port as u16, key) {
+        match known_hosts.check_port(host, port, key) {
             CheckResult::Match => {
                 debug!(host = %host, "Host key verified against known_hosts");
                 Ok(())
@@ -310,12 +310,12 @@ impl SshConnection {
 
         debug!(methods = %methods, "Available authentication methods");
 
-        if supports_auth_method(&methods, "keyboard-interactive") && host_config.password.is_none()
+        if supports_auth_method(methods, "keyboard-interactive") && host_config.password.is_none()
         {
             debug!("Keyboard-interactive auth available but no password provided");
         }
 
-        for attempt in Self::build_auth_attempts(&methods, host_config, global_config) {
+        for attempt in Self::build_auth_attempts(methods, host_config, global_config) {
             match attempt {
                 AuthAttempt::Agent => {
                     if Self::try_agent_auth(session, user).is_ok() {

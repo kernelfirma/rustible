@@ -123,7 +123,7 @@ mod tests {
     fn make_actions(count: usize) -> Vec<PlannedAction> {
         (0..count)
             .map(|i| {
-                let id = ResourceId::new("aws_instance", &format!("server_{}", i));
+                let id = ResourceId::new("aws_instance", format!("server_{}", i));
                 PlannedAction {
                     resource_id: id,
                     change_type: ChangeType::Create,

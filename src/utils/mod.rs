@@ -308,10 +308,7 @@ mod tests {
             Cow::Owned(_) => panic!("Should be borrowed"),
         }
 
-        match shell_escape("with space") {
-            Cow::Borrowed(_) => panic!("Should be owned"),
-            Cow::Owned(_) => {}
-        }
+        if let Cow::Borrowed(_) = shell_escape("with space") { panic!("Should be owned") }
     }
 
     #[test]

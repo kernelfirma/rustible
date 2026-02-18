@@ -26,6 +26,7 @@ fn with_parents(mut params: ModuleParams, parents: Vec<&str>) -> ModuleParams {
     params
 }
 
+#[allow(dead_code)]
 fn with_src(mut params: ModuleParams, src: &str) -> ModuleParams {
     params.insert("src".to_string(), serde_json::json!(src));
     params
@@ -479,7 +480,7 @@ fn test_all_network_modules_have_unique_names() {
     let junos = JunosConfigModule;
     let eos = EosConfigModule;
 
-    let names = vec![ios.name(), nxos.name(), junos.name(), eos.name()];
+    let names = [ios.name(), nxos.name(), junos.name(), eos.name()];
     let unique_names: std::collections::HashSet<_> = names.iter().collect();
 
     assert_eq!(
@@ -550,7 +551,7 @@ interface GigabitEthernet0/1
     // parse_ios_config returns NetworkConfig directly
     let network_config = parse_ios_config(config);
     // Just verify it doesn't panic and produces some output
-    assert!(config.len() > 0, "Should parse valid IOS config");
+    let _ = &network_config;
 }
 
 #[test]
@@ -610,7 +611,7 @@ interface GigabitEthernet0/0
     // generate_ios_diff_commands returns Vec<String> directly
     let commands = generate_ios_diff_commands(running, desired);
     // Should produce some diff commands
-    assert!(commands.len() >= 0, "Should generate diff commands");
+    let _ = &commands; // Should generate diff commands
 }
 
 // ============================================================================

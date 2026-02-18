@@ -28,7 +28,7 @@ use serde_json::Value;
 #[cfg(feature = "aws")]
 use aws_config::BehaviorVersion;
 #[cfg(feature = "aws")]
-use aws_sdk_ec2::types::{Filter, ResourceType, Tag, TagSpecification};
+use aws_sdk_ec2::types::{ResourceType, Tag, TagSpecification};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::Client;
 
@@ -45,6 +45,7 @@ use crate::provisioning::traits::{
 
 /// Route configuration for a route table
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub struct RouteConfig {
     /// Destination CIDR block for the route
     pub cidr_block: Option<String>,
@@ -1161,20 +1162,3 @@ mod tests {
     }
 }
 
-impl Default for RouteConfig {
-    fn default() -> Self {
-        Self {
-            cidr_block: None,
-            ipv6_cidr_block: None,
-            destination_prefix_list_id: None,
-            gateway_id: None,
-            nat_gateway_id: None,
-            vpc_peering_connection_id: None,
-            transit_gateway_id: None,
-            network_interface_id: None,
-            instance_id: None,
-            vpc_endpoint_id: None,
-            egress_only_gateway_id: None,
-        }
-    }
-}

@@ -87,7 +87,7 @@ mod null_callback_tests {
         let callback = NullCallback::new();
         assert_eq!(callback, NullCallback);
 
-        let callback_default = NullCallback::default();
+        let callback_default = NullCallback;
         assert_eq!(callback_default, NullCallback);
     }
 
@@ -95,7 +95,7 @@ mod null_callback_tests {
     fn test_null_callback_clone_and_copy() {
         let callback1 = NullCallback;
         let callback2 = callback1; // Copy
-        let callback3 = callback1.clone(); // Clone
+        let callback3 = callback1; // Clone
 
         // All should be equal
         assert_eq!(callback1, callback2);
@@ -196,15 +196,15 @@ mod default_callback_tests {
 
     #[test]
     fn test_default_callback_with_verbosity() {
-        let _callback = DefaultCallback::new().with_verbosity(2);
-        // Verbosity is stored internally
-        assert!(true); // Construction should not panic
+        let callback = DefaultCallback::new().with_verbosity(2);
+        // Verbosity is stored internally; if we got here, construction succeeded
+        let _ = &callback;
     }
 
     #[test]
     fn test_default_callback_with_no_color() {
-        let _callback = DefaultCallback::new().with_no_color(true);
-        assert!(true); // Construction should not panic
+        let callback = DefaultCallback::new().with_no_color(true);
+        let _ = &callback;
     }
 
     #[test]
@@ -252,14 +252,14 @@ mod default_callback_tests {
         let _callback1 = DefaultCallback::new().with_verbosity(3);
         let _callback2 = _callback1.clone();
 
-        // Clone should have same configuration
-        assert!(true); // Clone should not panic
+        // Clone should have same configuration; if we got here, clone succeeded
+        let _ = &_callback2;
     }
 
     #[test]
     fn test_default_callback_default_trait() {
-        let _callback = DefaultCallback::default();
-        assert!(true); // Default should work
+        let callback = DefaultCallback::default();
+        let _ = &callback;
     }
 
     #[tokio::test]
@@ -696,14 +696,14 @@ mod minimal_callback_tests {
 
     #[test]
     fn test_minimal_callback_construction() {
-        let _callback = MinimalCallback::new();
-        assert!(true); // Construction should not panic
+        let callback = MinimalCallback::new();
+        let _ = &callback;
     }
 
     #[test]
     fn test_minimal_callback_default() {
         let _callback = MinimalCallback::default();
-        assert!(true); // Default should work
+        let _ = &_callback; // Default should work
     }
 
     #[test]
@@ -713,7 +713,7 @@ mod minimal_callback_tests {
 
         // Clone should share state (Arc pointers should be the same)
         // This is verified in the inline tests of minimal.rs
-        assert!(true);
+        let _ = &_callback2;
     }
 
     #[tokio::test]

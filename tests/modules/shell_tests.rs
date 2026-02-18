@@ -281,7 +281,7 @@ fn test_shell_custom_executable() {
     params.insert("cmd".to_string(), serde_json::json!("echo test"));
     params.insert("executable".to_string(), serde_json::json!("/bin/bash"));
 
-    assert!(params.get("executable").is_some());
+    assert!(params.contains_key("executable"));
 }
 
 // ============================================================================

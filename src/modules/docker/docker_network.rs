@@ -21,10 +21,10 @@
 //! - `force`: Force removal even if containers are connected
 
 #[cfg(feature = "docker")]
-use bollard::models::{Ipam, IpamConfig, NetworkCreateResponse};
+use bollard::models::{Ipam, IpamConfig};
 #[cfg(feature = "docker")]
 use bollard::network::{
-    ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions, ListNetworksOptions,
+    ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions,
 };
 #[cfg(feature = "docker")]
 use bollard::Docker;

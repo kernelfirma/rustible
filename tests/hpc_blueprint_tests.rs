@@ -170,7 +170,7 @@ fn test_all_group_vars_parse_as_valid_yaml() {
             let path = entry.path();
             if path
                 .extension()
-                .map_or(false, |e| e == "yml" || e == "yaml")
+                .is_some_and(|e| e == "yml" || e == "yaml")
             {
                 let content = std::fs::read_to_string(&path).unwrap();
                 let _: serde_yaml::Value = serde_yaml::from_str(&content).unwrap_or_else(|e| {

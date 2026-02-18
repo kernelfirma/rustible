@@ -159,7 +159,7 @@ mod fact_parsing {
             parsed.get("VERSION_CODENAME"),
             Some(&"bookworm".to_string())
         );
-        assert!(parsed.get("PRETTY_NAME").is_some());
+        assert!(parsed.contains_key("PRETTY_NAME"));
     }
 
     #[test]
@@ -191,7 +191,7 @@ mod fact_parsing {
         assert_eq!(parsed.get("ID"), Some(&"arch".to_string()));
         assert_eq!(parsed.get("NAME"), Some(&"Arch Linux".to_string()));
         // Arch doesn't have VERSION_ID (rolling release)
-        assert!(parsed.get("VERSION_ID").is_none());
+        assert!(!parsed.contains_key("VERSION_ID"));
     }
 
     /// Helper function to determine OS family from distribution
@@ -307,9 +307,9 @@ mod fact_parsing {
         let parsed = parse_os_release(content);
 
         // Should still work even without VERSION_ID
-        assert!(parsed.get("ID").is_some());
-        assert!(parsed.get("VERSION_ID").is_none());
-        assert!(parsed.get("NAME").is_some());
+        assert!(parsed.contains_key("ID"));
+        assert!(!parsed.contains_key("VERSION_ID"));
+        assert!(parsed.contains_key("NAME"));
     }
 
     #[test]
@@ -1092,9 +1092,9 @@ mod facts_core {
 
         let all_facts = facts.all();
         assert_eq!(all_facts.len(), 3);
-        assert!(all_facts.contains_key("fact1"));
-        assert!(all_facts.contains_key("fact2"));
-        assert!(all_facts.contains_key("fact3"));
+        assert!(all_facts.get("fact1").is_some());
+        assert!(all_facts.get("fact2").is_some());
+        assert!(all_facts.get("fact3").is_some());
     }
 
     #[test]
@@ -1379,7 +1379,7 @@ mod complex_fact_types {
         // Test all JSON value types
         facts.set("string_fact", serde_json::json!("text"));
         facts.set("number_int", serde_json::json!(42));
-        facts.set("number_float", serde_json::json!(3.14));
+        facts.set("number_float", serde_json::json!(2.72));
         facts.set("bool_fact", serde_json::json!(true));
         facts.set("array_fact", serde_json::json!([1, 2, 3]));
         facts.set("object_fact", serde_json::json!({"key": "value"}));

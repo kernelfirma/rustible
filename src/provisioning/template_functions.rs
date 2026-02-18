@@ -202,9 +202,9 @@ fn resource_fn(
     let key = format!("{}.{}", resource_type, name);
 
     // Navigate through the context structure
-    if let Some(resources) = ctx.get_attr("resources").ok() {
-        if let Some(resource) = resources.get_attr(&key).ok() {
-            if let Some(value) = resource.get_attr(&attribute).ok() {
+    if let Ok(resources) = ctx.get_attr("resources") {
+        if let Ok(resource) = resources.get_attr(&key) {
+            if let Ok(value) = resource.get_attr(&attribute) {
                 if !value.is_undefined() {
                     return Ok(value);
                 }
@@ -241,8 +241,8 @@ fn var_fn(
         MiniJinjaError::new(ErrorKind::UndefinedError, "Template context not available")
     })?;
 
-    if let Some(variables) = ctx.get_attr("variables").ok() {
-        if let Some(value) = variables.get_attr(&name).ok() {
+    if let Ok(variables) = ctx.get_attr("variables") {
+        if let Ok(value) = variables.get_attr(&name) {
             if !value.is_undefined() {
                 return Ok(value);
             }
@@ -281,9 +281,9 @@ fn data_fn(
 
     let key = format!("{}.{}", data_type, name);
 
-    if let Some(data_sources) = ctx.get_attr("data_sources").ok() {
-        if let Some(data) = data_sources.get_attr(&key).ok() {
-            if let Some(value) = data.get_attr(&attribute).ok() {
+    if let Ok(data_sources) = ctx.get_attr("data_sources") {
+        if let Ok(data) = data_sources.get_attr(&key) {
+            if let Ok(value) = data.get_attr(&attribute) {
                 if !value.is_undefined() {
                     return Ok(value);
                 }
@@ -314,8 +314,8 @@ fn local_fn(state: &State<'_, '_>, name: String) -> Result<Value, MiniJinjaError
         MiniJinjaError::new(ErrorKind::UndefinedError, "Template context not available")
     })?;
 
-    if let Some(locals) = ctx.get_attr("locals").ok() {
-        if let Some(value) = locals.get_attr(&name).ok() {
+    if let Ok(locals) = ctx.get_attr("locals") {
+        if let Ok(value) = locals.get_attr(&name) {
             if !value.is_undefined() {
                 return Ok(value);
             }
@@ -354,8 +354,8 @@ fn resource_exists_fn(
 
     let key = format!("{}.{}", resource_type, name);
 
-    if let Some(resources) = ctx.get_attr("resources").ok() {
-        if let Some(resource) = resources.get_attr(&key).ok() {
+    if let Ok(resources) = ctx.get_attr("resources") {
+        if let Ok(resource) = resources.get_attr(&key) {
             return Ok(!resource.is_undefined());
         }
     }
@@ -410,7 +410,7 @@ fn cidr_subnet_fn(cidr: String, newbits: i32, netnum: i32) -> Result<String, Min
         )
     })?;
 
-    if newbits < 0 || newbits > 32 {
+    if !(0..=32).contains(&newbits) {
         return Err(MiniJinjaError::new(
             ErrorKind::InvalidOperation,
             format!("Invalid newbits value: {} (must be 0-32)", newbits),
@@ -483,8 +483,8 @@ fn data_exists_fn(
 
     let key = format!("{}.{}", data_type, name);
 
-    if let Some(data_sources) = ctx.get_attr("data_sources").ok() {
-        if let Some(data) = data_sources.get_attr(&key).ok() {
+    if let Ok(data_sources) = ctx.get_attr("data_sources") {
+        if let Ok(data) = data_sources.get_attr(&key) {
             return Ok(!data.is_undefined());
         }
     }
@@ -734,7 +734,7 @@ fn values_filter(value: Value) -> Result<Value, MiniJinjaError> {
     // Try to iterate over the value as a mapping and get values
     if let Ok(iter) = value.try_iter() {
         for key in iter {
-            if let Some(v) = value.get_attr(&key.to_string()).ok() {
+            if let Ok(v) = value.get_attr(&key.to_string()) {
                 values.push(v);
             }
         }
@@ -771,7 +771,7 @@ fn aws_tags_filter(value: Value) -> Result<Value, MiniJinjaError> {
     // Iterate over the map
     if let Ok(iter) = value.try_iter() {
         for key in iter {
-            if let Some(v) = value.get_attr(&key.to_string()).ok() {
+            if let Ok(v) = value.get_attr(&key.to_string()) {
                 let tag = Value::from_iter([("Key".to_string(), key), ("Value".to_string(), v)]);
                 tags.push(tag);
             }
@@ -793,7 +793,7 @@ fn gcp_labels_filter(value: Value) -> Result<Value, MiniJinjaError> {
 
     if let Ok(iter) = value.try_iter() {
         for key in iter {
-            if let Some(v) = value.get_attr(&key.to_string()).ok() {
+            if let Ok(v) = value.get_attr(&key.to_string()) {
                 // GCP labels must be lowercase
                 let key_lower = key.to_string().to_lowercase().replace(' ', "_");
                 labels.insert(key_lower, v.to_string());
@@ -1355,7 +1355,7 @@ mod tests {
         let value = Value::from_iter([("Name".to_string(), Value::from("test"))]);
         let result = aws_tags_filter(value).unwrap();
         // Should have Key and Value fields in each tag
-        if let Some(first_tag) = result.get_item(&Value::from(0)).ok() {
+        if let Ok(first_tag) = result.get_item(&Value::from(0)) {
             assert!(first_tag.get_attr("Key").is_ok());
             assert!(first_tag.get_attr("Value").is_ok());
         }
@@ -1470,7 +1470,7 @@ mod tests {
 
     #[test]
     fn test_full_template_rendering() {
-        let mut env = create_test_env();
+        let env = create_test_env();
         let ctx = create_test_context();
 
         // Create template variables including context

@@ -762,7 +762,7 @@ router bgp 65000
 
         let sections = extract_config_sections(config, "router");
 
-        assert!(sections.len() >= 1, "Should extract BGP sections");
+        assert!(!sections.is_empty(), "Should extract BGP sections");
     }
 
     #[test]

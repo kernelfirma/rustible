@@ -379,7 +379,7 @@ fn test_key_type_from_openssh_str() {
 #[test]
 fn test_key_type_clone() {
     let kt = KeyType::Ed25519;
-    let cloned = kt.clone();
+    let cloned = kt;
     assert_eq!(kt, cloned);
 }
 
@@ -442,7 +442,7 @@ fn test_state_invalid() {
 #[test]
 fn test_state_clone() {
     let state = KnownHostsState::Present;
-    let cloned = state.clone();
+    let cloned = state;
     assert_eq!(state, cloned);
 }
 
@@ -576,9 +576,7 @@ fn test_find_entries_by_hostname_and_key_type() {
     let path = temp_dir.path().join("known_hosts");
     fs::write(
         &path,
-        format!(
-            "example.com ssh-rsa AAAAB3NzaC1yc2EAAAAtest1\nexample.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5test2\n"
-        ),
+        "example.com ssh-rsa AAAAB3NzaC1yc2EAAAAtest1\nexample.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5test2\n",
     )
     .unwrap();
 

@@ -27,6 +27,9 @@ use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 
+#[cfg(feature = "gpu")]
+use rustible::modules::hpc::gpu::NvidiaGpuModule;
+
 // ============================================================================
 // ModuleRegistry Tests
 // ============================================================================
@@ -409,9 +412,9 @@ fn test_param_ext_get_bool_or() {
     let mut params: ModuleParams = HashMap::new();
     params.insert("bool".to_string(), serde_json::json!(true));
 
-    assert_eq!(params.get_bool_or("bool", false), true);
-    assert_eq!(params.get_bool_or("missing", true), true);
-    assert_eq!(params.get_bool_or("missing", false), false);
+    assert!(params.get_bool_or("bool", false));
+    assert!(params.get_bool_or("missing", true));
+    assert!(!params.get_bool_or("missing", false));
 }
 
 #[test]
@@ -2306,8 +2309,10 @@ fn test_command_with_work_dir_from_context() {
     params.insert("cmd".to_string(), serde_json::json!("pwd"));
     params.insert("shell_type".to_string(), serde_json::json!("posix"));
 
-    let mut context = ModuleContext::default();
-    context.work_dir = Some(temp.path().to_str().unwrap().to_string());
+    let context = ModuleContext {
+        work_dir: Some(temp.path().to_str().unwrap().to_string()),
+        ..Default::default()
+    };
 
     let result = module.execute(&params, &context).unwrap();
 
@@ -3332,9 +3337,8 @@ fn test_package_with_multiple_packages() {
     // We expect either success (with detected package manager) or
     // error (if no package manager found)
     // The important thing is params were parsed correctly
-    if result.is_err() {
+    if let Err(err) = result {
         // Expected on systems without supported package managers
-        let err = result.unwrap_err();
         assert!(
             format!("{}", err).contains("package manager") || format!("{}", err).contains("detect")
         );
@@ -3354,8 +3358,7 @@ fn test_package_state_values() {
     let result = module.check(&params, &context);
 
     // Check mode should work even if package manager not available
-    if result.is_err() {
-        let err = result.unwrap_err();
+    if let Err(err) = result {
         // Should be about package manager, not about state value
         assert!(!format!("{}", err).contains("Invalid state"));
     }
@@ -3374,8 +3377,7 @@ fn test_package_with_explicit_manager() {
 
     // On non-apt systems, this should still parse but fail at execution
     // The important thing is the 'use' parameter is recognized
-    if result.is_err() {
-        let err = result.unwrap_err();
+    if let Err(err) = result {
         // Should not be about invalid parameter
         assert!(!format!("{}", err).contains("Invalid parameter"));
     }
@@ -3396,8 +3398,7 @@ fn test_service_state_values() {
     let result = module.check(&params, &context);
 
     // May fail if no init system detected, but state parsing should work
-    if result.is_err() {
-        let err = result.unwrap_err();
+    if let Err(err) = result {
         assert!(!format!("{}", err).contains("Invalid state"));
     }
 }
@@ -3425,8 +3426,8 @@ fn test_service_restarted_state() {
     let result = module.check(&params, &context);
 
     // Verify state parsing
-    if result.is_ok() {
-        assert!(result.unwrap().changed);
+    if let Ok(output) = result {
+        assert!(output.changed);
     }
 }
 
@@ -3974,7 +3975,7 @@ fn test_all_modules_have_names() {
         Box::new(UserModule),
     ];
 
-    let expected_names = vec![
+    let expected_names = [
         "command", "shell", "copy", "template", "file", "package", "service", "user",
     ];
 
@@ -4042,4 +4043,238 @@ fn test_all_modules_have_parallelization_hint() {
         let _hint = module.parallelization_hint();
         // All modules should have a valid parallelization hint
     }
+}
+
+// ============================================================================
+// GPU Module Tests
+// ============================================================================
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_nvidia_gpu_sets_persistence_mode() {
+    let module = NvidiaGpuModule;
+    let mock = std::sync::Arc::new(MockConnection::new("gpu-host"));
+
+    mock.set_command_result(
+        "cat /etc/os-release",
+        CommandResult::success("ID=ubuntu\nID_LIKE=debian".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,memory.total --format=csv,noheader,nounits",
+        CommandResult::success(
+            "0, NVIDIA A100, GPU-aaa, 00000000:01:00.0, 40960\n".to_string(),
+            String::new(),
+        ),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=persistence_mode --format=csv,noheader",
+        CommandResult::success("Disabled\n".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi -pm 1",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "systemctl is-active nvidia-persistenced.service",
+        CommandResult::success("active".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "systemctl is-enabled nvidia-persistenced.service",
+        CommandResult::success("enabled".to_string(), String::new()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("persistence_mode".to_string(), serde_json::json!(true));
+
+    let context = ModuleContext::default().with_connection(mock.clone());
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+
+    let commands = mock.get_commands();
+    assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -pm 1")));
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_nvidia_gpu_sets_compute_mode_and_power_limit() {
+    let module = NvidiaGpuModule;
+    let mock = std::sync::Arc::new(MockConnection::new("gpu-host"));
+
+    mock.set_command_result(
+        "cat /etc/os-release",
+        CommandResult::success("ID=ubuntu\nID_LIKE=debian".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,memory.total --format=csv,noheader,nounits",
+        CommandResult::success(
+            "0, NVIDIA A100, GPU-aaa, 00000000:01:00.0, 40960\n".to_string(),
+            String::new(),
+        ),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=compute_mode --format=csv,noheader",
+        CommandResult::success("Default\n".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi -c 2",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=power.limit --format=csv,noheader",
+        CommandResult::success("250.00 W\n".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi -pl 300",
+        CommandResult::success(String::new(), String::new()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert(
+        "compute_mode".to_string(),
+        serde_json::json!("exclusive_process"),
+    );
+    params.insert("power_limit".to_string(), serde_json::json!(300));
+
+    let context = ModuleContext::default().with_connection(mock.clone());
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+
+    let commands = mock.get_commands();
+    assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -c 2")));
+    assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -pl 300")));
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_nvidia_gpu_gpu_id_targets_single_gpu() {
+    let module = NvidiaGpuModule;
+    let mock = std::sync::Arc::new(MockConnection::new("gpu-host"));
+
+    mock.set_command_result(
+        "cat /etc/os-release",
+        CommandResult::success("ID=ubuntu\nID_LIKE=debian".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,memory.total --format=csv,noheader,nounits",
+        CommandResult::success(
+            "0, NVIDIA A100, GPU-aaa, 00000000:01:00.0, 40960\n".to_string(),
+            String::new(),
+        ),
+    );
+    mock.set_command_result(
+        "nvidia-smi -i 0 --query-gpu=compute_mode --format=csv,noheader",
+        CommandResult::success("Default\n".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi -i 0 -c 1",
+        CommandResult::success(String::new(), String::new()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("gpu_id".to_string(), serde_json::json!("0"));
+    params.insert(
+        "compute_mode".to_string(),
+        serde_json::json!("exclusive_thread"),
+    );
+
+    let context = ModuleContext::default().with_connection(mock.clone());
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+
+    let commands = mock.get_commands();
+    assert!(commands
+        .iter()
+        .any(|cmd| cmd.contains("nvidia-smi -i 0 -c 1")));
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_nvidia_gpu_sets_ecc_mode() {
+    let module = NvidiaGpuModule;
+    let mock = std::sync::Arc::new(MockConnection::new("gpu-host"));
+
+    mock.set_command_result(
+        "cat /etc/os-release",
+        CommandResult::success("ID=ubuntu\nID_LIKE=debian".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+        CommandResult::success(String::new(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,memory.total --format=csv,noheader,nounits",
+        CommandResult::success(
+            "0, NVIDIA A100, GPU-aaa, 00000000:01:00.0, 40960\n".to_string(),
+            String::new(),
+        ),
+    );
+    mock.set_command_result(
+        "nvidia-smi --query-gpu=ecc.mode.current --format=csv,noheader",
+        CommandResult::success("Disabled\n".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "nvidia-smi -e 1",
+        CommandResult::success(String::new(), String::new()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("ecc_mode".to_string(), serde_json::json!(true));
+
+    let context = ModuleContext::default().with_connection(mock.clone());
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+
+    let commands = mock.get_commands();
+    assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -e 1")));
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_nvidia_gpu_check_mode_reports_changes() {
+    let module = NvidiaGpuModule;
+    let mock = std::sync::Arc::new(MockConnection::new("gpu-host"));
+
+    mock.set_command_result(
+        "cat /etc/os-release",
+        CommandResult::success("ID=ubuntu\nID_LIKE=debian".to_string(), String::new()),
+    );
+    mock.set_command_result(
+        "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+        CommandResult::success(String::new(), String::new()),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("persistence_mode".to_string(), serde_json::json!(true));
+
+    let context = ModuleContext::default()
+        .with_connection(mock.clone())
+        .with_check_mode(true);
+    let result = module.execute(&params, &context).unwrap();
+
+    assert!(result.changed);
+    assert_eq!(result.status, ModuleStatus::Changed);
+
+    let commands = mock.get_commands();
+    assert!(commands.iter().any(|cmd| cmd.contains("dpkg -s nvidia-driver-535")));
+    assert!(!commands.iter().any(|cmd| cmd.contains("nvidia-smi -pm")));
 }

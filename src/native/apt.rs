@@ -199,14 +199,11 @@ impl AptNative {
             if line.starts_with(' ') || line.starts_with('\t') {
                 if let (Some(ref field), Some(ref mut pkg)) = (&current_field, &mut current_pkg) {
                     let value = line.trim();
-                    match field.as_str() {
-                        "Description" => {
-                            if let Some(ref mut desc) = pkg.description {
-                                desc.push('\n');
-                                desc.push_str(value);
-                            }
+                    if field.as_str() == "Description" {
+                        if let Some(ref mut desc) = pkg.description {
+                            desc.push('\n');
+                            desc.push_str(value);
                         }
-                        _ => {}
                     }
                 }
                 continue;
@@ -270,8 +267,7 @@ impl AptNative {
         s.split(',')
             .map(|dep| {
                 // Extract just the package name, ignoring version constraints
-                dep.trim()
-                    .split_whitespace()
+                dep.split_whitespace()
                     .next()
                     .unwrap_or("")
                     .to_string()

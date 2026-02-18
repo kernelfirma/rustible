@@ -470,7 +470,7 @@ mod tests {
     fn test_http_error_with_source() {
         let err = GalaxyError::http_error_with_source(
             "request failed",
-            std::io::Error::new(std::io::ErrorKind::Other, "boom"),
+            std::io::Error::other("boom"),
         );
         assert!(matches!(
             err,

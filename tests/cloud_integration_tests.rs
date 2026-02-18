@@ -485,16 +485,14 @@ mod cloud_patterns {
     fn test_cloud_instance_states() {
         // Common compute instance states across providers
         let common_states = vec!["running", "stopped", "terminated"];
-        let aws_states = vec!["running", "stopped", "terminated", "rebooted"];
-        let azure_states = vec![
-            "present",
+        let aws_states = ["running", "stopped", "terminated", "rebooted"];
+        let azure_states = ["present",
             "absent",
             "running",
             "stopped",
             "deallocated",
-            "restarted",
-        ];
-        let gcp_states = vec!["running", "stopped", "terminated", "reset"];
+            "restarted"];
+        let gcp_states = ["running", "stopped", "terminated", "reset"];
 
         // All providers support basic states
         for state in common_states {
@@ -509,9 +507,9 @@ mod cloud_patterns {
     #[test]
     fn test_cloud_storage_operations() {
         // Common storage operations
-        let s3_modes = vec!["put", "get", "delete", "list", "sync", "copy"];
-        let azure_blob_modes = vec!["upload", "download", "delete", "list"];
-        let gcs_modes = vec!["upload", "download", "delete", "list"];
+        let s3_modes = ["put", "get", "delete", "list", "sync", "copy"];
+        let azure_blob_modes = ["upload", "download", "delete", "list"];
+        let gcs_modes = ["upload", "download", "delete", "list"];
 
         // All providers support basic CRUD
         for mode in &["delete", "list"] {
@@ -552,7 +550,7 @@ mod cloud_patterns {
         };
 
         let azure_pattern = |name: &str| -> bool {
-            name.len() >= 1
+            !name.is_empty()
                 && name.len() <= 80
                 && name
                     .chars()
@@ -560,7 +558,7 @@ mod cloud_patterns {
         };
 
         let gcp_pattern = |name: &str| -> bool {
-            name.len() >= 1
+            !name.is_empty()
                 && name.len() <= 63
                 && name
                     .chars()
@@ -621,7 +619,7 @@ mod cloud_patterns {
 // ============================================================================
 
 mod cloud_rate_limiting {
-    use super::*;
+    
     use rustible::modules::ParallelizationHint;
 
     #[test]
@@ -682,7 +680,7 @@ mod cloud_rate_limiting {
 // ============================================================================
 
 mod cloud_credentials {
-    use super::*;
+    
 
     #[test]
     fn test_aws_credential_env_vars() {

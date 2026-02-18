@@ -94,7 +94,7 @@ impl AwsEbsVolumeResource {
 
         match resp {
             Ok(r) => {
-                for volume in r.volumes() {
+                if let Some(volume) = r.volumes().iter().next() {
                     return Ok(Some(self.parse_volume(volume)));
                 }
                 Ok(None)
@@ -533,8 +533,8 @@ impl Resource for AwsEbsVolumeResource {
                     modifications.insert(
                         "iops".to_string(),
                         (
-                            serde_json::to_value(&current_state.iops).unwrap(),
-                            serde_json::to_value(&config.iops).unwrap(),
+                            serde_json::to_value(current_state.iops).unwrap(),
+                            serde_json::to_value(config.iops).unwrap(),
                         ),
                     );
                 }
@@ -544,8 +544,8 @@ impl Resource for AwsEbsVolumeResource {
                     modifications.insert(
                         "throughput".to_string(),
                         (
-                            serde_json::to_value(&current_state.throughput).unwrap(),
-                            serde_json::to_value(&config.throughput).unwrap(),
+                            serde_json::to_value(current_state.throughput).unwrap(),
+                            serde_json::to_value(config.throughput).unwrap(),
                         ),
                     );
                 }
@@ -703,7 +703,7 @@ impl Resource for AwsEbsVolumeResource {
         info!("Updating EBS volume: {}", id);
 
         // Check if we need to modify volume attributes
-        let size_changed = new_config.size.map_or(false, |s| s != old_state.size);
+        let size_changed = new_config.size.is_some_and(|s| s != old_state.size);
         let type_changed = new_config.volume_type != old_state.volume_type;
         let iops_changed = new_config.iops != old_state.iops;
         let throughput_changed = new_config.throughput != old_state.throughput;
@@ -914,7 +914,7 @@ impl Resource for AwsEbsVolumeResource {
                     vol_type
                 )));
             }
-            if iops < 100 || iops > 256000 {
+            if !(100..=256000).contains(&iops) {
                 return Err(ProvisioningError::ValidationError(
                     "IOPS must be between 100 and 256000".to_string(),
                 ));
@@ -929,7 +929,7 @@ impl Resource for AwsEbsVolumeResource {
                     "Throughput can only be specified for gp3 volumes".to_string(),
                 ));
             }
-            if throughput < 125 || throughput > 1000 {
+            if !(125..=1000).contains(&throughput) {
                 return Err(ProvisioningError::ValidationError(
                     "Throughput must be between 125 and 1000 MiB/s".to_string(),
                 ));

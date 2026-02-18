@@ -404,7 +404,7 @@ fn test_firewalld_source_validation_valid() {
             assert_eq!(octets.len(), 4);
             for octet in octets {
                 let num: u8 = octet.parse().unwrap();
-                assert!(num <= 255);
+                let _ = num; // u8 is always <= 255
             }
         }
     }
@@ -777,14 +777,14 @@ fn test_firewalld_port_boundary_values() {
 
     for port in valid_ports {
         let port_num: u16 = port.split('/').next().unwrap().parse().unwrap();
-        assert!(port_num >= 1 && port_num <= 65535);
+        assert!((1..=65535).contains(&port_num));
     }
 
     for port in invalid_ports {
         let port_part = port.split('/').next().unwrap();
         let result: Result<u16, _> = port_part.parse();
         if let Ok(num) = result {
-            assert!(num == 0 || num > 65535);
+            assert_eq!(num, 0);
         }
     }
 }
@@ -801,8 +801,8 @@ fn test_firewalld_port_range_values() {
         let start: u16 = range_parts[0].parse().unwrap();
         let end: u16 = range_parts[1].parse().unwrap();
 
-        assert!(start >= 1 && start <= 65535);
-        assert!(end >= 1 && end <= 65535);
+        assert!((1..=65535).contains(&start));
+        assert!((1..=65535).contains(&end));
         assert!(start <= end);
     }
 }

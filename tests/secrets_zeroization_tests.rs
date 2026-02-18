@@ -416,7 +416,7 @@ mod vault_redaction_tests {
 
     #[test]
     fn test_vault_encrypted_content_no_plaintext() {
-        let vault = Vault::new(&test_credential("enc_key"));
+        let vault = Vault::new(test_credential("enc_key"));
         let secret_data = "This is very secret data that must not leak";
 
         let encrypted = vault.encrypt(secret_data).unwrap();

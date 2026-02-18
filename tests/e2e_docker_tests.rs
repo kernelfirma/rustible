@@ -131,7 +131,7 @@ fn docker_available() -> bool {
 
 /// Check if containers are running
 fn containers_running(config: &DockerE2EConfig) -> bool {
-    for (name, _) in &config.containers {
+    for name in config.containers.keys() {
         let container_name = format!("rustible-e2e-{}", name);
         let output = Command::new("docker")
             .args(["inspect", "-f", "{{.State.Running}}", &container_name])

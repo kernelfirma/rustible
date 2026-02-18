@@ -420,7 +420,7 @@ pub enum ServiceType {
 
 impl ServiceType {
     pub fn from_str(s: &str) -> ModuleResult<Self> {
-        match s.to_lowercase().replace('-', "").replace('_', "").as_str() {
+        match s.to_lowercase().replace(['-', '_'], "").as_str() {
             "clusterip" => Ok(ServiceType::ClusterIP),
             "nodeport" => Ok(ServiceType::NodePort),
             "loadbalancer" => Ok(ServiceType::LoadBalancer),

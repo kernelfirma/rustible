@@ -10,7 +10,6 @@
 //! Integration tests verify modules work together and produce correct output.
 //! Remote execution tests run in check_mode against localhost (no Windows target needed).
 
-use indexmap::IndexMap;
 use rustible::executor::playbook::{Play, Playbook};
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::task::Task;
@@ -18,7 +17,7 @@ use rustible::executor::{Executor, ExecutorConfig};
 use rustible::modules::windows::{
     WinCopyModule, WinFeatureModule, WinPackageModule, WinServiceModule, WinUserModule,
 };
-use rustible::modules::{Module, ModuleClassification, ModuleContext};
+use rustible::modules::{Module, ModuleClassification};
 use std::collections::HashMap;
 
 // ============================================================================

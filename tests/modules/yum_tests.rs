@@ -177,7 +177,7 @@ fn test_yum_with_update_cache_parameter() {
     params.insert("name".to_string(), serde_json::json!("httpd"));
     params.insert("update_cache".to_string(), serde_json::json!(true));
 
-    assert!(params.get("update_cache").is_some());
+    assert!(params.contains_key("update_cache"));
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn test_yum_with_disable_gpg_check() {
     params.insert("name".to_string(), serde_json::json!("httpd"));
     params.insert("disable_gpg_check".to_string(), serde_json::json!(true));
 
-    assert!(params.get("disable_gpg_check").is_some());
+    assert!(params.contains_key("disable_gpg_check"));
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn test_yum_with_enablerepo() {
     params.insert("name".to_string(), serde_json::json!("httpd"));
     params.insert("enablerepo".to_string(), serde_json::json!("epel"));
 
-    assert!(params.get("enablerepo").is_some());
+    assert!(params.contains_key("enablerepo"));
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn test_yum_with_disablerepo() {
     params.insert("name".to_string(), serde_json::json!("httpd"));
     params.insert("disablerepo".to_string(), serde_json::json!("*"));
 
-    assert!(params.get("disablerepo").is_some());
+    assert!(params.contains_key("disablerepo"));
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn test_yum_package_list_parameter() {
         serde_json::json!(["httpd", "vim", "curl"]),
     );
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 // ============================================================================

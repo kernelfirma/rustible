@@ -6,7 +6,12 @@
 //! # Parameters
 //!
 //! - `state` (optional): "present" (default) or "absent"
-//! - `persistence_mode` (optional): bool (default: false) - enable nvidia-persistenced
+//! - `driver_version` (optional): string - NVIDIA driver version (e.g., "535.129.03")
+//! - `persistence_mode` (optional): bool (default: false) - enable persistence mode
+//! - `compute_mode` (optional): string - default, exclusive_thread, exclusive_process, prohibited
+//! - `ecc_mode` (optional): bool - enable/disable ECC (requires reboot)
+//! - `power_limit` (optional): u32 - power limit in watts
+//! - `gpu_id` (optional): string - GPU index or UUID for single-GPU operations
 //! - `gres_config` (optional): bool (default: false) - generate GRES entries for Slurm
 
 use std::collections::HashMap;
@@ -82,6 +87,69 @@ fn detect_os_family(os_release: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+fn driver_branch(version: &str) -> Option<String> {
+    let trimmed = version.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let branch = trimmed.split('.').next().unwrap_or("");
+    if branch.is_empty() {
+        None
+    } else {
+        Some(branch.to_string())
+    }
+}
+
+fn normalize_compute_mode(mode: &str) -> ModuleResult<String> {
+    let normalized = mode.trim().to_lowercase();
+    if normalized.is_empty() {
+        return Err(ModuleError::InvalidParameter(
+            "compute_mode cannot be empty".to_string(),
+        ));
+    }
+
+    if let Ok(value) = normalized.parse::<u32>() {
+        if value <= 3 {
+            return Ok(value.to_string());
+        }
+    }
+
+    match normalized.as_str() {
+        "default" => Ok("0".to_string()),
+        "exclusive_thread" => Ok("1".to_string()),
+        "exclusive_process" => Ok("2".to_string()),
+        "prohibited" => Ok("3".to_string()),
+        _ => Err(ModuleError::InvalidParameter(format!(
+            "compute_mode must be default, exclusive_thread, exclusive_process, prohibited, or 0-3 (got: {})",
+            mode
+        ))),
+    }
+}
+
+fn gpu_selector_arg(gpu_id: &Option<String>) -> String {
+    gpu_id
+        .as_ref()
+        .map(|id| format!(" -i {}", id))
+        .unwrap_or_default()
+}
+
+fn parse_power_limit(value: &str) -> Option<f64> {
+    let token = value
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+    token.parse::<f64>().ok()
+}
+
+fn parse_enabled_flag(value: &str) -> Option<bool> {
+    let normalized = value.trim().to_lowercase();
+    match normalized.as_str() {
+        "enabled" | "on" | "yes" => Some(true),
+        "disabled" | "off" | "no" => Some(false),
+        _ => None,
+    }
 }
 
 pub struct NvidiaGpuModule;
@@ -161,18 +229,41 @@ impl NvidiaGpuModule {
         Ok(gpus)
     }
 
+    fn query_single_value(
+        &self,
+        connection: &Arc<dyn Connection + Send + Sync>,
+        context: &ModuleContext,
+        query: &str,
+        gpu_id: &Option<String>,
+    ) -> ModuleResult<Vec<String>> {
+        let selector = gpu_selector_arg(gpu_id);
+        let output = run_cmd_ok(
+            connection,
+            &format!(
+                "nvidia-smi{} --query-gpu={} --format=csv,noheader",
+                selector, query
+            ),
+            context,
+        )?;
+        Ok(output
+            .lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect())
+    }
+
     /// Generate Slurm GRES config lines from GPU inventory.
     fn generate_gres_lines(&self, gpus: &[serde_json::Value]) -> Vec<String> {
         gpus.iter()
-            .filter_map(|gpu| {
+            .map(|gpu| {
                 let name = gpu["name"].as_str().unwrap_or("gpu");
                 let index = gpu["index"].as_str().unwrap_or("0");
                 // Format: Name=gpu Type=<model> File=/dev/nvidia<index>
-                Some(format!(
+                format!(
                     "Name=gpu Type={} File=/dev/nvidia{}",
                     name.replace(' ', "_"),
                     index,
-                ))
+                )
             })
             .collect()
     }
@@ -204,7 +295,12 @@ impl Module for NvidiaGpuModule {
         let state = params
             .get_string("state")?
             .unwrap_or_else(|| "present".to_string());
-        let persistence_mode = params.get_bool_or("persistence_mode", false);
+        let driver_version = params.get_string("driver_version")?;
+        let persistence_mode = params.get_bool("persistence_mode")?;
+        let compute_mode = params.get_string("compute_mode")?;
+        let ecc_mode = params.get_bool("ecc_mode")?;
+        let power_limit = params.get_u32("power_limit")?;
+        let gpu_id = params.get_string("gpu_id")?;
         let gres_config = params.get_bool_or("gres_config", false);
 
         // Detect OS family
@@ -224,23 +320,48 @@ impl Module for NvidiaGpuModule {
         let mut changes: Vec<String> = Vec::new();
 
         // --- Install NVIDIA driver packages ---
+        let desired_branch = driver_version
+            .as_deref()
+            .and_then(driver_branch)
+            .unwrap_or_else(|| "535".to_string());
         let check_cmd = match os_family {
-            "rhel" => "rpm -q nvidia-driver nvidia-driver-cuda >/dev/null 2>&1",
-            _ => "dpkg -s nvidia-driver-535 >/dev/null 2>&1",
+            "rhel" => {
+                if driver_version.is_some() {
+                    format!("rpm -q nvidia-driver-{}xx >/dev/null 2>&1", desired_branch)
+                } else {
+                    "rpm -q nvidia-driver nvidia-driver-cuda >/dev/null 2>&1".to_string()
+                }
+            }
+            _ => format!("dpkg -s nvidia-driver-{} >/dev/null 2>&1", desired_branch),
         };
-        let (installed, _, _) = run_cmd(connection, check_cmd, context)?;
+        let (installed, _, _) = run_cmd(connection, &check_cmd, context)?;
 
         if !installed {
             if context.check_mode {
-                changes.push("Would install NVIDIA driver packages".to_string());
+                changes.push(format!(
+                    "Would install NVIDIA driver packages (branch {})",
+                    desired_branch
+                ));
             } else {
                 let install_cmd = match os_family {
-                    "rhel" => "dnf install -y nvidia-driver nvidia-driver-cuda",
-                    _ => "DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535",
+                    "rhel" => {
+                        if driver_version.is_some() {
+                            format!("dnf install -y nvidia-driver-{}xx", desired_branch)
+                        } else {
+                            "dnf install -y nvidia-driver nvidia-driver-cuda".to_string()
+                        }
+                    }
+                    _ => format!(
+                        "DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-{}",
+                        desired_branch
+                    ),
                 };
-                run_cmd_ok(connection, install_cmd, context)?;
+                run_cmd_ok(connection, &install_cmd, context)?;
                 changed = true;
-                changes.push("Installed NVIDIA driver packages".to_string());
+                changes.push(format!(
+                    "Installed NVIDIA driver packages (branch {})",
+                    desired_branch
+                ));
             }
         }
 
@@ -260,29 +381,172 @@ impl Module for NvidiaGpuModule {
         };
 
         // --- Persistence mode ---
-        if persistence_mode {
-            let (svc_active, _, _) = run_cmd(
-                connection,
-                "systemctl is-active nvidia-persistenced.service",
-                context,
-            )?;
-            let (svc_enabled, _, _) = run_cmd(
-                connection,
-                "systemctl is-enabled nvidia-persistenced.service",
-                context,
-            )?;
+        if let Some(persistence_mode) = persistence_mode {
+            let selector = gpu_selector_arg(&gpu_id);
+            let current = self
+                .query_single_value(connection, context, "persistence_mode", &gpu_id)
+                .unwrap_or_default();
+            let current_enabled = current.first()
+                .and_then(|value| parse_enabled_flag(value));
 
-            if !svc_active || !svc_enabled {
+            if current_enabled != Some(persistence_mode) {
                 if context.check_mode {
-                    changes.push("Would enable and start nvidia-persistenced.service".to_string());
+                    changes.push(format!(
+                        "Would set persistence_mode={}{}",
+                        persistence_mode, selector
+                    ));
                 } else {
                     run_cmd_ok(
                         connection,
-                        "systemctl enable --now nvidia-persistenced.service",
+                        &format!(
+                            "nvidia-smi{} -pm {}",
+                            selector,
+                            if persistence_mode { 1 } else { 0 }
+                        ),
                         context,
                     )?;
                     changed = true;
-                    changes.push("Enabled and started nvidia-persistenced.service".to_string());
+                    changes.push(format!(
+                        "Set persistence_mode={}{}",
+                        persistence_mode, selector
+                    ));
+                }
+            }
+
+            if persistence_mode {
+                let (svc_active, _, _) = run_cmd(
+                    connection,
+                    "systemctl is-active nvidia-persistenced.service",
+                    context,
+                )?;
+                let (svc_enabled, _, _) = run_cmd(
+                    connection,
+                    "systemctl is-enabled nvidia-persistenced.service",
+                    context,
+                )?;
+
+                if !svc_active || !svc_enabled {
+                    if context.check_mode {
+                        changes.push("Would enable and start nvidia-persistenced.service"
+                            .to_string());
+                    } else {
+                        run_cmd_ok(
+                            connection,
+                            "systemctl enable --now nvidia-persistenced.service",
+                            context,
+                        )?;
+                        changed = true;
+                        changes.push(
+                            "Enabled and started nvidia-persistenced.service".to_string(),
+                        );
+                    }
+                }
+            } else {
+                let (svc_active, _, _) = run_cmd(
+                    connection,
+                    "systemctl is-active nvidia-persistenced.service",
+                    context,
+                )?;
+                if svc_active {
+                    if context.check_mode {
+                        changes.push("Would stop nvidia-persistenced.service".to_string());
+                    } else {
+                        run_cmd_ok(
+                            connection,
+                            "systemctl disable --now nvidia-persistenced.service",
+                            context,
+                        )?;
+                        changed = true;
+                        changes.push("Stopped nvidia-persistenced.service".to_string());
+                    }
+                }
+            }
+        }
+
+        // --- Compute mode ---
+        if let Some(mode) = compute_mode.as_deref() {
+            let selector = gpu_selector_arg(&gpu_id);
+            let desired_mode = normalize_compute_mode(mode)?;
+            let desired_label = mode.trim().to_lowercase();
+            let current = self
+                .query_single_value(connection, context, "compute_mode", &gpu_id)
+                .unwrap_or_default();
+            let current_mode = current.first()
+                .map(|value| value.trim().to_lowercase());
+
+            if current_mode.as_deref() != Some(desired_label.as_str()) {
+                if context.check_mode {
+                    changes.push(format!("Would set compute_mode={}{}", mode, selector));
+                } else {
+                    run_cmd_ok(
+                        connection,
+                        &format!("nvidia-smi{} -c {}", selector, desired_mode),
+                        context,
+                    )?;
+                    changed = true;
+                    changes.push(format!("Set compute_mode={}{}", mode, selector));
+                }
+            }
+        }
+
+        // --- ECC mode ---
+        if let Some(ecc_mode) = ecc_mode {
+            let selector = gpu_selector_arg(&gpu_id);
+            let current = self
+                .query_single_value(connection, context, "ecc.mode.current", &gpu_id)
+                .unwrap_or_default();
+            let current_enabled = current.first()
+                .and_then(|value| parse_enabled_flag(value));
+
+            if current_enabled != Some(ecc_mode) {
+                if context.check_mode {
+                    changes.push(format!("Would set ecc_mode={}{}", ecc_mode, selector));
+                } else {
+                    run_cmd_ok(
+                        connection,
+                        &format!(
+                            "nvidia-smi{} -e {}",
+                            selector,
+                            if ecc_mode { 1 } else { 0 }
+                        ),
+                        context,
+                    )?;
+                    changed = true;
+                    changes.push(format!("Set ecc_mode={}{}", ecc_mode, selector));
+                }
+            }
+        }
+
+        // --- Power limit ---
+        if let Some(power_limit) = power_limit {
+            let selector = gpu_selector_arg(&gpu_id);
+            let current = self
+                .query_single_value(connection, context, "power.limit", &gpu_id)
+                .unwrap_or_default();
+            let current_limit = current.first()
+                .and_then(|value| parse_power_limit(value));
+
+            let needs_update = current_limit
+                .map(|limit| (limit - power_limit as f64).abs() > 0.1)
+                .unwrap_or(true);
+
+            if needs_update {
+                if context.check_mode {
+                    changes.push(format!(
+                        "Would set power_limit={}{}",
+                        power_limit, selector
+                    ));
+                } else {
+                    run_cmd_ok(
+                        connection,
+                        &format!("nvidia-smi{} -pl {}", selector, power_limit),
+                        context,
+                    )?;
+                    changed = true;
+                    changes.push(format!(
+                        "Set power_limit={}{}",
+                        power_limit, selector
+                    ));
                 }
             }
         }
@@ -339,8 +603,34 @@ impl Module for NvidiaGpuModule {
     fn optional_params(&self) -> HashMap<&'static str, serde_json::Value> {
         let mut m = HashMap::new();
         m.insert("state", serde_json::json!("present"));
-        m.insert("persistence_mode", serde_json::json!(false));
+        m.insert("driver_version", serde_json::json!(null));
+        m.insert("persistence_mode", serde_json::json!(null));
+        m.insert("compute_mode", serde_json::json!(null));
+        m.insert("ecc_mode", serde_json::json!(null));
+        m.insert("power_limit", serde_json::json!(null));
+        m.insert("gpu_id", serde_json::json!(null));
         m.insert("gres_config", serde_json::json!(false));
         m
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{driver_branch, normalize_compute_mode};
+
+    #[test]
+    fn test_driver_branch_parses_versions() {
+        assert_eq!(driver_branch("535.129.03"), Some("535".to_string()));
+        assert_eq!(driver_branch("550"), Some("550".to_string()));
+        assert_eq!(driver_branch(""), None);
+    }
+
+    #[test]
+    fn test_normalize_compute_mode() {
+        assert_eq!(normalize_compute_mode("default").unwrap(), "0");
+        assert_eq!(normalize_compute_mode("exclusive_thread").unwrap(), "1");
+        assert_eq!(normalize_compute_mode("exclusive_process").unwrap(), "2");
+        assert_eq!(normalize_compute_mode("prohibited").unwrap(), "3");
+        assert_eq!(normalize_compute_mode("2").unwrap(), "2");
     }
 }

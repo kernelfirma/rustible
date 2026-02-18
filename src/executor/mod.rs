@@ -1083,7 +1083,7 @@ impl Executor {
             };
 
             // Get connection for host once before running tasks
-            let host_connection = self.get_connection_for_host(&host).await;
+            let host_connection = self.get_connection_for_host(host).await;
 
             for task in tasks {
                 if host_result.failed || host_result.unreachable {
@@ -1172,7 +1172,7 @@ impl Executor {
                     if result.status == TaskStatus::Changed {
                         let record = Self::build_task_state_record(
                             task,
-                            &host,
+                            host,
                             crate::state::TaskStatus::Changed,
                         );
                         self.changed_tasks.lock().await.push(record);
@@ -1204,7 +1204,7 @@ impl Executor {
         let verbosity = self.config.verbosity;
 
         // Avoid cloning entire task list - use Arc slice instead
-        let tasks: Arc<[Task]> = tasks.iter().cloned().collect::<Vec<_>>().into();
+        let tasks: Arc<[Task]> = tasks.to_vec().into();
         let results = Arc::new(Mutex::new(HashMap::with_capacity(hosts.len())));
 
         let event_callback = self.event_callback.clone();
@@ -2158,8 +2158,7 @@ impl Executor {
                     };
 
                     let content = tokio::fs::read_to_string(&full_path).await.map_err(|e| {
-                        ExecutorError::IoError(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        ExecutorError::IoError(std::io::Error::other(
                             format!("Failed to read vars file {}: {}", full_path.display(), e),
                         ))
                     })?;

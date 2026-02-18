@@ -313,6 +313,7 @@ impl UnitFile {
 }
 
 /// Native systemd interface
+#[derive(Default)]
 pub struct SystemdNative {
     /// Use D-Bus when available (future feature)
     #[allow(dead_code)]
@@ -336,7 +337,7 @@ impl SystemdNative {
         let output = Command::new("systemctl")
             .args(["show", unit, "--no-pager"])
             .output()
-            .map_err(|e| NativeError::Io(e))?;
+            .map_err(NativeError::Io)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -421,7 +422,7 @@ impl SystemdNative {
                 "--no-pager",
             ])
             .output()
-            .map_err(|e| NativeError::Io(e))?;
+            .map_err(NativeError::Io)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut units = Vec::new();
@@ -459,7 +460,7 @@ impl SystemdNative {
                 "--no-pager",
             ])
             .output()
-            .map_err(|e| NativeError::Io(e))?;
+            .map_err(NativeError::Io)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let services: Vec<String> = stdout
@@ -486,7 +487,7 @@ impl SystemdNative {
         let output = Command::new("systemctl")
             .args(["cat", unit, "--no-pager"])
             .output()
-            .map_err(|e| NativeError::Io(e))?;
+            .map_err(NativeError::Io)?;
 
         if output.status.success() {
             let content = String::from_utf8_lossy(&output.stdout);
@@ -515,7 +516,7 @@ impl SystemdNative {
         let output = Command::new("systemctl")
             .args(["--failed", "--no-legend", "--no-pager"])
             .output()
-            .map_err(|e| NativeError::Io(e))?;
+            .map_err(NativeError::Io)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut units = Vec::new();
@@ -549,11 +550,6 @@ impl SystemdNative {
     }
 }
 
-impl Default for SystemdNative {
-    fn default() -> Self {
-        Self { use_dbus: false }
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -21,7 +21,7 @@ pub struct PlaybookProgress {
 
 impl PlaybookProgress {
     /// Create a new progress tracker
-    pub fn new(total_tasks: u64, total_hosts: u64, json_mode: bool) -> Self {
+    pub fn new(total_tasks: u64, _total_hosts: u64, json_mode: bool) -> Self {
         let multi = Arc::new(MultiProgress::new());
 
         if json_mode {

@@ -316,11 +316,11 @@ fn parse_node_info(scontrol_output: &str) -> NodeInfo {
     // Re-parse reason from the raw output for better accuracy.
     if let Some(reason_start) = scontrol_output.find("Reason=") {
         let after_eq = &scontrol_output[reason_start + 7..];
-        let parsed_reason = if after_eq.starts_with('"') {
+        let parsed_reason = if let Some(stripped) = after_eq.strip_prefix('"') {
             // Quoted reason - find closing quote
-            after_eq[1..]
+            stripped
                 .find('"')
-                .map(|end| after_eq[1..end + 1].to_string())
+                .map(|end| stripped[..end].to_string())
                 .unwrap_or_else(|| after_eq.trim().to_string())
         } else {
             // Unquoted - take until next whitespace or newline

@@ -148,7 +148,7 @@ impl Playbook {
     /// Load a playbook from a YAML file
     pub fn load<P: AsRef<Path>>(path: P) -> ExecutorResult<Self> {
         let path = path.as_ref();
-        let content = std::fs::read_to_string(path).map_err(|e| ExecutorError::IoError(e))?;
+        let content = std::fs::read_to_string(path).map_err(ExecutorError::IoError)?;
 
         Self::parse(&content, Some(path.to_path_buf()))
     }

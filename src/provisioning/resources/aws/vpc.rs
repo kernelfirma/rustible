@@ -298,7 +298,7 @@ impl AwsVpcResource {
         match parts[1].parse::<u8>() {
             Ok(prefix) if prefix <= 32 => {
                 // AWS VPC CIDR must be between /16 and /28
-                if prefix < 16 || prefix > 28 {
+                if !(16..=28).contains(&prefix) {
                     return Err(ProvisioningError::ValidationError(format!(
                         "Invalid CIDR block '{}': VPC CIDR prefix must be between /16 and /28",
                         cidr

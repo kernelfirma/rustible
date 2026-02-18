@@ -76,7 +76,7 @@ async fn handle_socket(
             };
 
             if let Ok(json) = serde_json::to_string(&msg) {
-                if sender.send(Message::Text(json.into())).await.is_err() {
+                if sender.send(Message::Text(json)).await.is_err() {
                     warn!("Failed to send history to WebSocket");
                     return;
                 }
@@ -95,7 +95,7 @@ async fn handle_socket(
                         Ok(msg) => {
                             match serde_json::to_string(&msg) {
                                 Ok(json) => {
-                                    if sender.send(Message::Text(json.into())).await.is_err() {
+                                    if sender.send(Message::Text(json)).await.is_err() {
                                         break;
                                     }
 

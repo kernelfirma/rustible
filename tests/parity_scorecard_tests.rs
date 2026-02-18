@@ -65,6 +65,7 @@ impl Feature {
         }
     }
 
+    #[allow(dead_code)]
     fn with_note(mut self, note: &str) -> Self {
         self.notes = Some(note.to_string());
         self

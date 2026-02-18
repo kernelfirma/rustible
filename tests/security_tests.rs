@@ -1130,7 +1130,7 @@ mod path_traversal_prevention {
         // Create a vars file outside
         let outside_vars = temp.path().join("secrets.yml");
         let mut file = fs::File::create(&outside_vars).unwrap();
-        write!(file, "db_password: supersecret\n").unwrap();
+        writeln!(file, "db_password: supersecret").unwrap();
 
         let includer = TaskIncluder::new(&playbook_dir);
         let mut var_store = VarStore::new();
@@ -1281,7 +1281,7 @@ mod execute_include_vars_security {
         // Create a secret vars file outside the working directory
         let secret_file = temp.path().join("secret_vars.yml");
         let mut file = fs::File::create(&secret_file).unwrap();
-        write!(file, "db_password: supersecret123\n").unwrap();
+        writeln!(file, "db_password: supersecret123").unwrap();
 
         // Change to working directory for test
         let original_dir = std::env::current_dir().unwrap();
@@ -1312,7 +1312,7 @@ mod execute_include_vars_security {
         // Create a file at temp root
         let target = temp.path().join("passwd.yml");
         let mut file = fs::File::create(&target).unwrap();
-        write!(file, "root_password: toor\n").unwrap();
+        writeln!(file, "root_password: toor").unwrap();
 
         let result = test_path_validation("../../../../passwd.yml", &deep_dir);
         assert!(result.is_err(), "Deep path traversal should be blocked");
@@ -1328,12 +1328,12 @@ mod execute_include_vars_security {
         // Create file inside project (valid)
         let valid_file = project_dir.join("vars.yml");
         let mut file = fs::File::create(&valid_file).unwrap();
-        write!(file, "valid_var: true\n").unwrap();
+        writeln!(file, "valid_var: true").unwrap();
 
         // Create file outside project
         let outside_file = temp.path().join("outside.yml");
         let mut file = fs::File::create(&outside_file).unwrap();
-        write!(file, "secret: stolen\n").unwrap();
+        writeln!(file, "secret: stolen").unwrap();
 
         // Valid file should work
         let result = test_path_validation(valid_file.to_str().unwrap(), &project_dir);
@@ -1362,7 +1362,7 @@ mod execute_include_vars_security {
         // Create secret file outside project
         let secret_file = temp.path().join("secret.yml");
         let mut file = fs::File::create(&secret_file).unwrap();
-        write!(file, "api_key: sk-12345\n").unwrap();
+        writeln!(file, "api_key: sk-12345").unwrap();
 
         // Create symlink inside vars dir pointing outside
         let symlink_path = vars_dir.join("config.yml");
@@ -1388,11 +1388,11 @@ mod execute_include_vars_security {
         // Create valid vars files at different levels
         let root_vars = project_dir.join("vars.yml");
         let mut file = fs::File::create(&root_vars).unwrap();
-        write!(file, "root_var: value1\n").unwrap();
+        writeln!(file, "root_var: value1").unwrap();
 
         let nested_vars = subdir.join("database.yml");
         let mut file = fs::File::create(&nested_vars).unwrap();
-        write!(file, "db_host: localhost\n").unwrap();
+        writeln!(file, "db_host: localhost").unwrap();
 
         // Both should be valid
         let result1 = test_path_validation("vars.yml", &project_dir);
@@ -1423,7 +1423,7 @@ mod execute_include_vars_security {
 
         let secret_file = outside_dir.join("passwords.yml");
         let mut file = fs::File::create(&secret_file).unwrap();
-        write!(file, "mysql_password: root123\n").unwrap();
+        writeln!(file, "mysql_password: root123").unwrap();
 
         // Attempt to include vars from outside directory
         let result = test_path_validation("../secrets", &project_dir);
@@ -1440,7 +1440,7 @@ mod execute_include_vars_security {
         // Create a target file
         let target = temp.path().join("target.yml");
         let mut file = fs::File::create(&target).unwrap();
-        write!(file, "stolen: data\n").unwrap();
+        writeln!(file, "stolen: data").unwrap();
 
         // Test various attack patterns
         let attack_patterns = vec![
@@ -1476,7 +1476,7 @@ mod execute_include_vars_security {
 
         let target = temp.path().join("secret.yml");
         let mut file = fs::File::create(&target).unwrap();
-        write!(file, "x: y\n").unwrap();
+        writeln!(file, "x: y").unwrap();
 
         let result = test_path_validation("../secret.yml", &project_dir);
         assert!(result.is_err());
@@ -1592,11 +1592,6 @@ mod delegation_security {
             if !is_safe {
                 // Hostname contains dangerous characters - should be rejected
                 // by connection layer validation
-                assert!(
-                    true,
-                    "Hostname '{}' contains dangerous characters and should be validated",
-                    hostname
-                );
             }
         }
     }
@@ -1611,12 +1606,12 @@ mod delegation_security {
         // Create vars file in project
         let vars_file = project_dir.join("vars.yml");
         let mut file = fs::File::create(&vars_file).unwrap();
-        write!(file, "delegate_host: server1\n").unwrap();
+        writeln!(file, "delegate_host: server1").unwrap();
 
         // Create secret file outside
         let secret = temp.path().join("credentials.yml");
         let mut file = fs::File::create(&secret).unwrap();
-        write!(file, "ssh_password: supersecret\n").unwrap();
+        writeln!(file, "ssh_password: supersecret").unwrap();
 
         // Path validation should still work in delegation context
         let original_dir = std::env::current_dir().unwrap();
@@ -1645,14 +1640,14 @@ mod delegation_security {
         // Create normal vars file
         let normal_vars = vars_dir.join("all.yml");
         let mut file = fs::File::create(&normal_vars).unwrap();
-        write!(file, "environment: production\n").unwrap();
+        writeln!(file, "environment: production").unwrap();
 
         // Create attacker-controlled symlink in vars directory
         // pointing to system file
         let passwd_link = vars_dir.join("system.yml");
 
         // Only create symlink if we have permission (skip in restricted envs)
-        if let Ok(_) = std::os::unix::fs::symlink("/etc/passwd", &passwd_link) {
+        if std::os::unix::fs::symlink("/etc/passwd", &passwd_link).is_ok() {
             // Symlink should be blocked when canonicalized
             let result = execute_include_vars_security::test_path_validation(
                 "group_vars/system.yml",
@@ -1683,10 +1678,7 @@ mod delegation_security {
         // 2. Uses canonical path for reading
         // 3. Not the original user-supplied path
 
-        assert!(
-            true,
-            "TOCTOU resistance is documented and implemented via canonicalize()"
-        );
+        // TOCTOU resistance is documented and implemented via canonicalize()
     }
 }
 
@@ -1877,8 +1869,10 @@ mod ssh_connection_security {
     fn test_password_not_serialized() {
         use rustible::connection::config::HostConfig;
 
-        let mut config = HostConfig::default();
-        config.password = Some("secret123".to_string());
+        let config = HostConfig {
+            password: Some("secret123".to_string()),
+            ..Default::default()
+        };
 
         // Serialize the config
         let serialized = serde_json::to_string(&config).unwrap();
@@ -2132,9 +2126,11 @@ example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9ok
     fn test_debug_output_safety() {
         use rustible::connection::config::HostConfig;
 
-        let mut config = HostConfig::default();
-        config.password = Some("supersecret".to_string());
-        config.identity_file = Some("/path/to/key".to_string());
+        let config = HostConfig {
+            password: Some("supersecret".to_string()),
+            identity_file: Some("/path/to/key".to_string()),
+            ..Default::default()
+        };
 
         let debug_output = format!("{:?}", config);
 

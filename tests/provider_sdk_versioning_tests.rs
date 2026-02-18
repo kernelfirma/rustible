@@ -232,7 +232,7 @@ mod dependency_version_tests {
     use super::*;
 
     fn dependency_satisfied(dep: &ProviderDependency, available: &Version) -> bool {
-        let req: VersionReq = dep.req.parse().unwrap_or_else(|_| VersionReq::STAR);
+        let req: VersionReq = dep.req.parse().unwrap_or(VersionReq::STAR);
         req.matches(available)
     }
 
@@ -488,12 +488,10 @@ mod version_sorting_tests {
 
     #[test]
     fn test_sort_versions_ascending() {
-        let mut versions = vec![
-            Version::new(1, 0, 0),
+        let mut versions = [Version::new(1, 0, 0),
             Version::new(2, 0, 0),
             Version::new(0, 1, 0),
-            Version::new(1, 1, 0),
-        ];
+            Version::new(1, 1, 0)];
 
         versions.sort();
 
@@ -505,12 +503,10 @@ mod version_sorting_tests {
 
     #[test]
     fn test_sort_versions_with_prerelease() {
-        let mut versions = vec![
-            "1.0.0".parse::<Version>().unwrap(),
+        let mut versions = ["1.0.0".parse::<Version>().unwrap(),
             "1.0.0-alpha".parse::<Version>().unwrap(),
             "1.0.0-beta".parse::<Version>().unwrap(),
-            "1.0.0-rc.1".parse::<Version>().unwrap(),
-        ];
+            "1.0.0-rc.1".parse::<Version>().unwrap()];
 
         versions.sort();
 
@@ -520,12 +516,10 @@ mod version_sorting_tests {
 
     #[test]
     fn test_find_latest_compatible() {
-        let available = vec![
-            Version::new(1, 0, 0),
+        let available = [Version::new(1, 0, 0),
             Version::new(1, 1, 0),
             Version::new(1, 2, 0),
-            Version::new(2, 0, 0),
-        ];
+            Version::new(2, 0, 0)];
 
         let req: VersionReq = "^1.0.0".parse().unwrap();
 
@@ -543,7 +537,7 @@ mod version_sorting_tests {
 // ============================================================================
 
 mod version_policy_tests {
-    use super::*;
+    
 
     /// Documents the version policy for providers
     #[test]
@@ -555,13 +549,11 @@ mod version_policy_tests {
         // - Changing output types
         // - Changing error types
 
-        let breaking_changes = vec![
-            "Removing a module",
+        let breaking_changes = ["Removing a module",
             "Changing parameter types",
             "Removing required parameters",
             "Changing output types",
-            "Changing error behavior",
-        ];
+            "Changing error behavior"];
 
         assert!(breaking_changes.len() >= 5);
     }
@@ -575,12 +567,10 @@ mod version_policy_tests {
         // - Adding new capabilities
         // - Adding new output fields
 
-        let feature_additions = vec![
-            "Adding new modules",
+        let feature_additions = ["Adding new modules",
             "Adding optional parameters",
             "Adding new capabilities",
-            "Adding new output fields",
-        ];
+            "Adding new output fields"];
 
         assert!(feature_additions.len() >= 4);
     }
@@ -594,12 +584,10 @@ mod version_policy_tests {
         // - Performance improvements
         // - Internal refactoring
 
-        let patch_changes = vec![
-            "Bug fixes",
+        let patch_changes = ["Bug fixes",
             "Documentation updates",
             "Performance improvements",
-            "Internal refactoring",
-        ];
+            "Internal refactoring"];
 
         assert!(patch_changes.len() >= 4);
     }

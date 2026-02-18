@@ -151,7 +151,7 @@ async fn init_runtime(inventory: &Inventory) -> RuntimeContext {
 
     // Add all hosts to runtime
     for host in inventory.get_all_hosts() {
-        let host_vars = inventory.get_host_vars(&host);
+        let host_vars = inventory.get_host_vars(host);
         for (key, value) in host_vars {
             // Convert serde_yaml::Value to serde_json::Value
             let json_value = serde_json::to_value(&value).unwrap_or(serde_json::Value::Null);

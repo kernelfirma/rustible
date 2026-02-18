@@ -284,8 +284,7 @@ impl ServerSideEncryption {
     fn from_str(s: &str) -> ModuleResult<Self> {
         match s
             .to_uppercase()
-            .replace('-', "_")
-            .replace(':', "_")
+            .replace(['-', ':'], "_")
             .as_str()
         {
             "AES256" | "AES_256" | "SSE_S3" => Ok(ServerSideEncryption::Aes256),
@@ -561,7 +560,7 @@ impl MultipartUploadState {
     }
 
     fn total_parts(&self) -> u64 {
-        (self.total_size + self.part_size - 1) / self.part_size
+        self.total_size.div_ceil(self.part_size)
     }
 
     fn add_completed_part(&mut self, part_number: i32, etag: String, size: u64) {

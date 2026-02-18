@@ -558,7 +558,7 @@ proptest! {
         let line_count = lines.len();
 
         // Should be calculable without overflow
-        prop_assert!(total_size <= usize::MAX);
+        let _ = total_size;
         prop_assert!(line_count <= 1000);
 
         // Test truncation strategy
@@ -679,7 +679,7 @@ proptest! {
         let _ = s.trim();
         let _ = s.len();
         let _ = s.chars().count();
-        let _ = s.bytes().len();
+        let _ = s.len();
         let _ = s.is_empty();
         let _ = s.to_lowercase();
         let _ = s.to_uppercase();

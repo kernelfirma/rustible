@@ -859,11 +859,8 @@ fn test_multiple_roles_with_different_conditions() {
     }
 
     // Third role (simple) has no condition
-    match &playbook.plays[0].roles[2] {
-        RoleRef::Simple(_) => {
-            // Simple roles don't have when conditions
-        }
-        _ => {}
+    if let RoleRef::Simple(_) = &playbook.plays[0].roles[2] {
+        // Simple roles don't have when conditions
     }
 }
 

@@ -93,7 +93,7 @@ impl AwsDbSubnetGroupResource {
 
         match resp {
             Ok(r) => {
-                for group in r.db_subnet_groups() {
+                if let Some(group) = r.db_subnet_groups().iter().next() {
                     return Ok(Some(self.parse_subnet_group(group)));
                 }
                 Ok(None)

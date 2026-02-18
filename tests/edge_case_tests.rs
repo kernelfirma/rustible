@@ -112,20 +112,21 @@ fn test_playbook_with_no_hosts_defined() {
     let result = Playbook::from_yaml(yaml, None);
 
     // Missing hosts field should error
-    if result.is_ok() {
-        // Some implementations might default hosts
-        let playbook = result.unwrap();
-        assert!(playbook.play_count() >= 1);
-    } else {
-        let error = result.unwrap_err();
-        let error_str = error.to_string();
-        assert!(
-            error_str.contains("hosts")
-                || error_str.contains("required")
-                || error_str.contains("missing"),
-            "Error should mention missing hosts field, got: {}",
-            error_str
-        );
+    match result {
+        Ok(playbook) => {
+            // Some implementations might default hosts
+            assert!(playbook.play_count() >= 1);
+        }
+        Err(error) => {
+            let error_str = error.to_string();
+            assert!(
+                error_str.contains("hosts")
+                    || error_str.contains("required")
+                    || error_str.contains("missing"),
+                "Error should mention missing hosts field, got: {}",
+                error_str
+            );
+        }
     }
 }
 
@@ -219,18 +220,19 @@ fn test_missing_task_module() {
     let result = Playbook::from_yaml(yaml, None);
 
     // This might parse (empty module map) or error - both acceptable
-    if result.is_ok() {
-        let playbook = result.unwrap();
-        let task = &playbook.plays[0].tasks[0];
-        assert_eq!(task.name, "Task with no module");
-    } else {
-        let error = result.unwrap_err();
-        assert!(
-            error.to_string().contains("module")
-                || error.to_string().contains("required")
-                || error.to_string().contains("action"),
-            "Error should mention missing module"
-        );
+    match result {
+        Ok(playbook) => {
+            let task = &playbook.plays[0].tasks[0];
+            assert_eq!(task.name, "Task with no module");
+        }
+        Err(error) => {
+            assert!(
+                error.to_string().contains("module")
+                    || error.to_string().contains("required")
+                    || error.to_string().contains("action"),
+                "Error should mention missing module"
+            );
+        }
     }
 }
 
@@ -680,17 +682,18 @@ fn test_template_with_undefined_variable() {
     let result = engine.render("{{ undefined_variable }}", &vars);
 
     // Should error or return empty/default
-    if result.is_ok() {
-        // Some engines allow undefined vars with defaults
-        let rendered = result.unwrap();
-        assert!(rendered.is_empty() || rendered.contains("undefined"));
-    } else {
-        let error = result.unwrap_err();
-        assert!(
-            error.to_string().contains("undefined")
-                || error.to_string().contains("variable")
-                || error.to_string().contains("not found")
-        );
+    match result {
+        Ok(rendered) => {
+            // Some engines allow undefined vars with defaults
+            assert!(rendered.is_empty() || rendered.contains("undefined"));
+        }
+        Err(error) => {
+            assert!(
+                error.to_string().contains("undefined")
+                    || error.to_string().contains("variable")
+                    || error.to_string().contains("not found")
+            );
+        }
     }
 }
 
@@ -714,7 +717,7 @@ fn test_deeply_nested_variables() {
 "#;
 
     let playbook = Playbook::from_yaml(yaml, None).expect("Should parse deeply nested vars");
-    assert!(playbook.plays[0].vars.len() > 0);
+    assert!(!playbook.plays[0].vars.is_empty());
 }
 
 // ============================================================================
@@ -1005,13 +1008,12 @@ fn test_inventory_empty_hosts_pattern() {
 
     // Pattern matching on empty inventory
     let result = inventory.get_hosts_for_pattern("all");
-    match result {
-        Ok(hosts) => assert!(
+    if let Ok(hosts) = result {
+        assert!(
             hosts.is_empty(),
             "All pattern on empty inventory should return empty"
-        ),
-        Err(_) => {} // Empty pattern result is also acceptable
-    }
+        );
+    } // Empty pattern result is also acceptable
 }
 
 #[test]
@@ -1410,7 +1412,7 @@ fn test_executor_config_extreme_forks() {
 
     for config in configs {
         // Configuration should be valid (enforcement happens at runtime)
-        assert!(config.forks <= usize::MAX);
+        let _ = config.forks;
     }
 }
 
@@ -1566,8 +1568,7 @@ fn test_template_with_malformed_syntax() {
     for template in malformed_templates {
         let result = engine.render(template, &vars);
         // Should either error or handle gracefully
-        if result.is_err() {
-            let error = result.unwrap_err();
+        if let Err(error) = result {
             assert!(
                 !error.to_string().is_empty(),
                 "Error message should not be empty"
@@ -1678,10 +1679,9 @@ fn test_inventory_regex_edge_cases() {
 
     // Regex pattern matching
     let result = inventory.get_hosts_for_pattern("~server-0\\d{2}");
-    match result {
-        Ok(hosts) => assert_eq!(hosts.len(), 2),
-        Err(_) => {} // Some implementations may not support this
-    }
+    if let Ok(hosts) = result {
+        assert_eq!(hosts.len(), 2);
+    } // Some implementations may not support this
 }
 
 #[test]

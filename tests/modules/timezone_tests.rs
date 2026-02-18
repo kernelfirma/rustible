@@ -70,7 +70,7 @@ fn test_timezone_basic_params() {
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("name".to_string(), serde_json::json!("America/New_York"));
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
     assert_eq!(
         params.get("name").unwrap(),
         &serde_json::json!("America/New_York")
@@ -83,7 +83,7 @@ fn test_timezone_with_ntp_param() {
     params.insert("name".to_string(), serde_json::json!("UTC"));
     params.insert("ntp".to_string(), serde_json::json!(true));
 
-    assert!(params.get("ntp").is_some());
+    assert!(params.contains_key("ntp"));
     assert_eq!(params.get("ntp").unwrap(), &serde_json::json!(true));
 }
 
@@ -93,7 +93,7 @@ fn test_timezone_with_hwclock_param() {
     params.insert("name".to_string(), serde_json::json!("Europe/London"));
     params.insert("hwclock".to_string(), serde_json::json!("local"));
 
-    assert!(params.get("hwclock").is_some());
+    assert!(params.contains_key("hwclock"));
     assert_eq!(params.get("hwclock").unwrap(), &serde_json::json!("local"));
 }
 
@@ -103,7 +103,7 @@ fn test_timezone_with_use_param() {
     params.insert("name".to_string(), serde_json::json!("Asia/Tokyo"));
     params.insert("use".to_string(), serde_json::json!("timedatectl"));
 
-    assert!(params.get("use").is_some());
+    assert!(params.contains_key("use"));
     assert_eq!(
         params.get("use").unwrap(),
         &serde_json::json!("timedatectl")
@@ -230,7 +230,7 @@ fn test_timezone_strategy_values() {
         params.insert("use".to_string(), serde_json::json!(strategy));
 
         assert!(
-            params.get("use").is_some(),
+            params.contains_key("use"),
             "Strategy '{}' should be valid",
             strategy
         );
@@ -251,7 +251,7 @@ fn test_timezone_hwclock_values() {
         params.insert("hwclock".to_string(), serde_json::json!(mode));
 
         assert!(
-            params.get("hwclock").is_some(),
+            params.contains_key("hwclock"),
             "Hwclock mode '{}' should be valid",
             mode
         );
@@ -324,10 +324,10 @@ fn test_timezone_full_configuration() {
     params.insert("use".to_string(), serde_json::json!("timedatectl"));
 
     assert_eq!(params.len(), 4);
-    assert!(params.get("name").is_some());
-    assert!(params.get("ntp").is_some());
-    assert!(params.get("hwclock").is_some());
-    assert!(params.get("use").is_some());
+    assert!(params.contains_key("name"));
+    assert!(params.contains_key("ntp"));
+    assert!(params.contains_key("hwclock"));
+    assert!(params.contains_key("use"));
 }
 
 #[test]

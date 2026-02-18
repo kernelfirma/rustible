@@ -217,7 +217,7 @@ fn test_apt_with_update_cache_parameter() {
     params.insert("update_cache".to_string(), serde_json::json!(true));
 
     // update_cache should be a valid parameter
-    assert!(params.get("update_cache").is_some());
+    assert!(params.contains_key("update_cache"));
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn test_apt_package_list_parameter() {
     );
 
     // Should accept list of packages
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 // ============================================================================

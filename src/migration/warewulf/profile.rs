@@ -218,7 +218,7 @@ impl WarewulfProfileImporter {
 
         // Support both top-level mapping and `noderange:` wrapper.
         let nodes_mapping = if let Some(mapping) = raw.as_mapping() {
-            if let Some(noderange) = mapping.get(&serde_yaml::Value::String("noderange".into())) {
+            if let Some(noderange) = mapping.get(serde_yaml::Value::String("noderange".into())) {
                 noderange
                     .as_mapping()
                     .ok_or_else(|| MigrationError::ParseError {

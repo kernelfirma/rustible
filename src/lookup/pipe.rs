@@ -369,7 +369,7 @@ mod tests {
         assert!(result.is_ok());
         let values = result.unwrap();
         let lines: Vec<&str> = values[0].lines().collect();
-        assert!(lines.len() >= 1);
+        assert!(!lines.is_empty());
     }
 
     #[test]

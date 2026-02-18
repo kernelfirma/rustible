@@ -509,7 +509,7 @@ impl Provider for AwsProvider {
         // Validate timeout if provided
         if let Some(timeout) = config.get("timeout") {
             if let Some(t) = timeout.as_u64() {
-                if t < 30 || t > 3600 {
+                if !(30..=3600).contains(&t) {
                     return Err(ProvisioningError::provider_config(
                         PROVIDER_NAME,
                         "timeout must be between 30 and 3600 seconds",
@@ -526,7 +526,7 @@ impl Provider for AwsProvider {
         // Validate max_retries if provided
         if let Some(retries) = config.get("max_retries") {
             if let Some(r) = retries.as_i64() {
-                if r < 0 || r > 10 {
+                if !(0..=10).contains(&r) {
                     return Err(ProvisioningError::provider_config(
                         PROVIDER_NAME,
                         "max_retries must be between 0 and 10",

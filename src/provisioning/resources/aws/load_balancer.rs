@@ -1250,7 +1250,7 @@ impl Resource for AwsLoadBalancerResource {
         // Validate idle_timeout
         if let Some(idle_timeout) = obj.get("idle_timeout") {
             if let Some(timeout) = idle_timeout.as_i64() {
-                if timeout < 1 || timeout > 4000 {
+                if !(1..=4000).contains(&timeout) {
                     return Err(ProvisioningError::ValidationError(
                         "idle_timeout must be between 1 and 4000 seconds".to_string(),
                     ));

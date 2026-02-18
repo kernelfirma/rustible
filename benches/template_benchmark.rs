@@ -76,6 +76,7 @@ Feature is disabled
 }
 
 /// Generate a template with filters
+#[allow(dead_code)]
 fn generate_filter_template() -> &'static str {
     "{{ name | upper }} - {{ description | lower | trim }}"
 }

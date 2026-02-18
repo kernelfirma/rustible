@@ -697,13 +697,13 @@ impl RuntimeContext {
 
         self.host_data
             .entry(host.clone())
-            .or_insert_with(HostVars::new);
+            .or_default();
 
         if let Some(group_name) = group {
             let group = self
                 .groups
                 .entry(group_name.to_string())
-                .or_insert_with(InventoryGroup::default);
+                .or_default();
 
             if !group.hosts.contains(&host) {
                 group.hosts.push(host);
@@ -755,7 +755,7 @@ impl RuntimeContext {
         let host_data = self
             .host_data
             .entry(host.to_string())
-            .or_insert_with(HostVars::new);
+            .or_default();
         host_data.set_fact(name, value);
     }
 
@@ -771,7 +771,7 @@ impl RuntimeContext {
         let host_data = self
             .host_data
             .entry(host.to_string())
-            .or_insert_with(HostVars::new);
+            .or_default();
         for (k, v) in facts {
             host_data.set_fact(k, v);
         }
@@ -783,7 +783,7 @@ impl RuntimeContext {
         let host_data = self
             .host_data
             .entry(host.to_string())
-            .or_insert_with(HostVars::new);
+            .or_default();
         host_data.register(name, result);
     }
 
@@ -799,7 +799,7 @@ impl RuntimeContext {
         let host_data = self
             .host_data
             .entry(host.to_string())
-            .or_insert_with(HostVars::new);
+            .or_default();
         host_data.set_var(name, value);
     }
 
@@ -986,7 +986,7 @@ impl RuntimeContext {
         let group_data = self
             .groups
             .entry(group.to_string())
-            .or_insert_with(InventoryGroup::default);
+            .or_default();
         group_data.vars.insert(name, value);
     }
 
@@ -1625,14 +1625,14 @@ mod tests {
         );
 
         // Remove extra_var, include_param should win
-        ctx.extra_vars.remove("test_var");
+        ctx.extra_vars.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("include_param"))
         );
 
         // Remove include_param, role_param should win
-        ctx.include_params.remove("test_var");
+        ctx.include_params.shift_remove("test_var");
         assert_eq!(
             ctx.get_var_with_full_precedence("test_var", Some("server1")),
             Some(serde_json::json!("role_param"))

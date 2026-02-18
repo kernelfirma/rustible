@@ -634,7 +634,7 @@ mod ssh_pipelining {
         let commands = vec!["cmd1", "cmd2", "cmd3", "cmd4", "cmd5"];
 
         for cmd in &commands {
-            conn.execute(*cmd, None).await.unwrap();
+            conn.execute(cmd, None).await.unwrap();
         }
 
         assert_eq!(conn.command_count(), 5);
@@ -745,7 +745,7 @@ Host *
 
         assert_eq!(star.options.get("controlmaster"), Some(&"auto".to_string()));
         assert_eq!(star.options.get("controlpersist"), Some(&"600".to_string()));
-        assert!(star.options.get("controlpath").is_some());
+        assert!(star.options.contains_key("controlpath"));
     }
 
     #[tokio::test]
@@ -825,7 +825,7 @@ Host internal-*
         let hosts = SshConfigParser::parse(config).unwrap();
         let internal = hosts.get("internal-*").unwrap();
 
-        assert!(internal.options.get("proxycommand").is_some());
+        assert!(internal.options.contains_key("proxycommand"));
         let proxy_cmd = internal.options.get("proxycommand").unwrap();
         assert!(proxy_cmd.contains("bastion.example.com"));
     }
@@ -908,9 +908,11 @@ Host deep-internal
         conn.set_proxy_command(Some("ssh -W %h:%p bastion".to_string()));
         conn.set_default_result(CommandResult::success("success".to_string(), String::new()));
 
-        let proxy_cmd = conn.proxy_command.read();
-        assert!(proxy_cmd.as_ref().unwrap().contains("bastion"));
-        drop(proxy_cmd);
+        {
+            let guard = conn.proxy_command.read();
+            let proxy_cmd: &Option<String> = &guard;
+            assert!(proxy_cmd.as_ref().unwrap().contains("bastion"));
+        }
 
         let result = conn.execute("echo test", None).await.unwrap();
         assert!(result.success);

@@ -733,7 +733,7 @@ impl KubernetesConnectionBuilder {
             .pod
             .ok_or_else(|| ConnectionError::InvalidConfig("Pod name is required".to_string()))?;
 
-        let auth = self.auth.unwrap_or_else(|| KubernetesAuth::Kubeconfig {
+        let auth = self.auth.unwrap_or(KubernetesAuth::Kubeconfig {
             path: self.kubeconfig_path,
             context: self.context,
         });

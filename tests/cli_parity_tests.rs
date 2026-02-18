@@ -13,6 +13,7 @@ mod config {
 
 // Pull in the real CLI module used by the binary.
 #[path = "../src/cli/mod.rs"]
+#[allow(dead_code, unused_imports)]
 mod cli;
 
 #[test]

@@ -642,29 +642,37 @@ mod context_tests {
 
     #[test]
     fn test_context_check_mode() {
-        let mut ctx = ModuleContext::default();
-        ctx.check_mode = true;
+        let ctx = ModuleContext {
+            check_mode: true,
+            ..Default::default()
+        };
         assert!(ctx.check_mode);
     }
 
     #[test]
     fn test_context_diff_mode() {
-        let mut ctx = ModuleContext::default();
-        ctx.diff_mode = true;
+        let ctx = ModuleContext {
+            diff_mode: true,
+            ..Default::default()
+        };
         assert!(ctx.diff_mode);
     }
 
     #[test]
     fn test_context_verbosity() {
-        let mut ctx = ModuleContext::default();
-        ctx.verbosity = 3;
+        let ctx = ModuleContext {
+            verbosity: 3,
+            ..Default::default()
+        };
         assert_eq!(ctx.verbosity, 3);
     }
 
     #[test]
     fn test_context_timeout() {
-        let mut ctx = ModuleContext::default();
-        ctx.timeout = Some(60);
+        let ctx = ModuleContext {
+            timeout: Some(60),
+            ..Default::default()
+        };
         assert_eq!(ctx.timeout, Some(60));
     }
 

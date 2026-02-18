@@ -5,7 +5,7 @@
 
 use crate::migration::error::{MigrationError, MigrationResult};
 use crate::migration::report::{
-    DiagnosticCategory, FindingStatus, MigrationDiagnostic, MigrationFinding, MigrationOutcome,
+    DiagnosticCategory, FindingStatus, MigrationDiagnostic, MigrationFinding,
     MigrationReport, MigrationSeverity,
 };
 use serde::{Deserialize, Serialize};
@@ -368,7 +368,7 @@ mod tests {
 
         let validator = TerraformPlanValidator::new(tf_file.path(), r_file.path(), 1.0);
         let report = validator.validate().unwrap();
-        assert_eq!(report.outcome, MigrationOutcome::Pass);
+        assert_eq!(report.outcome, crate::migration::report::MigrationOutcome::Pass);
     }
 
     #[test]
@@ -405,7 +405,7 @@ mod tests {
 
         let validator = TerraformPlanValidator::new(tf_file.path(), r_file.path(), 1.0);
         let report = validator.validate().unwrap();
-        assert_eq!(report.outcome, MigrationOutcome::Fail);
+        assert_eq!(report.outcome, crate::migration::report::MigrationOutcome::Fail);
         assert!(report.summary.errors > 0);
     }
 
@@ -419,7 +419,7 @@ mod tests {
 
         let validator = TerraformPlanValidator::new(tf_file.path(), r_file.path(), 1.0);
         let report = validator.validate().unwrap();
-        assert_eq!(report.outcome, MigrationOutcome::Pass);
+        assert_eq!(report.outcome, crate::migration::report::MigrationOutcome::Pass);
         assert_eq!(report.compatibility_score, 1.0);
     }
 }

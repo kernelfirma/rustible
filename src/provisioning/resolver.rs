@@ -1242,7 +1242,7 @@ impl TemplateResolver {
                         (node_map.get(&dep), node_map.get(&id))
                     {
                         graph.add_edge(from_idx, to_idx, ());
-                    } else if node_map.get(&dep).is_none() && !dep.resource_type.is_empty() {
+                    } else if !node_map.contains_key(&dep) && !dep.resource_type.is_empty() {
                         // Dependency references a resource that doesn't exist in config
                         return Err(ProvisioningError::MissingDependency {
                             resource: id.address(),
@@ -2392,7 +2392,7 @@ locals:
             (serde_json::json!(42), serde_json::json!(42)),
             (serde_json::json!(true), serde_json::json!(true)),
             (serde_json::json!(null), serde_json::json!(null)),
-            (serde_json::json!(3.14), serde_json::json!(3.14)),
+            (serde_json::json!(3.15), serde_json::json!(3.15)),
             (
                 serde_json::json!("plain string"),
                 serde_json::json!("plain string"),

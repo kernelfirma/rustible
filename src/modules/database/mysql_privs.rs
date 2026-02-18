@@ -185,7 +185,7 @@ impl PrivilegeSpec {
             "USAGE",
         ];
 
-        if !VALID_PRIVILEGES.contains(&priv_name.as_ref()) {
+        if !VALID_PRIVILEGES.contains(&priv_name) {
             return Err(ModuleError::InvalidParameter(format!(
                 "Unknown privilege: '{}'. Valid privileges include: SELECT, INSERT, UPDATE, DELETE, ALL, etc.",
                 priv_name

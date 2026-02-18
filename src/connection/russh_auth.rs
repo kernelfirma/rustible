@@ -1149,7 +1149,7 @@ impl RusshAuthenticator {
                     if responses.is_empty() {
                         answers.resize(prompts.len(), String::new());
                     } else if responses.len() == 1 && prompts.len() > 1 {
-                        answers.extend(std::iter::repeat(responses[0].clone()).take(prompts.len()));
+                        answers.extend(std::iter::repeat_n(responses[0].clone(), prompts.len()));
                     } else {
                         for index in 0..prompts.len() {
                             answers.push(responses.get(index).cloned().unwrap_or_default());

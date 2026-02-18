@@ -1134,7 +1134,7 @@ impl DetectArgs {
 
                 // Filter out in-sync findings unless show_all is enabled
                 let relevant_findings: Vec<_> = if self.show_all {
-                    findings.iter().copied().collect()
+                    findings.to_vec()
                 } else {
                     findings
                         .iter()

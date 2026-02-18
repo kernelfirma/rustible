@@ -100,7 +100,7 @@
 //! | `tags` | No | Resource tags |
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -110,8 +110,10 @@ use std::time::Duration;
 /// Represents the desired state of an Azure VM
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum VmState {
     /// VM should exist and be running
+    #[default]
     Present,
     /// VM should not exist
     Absent,
@@ -125,11 +127,6 @@ pub enum VmState {
     Restarted,
 }
 
-impl Default for VmState {
-    fn default() -> Self {
-        Self::Present
-    }
-}
 
 impl VmState {
     fn from_str(s: &str) -> ModuleResult<Self> {

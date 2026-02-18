@@ -84,8 +84,8 @@ impl VaultLookup {
     /// - `mount=custom secret/path#key` -> ("custom", "secret/path", Some("key"))
     fn parse_path(&self, path_arg: &str) -> (String, String, Option<String>) {
         // Strip vault:// scheme if present
-        let path = if path_arg.starts_with("vault://") {
-            &path_arg[8..]
+        let path = if let Some(stripped) = path_arg.strip_prefix("vault://") {
+            stripped
         } else {
             path_arg
         };

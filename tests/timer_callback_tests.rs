@@ -842,7 +842,7 @@ mod timer_callback_tests {
             ..Default::default()
         });
 
-        let durations = vec![100u64, 200, 300];
+        let durations = [100u64, 200, 300];
         for (i, duration) in durations.iter().enumerate() {
             let result = create_result(&format!("task{}", i), "host1", *duration, true);
             timer.on_task_start(&format!("task{}", i), "host1").await;
@@ -1066,7 +1066,7 @@ mod profile_tasks_callback_tests {
 
         callback.on_playbook_start("test").await;
 
-        let durations = vec![100u64, 500, 200];
+        let durations = [100u64, 500, 200];
         for (i, duration) in durations.iter().enumerate() {
             let host = format!("host{}", i);
             callback.on_task_start("variable_task", &host).await;

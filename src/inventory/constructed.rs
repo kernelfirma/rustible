@@ -624,11 +624,10 @@ impl ExpressionEvaluator {
     fn parse_is_defined(expr: &str) -> Option<&str> {
         // Pattern: "var is defined"
         let parts: Vec<&str> = expr.split_whitespace().collect();
-        if parts.len() == 3 && parts[1] == "is" && parts[2] == "defined" {
-            if Self::is_valid_var_path(parts[0]) {
+        if parts.len() == 3 && parts[1] == "is" && parts[2] == "defined"
+            && Self::is_valid_var_path(parts[0]) {
                 return Some(parts[0]);
             }
-        }
         None
     }
 
@@ -639,11 +638,10 @@ impl ExpressionEvaluator {
             if Self::is_valid_var_path(parts[0]) {
                 return Some(parts[0]);
             }
-        } else if parts.len() == 3 && parts[1] == "is" && parts[2] == "undefined" {
-            if Self::is_valid_var_path(parts[0]) {
+        } else if parts.len() == 3 && parts[1] == "is" && parts[2] == "undefined"
+            && Self::is_valid_var_path(parts[0]) {
                 return Some(parts[0]);
             }
-        }
         None
     }
 
@@ -1292,9 +1290,10 @@ mod tests {
         );
         vars.insert("enabled".to_string(), serde_yaml::Value::Bool(true));
 
-        let mut packages = serde_yaml::Sequence::new();
-        packages.push(serde_yaml::Value::String("nginx".to_string()));
-        packages.push(serde_yaml::Value::String("redis".to_string()));
+        let packages = vec![
+            serde_yaml::Value::String("nginx".to_string()),
+            serde_yaml::Value::String("redis".to_string()),
+        ];
         vars.insert(
             "installed_packages".to_string(),
             serde_yaml::Value::Sequence(packages),

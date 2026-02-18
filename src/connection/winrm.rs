@@ -53,7 +53,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
-use zeroize::Zeroizing;
 
 use super::{
     CommandResult, Connection, ConnectionError, ConnectionResult, ExecuteOptions, FileStat,
@@ -152,7 +151,7 @@ impl WinRmAuth {
 
         WinRmAuth::Ntlm {
             username: user,
-            password: SecretString::new(password.into().into()),
+            password: SecretString::new(password.into()),
             domain,
         }
     }
@@ -183,7 +182,7 @@ impl WinRmAuth {
     pub fn basic(username: impl Into<String>, password: impl Into<String>) -> Self {
         WinRmAuth::Basic {
             username: username.into(),
-            password: SecretString::new(password.into().into()),
+            password: SecretString::new(password.into()),
         }
     }
 
@@ -582,7 +581,7 @@ impl Default for WinRmConfig {
             use_ssl: false,
             auth: WinRmAuth::Basic {
                 username: String::new(),
-                password: SecretString::new(String::new().into()),
+                password: SecretString::new(String::new()),
             },
             timeout: DEFAULT_TIMEOUT,
             verify_ssl: true,
@@ -1807,7 +1806,7 @@ mod tests {
 
     #[test]
     fn test_winrm_auth_ntlm_parse() {
-        let auth = WinRmAuth::ntlm("DOMAIN\\user", &test_pw());
+        let auth = WinRmAuth::ntlm("DOMAIN\\user", test_pw());
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..
@@ -1821,7 +1820,7 @@ mod tests {
 
     #[test]
     fn test_winrm_auth_ntlm_upn() {
-        let auth = WinRmAuth::ntlm("user@domain.local", &test_pw());
+        let auth = WinRmAuth::ntlm("user@domain.local", test_pw());
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..
@@ -1870,7 +1869,7 @@ mod tests {
     fn test_ntlm_negotiate_message() {
         let auth = NtlmAuthenticator::new(
             "testuser",
-            SecretString::new("testpass".to_string().into()),
+            SecretString::new("testpass".to_string()),
             Some("TESTDOMAIN".to_string()),
         );
 

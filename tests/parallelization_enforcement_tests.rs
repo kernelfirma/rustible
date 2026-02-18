@@ -28,9 +28,9 @@ async fn test_host_exclusive_enforcement() {
         let _guard = manager1
             .acquire(ParallelizationHint::HostExclusive, host, module)
             .await;
-        log1.lock().await.push(format!("Task1 started"));
+        log1.lock().await.push("Task1 started".to_string());
         tokio::time::sleep(Duration::from_millis(100)).await;
-        log1.lock().await.push(format!("Task1 finished"));
+        log1.lock().await.push("Task1 finished".to_string());
     });
 
     // Give first task time to acquire lock
@@ -48,7 +48,7 @@ async fn test_host_exclusive_enforcement() {
             .await
             .push(format!("Task2 started after {:?}", wait_time));
         tokio::time::sleep(Duration::from_millis(50)).await;
-        log2.lock().await.push(format!("Task2 finished"));
+        log2.lock().await.push("Task2 finished".to_string());
     });
 
     handle1.await.unwrap();
@@ -80,9 +80,9 @@ async fn test_host_exclusive_different_hosts_parallel() {
         let _guard = manager1
             .acquire(ParallelizationHint::HostExclusive, "host1", "apt")
             .await;
-        log1.lock().await.push(format!("host1 started"));
+        log1.lock().await.push("host1 started".to_string());
         tokio::time::sleep(Duration::from_millis(100)).await;
-        log1.lock().await.push(format!("host1 finished"));
+        log1.lock().await.push("host1 finished".to_string());
     });
 
     let manager2 = manager.clone();
@@ -91,9 +91,9 @@ async fn test_host_exclusive_different_hosts_parallel() {
         let _guard = manager2
             .acquire(ParallelizationHint::HostExclusive, "host2", "apt")
             .await;
-        log2.lock().await.push(format!("host2 started"));
+        log2.lock().await.push("host2 started".to_string());
         tokio::time::sleep(Duration::from_millis(100)).await;
-        log2.lock().await.push(format!("host2 finished"));
+        log2.lock().await.push("host2 finished".to_string());
     });
 
     handle1.await.unwrap();
@@ -126,9 +126,9 @@ async fn test_global_exclusive_enforcement() {
                 "cluster_config",
             )
             .await;
-        log1.lock().await.push(format!("host1 started"));
+        log1.lock().await.push("host1 started".to_string());
         tokio::time::sleep(Duration::from_millis(100)).await;
-        log1.lock().await.push(format!("host1 finished"));
+        log1.lock().await.push("host1 finished".to_string());
     });
 
     // Give first task time to acquire lock
@@ -150,7 +150,7 @@ async fn test_global_exclusive_enforcement() {
             .await
             .push(format!("host2 started after {:?}", wait_time));
         tokio::time::sleep(Duration::from_millis(50)).await;
-        log2.lock().await.push(format!("host2 finished"));
+        log2.lock().await.push("host2 finished".to_string());
     });
 
     handle1.await.unwrap();

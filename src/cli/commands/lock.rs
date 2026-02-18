@@ -456,7 +456,7 @@ impl LockArgs {
     }
 
     /// Scan playbook for dependencies and add them to lockfile
-    async fn scan_dependencies(&self, lockfile: &mut Lockfile) -> anyhow::Result<()> {
+    async fn scan_dependencies(&self, _lockfile: &mut Lockfile) -> anyhow::Result<()> {
         // In a real implementation, this would:
         // 1. Parse the playbook
         // 2. Find role and collection references

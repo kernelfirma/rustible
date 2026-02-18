@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 
 /// Work assignment strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum AssignmentStrategy {
     /// Simple round-robin distribution
     RoundRobin,
@@ -19,14 +20,10 @@ pub enum AssignmentStrategy {
     /// Assign based on host affinity (keep hosts on same controller)
     Affinity,
     /// Adaptive strategy combining multiple signals
+    #[default]
     Adaptive,
 }
 
-impl Default for AssignmentStrategy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
-}
 
 /// Trait for work assignment strategies
 pub trait WorkAssigner: Send + Sync {

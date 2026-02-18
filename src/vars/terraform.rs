@@ -226,7 +226,7 @@ impl TerraformVarImporter {
             TerraformStateSource::Local(path) => {
                 let content = tokio::fs::read_to_string(&path)
                     .await
-                    .map_err(|e| VarsError::Io(e))?;
+                    .map_err(VarsError::Io)?;
                 serde_json::from_str(&content).map_err(VarsError::Json)
             }
             TerraformStateSource::Http { address } => {

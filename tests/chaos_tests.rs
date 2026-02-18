@@ -18,7 +18,6 @@
 
 #![cfg(feature = "ssh2-backend")]
 
-use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -28,6 +27,9 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use rand::Rng;
+
+// Import the Connection trait so we can call .execute() / .close() on connections
+use rustible::connection::{Connection, ConnectionConfig, ConnectionResult, HostConfig};
 
 mod common;
 
@@ -76,6 +78,15 @@ impl ChaosTestConfig {
             false
         }
     }
+
+    /// Build a HostConfig for SSH connections using the test configuration.
+    fn host_config(&self, host: &str) -> HostConfig {
+        HostConfig::new()
+            .hostname(host)
+            .port(22)
+            .user(&self.ssh_user)
+            .identity_file(self.ssh_key_path.to_string_lossy())
+    }
 }
 
 // =============================================================================
@@ -83,7 +94,7 @@ impl ChaosTestConfig {
 // =============================================================================
 
 /// A wrapper connection that introduces chaos (failures, delays)
-pub struct ChaosConnection<C: rustible::connection::Connection> {
+pub struct ChaosConnection<C: Connection> {
     inner: C,
     failure_rate: f64,         // 0.0 to 1.0
     latency_ms: Option<u64>,   // Additional latency per operation
@@ -92,7 +103,7 @@ pub struct ChaosConnection<C: rustible::connection::Connection> {
     should_fail_next: AtomicBool,
 }
 
-impl<C: rustible::connection::Connection> ChaosConnection<C> {
+impl<C: Connection> ChaosConnection<C> {
     pub fn new(inner: C) -> Self {
         Self {
             inner,
@@ -161,9 +172,7 @@ impl<C: rustible::connection::Connection> ChaosConnection<C> {
 }
 
 #[async_trait]
-impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Connection
-    for ChaosConnection<C>
-{
+impl<C: Connection + Send + Sync> Connection for ChaosConnection<C> {
     fn identifier(&self) -> &str {
         self.inner.identifier()
     }
@@ -176,7 +185,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
         &self,
         command: &str,
         options: Option<rustible::connection::ExecuteOptions>,
-    ) -> rustible::connection::ConnectionResult<rustible::connection::CommandResult> {
+    ) -> ConnectionResult<rustible::connection::CommandResult> {
         self.maybe_fail().await?;
         self.inner.execute(command, options).await
     }
@@ -186,7 +195,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
         src: &std::path::Path,
         dest: &std::path::Path,
         options: Option<rustible::connection::TransferOptions>,
-    ) -> rustible::connection::ConnectionResult<()> {
+    ) -> ConnectionResult<()> {
         self.maybe_fail().await?;
         self.inner.upload(src, dest, options).await
     }
@@ -196,7 +205,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
         content: &[u8],
         dest: &std::path::Path,
         options: Option<rustible::connection::TransferOptions>,
-    ) -> rustible::connection::ConnectionResult<()> {
+    ) -> ConnectionResult<()> {
         self.maybe_fail().await?;
         self.inner.upload_content(content, dest, options).await
     }
@@ -205,7 +214,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
         &self,
         src: &std::path::Path,
         dest: &std::path::Path,
-    ) -> rustible::connection::ConnectionResult<()> {
+    ) -> ConnectionResult<()> {
         self.maybe_fail().await?;
         self.inner.download(src, dest).await
     }
@@ -213,7 +222,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
     async fn download_content(
         &self,
         src: &std::path::Path,
-    ) -> rustible::connection::ConnectionResult<Vec<u8>> {
+    ) -> ConnectionResult<Vec<u8>> {
         self.maybe_fail().await?;
         self.inner.download_content(src).await
     }
@@ -221,7 +230,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
     async fn path_exists(
         &self,
         path: &std::path::Path,
-    ) -> rustible::connection::ConnectionResult<bool> {
+    ) -> ConnectionResult<bool> {
         self.maybe_fail().await?;
         self.inner.path_exists(path).await
     }
@@ -229,7 +238,7 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
     async fn is_directory(
         &self,
         path: &std::path::Path,
-    ) -> rustible::connection::ConnectionResult<bool> {
+    ) -> ConnectionResult<bool> {
         self.maybe_fail().await?;
         self.inner.is_directory(path).await
     }
@@ -237,12 +246,12 @@ impl<C: rustible::connection::Connection + Send + Sync> rustible::connection::Co
     async fn stat(
         &self,
         path: &std::path::Path,
-    ) -> rustible::connection::ConnectionResult<rustible::connection::FileStat> {
+    ) -> ConnectionResult<rustible::connection::FileStat> {
         self.maybe_fail().await?;
         self.inner.stat(path).await
     }
 
-    async fn close(&self) -> rustible::connection::ConnectionResult<()> {
+    async fn close(&self) -> ConnectionResult<()> {
         self.inner.close().await
     }
 }
@@ -260,17 +269,18 @@ async fn test_random_connection_failures_10_percent() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host);
 
-    let base_conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let base_conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     let chaos_conn = ChaosConnection::new(base_conn).with_failure_rate(0.10); // 10% failure rate
 
@@ -279,7 +289,10 @@ async fn test_random_connection_failures_10_percent() {
     let total_ops = 50;
 
     for i in 0..total_ops {
-        match chaos_conn.execute(&format!("echo test_{}", i), None).await {
+        match chaos_conn
+            .execute(&format!("echo test_{}", i), None)
+            .await
+        {
             Ok(result) if result.success => successes += 1,
             _ => failures += 1,
         }
@@ -315,17 +328,18 @@ async fn test_random_connection_failures_30_percent() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host);
 
-    let base_conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let base_conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     let chaos_conn = ChaosConnection::new(base_conn).with_failure_rate(0.30); // 30% failure rate
 
@@ -334,7 +348,10 @@ async fn test_random_connection_failures_30_percent() {
     let total_ops = 50;
 
     for i in 0..total_ops {
-        match chaos_conn.execute(&format!("echo test_{}", i), None).await {
+        match chaos_conn
+            .execute(&format!("echo test_{}", i), None)
+            .await
+        {
             Ok(result) if result.success => successes += 1,
             _ => failures += 1,
         }
@@ -374,17 +391,18 @@ async fn test_slow_network_latency() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host);
 
-    let base_conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let base_conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     // Add 200ms latency per operation
     let chaos_conn = ChaosConnection::new(base_conn).with_latency(200);
@@ -426,18 +444,18 @@ async fn test_high_latency_with_timeout() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        timeout: Duration::from_secs(60),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host).timeout(60);
 
-    let base_conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let base_conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     // Add 500ms latency - commands should still complete
     let chaos_conn = ChaosConnection::new(base_conn).with_latency(500);
@@ -445,7 +463,9 @@ async fn test_high_latency_with_timeout() {
     let start = Instant::now();
 
     // Simple command with high latency
-    let result = chaos_conn.execute("echo 'high latency test'", None).await;
+    let result = chaos_conn
+        .execute("echo 'high latency test'", None)
+        .await;
     let elapsed = start.elapsed();
 
     assert!(result.is_ok(), "Command should complete despite latency");
@@ -472,17 +492,18 @@ async fn test_fail_after_n_operations() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host);
 
-    let base_conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let base_conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     // Fail after 5 successful operations
     let chaos_conn = ChaosConnection::new(base_conn).with_fail_after(5);
@@ -490,7 +511,9 @@ async fn test_fail_after_n_operations() {
     let mut results = vec![];
 
     for i in 0..10 {
-        let result = chaos_conn.execute(&format!("echo op_{}", i), None).await;
+        let result = chaos_conn
+            .execute(&format!("echo op_{}", i), None)
+            .await;
         results.push(result.is_ok());
     }
 
@@ -518,20 +541,21 @@ async fn test_recovery_after_forced_failure() {
     }
 
     let host = config.hosts.first().expect("Need at least one host");
+    let global_config = ConnectionConfig::default();
 
     // Test that we can recover from a failed connection by reconnecting
     for attempt in 0..3 {
-        let ssh_config = rustible::connection::SshConfig {
-            host: host.clone(),
-            port: 22,
-            user: config.ssh_user.clone(),
-            private_key_path: Some(config.ssh_key_path.clone()),
-            ..Default::default()
-        };
+        let host_cfg = config.host_config(host);
 
-        let conn = rustible::connection::SshConnection::connect(ssh_config)
-            .await
-            .expect("Failed to connect");
+        let conn = rustible::connection::SshConnection::connect(
+            host,
+            22,
+            &config.ssh_user,
+            Some(host_cfg),
+            &global_config,
+        )
+        .await
+        .expect("Failed to connect");
 
         // Simulate some operations
         let result = conn.execute("echo 'test recovery'", None).await;
@@ -570,22 +594,25 @@ async fn test_concurrent_operations_with_failures() {
     let results: Arc<RwLock<Vec<(String, bool)>>> = Arc::new(RwLock::new(Vec::new()));
     let mut handles = vec![];
 
+    let global_config = Arc::new(ConnectionConfig::default());
+
     for host in config.hosts.iter().take(3) {
         let host = host.clone();
         let user = config.ssh_user.clone();
-        let key_path = config.ssh_key_path.clone();
+        let host_cfg = config.host_config(&host);
         let results = Arc::clone(&results);
+        let global_cfg = Arc::clone(&global_config);
 
         handles.push(tokio::spawn(async move {
-            let ssh_config = rustible::connection::SshConfig {
-                host: host.clone(),
-                port: 22,
-                user,
-                private_key_path: Some(key_path),
-                ..Default::default()
-            };
-
-            match rustible::connection::SshConnection::connect(ssh_config).await {
+            match rustible::connection::SshConnection::connect(
+                &host,
+                22,
+                &user,
+                Some(host_cfg),
+                &global_cfg,
+            )
+            .await
+            {
                 Ok(base_conn) => {
                     // 20% failure rate per connection
                     let chaos_conn = ChaosConnection::new(base_conn).with_failure_rate(0.20);
@@ -649,39 +676,33 @@ async fn test_connection_pool_exhaustion_recovery() {
     let host = config.hosts.first().expect("Need at least one host");
 
     // Create a very small pool
-    let pool = Arc::new(rustible::connection::ConnectionPool::new(2));
+    let pool = rustible::connection::AsyncConnectionPool::new(2);
     let user = config.ssh_user.clone();
-    let key_path = config.ssh_key_path.clone();
     let host = host.clone();
+    let global_config = Arc::new(ConnectionConfig::default());
 
     // Try to get more connections than pool size simultaneously
     let mut handles = vec![];
 
     for i in 0..5 {
-        let pool = Arc::clone(&pool);
+        let pool = pool.clone();
         let host = host.clone();
         let user = user.clone();
-        let key_path = key_path.clone();
+        let host_cfg = config.host_config(&host);
+        let global_cfg = Arc::clone(&global_config);
 
         handles.push(tokio::spawn(async move {
-            let ssh_config = rustible::connection::SshConfig {
-                host: host.clone(),
-                port: 22,
-                user: user.clone(),
-                private_key_path: Some(key_path),
-                timeout: Duration::from_secs(10),
-                ..Default::default()
-            };
+            let pool_key = format!("ssh://{}@{}:22/{}", user, host, i);
 
-            let pool_key = format!("ssh://{}@{}:22", user, host);
-
-            // Attempt to get connection
+            // Attempt to get connection with timeout
             match tokio::time::timeout(Duration::from_secs(15), async {
-                pool.get_or_create(&pool_key, || {
-                    Box::pin(async {
-                        rustible::connection::SshConnection::connect(ssh_config.clone()).await
-                    })
-                })
+                rustible::connection::SshConnection::connect(
+                    &host,
+                    22,
+                    &user,
+                    Some(host_cfg),
+                    &global_cfg,
+                )
                 .await
             })
             .await
@@ -689,8 +710,11 @@ async fn test_connection_pool_exhaustion_recovery() {
                 Ok(Ok(conn)) => {
                     // Hold connection briefly
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                    let _ = conn.execute(&format!("echo worker_{}", i), None).await;
-                    pool.return_connection(conn).await;
+                    let conn: Arc<dyn Connection + Send + Sync> = Arc::new(conn);
+                    let _ = conn
+                        .execute(&format!("echo worker_{}", i), None)
+                        .await;
+                    pool.put(pool_key, conn).await;
                     true
                 }
                 _ => false,
@@ -731,7 +755,7 @@ async fn test_rescue_block_reliability() {
     let host = config.hosts.first().expect("Need at least one host");
 
     // Create inventory
-    let inventory = common::InventoryBuilder::new()
+    let _inventory = common::InventoryBuilder::new()
         .add_host(host, Some("all"))
         .host_var(host, "ansible_host", serde_json::json!(host))
         .host_var(host, "ansible_user", serde_json::json!(config.ssh_user))
@@ -763,19 +787,18 @@ async fn test_rescue_block_reliability() {
     let playbook =
         rustible::executor::playbook::Playbook::parse(yaml, None).expect("Failed to parse");
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 1,
-        check_mode: false,
-        diff_mode: false,
         verbosity: 1,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 30,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
-    let result = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let result = executor.run_playbook(&playbook).await;
 
     // Rescue should have run after failure, always should always run
     assert!(
@@ -794,7 +817,7 @@ async fn test_always_block_guaranteed_execution() {
 
     let host = config.hosts.first().expect("Need at least one host");
 
-    let inventory = common::InventoryBuilder::new()
+    let _inventory = common::InventoryBuilder::new()
         .add_host(host, Some("all"))
         .host_var(host, "ansible_host", serde_json::json!(host))
         .host_var(host, "ansible_user", serde_json::json!(config.ssh_user))
@@ -828,32 +851,31 @@ async fn test_always_block_guaranteed_execution() {
     let playbook =
         rustible::executor::playbook::Playbook::parse(yaml, None).expect("Failed to parse");
 
+    let base_config = common::test_executor_config();
     let executor_config = rustible::executor::ExecutorConfig {
         forks: 1,
-        check_mode: false,
-        diff_mode: false,
-        verbosity: 0,
         strategy: rustible::executor::ExecutionStrategy::Linear,
         task_timeout: 30,
         gather_facts: false,
-        extra_vars: HashMap::new(),
-        ..Default::default()
+        ..base_config
     };
 
-    let _ = rustible::executor::execute_playbook(&playbook, &inventory, executor_config).await;
+    let executor = rustible::executor::Executor::new(executor_config);
+    let _ = executor.run_playbook(&playbook).await;
 
     // Verify always block ran by checking marker file
-    let ssh_config = rustible::connection::SshConfig {
-        host: host.clone(),
-        port: 22,
-        user: config.ssh_user.clone(),
-        private_key_path: Some(config.ssh_key_path.clone()),
-        ..Default::default()
-    };
+    let global_config = ConnectionConfig::default();
+    let host_cfg = config.host_config(host);
 
-    let conn = rustible::connection::SshConnection::connect(ssh_config)
-        .await
-        .expect("Failed to connect");
+    let conn = rustible::connection::SshConnection::connect(
+        host,
+        22,
+        &config.ssh_user,
+        Some(host_cfg),
+        &global_config,
+    )
+    .await
+    .expect("Failed to connect");
 
     let verify = conn
         .execute(
@@ -902,24 +924,27 @@ async fn test_mixed_chaos_stress() {
         (0.25, 150), // 25% failures, 150ms latency
     ];
 
+    let global_config = Arc::new(ConnectionConfig::default());
+
     for (i, host) in config.hosts.iter().take(3).enumerate() {
         let host = host.clone();
         let user = config.ssh_user.clone();
-        let key_path = config.ssh_key_path.clone();
+        let host_cfg = config.host_config(&host);
         let (failure_rate, latency) = chaos_configs.get(i).copied().unwrap_or((0.1, 50));
         let successful = Arc::clone(&successful_ops);
         let failed = Arc::clone(&failed_ops);
+        let global_cfg = Arc::clone(&global_config);
 
         handles.push(tokio::spawn(async move {
-            let ssh_config = rustible::connection::SshConfig {
-                host: host.clone(),
-                port: 22,
-                user,
-                private_key_path: Some(key_path),
-                ..Default::default()
-            };
-
-            match rustible::connection::SshConnection::connect(ssh_config).await {
+            match rustible::connection::SshConnection::connect(
+                &host,
+                22,
+                &user,
+                Some(host_cfg),
+                &global_cfg,
+            )
+            .await
+            {
                 Ok(base_conn) => {
                     let chaos_conn = ChaosConnection::new(base_conn)
                         .with_failure_rate(failure_rate)

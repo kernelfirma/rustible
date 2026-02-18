@@ -121,9 +121,9 @@ impl CallbackManager {
 
     pub async fn register(&self, plugin: Arc<dyn CallbackPlugin>) -> bool {
         let name = plugin.name().to_string();
+        plugin.on_register().await;
         let mut plugins = self.plugins.write();
         let is_new = !plugins.contains_key(&name);
-        plugin.on_register().await;
         plugins.insert(name, plugin);
         is_new
     }
@@ -141,10 +141,10 @@ impl CallbackManager {
     }
 
     pub async fn on_playbook_start(&self, name: &str) -> DispatchResult {
-        let plugins = self.plugins.read();
+        let plugin_list: Vec<_> = self.plugins.read().values().cloned().collect();
         let mut result = DispatchResult::default();
 
-        for plugin in plugins.values() {
+        for plugin in &plugin_list {
             if plugin.is_enabled() {
                 plugin.on_playbook_start(name).await;
                 result.success_count += 1;
@@ -1153,12 +1153,12 @@ fn test_plugin_config_type_helpers() {
         .with_value("bool_val", json!(true))
         .with_value("str_val", json!("hello"))
         .with_value("u64_val", json!(42))
-        .with_value("f64_val", json!(3.14));
+        .with_value("f64_val", json!(std::f64::consts::PI));
 
     assert_eq!(config.get_bool("bool_val"), Some(true));
     assert_eq!(config.get_str("str_val"), Some("hello"));
     assert_eq!(config.get_u64("u64_val"), Some(42));
-    assert_eq!(config.get_f64("f64_val"), Some(3.14));
+    assert_eq!(config.get_f64("f64_val"), Some(std::f64::consts::PI));
 
     // Missing keys return None
     assert_eq!(config.get_bool("missing"), None);

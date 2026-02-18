@@ -37,10 +37,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::runtime::Runtime;
 
 use rustible::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams, ModuleRegistry,
+    Diff, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams, ModuleRegistry,
     ParallelizationHint, ParamExt,
 };
 
@@ -104,6 +103,7 @@ fn generate_package_params() -> ModuleParams {
 }
 
 /// Generate user module parameters
+#[allow(dead_code)]
 fn generate_user_params() -> ModuleParams {
     let mut params = HashMap::new();
     params.insert("name".to_string(), serde_json::json!("deploy"));

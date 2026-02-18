@@ -226,6 +226,7 @@ fn test_block_with_null_rescue_always() {
 
     #[derive(Debug, serde::Deserialize)]
     struct TaskDef {
+        #[allow(dead_code)]
         name: String,
         #[serde(default)]
         block: Vec<serde_json::Value>,
@@ -262,6 +263,7 @@ fn test_nested_blocks() {
 
     #[derive(Debug, serde::Deserialize)]
     struct TaskDef {
+        #[allow(dead_code)]
         name: Option<String>,
         #[serde(default)]
         block: Vec<TaskDef>,

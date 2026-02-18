@@ -98,8 +98,10 @@ use std::time::Duration;
 /// Represents the desired state of an EC2 instance
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum InstanceState {
     /// Instance should be running
+    #[default]
     Running,
     /// Instance should be stopped
     Stopped,
@@ -111,11 +113,6 @@ pub enum InstanceState {
     Rebooted,
 }
 
-impl Default for InstanceState {
-    fn default() -> Self {
-        Self::Running
-    }
-}
 
 impl InstanceState {
     fn from_str(s: &str) -> ModuleResult<Self> {
@@ -1541,7 +1538,7 @@ impl Ec2SecurityGroupModule {
             ModuleError::ExecutionFailed(format!("Failed to describe security groups: {}", e))
         })?;
 
-        for sg in resp.security_groups() {
+        if let Some(sg) = resp.security_groups().iter().next() {
             let mut tags = HashMap::new();
             for tag in sg.tags() {
                 if let (Some(key), Some(value)) = (tag.key(), tag.value()) {
@@ -1969,7 +1966,7 @@ impl Ec2VpcModule {
             .await
             .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to describe VPCs: {}", e)))?;
 
-        for vpc in resp.vpcs() {
+        if let Some(vpc) = resp.vpcs().iter().next() {
             let mut tags = HashMap::new();
             for tag in vpc.tags() {
                 if let (Some(key), Some(value)) = (tag.key(), tag.value()) {

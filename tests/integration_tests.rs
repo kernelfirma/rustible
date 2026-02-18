@@ -1152,7 +1152,7 @@ mod module_interactions {
         // Create app directory structure
         for dir in &["logs", "config", "data"] {
             play.add_task(
-                Task::new(&format!("Create {} directory", dir), "file")
+                Task::new(format!("Create {} directory", dir), "file")
                     .arg(
                         "path",
                         temp_dir
@@ -1787,7 +1787,7 @@ mod complex_scenarios {
 
         for subdir in &["config", "logs", "data"] {
             setup_play.add_task(
-                Task::new(&format!("Create {} directory", subdir), "file")
+                Task::new(format!("Create {} directory", subdir), "file")
                     .arg(
                         "path",
                         temp_dir

@@ -317,7 +317,7 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
         // Convert GIDs to group names
         let mut group_names = Vec::new();
         for gid in groups {
-            if let Ok(Some(group)) = get_group_by_gid(gid as u32) {
+            if let Ok(Some(group)) = get_group_by_gid(gid) {
                 group_names.push(group.name);
             }
         }

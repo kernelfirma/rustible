@@ -286,7 +286,7 @@ fn bench_repeated_renders(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..10 {
                 let result = engine.render(template, &vars);
-                black_box(result);
+                let _ = black_box(result);
             }
         })
     });
@@ -296,7 +296,7 @@ fn bench_repeated_renders(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..100 {
                 let result = engine.render(template, &vars);
-                black_box(result);
+                let _ = black_box(result);
             }
         })
     });

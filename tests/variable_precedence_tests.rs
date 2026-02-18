@@ -1037,11 +1037,11 @@ mod variable_types {
     fn test_float_variable() {
         let mut store = VarStore::new();
 
-        let float_val = Value::Number(serde_yaml::Number::from(3.14_f64));
+        let float_val = Value::Number(serde_yaml::Number::from(3.15_f64));
         store.set("float_var", float_val, VarPrecedence::PlayVars);
 
         let result = store.get("float_var").expect("float_var should exist");
-        assert_eq!(resolve::to_float(result), Some(3.14));
+        assert_eq!(resolve::to_float(result), Some(3.15));
     }
 
     #[test]
@@ -1722,12 +1722,12 @@ mod set_fact {
         store.set("count", yaml_int(42), VarPrecedence::SetFacts);
         store.set(
             "rate",
-            Value::Number(serde_yaml::Number::from(3.14_f64)),
+            Value::Number(serde_yaml::Number::from(3.15_f64)),
             VarPrecedence::SetFacts,
         );
 
         assert_eq!(store.get("count"), Some(&yaml_int(42)));
-        assert_eq!(resolve::to_float(store.get("rate").unwrap()), Some(3.14));
+        assert_eq!(resolve::to_float(store.get("rate").unwrap()), Some(3.15));
     }
 
     #[test]
@@ -2412,7 +2412,7 @@ mod edge_cases {
     fn test_large_list() {
         let mut store = VarStore::new();
 
-        let large_list: Vec<Value> = (0..1000).map(|i| yaml_int(i)).collect();
+        let large_list: Vec<Value> = (0..1000).map(yaml_int).collect();
         store.set(
             "large_list",
             Value::Sequence(large_list),

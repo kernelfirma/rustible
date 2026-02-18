@@ -97,25 +97,24 @@ impl HostId {
 
 /// Controller role in the Raft cluster
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ControllerRole {
     /// Leader node - handles work distribution
     Leader,
     /// Follower node - executes assigned work
+    #[default]
     Follower,
     /// Candidate node - participating in election
     Candidate,
 }
 
-impl Default for ControllerRole {
-    fn default() -> Self {
-        Self::Follower
-    }
-}
 
 /// Health status of a controller
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ControllerHealth {
     /// Controller is healthy and responsive
+    #[default]
     Healthy,
     /// Controller is degraded but functional
     Degraded,
@@ -125,11 +124,6 @@ pub enum ControllerHealth {
     Down,
 }
 
-impl Default for ControllerHealth {
-    fn default() -> Self {
-        Self::Healthy
-    }
-}
 
 /// Information about a controller node
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -246,8 +240,10 @@ impl ControllerLoad {
 
 /// Work unit lifecycle states
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum WorkUnitState {
     /// Work unit is pending assignment
+    #[default]
     Pending,
     /// Work unit has been assigned to a controller
     Assigned,
@@ -261,11 +257,6 @@ pub enum WorkUnitState {
     Cancelled,
 }
 
-impl Default for WorkUnitState {
-    fn default() -> Self {
-        Self::Pending
-    }
-}
 
 /// Task specification within a work unit
 #[derive(Debug, Clone, Serialize, Deserialize)]

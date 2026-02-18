@@ -101,7 +101,7 @@ impl ReactorCondition {
                 .payload
                 .get(key)
                 .and_then(|v| v.as_str())
-                .map_or(false, |v| v == value),
+                .is_some_and(|v| v == value),
             ReactorCondition::All(conditions) => conditions.iter().all(|c| c.matches(event)),
             ReactorCondition::Any(conditions) => conditions.iter().any(|c| c.matches(event)),
         }

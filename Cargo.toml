@@ -88,6 +88,9 @@ categories = ["command-line-utilities", "development-tools", "config"]
 rust-version = "1.85"
 readme = "README.md"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin)', 'cfg(tarpaulin_include)'] }
+
 [lib]
 name = "rustible"
 path = "src/lib.rs"

@@ -366,7 +366,7 @@ async fn test_playbook_with_timeout_config() {
     let executor = Executor::new(config);
 
     // Verify executor was created with correct timeout
-    assert!(executor.is_check_mode() == false);
+    assert!(!executor.is_check_mode());
 }
 
 /// Test timeout enforcement across multiple hosts

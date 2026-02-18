@@ -178,7 +178,7 @@ mod auth_config_tests {
 
     #[test]
     fn test_auth_config_with_password() {
-        let password: String = std::iter::repeat('x').take(12).collect();
+        let password: String = std::iter::repeat_n('x', 12).collect();
         let config = AuthConfig::new("admin").with_password(password.clone());
 
         assert!(config

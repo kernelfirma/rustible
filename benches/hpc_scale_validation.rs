@@ -9,6 +9,7 @@ use std::time::Duration;
 
 /// Simulated host configuration for scale testing
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct SimulatedHost {
     hostname: String,
     ip: String,

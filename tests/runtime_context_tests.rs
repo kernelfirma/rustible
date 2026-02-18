@@ -11,9 +11,8 @@ mod common;
 use rustible::executor::playbook::Playbook;
 use rustible::executor::runtime::RuntimeContext;
 use rustible::executor::{Executor, ExecutorConfig};
-use rustible::vars::{VarPrecedence, Variables};
+use rustible::vars::Variables;
 use serde_json::json;
-use std::collections::HashMap;
 
 // ============================================================================
 // Host/Group Resolution Tests
@@ -502,11 +501,11 @@ fn test_executor_with_runtime() {
     let mut runtime = RuntimeContext::new();
     runtime.add_host("localhost".to_string(), None);
 
-    let executor = Executor::with_runtime(config, runtime);
+    let _executor = Executor::with_runtime(config, runtime);
 
     // Executor should be created successfully
     // (We can't easily introspect it, but creation succeeding is the test)
-    assert!(true);
+    let _ = &_executor;
 }
 
 // ============================================================================

@@ -25,13 +25,13 @@ use serde_json::Value;
 #[cfg(feature = "aws")]
 use aws_config::BehaviorVersion;
 #[cfg(feature = "aws")]
-use aws_sdk_ec2::types::{Filter, ResourceType, Tag, TagSpecification};
+use aws_sdk_ec2::types::{ResourceType, Tag, TagSpecification};
 #[cfg(feature = "aws")]
 use aws_sdk_ec2::Client;
 
 use crate::provisioning::error::{ProvisioningError, ProvisioningResult};
 use crate::provisioning::traits::{
-    ChangeType, FieldConstraint, FieldType, ProviderContext, Resource, ResourceDependency,
+    ChangeType, FieldType, ProviderContext, Resource, ResourceDependency,
     ResourceDiff, ResourceReadResult, ResourceResult, ResourceSchema, ResourceTimeouts,
     SchemaField,
 };

@@ -12,10 +12,12 @@ use tokio::sync::RwLock;
 
 /// Consistency level for read operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ConsistencyLevel {
     /// Read from any source, may be stale
     Eventual,
     /// Read from local if fresh, else from leader
+    #[default]
     Session,
     /// Always read from leader
     Strong,
@@ -23,11 +25,6 @@ pub enum ConsistencyLevel {
     Quorum,
 }
 
-impl Default for ConsistencyLevel {
-    fn default() -> Self {
-        Self::Session
-    }
-}
 
 /// Hybrid Logical Clock for ordering events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -440,8 +437,8 @@ mod tests {
         let mut clock1 = HLC::new(1);
         let mut clock2 = HLC::new(2);
 
-        // Initial state
-        assert!(clock1 < clock2 || clock1 > clock2 || clock1 == clock2);
+        // Initial state - clocks are independent, both valid
+        let _ = (&clock1, &clock2);
 
         clock1.tick();
         clock2.tick();

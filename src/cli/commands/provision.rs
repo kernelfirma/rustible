@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::CommandContext;
 
@@ -477,11 +477,13 @@ impl PlanArgs {
             self.state.as_ref(),
         )?;
 
-        let mut executor_config = ExecutorConfig::default();
-        executor_config.refresh_before_plan = self.refresh;
-        executor_config.targets = self.target.clone();
-        executor_config.state_backend = backend_config;
-        executor_config.state_path = state_path;
+        let executor_config = ExecutorConfig {
+            refresh_before_plan: self.refresh,
+            targets: self.target.clone(),
+            state_backend: backend_config,
+            state_path,
+            ..Default::default()
+        };
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -541,14 +543,16 @@ impl ApplyArgs {
             self.state.as_ref(),
         )?;
 
-        let mut executor_config = ExecutorConfig::default();
-        executor_config.auto_approve = self.auto_approve;
-        executor_config.parallelism = self.parallelism;
-        executor_config.targets = self.target.clone();
-        executor_config.backup_state = !self.no_backup;
-        executor_config.lock_state = !self.no_lock;
-        executor_config.state_backend = backend_config;
-        executor_config.state_path = state_path;
+        let executor_config = ExecutorConfig {
+            auto_approve: self.auto_approve,
+            parallelism: self.parallelism,
+            targets: self.target.clone(),
+            backup_state: !self.no_backup,
+            lock_state: !self.no_lock,
+            state_backend: backend_config,
+            state_path,
+            ..Default::default()
+        };
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -626,11 +630,13 @@ impl DestroyArgs {
             self.state.as_ref(),
         )?;
 
-        let mut executor_config = ExecutorConfig::default();
-        executor_config.auto_approve = self.auto_approve;
-        executor_config.targets = self.target.clone();
-        executor_config.state_backend = backend_config;
-        executor_config.state_path = state_path;
+        let executor_config = ExecutorConfig {
+            auto_approve: self.auto_approve,
+            targets: self.target.clone(),
+            state_backend: backend_config,
+            state_path,
+            ..Default::default()
+        };
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -719,9 +725,11 @@ impl ImportArgs {
             self.state.as_ref(),
         )?;
 
-        let mut executor_config = ExecutorConfig::default();
-        executor_config.state_backend = backend_config;
-        executor_config.state_path = state_path;
+        let executor_config = ExecutorConfig {
+            state_backend: backend_config,
+            state_path,
+            ..Default::default()
+        };
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
 
@@ -834,10 +842,12 @@ impl RefreshArgs {
             self.state.as_ref(),
         )?;
 
-        let mut executor_config = ExecutorConfig::default();
-        executor_config.targets = self.target.clone();
-        executor_config.state_backend = backend_config;
-        executor_config.state_path = state_path;
+        let executor_config = ExecutorConfig {
+            targets: self.target.clone(),
+            state_backend: backend_config,
+            state_path,
+            ..Default::default()
+        };
 
         let executor = ProvisioningExecutor::with_config(config, executor_config).await?;
         executor.refresh().await?;
@@ -1218,17 +1228,17 @@ impl WorkspaceArgs {
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
         use rustible::provisioning::workspace::WorkspaceManager;
 
-        let manager = WorkspaceManager::new(".rustible/workspaces");
+        let mut manager = WorkspaceManager::new(".rustible/workspaces").await?;
 
         match &self.command {
             WorkspaceCommands::List => {
                 ctx.output.banner("WORKSPACES");
                 let workspaces = manager.list().await?;
-                let current = manager.current().await.unwrap_or_default();
+                let current = manager.current().to_string();
 
                 for ws in &workspaces {
-                    let marker = if ws == &current { " *" } else { "" };
-                    ctx.output.info(&format!("  {}{}", ws, marker));
+                    let marker = if ws.name == current { " *" } else { "" };
+                    ctx.output.info(&format!("  {}{}", ws.name, marker));
                 }
 
                 if workspaces.is_empty() {
@@ -1264,10 +1274,7 @@ impl WorkspaceArgs {
                 Ok(0)
             }
             WorkspaceCommands::Show => {
-                let current = manager
-                    .current()
-                    .await
-                    .unwrap_or_else(|_| "default".to_string());
+                let current = manager.current().to_string();
                 ctx.output.info(&current);
                 Ok(0)
             }

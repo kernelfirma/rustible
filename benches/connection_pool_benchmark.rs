@@ -84,9 +84,9 @@ fn whoami() -> String {
 
 /// Expand tilde in paths
 fn expand_path(path: &str) -> String {
-    if path.starts_with("~/") {
-        if let Some(home) = std::env::var("HOME").ok() {
-            return format!("{}/{}", home, &path[2..]);
+    if let Some(stripped) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{}/{}", home, stripped);
         }
     }
     path.to_string()
@@ -823,7 +823,7 @@ criterion_main!(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn test_expand_path() {

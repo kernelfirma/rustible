@@ -122,7 +122,7 @@ impl ClusterManager {
 
         // Initialize peer connections for configured peers
         for (i, addr) in config.peers.iter().enumerate() {
-            let peer_id = ControllerId::new(&format!("peer-{}", i));
+            let peer_id = ControllerId::new(format!("peer-{}", i));
             peers.insert(
                 peer_id.clone(),
                 PeerConnection {
@@ -270,7 +270,7 @@ impl ClusterManager {
             .filter(|i| matches!(i.health, ControllerHealth::Healthy))
             .count();
 
-        let quorum_size = (self.config.peers.len() + 1) / 2 + 1;
+        let quorum_size = self.config.peers.len().div_ceil(2) + 1;
 
         ClusterState {
             controllers: peer_info.clone(),

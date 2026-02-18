@@ -1498,7 +1498,7 @@ async fn test_serial_with_max_fail_percentage() {
     let results = executor.run_playbook(&playbook).await.unwrap();
 
     // host1 should fail, others should succeed or continue
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
 }
 
 // ============================================================================

@@ -326,7 +326,7 @@ fn test_yaml_anchor_in_tasks() {
     let result = Playbook::from_yaml(yaml, None);
     if let Ok(playbook) = result {
         // Second task should merge with first
-        assert!(playbook.plays[0].tasks.len() >= 1);
+        assert!(!playbook.plays[0].tasks.is_empty());
     }
 }
 

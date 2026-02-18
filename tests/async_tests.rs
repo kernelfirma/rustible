@@ -435,7 +435,7 @@ fn test_async_timeout_exceeded() {
 
     if job.duration_secs > timeout_secs as u64 && !job.is_complete() {
         // Would timeout in real scenario
-        assert!(true, "Job would timeout");
+        // Job would timeout
     }
 }
 
@@ -447,7 +447,7 @@ fn test_timeout_cleanup() {
 
     // In real implementation, timeout would trigger cleanup
     // This test documents the expected behavior
-    assert!(true, "Cleanup should occur on timeout");
+    // Cleanup should occur on timeout
 }
 
 #[tokio::test]
@@ -1149,7 +1149,7 @@ fn test_load_basic_async_fixture() {
     if path.exists() {
         let playbook = Playbook::load(&path).unwrap();
         assert_eq!(playbook.plays.len(), 1);
-        assert!(playbook.plays[0].tasks.len() >= 1);
+        assert!(!playbook.plays[0].tasks.is_empty());
     }
 }
 
@@ -1166,7 +1166,7 @@ fn test_load_async_status_fixture() {
         // Should have at least the async_status task
         let tasks = &playbook.plays[0].tasks;
         let has_async_status = tasks.iter().any(|t| t.module == "async_status");
-        assert!(has_async_status || tasks.len() > 0);
+        assert!(has_async_status || !tasks.is_empty());
     }
 }
 

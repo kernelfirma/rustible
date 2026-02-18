@@ -469,7 +469,7 @@ fn test_ufw_ip_validation_ipv4() {
         assert_eq!(parts.len(), 4);
         for part in parts {
             let num: u8 = part.parse().unwrap();
-            assert!(num <= 255);
+            let _ = num; // u8 is always <= 255
         }
     }
 }
@@ -601,13 +601,13 @@ fn test_ufw_port_boundary_values() {
 
     for port in valid_ports {
         let num: u16 = port.parse().unwrap();
-        assert!(num >= 1 && num <= 65535);
+        assert!((1..=65535).contains(&num));
     }
 
     for port in invalid_ports {
         let result: Result<u16, _> = port.parse();
         if let Ok(num) = result {
-            assert!(num == 0 || num > 65535);
+            assert_eq!(num, 0);
         }
     }
 }

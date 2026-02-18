@@ -120,8 +120,8 @@ mod become_basic {
         let config = BecomeConfig::default();
 
         assert!(!config.enabled);
-        assert!(config.method.is_empty() || config.method == "");
-        assert!(config.user.is_empty() || config.user == "");
+        assert!(config.method.is_empty() || config.method.is_empty());
+        assert!(config.user.is_empty() || config.user.is_empty());
         assert!(config.password.is_none());
         assert!(config.flags.is_none());
     }
@@ -226,8 +226,10 @@ mod become_methods {
     /// Test that PrivilegeEscalation config method is stored
     #[test]
     fn test_privilege_escalation_method_storage() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "doas".to_string();
+        let config = PrivilegeEscalation {
+            become_method: "doas".to_string(),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_method, "doas");
     }
@@ -310,8 +312,10 @@ mod become_password {
     /// Test become_ask_pass config option
     #[test]
     fn test_become_ask_pass_config() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_ask_pass = true;
+        let config = PrivilegeEscalation {
+            become_ask_pass: true,
+            ..Default::default()
+        };
 
         assert!(config.become_ask_pass);
     }
@@ -369,8 +373,10 @@ mod become_flags {
     /// Test become_flags for custom flags
     #[test]
     fn test_become_flags_custom() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_flags = Some("-H -S -n".to_string());
+        let config = PrivilegeEscalation {
+            become_flags: Some("-H -S -n".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("-H -S -n".to_string()));
     }
@@ -378,9 +384,11 @@ mod become_flags {
     /// Test sudo with -H flag (preserve HOME)
     #[test]
     fn test_sudo_with_h_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "sudo".to_string();
-        config.become_flags = Some("-H".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "sudo".to_string(),
+            become_flags: Some("-H".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_method, "sudo");
         assert_eq!(config.become_flags, Some("-H".to_string()));
@@ -389,9 +397,11 @@ mod become_flags {
     /// Test sudo with -S flag (read password from stdin)
     #[test]
     fn test_sudo_with_s_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "sudo".to_string();
-        config.become_flags = Some("-S".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "sudo".to_string(),
+            become_flags: Some("-S".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("-S".to_string()));
     }
@@ -399,9 +409,11 @@ mod become_flags {
     /// Test sudo with -n flag (non-interactive, no password prompt)
     #[test]
     fn test_sudo_with_n_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "sudo".to_string();
-        config.become_flags = Some("-n".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "sudo".to_string(),
+            become_flags: Some("-n".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("-n".to_string()));
     }
@@ -409,9 +421,11 @@ mod become_flags {
     /// Test su with - flag (login shell)
     #[test]
     fn test_su_with_login_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "su".to_string();
-        config.become_flags = Some("-".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "su".to_string(),
+            become_flags: Some("-".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_method, "su");
         assert_eq!(config.become_flags, Some("-".to_string()));
@@ -420,9 +434,11 @@ mod become_flags {
     /// Test su with -l flag (login shell alternative)
     #[test]
     fn test_su_with_l_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "su".to_string();
-        config.become_flags = Some("-l".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "su".to_string(),
+            become_flags: Some("-l".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("-l".to_string()));
     }
@@ -430,9 +446,11 @@ mod become_flags {
     /// Test su with -m flag (preserve environment)
     #[test]
     fn test_su_with_m_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "su".to_string();
-        config.become_flags = Some("-m".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "su".to_string(),
+            become_flags: Some("-m".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("-m".to_string()));
     }
@@ -440,9 +458,11 @@ mod become_flags {
     /// Test doas with -n flag (non-interactive)
     #[test]
     fn test_doas_with_n_flag() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "doas".to_string();
-        config.become_flags = Some("-n".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "doas".to_string(),
+            become_flags: Some("-n".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_method, "doas");
         assert_eq!(config.become_flags, Some("-n".to_string()));
@@ -451,9 +471,11 @@ mod become_flags {
     /// Test multiple flags combined
     #[test]
     fn test_multiple_flags_combined() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_method = "sudo".to_string();
-        config.become_flags = Some("-H -S -n --preserve-env".to_string());
+        let config = PrivilegeEscalation {
+            become_method: "sudo".to_string(),
+            become_flags: Some("-H -S -n --preserve-env".to_string()),
+            ..Default::default()
+        };
 
         assert!(config.become_flags.as_ref().unwrap().contains("-H"));
         assert!(config.become_flags.as_ref().unwrap().contains("-S"));
@@ -482,8 +504,10 @@ mod become_flags {
     /// Test empty flags
     #[test]
     fn test_empty_flags() {
-        let mut config = PrivilegeEscalation::default();
-        config.become_flags = Some("".to_string());
+        let config = PrivilegeEscalation {
+            become_flags: Some("".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(config.become_flags, Some("".to_string()));
     }

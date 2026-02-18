@@ -13,11 +13,11 @@
 //! Run with: cargo bench --bench parallel_benchmark
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rustible::executor::parallelization::{ParallelizationManager, ParallelizationStats};
+use rustible::executor::parallelization::ParallelizationManager;
 use rustible::modules::ParallelizationHint;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::{Mutex, RwLock, Semaphore};
 
@@ -31,6 +31,7 @@ const MEDIUM_TASK_MICROS: u64 = 100;
 const SLOW_TASK_MICROS: u64 = 1000;
 
 /// Maximum hosts to test scaling
+#[allow(dead_code)]
 const MAX_HOSTS: usize = 100;
 
 // ============================================================================
@@ -61,6 +62,7 @@ async fn simulate_io_work(duration_micros: u64) {
 }
 
 /// Simulate mixed workload
+#[allow(dead_code)]
 async fn simulate_mixed_work(cpu_iterations: u64, io_micros: u64) {
     simulate_cpu_work(cpu_iterations);
     simulate_io_work(io_micros).await;
@@ -132,8 +134,8 @@ fn bench_semaphore_acquisition(c: &mut Criterion) {
                 b.to_async(&rt).iter(|| async move {
                     let sem = Semaphore::new(p);
                     for _ in 0..p {
-                        let permit = sem.acquire().await.unwrap();
-                        black_box(permit);
+                        let _permit = sem.acquire().await.unwrap();
+                        black_box(());
                     }
                 });
             },

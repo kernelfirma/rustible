@@ -954,7 +954,7 @@ async fn test_each_line_ends_with_meaningful_content() {
         // Each line should not be empty
         assert!(!line.trim().is_empty());
         // Each line should not be just whitespace
-        assert!(line.trim().len() > 0);
+        assert!(!line.trim().is_empty());
     }
 }
 

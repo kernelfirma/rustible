@@ -815,8 +815,10 @@ mod cache_invalidation_tests {
 
     #[test]
     fn test_cache_ttl_expiration() {
-        let mut config = CacheConfig::default();
-        config.default_ttl = Duration::from_millis(50);
+        let config = CacheConfig {
+            default_ttl: Duration::from_millis(50),
+            ..Default::default()
+        };
 
         let cache: Cache<String, String> = Cache::new(CacheType::Facts, config);
         cache.insert("key1".to_string(), "value1".to_string(), 10);
@@ -861,8 +863,10 @@ mod cache_invalidation_tests {
 
     #[test]
     fn test_cache_cleanup_expired() {
-        let mut config = CacheConfig::default();
-        config.default_ttl = Duration::from_millis(50);
+        let config = CacheConfig {
+            default_ttl: Duration::from_millis(50),
+            ..Default::default()
+        };
 
         let cache: Cache<String, String> = Cache::new(CacheType::Facts, config);
 
@@ -879,8 +883,10 @@ mod cache_invalidation_tests {
 
     #[test]
     fn test_cache_lru_eviction() {
-        let mut config = CacheConfig::default();
-        config.max_entries = 3;
+        let config = CacheConfig {
+            max_entries: 3,
+            ..Default::default()
+        };
 
         let cache: Cache<String, String> = Cache::new(CacheType::Facts, config);
 
@@ -913,7 +919,7 @@ mod cache_invalidation_tests {
                 IndexMap::new(),
             ));
 
-        assert!(manager.facts.len() > 0 || manager.variables.len() > 0);
+        assert!(!manager.facts.is_empty() || !manager.variables.is_empty());
 
         manager.clear_all();
 
@@ -940,8 +946,10 @@ mod cache_invalidation_tests {
 
     #[test]
     fn test_cache_manager_cleanup_all() {
-        let mut config = CacheConfig::default();
-        config.default_ttl = Duration::from_millis(50);
+        let config = CacheConfig {
+            default_ttl: Duration::from_millis(50),
+            ..Default::default()
+        };
 
         let manager = CacheManager::with_config(config);
 
@@ -1391,8 +1399,7 @@ mod playbook_cache_tests {
     use rustible::executor::playbook::{Play, Playbook};
 
     fn sample_playbook() -> Playbook {
-        let mut playbook = Playbook::default();
-        playbook.name = "test-playbook".to_string();
+        let mut playbook = Playbook::new("test-playbook");
         playbook.plays.push(Play::new("Test Play", "all"));
         playbook
     }
@@ -1420,7 +1427,7 @@ mod playbook_cache_tests {
         let content = "- name: Test\n  hosts: all";
         cache.insert_inline(content, sample_playbook());
 
-        assert!(cache.len() > 0);
+        assert!(!cache.is_empty());
 
         cache.clear();
         assert_eq!(cache.len(), 0);
@@ -1924,6 +1931,6 @@ mod concurrent_access_tests {
         }
 
         // Cache should have entries from all threads
-        assert!(cache.len() > 0);
+        assert!(!cache.is_empty());
     }
 }

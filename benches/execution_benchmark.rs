@@ -14,9 +14,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use indexmap::IndexMap;
 use rustible::connection::{
-    CommandResult, Connection, ConnectionConfig, ConnectionFactory, ExecuteOptions,
+    ConnectionConfig, ConnectionFactory,
 };
-use rustible::executor::playbook::{Play, Playbook};
+use rustible::executor::playbook::Playbook;
 use rustible::inventory::{Group, Host, Inventory};
 use rustible::template::TemplateEngine;
 use std::collections::HashMap;
@@ -601,7 +601,7 @@ fn bench_connection_pool_scaling(c: &mut Criterion) {
                         for i in 0..size {
                             let host = format!("localhost_{}", i);
                             let conn = factory.get_connection(&host).await;
-                            black_box(conn);
+                            let _ = black_box(conn);
                         }
                     }
                 })

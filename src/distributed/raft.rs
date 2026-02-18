@@ -139,7 +139,7 @@ impl RaftState {
 
     /// Get quorum size (majority of cluster)
     pub fn quorum_size(&self) -> usize {
-        (self.config.peers.len() + 1) / 2 + 1
+        self.config.peers.len().div_ceil(2) + 1
     }
 
     /// Record a vote

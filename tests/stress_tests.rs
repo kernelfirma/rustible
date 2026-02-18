@@ -1001,7 +1001,7 @@ async fn race_concurrent_fact_gathering() {
         let host = format!("host-{}", i);
         // Each host should have at least some facts
         let merged_vars = rt.get_merged_vars(&host);
-        assert!(merged_vars.len() > 0, "Host {} has no vars", host);
+        assert!(!merged_vars.is_empty(), "Host {} has no vars", host);
     }
 }
 

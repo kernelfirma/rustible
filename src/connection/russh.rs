@@ -4109,8 +4109,6 @@ mod tests {
     fn test_max_concurrent_channels_constant() {
         // Ensure we have a reasonable limit on concurrent channels
         assert_eq!(MAX_CONCURRENT_CHANNELS, 10);
-        assert!(MAX_CONCURRENT_CHANNELS > 0);
-        assert!(MAX_CONCURRENT_CHANNELS <= 20); // SSH servers typically support at least 10
     }
 
     #[test]
@@ -4166,7 +4164,7 @@ mod verification_tests {
 
         let result = handler.check_server_key(&public_key).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[tokio::test]
@@ -4192,7 +4190,7 @@ mod verification_tests {
 
         // Should return false (reject) because of mismatch, even if accept_unknown is true (mismatch != unknown)
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[tokio::test]
@@ -4209,7 +4207,7 @@ mod verification_tests {
 
         let result = handler.check_server_key(&public_key).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
 
         // Verify it was written to file
         let content = std::fs::read_to_string(&path).unwrap();
@@ -4231,7 +4229,7 @@ mod verification_tests {
 
         let result = handler.check_server_key(&public_key).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
 
         // Verify it was NOT written to file
         let content = std::fs::read_to_string(&path).unwrap();

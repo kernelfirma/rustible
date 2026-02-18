@@ -22,7 +22,9 @@ use rustible::vars::Variables;
 /// Test version of TaskStatus enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TaskStatus {
+    #[default]
     Ok,
     Changed,
     Failed,
@@ -30,11 +32,6 @@ pub enum TaskStatus {
     Unreachable,
 }
 
-impl Default for TaskStatus {
-    fn default() -> Self {
-        TaskStatus::Ok
-    }
-}
 
 /// Test version of TaskResult
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1367,7 +1364,7 @@ fn test_numeric_types() {
     let mut vars = Variables::new();
     vars.set("integer", json!(42));
     vars.set("negative", json!(-100));
-    vars.set("float", json!(3.14159));
+    vars.set("float", json!(3.14160));
     vars.set("zero", json!(0));
     vars.set("large", json!(9223372036854775807_i64));
 
@@ -1376,7 +1373,7 @@ fn test_numeric_types() {
 
     assert_eq!(deserialized.get("integer"), Some(&json!(42)));
     assert_eq!(deserialized.get("negative"), Some(&json!(-100)));
-    assert_eq!(deserialized.get("float"), Some(&json!(3.14159)));
+    assert_eq!(deserialized.get("float"), Some(&json!(3.14160)));
     assert_eq!(deserialized.get("zero"), Some(&json!(0)));
     assert_eq!(
         deserialized.get("large"),

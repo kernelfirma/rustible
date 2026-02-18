@@ -795,7 +795,7 @@ async fn test_failure_handling_max_fail_percentage() {
     let results = executor.run_playbook(&playbook).await.unwrap();
 
     // Execution should continue because 25% is at the threshold
-    assert!(results.len() >= 1, "Some results should be present");
+    assert!(!results.is_empty(), "Some results should be present");
 }
 
 #[tokio::test]
@@ -988,7 +988,7 @@ async fn test_multiple_plays_different_hosts() {
     let results = executor.run_playbook(&playbook).await.unwrap();
 
     // All 3 hosts should have results
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
 }
 
 #[tokio::test]

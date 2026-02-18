@@ -199,7 +199,7 @@ impl MysqlQueryModule {
             };
 
             let result_rows: Vec<HashMap<String, serde_json::Value>> =
-                rows.iter().map(|r| Self::row_to_map(r)).collect();
+                rows.iter().map(Self::row_to_map).collect();
 
             Ok(QueryResult {
                 rows_affected: result_rows.len() as u64,
@@ -286,7 +286,7 @@ impl MysqlQueryModule {
             };
 
             let result_rows: Vec<HashMap<String, serde_json::Value>> =
-                rows.iter().map(|r| Self::row_to_map(r)).collect();
+                rows.iter().map(Self::row_to_map).collect();
 
             Ok(QueryResult {
                 rows_affected: result_rows.len() as u64,

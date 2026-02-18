@@ -38,13 +38,13 @@ fn blocks_fixture_path(name: &str) -> PathBuf {
 
 fn load_block_fixture(name: &str) -> String {
     std::fs::read_to_string(blocks_fixture_path(name))
-        .expect(&format!("Failed to load block fixture: {}", name))
+        .unwrap_or_else(|_| panic!("Failed to load block fixture: {}", name))
 }
 
 fn parse_block_fixture(name: &str) -> Playbook {
     let content = load_block_fixture(name);
     Playbook::parse(&content, Some(blocks_fixture_path(name)))
-        .expect(&format!("Failed to parse block fixture: {}", name))
+        .unwrap_or_else(|_| panic!("Failed to parse block fixture: {}", name))
 }
 
 // ============================================================================

@@ -130,7 +130,7 @@ fn test_user_with_uid_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("uid".to_string(), serde_json::json!(1001));
 
-    assert!(params.get("uid").is_some());
+    assert!(params.contains_key("uid"));
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn test_user_with_group_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("group".to_string(), serde_json::json!("testgroup"));
 
-    assert!(params.get("group").is_some());
+    assert!(params.contains_key("group"));
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn test_user_with_groups_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("groups".to_string(), serde_json::json!(["wheel", "docker"]));
 
-    assert!(params.get("groups").is_some());
+    assert!(params.contains_key("groups"));
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_user_with_home_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("home".to_string(), serde_json::json!("/home/testuser"));
 
-    assert!(params.get("home").is_some());
+    assert!(params.contains_key("home"));
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn test_user_with_shell_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("shell".to_string(), serde_json::json!("/bin/bash"));
 
-    assert!(params.get("shell").is_some());
+    assert!(params.contains_key("shell"));
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn test_user_with_comment_parameter() {
         serde_json::json!("Test User Account"),
     );
 
-    assert!(params.get("comment").is_some());
+    assert!(params.contains_key("comment"));
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn test_user_with_create_home_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("create_home".to_string(), serde_json::json!(true));
 
-    assert!(params.get("create_home").is_some());
+    assert!(params.contains_key("create_home"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_user_with_system_parameter() {
     params.insert("name".to_string(), serde_json::json!("testuser"));
     params.insert("system".to_string(), serde_json::json!(true));
 
-    assert!(params.get("system").is_some());
+    assert!(params.contains_key("system"));
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn test_user_with_password_parameter() {
     );
     params.insert("password_encrypted".to_string(), serde_json::json!(true));
 
-    assert!(params.get("password").is_some());
+    assert!(params.contains_key("password"));
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn test_user_with_generate_ssh_key() {
     params.insert("ssh_key_type".to_string(), serde_json::json!("ed25519"));
     params.insert("ssh_key_bits".to_string(), serde_json::json!(4096));
 
-    assert!(params.get("generate_ssh_key").is_some());
+    assert!(params.contains_key("generate_ssh_key"));
 }
 
 // ============================================================================
@@ -271,7 +271,7 @@ fn test_user_remove_with_home() {
     params.insert("state".to_string(), serde_json::json!("absent"));
     params.insert("remove".to_string(), serde_json::json!(true));
 
-    assert!(params.get("remove").is_some());
+    assert!(params.contains_key("remove"));
 }
 
 #[test]
@@ -281,7 +281,7 @@ fn test_user_force_remove() {
     params.insert("state".to_string(), serde_json::json!("absent"));
     params.insert("force".to_string(), serde_json::json!(true));
 
-    assert!(params.get("force").is_some());
+    assert!(params.contains_key("force"));
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_user_append_groups() {
     params.insert("groups".to_string(), serde_json::json!(["docker"]));
     params.insert("append".to_string(), serde_json::json!(true));
 
-    assert!(params.get("append").is_some());
+    assert!(params.contains_key("append"));
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn test_user_move_home() {
     params.insert("home".to_string(), serde_json::json!("/new/home/path"));
     params.insert("move_home".to_string(), serde_json::json!(true));
 
-    assert!(params.get("move_home").is_some());
+    assert!(params.contains_key("move_home"));
 }
 
 // ============================================================================

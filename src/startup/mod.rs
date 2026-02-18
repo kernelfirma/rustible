@@ -91,8 +91,7 @@ mod tests {
     #[test]
     fn test_lazy_registry_not_initialized_on_import() {
         // Just importing should not initialize the registry
-        // This test verifies the lazy pattern works
-        assert!(true);
+        // This test verifies the lazy pattern works - if it compiles and runs, the test passes
     }
 
     #[test]

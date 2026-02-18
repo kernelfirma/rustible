@@ -179,7 +179,7 @@ fn filter_trim(value: &Value) -> FilterResult<Value> {
 }
 
 fn filter_default(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let default_value = args.get(0).unwrap_or(&Value::Null).clone();
+    let default_value = args.first().unwrap_or(&Value::Null).clone();
 
     // Return default if value is null, undefined, or empty string
     match value {
@@ -197,8 +197,7 @@ fn filter_replace(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
 
-    let old = args
-        .get(0)
+    let old = args.first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "replace".to_string(),
@@ -223,7 +222,7 @@ fn filter_regex_replace(value: &Value, args: &[Value]) -> FilterResult<Value> {
     })?;
 
     let pattern =
-        args.get(0)
+        args.first()
             .and_then(|v| v.as_str())
             .ok_or_else(|| FilterError::InvalidInput {
                 filter: "regex_replace".to_string(),
@@ -250,7 +249,7 @@ fn filter_split(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
 
-    let delimiter = args.get(0).and_then(|v| v.as_str()).unwrap_or(" ");
+    let delimiter = args.first().and_then(|v| v.as_str()).unwrap_or(" ");
 
     let result: Vec<Value> = s
         .split(delimiter)
@@ -266,7 +265,7 @@ fn filter_join(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let separator = args.get(0).and_then(|v| v.as_str()).unwrap_or("");
+    let separator = args.first().and_then(|v| v.as_str()).unwrap_or("");
 
     let strings: Vec<&str> = arr.iter().map(|v| v.as_str().unwrap_or("")).collect();
 
@@ -461,7 +460,7 @@ fn filter_round(value: &Value, args: &[Value]) -> FilterResult<Value> {
                 message: "Expected number".to_string(),
             })?;
 
-    let precision = args.get(0).and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+    let precision = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as usize;
 
     let multiplier = 10_f64.powi(precision as i32);
     let rounded = (n * multiplier).round() / multiplier;
@@ -544,7 +543,7 @@ fn filter_b64decode(value: &Value) -> FilterResult<Value> {
         .map_err(|e| FilterError::Base64(e.to_string()))?;
 
     String::from_utf8(decoded)
-        .map(|s| Value::String(s))
+        .map(Value::String)
         .map_err(|e| FilterError::Base64(e.to_string()))
 }
 
@@ -816,7 +815,7 @@ fn filter_nth(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let index = args.get(0).and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+    let index = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as usize;
 
     Ok(arr.get(index).cloned().unwrap_or(Value::Null))
 }
@@ -990,8 +989,7 @@ fn filter_map(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let attr = args
-        .get(0)
+    let attr = args.first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "map".to_string(),
@@ -1018,8 +1016,7 @@ fn filter_select(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let test = args
-        .get(0)
+    let test = args.first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "select".to_string(),
@@ -1071,8 +1068,7 @@ fn filter_selectattr(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array of objects".to_string(),
     })?;
 
-    let attr = args
-        .get(0)
+    let attr = args.first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "selectattr".to_string(),
@@ -1118,8 +1114,7 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array of objects".to_string(),
     })?;
 
-    let attr = args
-        .get(0)
+    let attr = args.first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "groupby".to_string(),
@@ -1135,7 +1130,7 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
                 let key = key_value.to_string();
                 groups
                     .entry(key)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(item.clone());
             }
         }
@@ -1152,8 +1147,7 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
 // ============== Date/Time Filters ==============
 
 fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let format = args
-        .get(0)
+    let format = args.first()
         .and_then(|v| v.as_str())
         .unwrap_or("%Y-%m-%d %H:%M:%S");
 
@@ -1167,8 +1161,7 @@ fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
         Value::Number(n) => {
             // Unix timestamp
             n.as_i64()
-                .map(|ts| Utc.timestamp_opt(ts, 0).single())
-                .flatten()
+                .and_then(|ts| Utc.timestamp_opt(ts, 0).single())
         }
         _ => None,
     };

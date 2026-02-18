@@ -81,7 +81,7 @@ mod module_discovery {
         // The executor should have some default paths configured
         // We can't access module_paths directly, but we can verify it works
         // by checking that the executor was created successfully
-        assert!(true, "Executor created successfully");
+        // Executor created successfully - if it compiles and runs, the test passes
     }
 
     #[test]
@@ -492,7 +492,7 @@ print(json.dumps({'changed': True}))
         let mut args: ModuleParams = HashMap::new();
         args.insert("string".to_string(), serde_json::json!("hello world"));
         args.insert("number".to_string(), serde_json::json!(42));
-        args.insert("float".to_string(), serde_json::json!(3.14));
+        args.insert("float".to_string(), serde_json::json!(3.15));
         args.insert("boolean".to_string(), serde_json::json!(true));
         args.insert("null_value".to_string(), serde_json::json!(null));
         args.insert(
@@ -550,8 +550,7 @@ mod python_interpreter {
             .arg("--version")
             .output();
 
-        if result.is_ok() {
-            let output = result.unwrap();
+        if let Ok(output) = result {
             let version = String::from_utf8_lossy(&output.stdout);
             assert!(
                 version.contains("Python 3") || output.status.success(),

@@ -273,8 +273,8 @@ databases
     assert!(webservers.has_var("http_port"));
 
     let production = inv.get_group("production").unwrap();
-    assert!(production.children.contains(&"webservers".to_string()));
-    assert!(production.children.contains(&"databases".to_string()));
+    assert!(production.children.contains("webservers"));
+    assert!(production.children.contains("databases"));
 
     std::fs::remove_file(&inventory_file).ok();
 }
@@ -1367,7 +1367,7 @@ fn test_fixture_multi_play_playbook() {
         assert_eq!(pb.plays[0].name, "Configure webservers");
         assert_eq!(pb.plays[0].hosts, "webservers");
         assert_eq!(pb.plays[0].r#become, Some(true));
-        assert!(pb.plays[0].handlers.len() >= 1);
+        assert!(!pb.plays[0].handlers.is_empty());
 
         // Second play
         assert_eq!(pb.plays[1].name, "Configure database servers");
@@ -1477,10 +1477,10 @@ fn test_fixture_with_includes_playbook() {
         assert!(pb.plays[0].vars_files.len() >= 2);
 
         // Check pre_tasks
-        assert!(pb.plays[0].pre_tasks.len() >= 1);
+        assert!(!pb.plays[0].pre_tasks.is_empty());
 
         // Check post_tasks
-        assert!(pb.plays[0].post_tasks.len() >= 1);
+        assert!(!pb.plays[0].post_tasks.is_empty());
     }
 }
 
@@ -1564,8 +1564,8 @@ fn test_fixture_ini_inventory() {
 
         // Check nested groups (children)
         let production = inv.get_group("production").unwrap();
-        assert!(production.children.contains(&"webservers".to_string()));
-        assert!(production.children.contains(&"databases".to_string()));
+        assert!(production.children.contains("webservers"));
+        assert!(production.children.contains("databases"));
 
         // Check group variables from :vars section
         let databases = inv.get_group("databases").unwrap();

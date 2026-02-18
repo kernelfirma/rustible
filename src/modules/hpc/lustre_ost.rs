@@ -184,7 +184,7 @@ fn guarded_deactivate(
     let num_exports: u32 = if exports_ok {
         // Output format: "obdfilter.<name>.num_exports=<N>" or just "<N>"
         let trimmed = exports_out.trim();
-        if let Some(val) = trimmed.split('=').last() {
+        if let Some(val) = trimmed.split('=').next_back() {
             val.trim().parse().unwrap_or(0)
         } else {
             trimmed.parse().unwrap_or(0)

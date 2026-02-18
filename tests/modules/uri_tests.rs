@@ -93,9 +93,8 @@ fn test_uri_invalid_url_schemes() {
         let is_http = url_val.starts_with("http://") || url_val.starts_with("https://");
 
         // These should fail validation in the actual module
-        if !is_http {
-            assert!(true, "URL {} correctly identified as non-HTTP", url);
-        }
+        // Non-HTTP URLs should fail validation in the actual module
+        let _ = is_http;
     }
 }
 
@@ -515,7 +514,7 @@ fn test_uri_rate_limiting() {
 fn test_uri_url_query_params() {
     // Test URL with query parameters
     let base_url = "https://api.example.com/search";
-    let query_params = vec![("q", "rust programming"), ("page", "1"), ("limit", "20")];
+    let query_params = [("q", "rust programming"), ("page", "1"), ("limit", "20")];
 
     let mut url = base_url.to_string();
     let query_string: Vec<String> = query_params

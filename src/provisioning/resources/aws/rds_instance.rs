@@ -1501,7 +1501,7 @@ impl Resource for AwsRdsInstanceResource {
         // Validate allocated_storage
         if let Some(storage) = obj.get("allocated_storage") {
             if let Some(size) = storage.as_i64() {
-                if size < 5 || size > 65536 {
+                if !(5..=65536).contains(&size) {
                     return Err(ProvisioningError::ValidationError(
                         "allocated_storage must be between 5 and 65536 GB".to_string(),
                     ));
@@ -1533,7 +1533,7 @@ impl Resource for AwsRdsInstanceResource {
         // Validate backup_retention_period
         if let Some(retention) = obj.get("backup_retention_period") {
             if let Some(days) = retention.as_i64() {
-                if days < 0 || days > 35 {
+                if !(0..=35).contains(&days) {
                     return Err(ProvisioningError::ValidationError(
                         "backup_retention_period must be between 0 and 35".to_string(),
                     ));

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 /// Simulated inventory host
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct InventoryHost {
     name: String,
     ansible_host: String,
@@ -53,10 +54,12 @@ impl Inventory {
             .unwrap_or_default()
     }
 
+    #[allow(dead_code)]
     fn host_count(&self) -> usize {
         self.hosts.len()
     }
 
+    #[allow(dead_code)]
     fn group_count(&self) -> usize {
         self.groups.len()
     }

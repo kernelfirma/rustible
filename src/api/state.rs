@@ -225,7 +225,7 @@ impl AppState {
 
         let filtered: Vec<_> = jobs
             .values()
-            .filter(|j| status_filter.map_or(true, |s| j.status == s))
+            .filter(|j| status_filter.is_none_or(|s| j.status == s))
             .collect();
 
         let total = filtered.len();

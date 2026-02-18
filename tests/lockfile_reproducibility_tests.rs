@@ -11,8 +11,6 @@ use chrono::{DateTime, TimeZone, Utc};
 use rustible::provisioning::state_lock::{
     AsyncLockGuard, FileLock, InMemoryLock, LockBackend, LockInfo, StateLockManager,
 };
-use serde_json::json;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -379,7 +377,7 @@ async fn test_lock_manager_expiration_configuration() {
     let duration = (expires - created).num_seconds();
 
     // Allow some tolerance for test execution time
-    assert!(duration >= 7199 && duration <= 7201);
+    assert!((7199..=7201).contains(&duration));
 }
 
 #[tokio::test]

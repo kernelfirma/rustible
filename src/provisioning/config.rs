@@ -60,6 +60,7 @@ pub enum ReferenceType {
 
 /// Complete infrastructure configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct InfrastructureConfig {
     /// Provider configurations
     #[serde(default)]
@@ -124,20 +125,6 @@ pub struct TerraformConfig {
     pub config: Value,
 }
 
-impl Default for InfrastructureConfig {
-    fn default() -> Self {
-        Self {
-            providers: HashMap::new(),
-            variables: HashMap::new(),
-            resources: HashMap::new(),
-            data: HashMap::new(),
-            outputs: HashMap::new(),
-            terraform: None,
-            locals: HashMap::new(),
-            moved: Vec::new(),
-        }
-    }
-}
 
 impl InfrastructureConfig {
     /// Create a new empty configuration

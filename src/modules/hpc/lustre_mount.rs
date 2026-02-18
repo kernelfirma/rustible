@@ -352,7 +352,7 @@ fn mount_health_output(
         context,
     )?;
     if df_ok && !df_stdout.trim().is_empty() {
-        let parts: Vec<&str> = df_stdout.trim().split_whitespace().collect();
+        let parts: Vec<&str> = df_stdout.split_whitespace().collect();
         if parts.len() >= 6 {
             health.insert("filesystem".to_string(), serde_json::json!(parts[0]));
             health.insert("size".to_string(), serde_json::json!(parts[1]));

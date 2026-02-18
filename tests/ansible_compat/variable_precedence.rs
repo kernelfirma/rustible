@@ -250,7 +250,7 @@ fn test_var_store_hash_replace_behavior() {
     // With Replace, higher precedence completely replaces
     let config = store.get("config").unwrap();
     let db = config.get("db").unwrap();
-    assert!(db.get("host").is_some());
+    assert!(db.contains_key("host"));
     // port should NOT exist because Replace mode replaces entire hash
     // (In Replace mode, the entire config from PlayVars replaces RoleDefaults)
 }

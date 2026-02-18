@@ -1139,7 +1139,7 @@ mod pipeline_tests {
         let pipeline = ExecutionPipeline::new();
 
         assert!(pipeline.speculative_config.enabled);
-        assert!(pipeline.file_pipeline.has_pending().await == false);
+        assert!(!(pipeline.file_pipeline.has_pending().await));
     }
 
     #[tokio::test]
@@ -1284,7 +1284,7 @@ mod work_stealing_tests {
         };
         let scheduler: WorkStealingScheduler<i32> = WorkStealingScheduler::new(config);
 
-        let items: Vec<_> = (0..20).map(|i| WorkItem::new(i)).collect();
+        let items: Vec<_> = (0..20).map(WorkItem::new).collect();
         scheduler.submit_batch(items);
 
         let stats = scheduler.stats();

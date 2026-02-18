@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_null_callback_default() {
-        let callback = NullCallback::default();
+        let callback = NullCallback;
         assert_eq!(callback, NullCallback);
     }
 

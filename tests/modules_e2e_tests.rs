@@ -126,7 +126,7 @@ fn init_e2e_logging() {
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     if enable {
-        INIT.call_once(|| rustible::logging::init_logging());
+        INIT.call_once(rustible::logging::init_logging);
     }
 }
 

@@ -217,7 +217,7 @@ impl AwsSecurityGroupResource {
             Err(e) => return Err(e),
         };
 
-        for sg in resp.security_groups() {
+        if let Some(sg) = resp.security_groups().iter().next() {
             return Ok(Some(self.parse_security_group(sg)));
         }
 
@@ -245,7 +245,7 @@ impl AwsSecurityGroupResource {
             ProvisioningError::CloudApiError(format!("Failed to describe security groups: {}", e))
         })?;
 
-        for sg in resp.security_groups() {
+        if let Some(sg) = resp.security_groups().iter().next() {
             return Ok(Some(self.parse_security_group(sg)));
         }
 

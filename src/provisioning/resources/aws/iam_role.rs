@@ -1007,7 +1007,7 @@ impl Resource for AwsIamRoleResource {
 
         // Validate max_session_duration if provided
         if let Some(duration) = config.get("max_session_duration").and_then(|v| v.as_i64()) {
-            if duration < 3600 || duration > 43200 {
+            if !(3600..=43200).contains(&duration) {
                 return Err(ProvisioningError::ValidationError(
                     "max_session_duration must be between 3600 and 43200 seconds".to_string(),
                 ));

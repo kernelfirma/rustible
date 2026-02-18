@@ -1113,7 +1113,7 @@ fn test_check_mode_with_empty_params() {
     // Should return error for missing required param
     let result = module.validate_params(&params);
     // validate_params checks for cmd or argv
-    assert!(result.is_err() || params.get("cmd").is_none());
+    assert!(result.is_err() || !params.contains_key("cmd"));
 }
 
 #[test]

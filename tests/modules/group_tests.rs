@@ -152,7 +152,7 @@ fn test_group_with_gid_parameter() {
     params.insert("name".to_string(), serde_json::json!("testgroup"));
     params.insert("gid".to_string(), serde_json::json!(1001));
 
-    assert!(params.get("gid").is_some());
+    assert!(params.contains_key("gid"));
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn test_group_with_system_parameter() {
     params.insert("name".to_string(), serde_json::json!("testgroup"));
     params.insert("system".to_string(), serde_json::json!(true));
 
-    assert!(params.get("system").is_some());
+    assert!(params.contains_key("system"));
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_group_with_state_parameter() {
     params.insert("name".to_string(), serde_json::json!("testgroup"));
     params.insert("state".to_string(), serde_json::json!("present"));
 
-    assert!(params.get("state").is_some());
+    assert!(params.contains_key("state"));
 }
 
 // ============================================================================
@@ -221,7 +221,7 @@ fn test_group_system_group_creation() {
     params.insert("state".to_string(), serde_json::json!("present"));
     params.insert("system".to_string(), serde_json::json!(true));
 
-    assert!(params.get("system").is_some());
+    assert!(params.contains_key("system"));
 }
 
 // ============================================================================

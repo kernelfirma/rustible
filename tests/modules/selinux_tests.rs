@@ -79,9 +79,9 @@ fn test_selinux_mode_params() {
         serde_json::json!("/etc/selinux/config"),
     );
 
-    assert!(params.get("state").is_some());
-    assert!(params.get("policy").is_some());
-    assert!(params.get("configfile").is_some());
+    assert!(params.contains_key("state"));
+    assert!(params.contains_key("policy"));
+    assert!(params.contains_key("configfile"));
 }
 
 #[test]
@@ -94,9 +94,9 @@ fn test_selinux_boolean_params() {
     params.insert("boolean_state".to_string(), serde_json::json!("on"));
     params.insert("persistent".to_string(), serde_json::json!(true));
 
-    assert!(params.get("boolean").is_some());
-    assert!(params.get("boolean_state").is_some());
-    assert!(params.get("persistent").is_some());
+    assert!(params.contains_key("boolean"));
+    assert!(params.contains_key("boolean_state"));
+    assert!(params.contains_key("persistent"));
 }
 
 #[test]
@@ -112,12 +112,12 @@ fn test_selinux_context_params() {
     params.insert("selevel".to_string(), serde_json::json!("s0"));
     params.insert("recursive".to_string(), serde_json::json!(true));
 
-    assert!(params.get("target").is_some());
-    assert!(params.get("setype").is_some());
-    assert!(params.get("seuser").is_some());
-    assert!(params.get("serole").is_some());
-    assert!(params.get("selevel").is_some());
-    assert!(params.get("recursive").is_some());
+    assert!(params.contains_key("target"));
+    assert!(params.contains_key("setype"));
+    assert!(params.contains_key("seuser"));
+    assert!(params.contains_key("serole"));
+    assert!(params.contains_key("selevel"));
+    assert!(params.contains_key("recursive"));
 }
 
 #[test]
@@ -128,10 +128,10 @@ fn test_selinux_port_params() {
     params.insert("port_type".to_string(), serde_json::json!("http_port_t"));
     params.insert("port_state".to_string(), serde_json::json!("present"));
 
-    assert!(params.get("ports").is_some());
-    assert!(params.get("proto").is_some());
-    assert!(params.get("port_type").is_some());
-    assert!(params.get("port_state").is_some());
+    assert!(params.contains_key("ports"));
+    assert!(params.contains_key("proto"));
+    assert!(params.contains_key("port_type"));
+    assert!(params.contains_key("port_state"));
 }
 
 // ============================================================================
@@ -156,7 +156,7 @@ fn test_selinux_all_mode_states() {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("state".to_string(), serde_json::json!(state));
         assert!(
-            params.get("state").is_some(),
+            params.contains_key("state"),
             "State '{}' should be valid",
             state
         );
@@ -171,7 +171,7 @@ fn test_selinux_all_protocols() {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("proto".to_string(), serde_json::json!(proto));
         assert!(
-            params.get("proto").is_some(),
+            params.contains_key("proto"),
             "Protocol '{}' should be valid",
             proto
         );
@@ -204,7 +204,7 @@ fn test_selinux_all_file_types() {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("ftype".to_string(), serde_json::json!(ftype));
         assert!(
-            params.get("ftype").is_some(),
+            params.contains_key("ftype"),
             "File type '{}' should be valid",
             ftype
         );
@@ -219,7 +219,7 @@ fn test_selinux_boolean_state_values() {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("boolean_state".to_string(), serde_json::json!(state));
         assert!(
-            params.get("boolean_state").is_some(),
+            params.contains_key("boolean_state"),
             "Boolean state '{}' should be valid",
             state
         );

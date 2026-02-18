@@ -721,12 +721,10 @@ async fn test_complex_multi_host_playbook() {
     callback_manager.add_callback(recording.clone());
     callback_manager.add_callback(stats.clone());
 
-    let hosts = vec![
-        "web1".to_string(),
+    let hosts = ["web1".to_string(),
         "web2".to_string(),
         "web3".to_string(),
-        "db1".to_string(),
-    ];
+        "db1".to_string()];
 
     callback_manager
         .on_playbook_start("production_deploy")
@@ -923,7 +921,7 @@ async fn test_skipped_task_callbacks() {
         .on_playbook_start("conditional_playbook")
         .await;
     callback_manager
-        .on_play_start("Conditional play", &vec!["host1".to_string()])
+        .on_play_start("Conditional play", &["host1".to_string()])
         .await;
 
     // Skipped task (condition not met)
@@ -964,7 +962,7 @@ async fn test_handler_callbacks() {
 
     callback_manager.on_playbook_start("handler_test").await;
     callback_manager
-        .on_play_start("Handler play", &vec!["host1".to_string()])
+        .on_play_start("Handler play", &["host1".to_string()])
         .await;
 
     // Task that notifies a handler
@@ -1195,7 +1193,7 @@ async fn test_callback_manager_with_no_callbacks() {
     // This should not panic even with no callbacks registered
     callback_manager.on_playbook_start("no_callbacks").await;
     callback_manager
-        .on_play_start("Play", &vec!["host".to_string()])
+        .on_play_start("Play", &["host".to_string()])
         .await;
 
     let result = ExecutionResult {

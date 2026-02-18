@@ -230,7 +230,7 @@ impl ExecutionCallback for YamlCallback {
     async fn on_playbook_start(&self, name: &str) {
         *self.current_playbook.lock().unwrap() = Some(name.to_string());
 
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "playbook": name,
         }))
         .unwrap();
@@ -239,7 +239,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_playbook_end(&self, name: &str, success: bool) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "playbook": name,
             "success": success,
         }))
@@ -250,7 +250,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_play_start(&self, name: &str, hosts: &[String]) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "play": name,
             "hosts": hosts,
         }))
@@ -260,7 +260,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_play_end(&self, name: &str, success: bool) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "play": name,
             "success": success,
         }))
@@ -270,7 +270,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_task_start(&self, name: &str, host: &str) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "task": name,
             "host": host,
         }))
@@ -280,7 +280,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_task_complete(&self, result: &ExecutionResult) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "task": result.task_name,
             "host": result.host,
             "success": result.result.success,
@@ -295,7 +295,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_handler_triggered(&self, name: &str) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "handler": name,
         }))
         .unwrap();
@@ -304,7 +304,7 @@ impl ExecutionCallback for YamlCallback {
     }
 
     async fn on_facts_gathered(&self, host: &str, facts: &Facts) {
-        let data = serde_yaml::to_value(&serde_json::json!({
+        let data = serde_yaml::to_value(serde_json::json!({
             "host": host,
             "facts_count": facts.all().len(),
         }))
@@ -448,8 +448,10 @@ mod yaml_indentation_tests {
     #[tokio::test]
     async fn test_uses_two_space_indentation() {
         let writer = CaptureWriter::new();
-        let mut config = YamlCallbackConfig::default();
-        config.indent_size = 2;
+        let config = YamlCallbackConfig {
+            indent_size: 2,
+            ..Default::default()
+        };
         let callback = YamlCallback::with_writer(writer.clone(), config);
 
         let hosts = vec![
@@ -533,8 +535,10 @@ mod yaml_indentation_tests {
     #[tokio::test]
     async fn test_custom_indent_size() {
         let writer = CaptureWriter::new();
-        let mut config = YamlCallbackConfig::default();
-        config.indent_size = 4;
+        let config = YamlCallbackConfig {
+            indent_size: 4,
+            ..Default::default()
+        };
         let callback = YamlCallback::with_writer(writer.clone(), config);
 
         let hosts = vec!["host1".to_string()];
@@ -830,10 +834,8 @@ mod yaml_escaping_tests {
             callback.on_task_complete(&result).await;
 
             let output = writer.get_output();
-            let docs = validate_yaml_documents(&output).expect(&format!(
-                "Reserved word '{}' should be properly handled",
-                message
-            ));
+            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| panic!("Reserved word '{}' should be properly handled",
+                message));
             assert!(
                 !docs.is_empty(),
                 "Output for '{}' should not be empty",
@@ -864,10 +866,8 @@ mod yaml_escaping_tests {
             callback.on_task_complete(&result).await;
 
             let output = writer.get_output();
-            let docs = validate_yaml_documents(&output).expect(&format!(
-                "Numeric string '{}' should produce valid YAML",
-                message
-            ));
+            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| panic!("Numeric string '{}' should produce valid YAML",
+                message));
             assert!(!docs.is_empty());
         }
     }
@@ -1063,8 +1063,10 @@ mod yaml_readability_tests {
     #[tokio::test]
     async fn test_document_separators_present_in_multi_doc_mode() {
         let writer = CaptureWriter::new();
-        let mut config = YamlCallbackConfig::default();
-        config.multi_document = true;
+        let config = YamlCallbackConfig {
+            multi_document: true,
+            ..Default::default()
+        };
         let callback = YamlCallback::with_writer(writer.clone(), config);
 
         callback.on_playbook_start("test.yml").await;

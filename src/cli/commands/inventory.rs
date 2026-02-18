@@ -555,7 +555,7 @@ impl ListTasksArgs {
                                     None
                                 };
 
-                                let when = task.get("when").map(|w| format_value(w));
+                                let when = task.get("when").map(format_value);
 
                                 target_list.push(TaskListing {
                                     name: task_name,
@@ -618,9 +618,9 @@ impl ListTasksArgs {
                             if self.detailed {
                                 if let Some(tags) = &task.tags {
                                     println!(
-                                        "       {}: {}",
+                                        "       {}: {:?}",
                                         "Tags".yellow(),
-                                        format!("{:?}", tags)
+                                        tags
                                     );
                                 }
                                 if let Some(when) = &task.when {

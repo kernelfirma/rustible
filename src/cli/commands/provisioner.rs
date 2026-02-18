@@ -31,7 +31,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// Terraform provisioner mode - run playbooks on newly created infrastructure
@@ -300,7 +300,7 @@ impl ProvisionerArgs {
                 Ok(result)
             }
             Err(e) => {
-                let result = ProvisionerResult {
+                let _result = ProvisionerResult {
                     success: false,
                     started_at,
                     finished_at,
@@ -533,14 +533,14 @@ impl ProvisionerArgs {
 }
 
 /// Expand tilde (~) in path to user's home directory
-fn expand_tilde(path: &PathBuf) -> PathBuf {
+fn expand_tilde(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
     if let Some(stripped) = path_str.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
             return home.join(stripped);
         }
     }
-    path.clone()
+    path.to_path_buf()
 }
 
 /// Generate a Terraform module snippet for using Rustible as a provisioner

@@ -780,7 +780,7 @@ mod module_args_fuzzing {
             let context = ModuleContext::new();
 
             // Should not panic
-            let _ = registry.execute(&module_name, &param_map, &context);
+            let _ = registry.execute(module_name, &param_map, &context);
         }
 
         /// Property: Module validation should not panic
@@ -1282,10 +1282,10 @@ mod invariants {
         #[test]
         fn empty_pattern_returns_empty(_dummy in Just(())) {
             let inventory = Inventory::new();
-            match inventory.get_hosts_for_pattern("") {
-                Ok(hosts) => prop_assert!(hosts.is_empty()),
-                Err(_) => {} // Error is also acceptable
+            if let Ok(hosts) = inventory.get_hosts_for_pattern("") {
+                prop_assert!(hosts.is_empty());
             }
+            // Error is also acceptable
         }
 
         /// Invariant: "all" pattern should return all hosts

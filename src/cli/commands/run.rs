@@ -685,8 +685,10 @@ impl RunArgs {
         if self.auto_rollback || self.checkpoint_dir.is_some() {
             use rustible::recovery::{RecoveryConfig, RecoveryManager};
 
-            let mut recovery_config = RecoveryConfig::default();
-            recovery_config.enable_rollback = self.auto_rollback;
+            let mut recovery_config = RecoveryConfig {
+                enable_rollback: self.auto_rollback,
+                ..Default::default()
+            };
 
             if let Some(ref dir) = self.checkpoint_dir {
                 recovery_config.enable_checkpoints = true;
@@ -871,7 +873,7 @@ impl RunArgs {
                     if play_idx > 0 { "\n" } else { "" },
                     play_idx + 1,
                     plays.len(),
-                    "*".to_string(),
+                    "*",
                     play_name
                 ),
             );
@@ -1000,7 +1002,7 @@ impl RunArgs {
                     plan_lines,
                     format!(
                         "\n  {} Task {}/{}: {}",
-                        ">".to_string(),
+                        ">",
                         task_num,
                         total,
                         task_name
@@ -1954,14 +1956,12 @@ impl RunArgs {
             .and_then(|t| {
                 if let Some(s) = t.as_str() {
                     Some(vec![s.to_string()])
-                } else if let Some(seq) = t.as_sequence() {
-                    Some(
+                } else {
+                    t.as_sequence().map(|seq| {
                         seq.iter()
                             .filter_map(|v| v.as_str().map(String::from))
-                            .collect(),
-                    )
-                } else {
-                    None
+                            .collect()
+                    })
                 }
             })
             .unwrap_or_default();

@@ -275,7 +275,7 @@ fn bench_dispatch_overhead(c: &mut Criterion) {
 
     // NoOp callback dispatch
     group.bench_function("noop_playbook_start", |b| {
-        let callback = NoOpCallback::default();
+        let callback = NoOpCallback;
         b.to_async(&rt)
             .iter(|| async { callback.on_playbook_start(black_box("test_playbook")).await })
     });
@@ -289,7 +289,7 @@ fn bench_dispatch_overhead(c: &mut Criterion) {
 
     // on_task_complete with ExecutionResult (minimal)
     group.bench_function("noop_task_complete", |b| {
-        let callback = NoOpCallback::default();
+        let callback = NoOpCallback;
         let result = create_execution_result("localhost", "test_task");
         b.to_async(&rt)
             .iter(|| async { callback.on_task_complete(black_box(&result)).await })
@@ -327,7 +327,7 @@ fn bench_dispatch_overhead(c: &mut Criterion) {
             BenchmarkId::new("play_start_hosts", host_count),
             &hosts,
             |b, hosts| {
-                let callback = NoOpCallback::default();
+                let callback = NoOpCallback;
                 b.to_async(&rt).iter(|| async {
                     callback
                         .on_play_start(black_box("test_play"), black_box(hosts))
@@ -350,7 +350,7 @@ fn bench_plugin_lifecycle(c: &mut Criterion) {
     // NoOp callback creation
     group.bench_function("noop_creation", |b| {
         b.iter(|| {
-            let callback = NoOpCallback::default();
+            let callback = NoOpCallback;
             black_box(callback)
         })
     });
@@ -383,11 +383,11 @@ fn bench_plugin_lifecycle(c: &mut Criterion) {
     group.bench_function("composite_5_callbacks", |b| {
         b.iter(|| {
             let callbacks: Vec<Arc<dyn ExecutionCallback>> = vec![
-                Arc::new(NoOpCallback::default()),
+                Arc::new(NoOpCallback),
                 Arc::new(CountingCallback::new()),
-                Arc::new(NoOpCallback::default()),
+                Arc::new(NoOpCallback),
                 Arc::new(CountingCallback::new()),
-                Arc::new(NoOpCallback::default()),
+                Arc::new(NoOpCallback),
             ];
             let composite = CompositeCallback::new(callbacks);
             black_box(composite)
@@ -497,7 +497,7 @@ fn bench_multi_plugin_scaling(c: &mut Criterion) {
             |b, &count| {
                 b.iter(|| {
                     let callbacks: Vec<Arc<dyn ExecutionCallback>> = (0..count)
-                        .map(|_| Arc::new(NoOpCallback::default()) as Arc<dyn ExecutionCallback>)
+                        .map(|_| Arc::new(NoOpCallback) as Arc<dyn ExecutionCallback>)
                         .collect();
                     let composite = CompositeCallback::new(callbacks);
                     black_box(composite)
@@ -511,7 +511,7 @@ fn bench_multi_plugin_scaling(c: &mut Criterion) {
             callback_count,
             |b, &count| {
                 let callbacks: Vec<Arc<dyn ExecutionCallback>> = (0..count)
-                    .map(|_| Arc::new(NoOpCallback::default()) as Arc<dyn ExecutionCallback>)
+                    .map(|_| Arc::new(NoOpCallback) as Arc<dyn ExecutionCallback>)
                     .collect();
                 let composite = CompositeCallback::new(callbacks);
 
@@ -652,7 +652,8 @@ fn bench_concurrent_dispatch(c: &mut Criterion) {
                             ));
                         }
                         for handle in handles {
-                            black_box(handle.await.unwrap());
+                            let _: () = handle.await.unwrap();
+                            black_box(());
                         }
                     }
                 })
@@ -684,7 +685,8 @@ fn bench_concurrent_dispatch(c: &mut Criterion) {
                             }));
                         }
                         for handle in handles {
-                            black_box(handle.await.unwrap());
+                            let _: () = handle.await.unwrap();
+                            black_box(());
                         }
                     }
                 })
@@ -728,7 +730,7 @@ fn bench_playbook_simulation(c: &mut Criterion) {
 
     // Simulate a small playbook execution with NoOp callback
     group.bench_function("small_playbook_noop_5h_10t", |b| {
-        let callback = NoOpCallback::default();
+        let callback = NoOpCallback;
         let hosts = generate_hosts(5);
         let num_tasks = 10;
 
@@ -786,8 +788,8 @@ fn bench_playbook_simulation(c: &mut Criterion) {
     group.bench_function("medium_playbook_composite_20h_25t", |b| {
         let callbacks: Vec<Arc<dyn ExecutionCallback>> = vec![
             Arc::new(CountingCallback::new()),
-            Arc::new(NoOpCallback::default()),
-            Arc::new(NoOpCallback::default()),
+            Arc::new(NoOpCallback),
+            Arc::new(NoOpCallback),
         ];
         let composite = CompositeCallback::new(callbacks);
         let hosts = generate_hosts(20);
@@ -1020,7 +1022,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_noop_callback() {
-        let callback = NoOpCallback::default();
+        let callback = NoOpCallback;
         // Should not panic
         callback.on_playbook_start("test").await;
         callback
@@ -1059,7 +1061,7 @@ mod tests {
         let counting = Arc::new(CountingCallback::new());
         let callbacks: Vec<Arc<dyn ExecutionCallback>> = vec![
             Arc::clone(&counting) as Arc<dyn ExecutionCallback>,
-            Arc::new(NoOpCallback::default()),
+            Arc::new(NoOpCallback),
         ];
         let composite = CompositeCallback::new(callbacks);
 

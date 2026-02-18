@@ -134,7 +134,7 @@ fn test_rack_grouping_10k() {
 
     let start = Instant::now();
     let mut rack_counts: HashMap<String, usize> = HashMap::new();
-    for (_, groups) in &inventory {
+    for groups in inventory.values() {
         for g in groups {
             if g.starts_with("rack") {
                 *rack_counts.entry(g.clone()).or_insert(0) += 1;

@@ -194,7 +194,7 @@ fn test_pip_with_single_package() {
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("name".to_string(), serde_json::json!("requests"));
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_pip_with_package_list() {
         serde_json::json!(["requests", "flask", "django"]),
     );
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn test_pip_with_version_specifier() {
     let mut params: HashMap<String, serde_json::Value> = HashMap::new();
     params.insert("name".to_string(), serde_json::json!("requests==2.28.0"));
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 #[test]
@@ -228,7 +228,7 @@ fn test_pip_with_version_range() {
     for pkg in packages {
         let mut params: HashMap<String, serde_json::Value> = HashMap::new();
         params.insert("name".to_string(), serde_json::json!(pkg));
-        assert!(params.get("name").is_some());
+        assert!(params.contains_key("name"));
     }
 }
 
@@ -242,7 +242,7 @@ fn test_pip_virtualenv_parameter() {
     params.insert("name".to_string(), serde_json::json!("requests"));
     params.insert("virtualenv".to_string(), serde_json::json!("/opt/venv"));
 
-    assert!(params.get("virtualenv").is_some());
+    assert!(params.contains_key("virtualenv"));
 }
 
 // ============================================================================
@@ -279,7 +279,7 @@ fn test_pip_extra_index_url() {
         serde_json::json!("--extra-index-url https://pypi.private.com/simple/"),
     );
 
-    assert!(params.get("extra_args").is_some());
+    assert!(params.contains_key("extra_args"));
 }
 
 // ============================================================================
@@ -320,7 +320,7 @@ fn test_pip_requirements_file() {
         serde_json::json!("/path/to/requirements.txt"),
     );
 
-    assert!(params.get("requirements").is_some());
+    assert!(params.contains_key("requirements"));
 }
 
 #[test]
@@ -334,7 +334,7 @@ fn test_pip_requirements_with_state_absent_invalid() {
     params.insert("state".to_string(), serde_json::json!("absent"));
 
     // This combination should be invalid
-    assert!(params.get("requirements").is_some());
+    assert!(params.contains_key("requirements"));
     assert_eq!(params.get("state").unwrap().as_str().unwrap(), "absent");
 }
 

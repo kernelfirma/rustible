@@ -423,7 +423,7 @@ async fn test_nested_callback_scenarios() {
     callback.on_play_end("play1", true).await;
 
     // Play 2
-    callback.on_play_start("play2", &hosts[..1].to_vec()).await;
+    callback.on_play_start("play2", &hosts[..1]).await;
     callback.on_task_start("task2", "host1").await;
     let result3 = ExecutionResult {
         host: "host1".to_string(),

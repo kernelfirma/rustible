@@ -503,11 +503,11 @@ impl Module for MockModule {
     }
 
     fn classification(&self) -> ModuleClassification {
-        self.classification.clone()
+        self.classification
     }
 
     fn parallelization_hint(&self) -> ParallelizationHint {
-        self.parallelization.clone()
+        self.parallelization
     }
 }
 

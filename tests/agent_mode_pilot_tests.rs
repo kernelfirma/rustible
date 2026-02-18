@@ -598,7 +598,7 @@ mod client_tests {
         let _client = AgentClient::new("192.168.1.100", "/var/run/rustible-agent.sock");
 
         // Client should be created without error
-        assert!(true);
+        let _ = &_client;
     }
 
     #[test]
@@ -607,7 +607,7 @@ mod client_tests {
             .with_auth_token("secret-token".to_string());
 
         // Client should be created without error
-        assert!(true);
+        let _ = &_client;
     }
 
     #[test]
@@ -616,7 +616,7 @@ mod client_tests {
             .with_timeout(Duration::from_secs(60));
 
         // Client should be created without error
-        assert!(true);
+        let _ = &_client;
     }
 
     #[test]
@@ -626,7 +626,7 @@ mod client_tests {
             .with_timeout(Duration::from_secs(120));
 
         // Client should be created without error
-        assert!(true);
+        let _ = &_client;
     }
 
     #[tokio::test]

@@ -194,9 +194,9 @@ fn check_compat_matrix(
         let kernel_ver = (k_major, k_minor);
 
         let compatible = match ofed_major {
-            5 => kernel_ver >= (4, 15) && kernel_ver <= (5, 15),
-            23 => kernel_ver >= (5, 4) && kernel_ver <= (6, 2),
-            24 => kernel_ver >= (5, 15) && kernel_ver <= (6, 8),
+            5 => ((4, 15)..=(5, 15)).contains(&kernel_ver),
+            23 => ((5, 4)..=(6, 2)).contains(&kernel_ver),
+            24 => ((5, 15)..=(6, 8)).contains(&kernel_ver),
             _ => {
                 warnings.push(format!(
                     "Unknown OFED major version {}; cannot verify kernel compatibility",
@@ -772,9 +772,9 @@ mod tests {
     /// Helper for testing compatibility matrix logic without a connection.
     fn is_compat(ofed_major: u32, kernel_ver: (u32, u32)) -> bool {
         match ofed_major {
-            5 => kernel_ver >= (4, 15) && kernel_ver <= (5, 15),
-            23 => kernel_ver >= (5, 4) && kernel_ver <= (6, 2),
-            24 => kernel_ver >= (5, 15) && kernel_ver <= (6, 8),
+            5 => ((4, 15)..=(5, 15)).contains(&kernel_ver),
+            23 => ((5, 4)..=(6, 2)).contains(&kernel_ver),
+            24 => ((5, 15)..=(6, 8)).contains(&kernel_ver),
             _ => true,
         }
     }

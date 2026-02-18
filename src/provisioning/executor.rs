@@ -237,10 +237,7 @@ impl ProvisioningExecutor {
                 Arc::new(LocalBackend::new(executor_config.state_path.clone()))
             };
 
-        let state = match state_backend.load().await? {
-            Some(state) => state,
-            None => ProvisioningState::new(),
-        };
+        let state = state_backend.load().await?.unwrap_or_default();
 
         let lock_manager = if executor_config.lock_state {
             state_backend.lock_backend().map(|backend| {
@@ -437,19 +434,17 @@ impl ProvisioningExecutor {
         let mut attrs = attributes.clone();
         if let Value::Object(attrs_map) = &mut attrs {
             // Get config values to merge
-            if let Some(config) = self
+            if let Some(Value::Object(config_map)) = self
                 .config
                 .resources
                 .get(&id.resource_type)
                 .and_then(|r| r.get(&id.name))
             {
-                if let Value::Object(config_map) = config {
                     for (key, value) in config_map {
                         if !attrs_map.contains_key(key) {
                             attrs_map.insert(key.clone(), value.clone());
                         }
                     }
-                }
             }
         }
 
@@ -792,7 +787,7 @@ impl ProvisioningExecutor {
             let state = self.state.read().clone();
             let mut updated_resources = Vec::new();
 
-            for (_, resource) in &state.resources {
+            for resource in state.resources.values() {
                 let resource_impl = match self.resource_registry.get(&resource.resource_type) {
                     Ok(r) => r,
                     Err(_) => {

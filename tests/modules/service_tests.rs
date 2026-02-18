@@ -156,7 +156,7 @@ fn test_service_with_state_parameter() {
     params.insert("name".to_string(), serde_json::json!("nginx"));
     params.insert("state".to_string(), serde_json::json!("started"));
 
-    assert!(params.get("state").is_some());
+    assert!(params.contains_key("state"));
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn test_service_with_enabled_parameter() {
     params.insert("name".to_string(), serde_json::json!("nginx"));
     params.insert("enabled".to_string(), serde_json::json!(true));
 
-    assert!(params.get("enabled").is_some());
+    assert!(params.contains_key("enabled"));
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn test_service_with_daemon_reload() {
     params.insert("name".to_string(), serde_json::json!("nginx"));
     params.insert("daemon_reload".to_string(), serde_json::json!(true));
 
-    assert!(params.get("daemon_reload").is_some());
+    assert!(params.contains_key("daemon_reload"));
 }
 
 #[test]

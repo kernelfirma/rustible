@@ -48,13 +48,13 @@ mod winrm_connection_tests {
 
     #[test]
     fn test_ntlm_auth_simple() {
-        let auth = WinRmAuth::ntlm("user", &test_credential("password"));
+        let auth = WinRmAuth::ntlm("user", test_credential("password"));
         assert_eq!(auth.scheme(), "Negotiate");
     }
 
     #[test]
     fn test_ntlm_auth_with_domain_backslash() {
-        let auth = WinRmAuth::ntlm("DOMAIN\\user", &test_credential("password"));
+        let auth = WinRmAuth::ntlm("DOMAIN\\user", test_credential("password"));
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..
@@ -68,7 +68,7 @@ mod winrm_connection_tests {
 
     #[test]
     fn test_ntlm_auth_with_domain_at() {
-        let auth = WinRmAuth::ntlm("user@domain.local", &test_credential("password"));
+        let auth = WinRmAuth::ntlm("user@domain.local", test_credential("password"));
         match auth {
             WinRmAuth::Ntlm {
                 username, domain, ..
@@ -116,7 +116,7 @@ mod winrm_connection_tests {
 
     #[test]
     fn test_basic_auth() {
-        let auth = WinRmAuth::basic("admin", &test_credential("secret"));
+        let auth = WinRmAuth::basic("admin", test_credential("secret"));
         assert_eq!(auth.scheme(), "Basic");
     }
 
@@ -508,7 +508,7 @@ mod ansible_parity_tests {
     /// Ansible's win_feature module supports these parameters
     #[test]
     fn test_win_feature_ansible_params_documented() {
-        let ansible_params = vec![
+        let ansible_params = [
             "name",                     // Feature name(s)
             "state",                    // present, absent
             "include_sub_features",     // Include sub-features
@@ -522,7 +522,7 @@ mod ansible_parity_tests {
     /// Ansible's win_copy module supports these parameters
     #[test]
     fn test_win_copy_ansible_params_documented() {
-        let ansible_params = vec![
+        let ansible_params = [
             "src",        // Source file/directory
             "dest",       // Destination path
             "content",    // Inline content

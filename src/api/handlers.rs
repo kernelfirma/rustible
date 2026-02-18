@@ -452,7 +452,6 @@ async fn run_playbook_job(
                     TaskStatus::Failed => "failed",
                     TaskStatus::Skipped => "skipping",
                     TaskStatus::Unreachable => "unreachable",
-                    _ => "unknown", // Handle potential future statuses
                 };
                 if let Some(msg) = &result.msg {
                     format!("{}: [{}] => {}", status_str, host, msg)

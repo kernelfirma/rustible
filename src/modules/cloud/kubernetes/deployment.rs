@@ -870,7 +870,7 @@ impl Module for K8sDeploymentModule {
 
         // Validate container_port if provided
         if let Some(port) = params.get_i64("container_port")? {
-            if port < 1 || port > 65535 {
+            if !(1..=65535).contains(&port) {
                 return Err(ModuleError::InvalidParameter(format!(
                     "container_port {} is invalid. Must be between 1 and 65535",
                     port

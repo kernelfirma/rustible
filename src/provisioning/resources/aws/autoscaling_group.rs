@@ -1515,7 +1515,7 @@ impl Resource for AwsAutoScalingGroupResource {
             .get("health_check_grace_period")
             .and_then(|v| v.as_i64())
         {
-            if hcgp < 0 || hcgp > 7200 {
+            if !(0..=7200).contains(&hcgp) {
                 return Err(ProvisioningError::ValidationError(
                     "health_check_grace_period must be between 0 and 7200".to_string(),
                 ));
@@ -1524,7 +1524,7 @@ impl Resource for AwsAutoScalingGroupResource {
 
         // Validate max_instance_lifetime
         if let Some(mil) = obj.get("max_instance_lifetime").and_then(|v| v.as_i64()) {
-            if mil != 0 && (mil < 86400 || mil > 31536000) {
+            if mil != 0 && !(86400..=31536000).contains(&mil) {
                 return Err(ProvisioningError::ValidationError(
                     "max_instance_lifetime must be 0 or between 86400 and 31536000".to_string(),
                 ));

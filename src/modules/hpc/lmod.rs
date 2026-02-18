@@ -688,14 +688,12 @@ mod tests {
     #[test]
     fn test_drift_detection_missing_dir() {
         // Simulate drift items for directories that would be missing
-        let configured_paths = vec![
-            "/opt/modulefiles".to_string(),
+        let configured_paths = ["/opt/modulefiles".to_string(),
             "/missing/path".to_string(),
-            "/also/missing".to_string(),
-        ];
+            "/also/missing".to_string()];
 
         // Simulate checking: first exists, second and third do not
-        let dir_exists = vec![true, false, false];
+        let dir_exists = [true, false, false];
 
         let mut drift: Vec<DriftItem> = Vec::new();
         for (i, dir) in configured_paths.iter().enumerate() {

@@ -157,7 +157,7 @@ fn test_git_with_version_parameter() {
     params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
     params.insert("version".to_string(), serde_json::json!("v1.0.0"));
 
-    assert!(params.get("version").is_some());
+    assert!(params.contains_key("version"));
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_git_with_branch_version() {
     params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
     params.insert("version".to_string(), serde_json::json!("develop"));
 
-    assert!(params.get("version").is_some());
+    assert!(params.contains_key("version"));
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn test_git_with_commit_hash() {
     params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
     params.insert("version".to_string(), serde_json::json!("abc123def456"));
 
-    assert!(params.get("version").is_some());
+    assert!(params.contains_key("version"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_git_with_depth_parameter() {
     params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
     params.insert("depth".to_string(), serde_json::json!(1));
 
-    assert!(params.get("depth").is_some());
+    assert!(params.contains_key("depth"));
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn test_git_with_update_parameter() {
     params.insert("dest".to_string(), serde_json::json!("/tmp/test"));
     params.insert("update".to_string(), serde_json::json!(true));
 
-    assert!(params.get("update").is_some());
+    assert!(params.contains_key("update"));
 }
 
 #[test]

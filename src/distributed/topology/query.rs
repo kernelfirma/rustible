@@ -12,10 +12,10 @@ pub struct TopologyQuery;
 
 impl TopologyQuery {
     /// Return all nodes matching a given [`NodeType`].
-    pub fn nodes_by_type<'a>(
-        topology: &'a ClusterTopology,
+    pub fn nodes_by_type(
+        topology: &ClusterTopology,
         node_type: NodeType,
-    ) -> Vec<&'a TopologyNode> {
+    ) -> Vec<&TopologyNode> {
         topology
             .nodes()
             .filter(|n| n.node_type == node_type)
@@ -23,10 +23,10 @@ impl TopologyQuery {
     }
 
     /// Return all nodes matching a given [`NodeRole`].
-    pub fn nodes_by_role<'a>(
-        topology: &'a ClusterTopology,
+    pub fn nodes_by_role(
+        topology: &ClusterTopology,
         role: NodeRole,
-    ) -> Vec<&'a TopologyNode> {
+    ) -> Vec<&TopologyNode> {
         topology.nodes().filter(|n| n.role == role).collect()
     }
 
@@ -36,7 +36,7 @@ impl TopologyQuery {
     /// This is a simplified heuristic: we find the leader, then return all
     /// nodes reachable from it via BFS, sorted by descending total latency
     /// from the leader.  If there is no leader the result is empty.
-    pub fn critical_path<'a>(topology: &'a ClusterTopology) -> Vec<&'a TopologyNode> {
+    pub fn critical_path(topology: &ClusterTopology) -> Vec<&TopologyNode> {
         use petgraph::visit::Bfs;
 
         let graph = topology.graph();
@@ -64,7 +64,7 @@ impl TopologyQuery {
     }
 
     /// Return nodes that have no incoming **and** no outgoing edges.
-    pub fn orphan_nodes<'a>(topology: &'a ClusterTopology) -> Vec<&'a TopologyNode> {
+    pub fn orphan_nodes(topology: &ClusterTopology) -> Vec<&TopologyNode> {
         let graph = topology.graph();
         topology
             .index_map()

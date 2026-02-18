@@ -172,7 +172,7 @@ fn test_archive_exclusion_patterns() {
     let source = create_test_structure(&temp);
 
     // Define exclusion patterns
-    let exclude_patterns = vec!["node_modules", ".git"];
+    let exclude_patterns = ["node_modules", ".git"];
 
     // Collect files, excluding patterns
     let mut collected_files: Vec<String> = Vec::new();
@@ -255,13 +255,13 @@ fn test_archive_params_validation() {
     let params_missing_path =
         create_params(vec![("dest", serde_json::json!("/tmp/archive.tar.gz"))]);
     assert!(
-        params_missing_path.get("path").is_none(),
+        !params_missing_path.contains_key("path"),
         "path param should be missing"
     );
 
     let params_missing_dest = create_params(vec![("path", serde_json::json!("/tmp/source"))]);
     assert!(
-        params_missing_dest.get("dest").is_none(),
+        !params_missing_dest.contains_key("dest"),
         "dest param should be missing"
     );
 
@@ -290,7 +290,7 @@ fn test_archive_compression_levels() {
             .get("compression_level")
             .and_then(|v| v.as_i64())
             .unwrap();
-        assert!(level_val >= 0 && level_val <= 9);
+        assert!((0..=9).contains(&level_val));
     }
 }
 

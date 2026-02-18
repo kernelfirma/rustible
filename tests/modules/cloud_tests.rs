@@ -733,7 +733,6 @@ mod stub_tests {
     #[test]
     fn test_cloud_test_module_compiles() {
         // This test ensures the test module compiles even without cloud features
-        assert!(true);
     }
 
     #[test]

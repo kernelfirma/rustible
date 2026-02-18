@@ -499,21 +499,18 @@ fn test_format_failure_contains_host() {
 
     // Since format_failure is private, we verify the format exists
     // in the callback documentation and implementation review
-    assert!(true);
 }
 
 #[test]
 fn test_format_unreachable_contains_host() {
     // The format_unreachable function is private
     // Format should be: "UNREACHABLE: <host> | <task_name> | <message>"
-    assert!(true);
 }
 
 #[test]
 fn test_format_recap_line_structure() {
     // The format_recap_line function is private
     // Format should be: "RECAP: <host> ok=N changed=N failed=N skipped=N unreachable=N"
-    assert!(true);
 }
 
 // ============================================================================

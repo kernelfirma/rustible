@@ -40,6 +40,7 @@ struct SshTestConfig {
     user: String,
     key_path: PathBuf,
     hosts: Vec<String>,
+    #[allow(dead_code)]
     inventory_path: Option<PathBuf>,
 }
 

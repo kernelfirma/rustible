@@ -619,7 +619,7 @@ impl StateArgs {
                 if let Ok(entries) = std::fs::read_dir(&state_path) {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        if path.extension().map_or(false, |ext| ext == "json") {
+                        if path.extension().is_some_and(|ext| ext == "json") {
                             let name = path.file_stem().unwrap_or_default().to_string_lossy();
                             let metadata = std::fs::metadata(&path).ok();
                             let size = metadata.as_ref().map_or(0, |m| m.len());
@@ -702,7 +702,7 @@ impl StateArgs {
                     if let Ok(entries) = std::fs::read_dir(source_path) {
                         for entry in entries.flatten() {
                             let path = entry.path();
-                            if path.extension().map_or(false, |ext| ext == "json") {
+                            if path.extension().is_some_and(|ext| ext == "json") {
                                 let dest = output.join(entry.file_name());
                                 std::fs::copy(&path, &dest)?;
                                 count += 1;
@@ -740,7 +740,7 @@ impl StateArgs {
                     if let Ok(entries) = std::fs::read_dir(state_dir) {
                         for entry in entries.flatten() {
                             let path = entry.path();
-                            if path.extension().map_or(false, |ext| ext == "json") {
+                            if path.extension().is_some_and(|ext| ext == "json") {
                                 let target = dest_path.join(entry.file_name());
                                 std::fs::copy(&path, &target)?;
                                 count += 1;
@@ -916,7 +916,7 @@ impl StateArgs {
                     if let Ok(entries) = std::fs::read_dir(&lock_dir) {
                         for entry in entries.flatten() {
                             let path = entry.path();
-                            if path.extension().map_or(false, |ext| ext == "lock") {
+                            if path.extension().is_some_and(|ext| ext == "lock") {
                                 let name = path.file_stem().unwrap_or_default().to_string_lossy();
                                 if let Ok(content) = std::fs::read_to_string(&path) {
                                     println!("  Lock: {} - {}", name, content.trim());

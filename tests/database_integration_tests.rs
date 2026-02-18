@@ -601,7 +601,7 @@ mod postgresql_query_tests {
         let required = module.required_params();
         // PostgreSQL query module may have different required params
         // The actual required params are validated - just ensure the method works
-        assert!(required.len() >= 0); // Always true, just verify method doesn't panic
+        let _ = required; // Just verify method doesn't panic
     }
 
     #[test]

@@ -371,7 +371,7 @@ impl InterfaceInfo {
     pub fn parse_ip_address(output: &str, interface: &str) -> Option<String> {
         for line in output.lines() {
             if line.trim().starts_with("inet ") && output.contains(interface) {
-                return line.trim().split_whitespace().nth(1).map(|s| s.to_string());
+                return line.split_whitespace().nth(1).map(|s| s.to_string());
             }
         }
         None

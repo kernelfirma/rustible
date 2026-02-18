@@ -117,10 +117,12 @@ impl CommandContext {
         ));
 
         // Build host config for SSH connection
-        let mut host_config = rustible::connection::HostConfig::default();
-        host_config.hostname = Some(ansible_host.to_string());
-        host_config.port = Some(ansible_port);
-        host_config.user = Some(ansible_user.to_string());
+        let mut host_config = rustible::connection::HostConfig {
+            hostname: Some(ansible_host.to_string()),
+            port: Some(ansible_port),
+            user: Some(ansible_user.to_string()),
+            ..Default::default()
+        };
         if let Some(key_path) = ansible_key {
             // Expand ~ to home directory
             let expanded_path = if let Some(stripped) = key_path.strip_prefix("~/") {

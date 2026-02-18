@@ -699,7 +699,7 @@ mod tests {
         logger.flush().unwrap();
 
         let content = std::fs::read_to_string(&log_path).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&content.trim()).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(content.trim()).unwrap();
         assert_eq!(parsed["category"], "file_modification");
     }
 

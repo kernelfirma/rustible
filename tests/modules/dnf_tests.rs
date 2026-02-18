@@ -184,7 +184,7 @@ fn test_dnf_with_update_cache_parameter() {
     params.insert("name".to_string(), serde_json::json!("httpd"));
     params.insert("update_cache".to_string(), serde_json::json!(true));
 
-    assert!(params.get("update_cache").is_some());
+    assert!(params.contains_key("update_cache"));
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn test_dnf_package_list_parameter() {
         serde_json::json!(["httpd", "vim", "curl"]),
     );
 
-    assert!(params.get("name").is_some());
+    assert!(params.contains_key("name"));
 }
 
 // ============================================================================

@@ -1054,9 +1054,10 @@ mod jump_host_tests {
 
     #[test]
     fn test_max_jump_depth_constant() {
-        // Verify the constant is reasonable
-        assert!(MAX_JUMP_DEPTH >= 5);
-        assert!(MAX_JUMP_DEPTH <= 20);
+        // Verify the constant is reasonable (compile-time checks)
+        const _: () = assert!(MAX_JUMP_DEPTH >= 5);
+        const _: () = assert!(MAX_JUMP_DEPTH <= 20);
+        let _ = MAX_JUMP_DEPTH;
     }
 
     // JumpHostResolver tests

@@ -313,7 +313,7 @@ impl PlanFormatter {
             // Show diff if available
             if self.show_diffs {
                 if let Some(ref diff) = change.diff {
-                    output.push_str("\n");
+                    output.push('\n');
                     for line in diff.render().lines() {
                         output.push_str(&format!("      {}\n", line));
                     }

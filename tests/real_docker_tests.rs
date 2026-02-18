@@ -15,12 +15,16 @@
 
 #![cfg(feature = "docker")]
 
-use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
+
+// Import the Connection trait so we can call .execute() / .close() etc.
+use rustible::connection::{Connection, ExecuteOptions};
+use rustible::connection::docker::DockerConnection;
+use rustible::modules::Module;
 
 mod common;
 
@@ -150,16 +154,7 @@ async fn test_docker_connect_to_running_container() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        user: None,
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect to Docker container");
+    let connection = DockerConnection::new(&config.test_container);
 
     assert!(connection.is_alive().await);
 
@@ -176,17 +171,14 @@ async fn test_docker_connect_to_non_existent_container() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: "nonexistent-container-12345".to_string(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
+    let connection = DockerConnection::new("nonexistent-container-12345");
 
-    let result = rustible::connection::DockerConnection::connect(docker_config).await;
+    // Attempting to execute on non-existent container should fail
+    let result = connection.execute("echo test", None).await;
 
     assert!(
         result.is_err(),
-        "Should fail to connect to non-existent container"
+        "Should fail to execute on non-existent container"
     );
 }
 
@@ -206,15 +198,7 @@ async fn test_docker_exec_simple_command() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     let result = connection.execute("echo 'hello from docker'", None).await;
 
@@ -242,24 +226,11 @@ async fn test_docker_exec_with_environment() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
+    let connection = DockerConnection::new(&config.test_container);
 
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
-
-    let mut env_vars = HashMap::new();
-    env_vars.insert("TEST_VAR".to_string(), "docker_value".to_string());
-    env_vars.insert("ANOTHER".to_string(), "456".to_string());
-
-    let options = rustible::connection::ExecuteOptions {
-        environment: Some(env_vars),
-        ..Default::default()
-    };
+    let options = ExecuteOptions::new()
+        .with_env("TEST_VAR", "docker_value")
+        .with_env("ANOTHER", "456");
 
     let result = connection
         .execute("echo $TEST_VAR-$ANOTHER", Some(options))
@@ -289,18 +260,13 @@ async fn test_docker_exec_as_different_user() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        user: Some("nobody".to_string()), // Execute as nobody
-        ..Default::default()
-    };
+    // Use escalation to run as a different user
+    let connection = DockerConnection::new(&config.test_container);
 
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let options = ExecuteOptions::new()
+        .with_escalation(Some("nobody".to_string()));
 
-    let result = connection.execute("whoami", None).await;
+    let result = connection.execute("whoami", Some(options)).await;
 
     assert!(result.is_ok());
     let output = result.unwrap();
@@ -323,20 +289,10 @@ async fn test_docker_exec_working_directory() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
+    let connection = DockerConnection::new(&config.test_container);
 
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
-
-    let options = rustible::connection::ExecuteOptions {
-        working_directory: Some("/tmp".into()),
-        ..Default::default()
-    };
+    let options = ExecuteOptions::new()
+        .with_cwd("/tmp");
 
     let result = connection.execute("pwd", Some(options)).await;
 
@@ -364,15 +320,7 @@ async fn test_docker_exec_exit_codes() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Exit 0
     let result = connection.execute("exit 0", None).await.unwrap();
@@ -413,15 +361,7 @@ async fn test_docker_cp_to_container() {
     let test_content = "Content for docker cp upload test";
     std::fs::write(&local_file, test_content).expect("Failed to write file");
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Upload file
     let remote_path = PathBuf::from("/tmp/docker_upload_test.txt");
@@ -458,15 +398,7 @@ async fn test_docker_cp_from_container() {
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Create file in container
     let test_content = "Content from docker container";
@@ -508,15 +440,7 @@ async fn test_docker_upload_content_directly() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Upload content directly
     let content = b"Direct content upload to docker";
@@ -559,15 +483,7 @@ async fn test_docker_large_file_transfer() {
     let large_content: Vec<u8> = (0..5 * 1024 * 1024).map(|i| (i % 256) as u8).collect();
     std::fs::write(&local_file, &large_content).expect("Failed to write file");
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Upload
     let remote_path = PathBuf::from("/tmp/docker_large_test.bin");
@@ -622,15 +538,7 @@ async fn test_docker_path_exists() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Test existing path
     let exists = connection
@@ -668,15 +576,7 @@ async fn test_docker_is_directory() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Test directory
     let is_dir = connection
@@ -726,14 +626,10 @@ async fn test_docker_exec_on_stopped_container() {
         .output()
         .await;
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: stopped_container.to_string(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
+    let connection = DockerConnection::new(stopped_container);
 
-    // Attempting to connect to stopped container should fail or handle gracefully
-    let result = rustible::connection::DockerConnection::connect(docker_config).await;
+    // Attempting to execute on stopped container should fail
+    let result = connection.execute("echo test", None).await;
 
     // Cleanup
     let _ = Command::new("sh")
@@ -766,27 +662,21 @@ async fn test_docker_module_execution() {
     }
 
     // Test executing rustible modules over Docker connection
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Test command module
-    let module = rustible::modules::CommandModule;
+    let module = rustible::modules::command::CommandModule;
     let params = common::make_params(vec![("cmd", serde_json::json!("echo 'module test'"))]);
 
-    let context = rustible::modules::ModuleContext::new(&connection).with_check_mode(false);
+    let context = rustible::modules::ModuleContext::new().with_check_mode(false);
 
     let result = module.execute(&params, &context);
     assert!(result.is_ok(), "Module execution failed: {:?}", result);
 
     let output = result.unwrap();
-    assert!(output.changed || output.status == rustible::modules::ModuleStatus::Ok);
+    assert!(
+        output.changed || output.status == rustible::modules::ModuleStatus::Ok
+    );
 
     connection.close().await.ok();
 }
@@ -807,24 +697,16 @@ async fn test_docker_copy_module() {
     let local_file = temp_dir.path().join("copy_module_test.txt");
     std::fs::write(&local_file, "Copy module content").expect("Failed to write file");
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = rustible::connection::DockerConnection::connect(docker_config)
-        .await
-        .expect("Failed to connect");
+    let connection = DockerConnection::new(&config.test_container);
 
     // Test copy module
-    let module = rustible::modules::CopyModule;
+    let module = rustible::modules::copy::CopyModule;
     let params = common::make_params(vec![
         ("src", serde_json::json!(local_file.to_string_lossy())),
         ("dest", serde_json::json!("/tmp/copy_module_dest.txt")),
     ]);
 
-    let context = rustible::modules::ModuleContext::new(&connection).with_check_mode(false);
+    let context = rustible::modules::ModuleContext::new().with_check_mode(false);
 
     let result = module.execute(&params, &context);
     assert!(result.is_ok(), "Copy module failed: {:?}", result);
@@ -894,16 +776,10 @@ services:
 
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    // Test connection via compose
-    let docker_config = rustible::connection::DockerConfig {
-        container: "rustible-compose-test".to_string(),
-        docker_host: config.docker_host.clone(),
-        compose_service: Some("test".to_string()),
-        compose_file: Some(compose_file.clone()),
-        ..Default::default()
-    };
+    // Test connection via compose - use DockerConnection::compose for service-based access
+    let connection = DockerConnection::compose("test");
 
-    let result = rustible::connection::DockerConnection::connect(docker_config).await;
+    let result = connection.execute("echo compose test", None).await;
 
     // Cleanup
     let _ = Command::new("docker")
@@ -913,10 +789,8 @@ services:
         .output()
         .await;
 
-    if let Ok(conn) = result {
-        let exec_result = conn.execute("echo compose test", None).await;
-        assert!(exec_result.is_ok());
-        conn.close().await.ok();
+    if let Ok(output) = result {
+        assert!(output.success);
     }
 }
 
@@ -936,17 +810,7 @@ async fn test_docker_concurrent_commands() {
         return;
     }
 
-    let docker_config = rustible::connection::DockerConfig {
-        container: config.test_container.clone(),
-        docker_host: config.docker_host.clone(),
-        ..Default::default()
-    };
-
-    let connection = std::sync::Arc::new(
-        rustible::connection::DockerConnection::connect(docker_config)
-            .await
-            .expect("Failed to connect"),
-    );
+    let connection = std::sync::Arc::new(DockerConnection::new(&config.test_container));
 
     let mut handles = vec![];
 

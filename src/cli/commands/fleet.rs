@@ -240,7 +240,7 @@ async fn execute_history(args: &FleetHistoryArgs, ctx: &mut CommandContext) -> R
         .filter(|e| {
             e.path()
                 .extension()
-                .map_or(false, |ext| ext == "json" || ext == "log")
+                .is_some_and(|ext| ext == "json" || ext == "log")
         })
         .collect();
 
@@ -321,13 +321,13 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
                     let connection = host_val
                         .as_mapping()
                         .and_then(|m| {
-                            m.get(&serde_yaml::Value::String("ansible_connection".to_string()))
+                            m.get(serde_yaml::Value::String("ansible_connection".to_string()))
                         })
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
                     let port = host_val
                         .as_mapping()
-                        .and_then(|m| m.get(&serde_yaml::Value::String("ansible_port".to_string())))
+                        .and_then(|m| m.get(serde_yaml::Value::String("ansible_port".to_string())))
                         .and_then(|v| v.as_u64())
                         .map(|p| p as u16);
                     hosts.push(HostInfo {
@@ -350,7 +350,7 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
                             let connection = host_val
                                 .as_mapping()
                                 .and_then(|m| {
-                                    m.get(&serde_yaml::Value::String(
+                                    m.get(serde_yaml::Value::String(
                                         "ansible_connection".to_string(),
                                     ))
                                 })
@@ -359,7 +359,7 @@ fn load_inventory_summary(path: &std::path::Path) -> Result<(Vec<HostInfo>, Vec<
                             let port = host_val
                                 .as_mapping()
                                 .and_then(|m| {
-                                    m.get(&serde_yaml::Value::String("ansible_port".to_string()))
+                                    m.get(serde_yaml::Value::String("ansible_port".to_string()))
                                 })
                                 .and_then(|v| v.as_u64())
                                 .map(|p| p as u16);

@@ -23,8 +23,7 @@ fn vars_from_json(v: JsonValue) -> IndexMap<String, JsonValue> {
 #[test]
 fn test_engine_creation() {
     let _engine = TemplateEngine::new();
-    // Engine should be created successfully
-    assert!(true);
+    // Engine should be created successfully - if it compiles and runs, the test passes
 }
 
 #[test]

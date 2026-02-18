@@ -2755,7 +2755,7 @@ output "vpc_id" {
         // Create 100 resources to test larger state files
         for i in 0..100 {
             let resource = ResourceState::new(
-                ResourceId::new("aws_instance", &format!("server-{}", i)),
+                ResourceId::new("aws_instance", format!("server-{}", i)),
                 format!("i-{:05}", i),
                 "aws",
                 serde_json::json!({}),

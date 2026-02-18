@@ -98,9 +98,9 @@ fn whoami() -> String {
 
 /// Expand tilde in paths
 fn expand_path(path: &str) -> String {
-    if path.starts_with("~/") {
-        if let Some(home) = std::env::var("HOME").ok() {
-            return format!("{}/{}", home, &path[2..]);
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{}/{}", home, rest);
         }
     }
     path.to_string()
@@ -171,48 +171,31 @@ fn ssh2_download(session: &ssh2::Session, remote_path: &str) -> Vec<u8> {
 // Russh Benchmark Functions (using async-ssh2-tokio wrapper)
 // ============================================================================
 
-/// Establish a russh connection using async-ssh2-tokio
+/// Russh client placeholder type (async-ssh2-tokio was removed due to russh 0.54.x conflicts)
 #[cfg(feature = "ssh2-backend")]
-async fn russh_connect(config: &SshBenchConfig) -> async_ssh2_tokio::client::Client {
-    use async_ssh2_tokio::client::{AuthMethod, Client, ServerCheckMethod};
+struct RusshClient;
 
-    let auth = AuthMethod::with_key_file(&config.key_path, None);
-    Client::connect(
-        (&config.host[..], config.port),
-        &config.user,
-        auth,
-        ServerCheckMethod::NoCheck,
-    )
-    .await
-    .unwrap()
+/// Establish a russh connection (stub - async-ssh2-tokio removed)
+#[cfg(feature = "ssh2-backend")]
+async fn russh_connect(_config: &SshBenchConfig) -> RusshClient {
+    eprintln!("WARNING: russh benchmarks disabled - async-ssh2-tokio crate was removed");
+    RusshClient
 }
 
-/// Execute a single command with russh
+/// Execute a single command with russh (stub)
 #[cfg(feature = "ssh2-backend")]
-async fn russh_execute(client: &async_ssh2_tokio::client::Client, command: &str) -> String {
-    let result = client.execute(command).await.unwrap();
-    result.stdout
+async fn russh_execute(_client: &RusshClient, _command: &str) -> String {
+    String::from("stub: async-ssh2-tokio removed")
 }
 
-/// Upload data via russh (using base64 encoding over command)
-/// Note: async-ssh2-tokio doesn't expose SFTP directly, so we use command-based transfer
+/// Upload data via russh (stub)
 #[cfg(feature = "ssh2-backend")]
-async fn russh_upload(client: &async_ssh2_tokio::client::Client, data: &[u8], remote_path: &str) {
-    use base64::Engine;
-    let encoded = base64::engine::general_purpose::STANDARD.encode(data);
-    let cmd = format!("echo '{}' | base64 -d > {}", encoded, remote_path);
-    let _ = client.execute(&cmd).await.unwrap();
-}
+async fn russh_upload(_client: &RusshClient, _data: &[u8], _remote_path: &str) {}
 
-/// Download data via russh (using base64 encoding over command)
+/// Download data via russh (stub)
 #[cfg(feature = "ssh2-backend")]
-async fn russh_download(client: &async_ssh2_tokio::client::Client, remote_path: &str) -> Vec<u8> {
-    use base64::Engine;
-    let cmd = format!("base64 < {}", remote_path);
-    let result = client.execute(&cmd).await.unwrap();
-    base64::engine::general_purpose::STANDARD
-        .decode(result.stdout.trim())
-        .unwrap_or_default()
+async fn russh_download(_client: &RusshClient, _remote_path: &str) -> Vec<u8> {
+    Vec::new()
 }
 
 // ============================================================================
@@ -533,44 +516,8 @@ fn bench_parallel(c: &mut Criterion) {
         );
 
         // Russh parallel connections (native async)
-        group.bench_with_input(
-            BenchmarkId::new("russh_parallel", num_concurrent),
-            &num_concurrent,
-            |b, &num| {
-                let config = SshBenchConfig::from_env().unwrap();
-                b.to_async(&rt).iter(|| async {
-                    let mut handles = Vec::with_capacity(num);
-                    for _ in 0..num {
-                        let host = config.host.clone();
-                        let port = config.port;
-                        let user = config.user.clone();
-                        let key_path = config.key_path.clone();
-
-                        let handle = tokio::spawn(async move {
-                            use async_ssh2_tokio::client::{AuthMethod, Client, ServerCheckMethod};
-
-                            let auth = AuthMethod::with_key_file(&key_path, None);
-                            let client = Client::connect(
-                                (&host[..], port),
-                                &user,
-                                auth,
-                                ServerCheckMethod::NoCheck,
-                            )
-                            .await
-                            .unwrap();
-
-                            let result = client.execute("echo hello").await.unwrap();
-                            result.stdout
-                        });
-                        handles.push(handle);
-                    }
-
-                    for handle in handles {
-                        black_box(handle.await.unwrap());
-                    }
-                })
-            },
-        );
+        // NOTE: async-ssh2-tokio was removed (conflicts with russh 0.54.x)
+        // This benchmark is disabled until a compatible async SSH client is available.
     }
 
     group.finish();

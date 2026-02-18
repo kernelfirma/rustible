@@ -1013,7 +1013,7 @@ async fn test_memory_safety_shared_state() {
             {
                 let mut data = self.shared_data.write();
                 data.entry(result.host.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(result.task_name.clone());
             }
 

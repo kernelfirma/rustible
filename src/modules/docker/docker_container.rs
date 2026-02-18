@@ -33,7 +33,7 @@
 
 #[cfg(feature = "docker")]
 use bollard::container::{
-    Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+    Config, CreateContainerOptions, RemoveContainerOptions,
     RestartContainerOptions, StartContainerOptions, StopContainerOptions,
 };
 #[cfg(feature = "docker")]
@@ -397,10 +397,7 @@ impl DockerContainerModule {
             PullPolicy::Never => false,
             PullPolicy::Missing => {
                 // Check if image exists
-                match docker.inspect_image(image).await {
-                    Ok(_) => false,
-                    Err(_) => true,
-                }
+                (docker.inspect_image(image).await).is_err()
             }
         };
 
@@ -549,7 +546,7 @@ impl DockerContainerModule {
     /// Stop container
     async fn stop_container(docker: &Docker, name: &str, timeout: Option<i64>) -> ModuleResult<()> {
         let options = StopContainerOptions {
-            t: timeout.unwrap_or(10) as i64,
+            t: timeout.unwrap_or(10),
         };
         docker
             .stop_container(name, Some(options))
@@ -667,25 +664,23 @@ impl DockerContainerModule {
                     } else {
                         messages.push(format!("Container '{}' is already running", config.name));
                     }
+                } else if context.check_mode {
+                    messages.push(format!(
+                        "Would create and start container '{}'",
+                        config.name
+                    ));
+                    changed = true;
                 } else {
-                    if context.check_mode {
-                        messages.push(format!(
-                            "Would create and start container '{}'",
-                            config.name
-                        ));
-                        changed = true;
-                    } else {
-                        // Pull image if needed
-                        if let Some(ref image) = config.image {
-                            if Self::ensure_image(&docker, image, &config.pull).await? {
-                                messages.push(format!("Pulled image '{}'", image));
-                            }
+                    // Pull image if needed
+                    if let Some(ref image) = config.image {
+                        if Self::ensure_image(&docker, image, &config.pull).await? {
+                            messages.push(format!("Pulled image '{}'", image));
                         }
-                        Self::create_container(&docker, &config).await?;
-                        Self::start_container(&docker, &config.name).await?;
-                        messages.push(format!("Created and started container '{}'", config.name));
-                        changed = true;
                     }
+                    Self::create_container(&docker, &config).await?;
+                    Self::start_container(&docker, &config.name).await?;
+                    messages.push(format!("Created and started container '{}'", config.name));
+                    changed = true;
                 }
             }
 
@@ -713,7 +708,7 @@ impl DockerContainerModule {
             }
 
             ContainerState::Restarted => {
-                if let Some(_) = existing {
+                if existing.is_some() {
                     if context.check_mode {
                         messages.push(format!("Would restart container '{}'", config.name));
                         changed = true;

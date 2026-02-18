@@ -88,8 +88,8 @@ fn test_systemd_unit_basic_params() {
         serde_json::json!("[Unit]\nDescription=Test"),
     );
 
-    assert!(params.get("name").is_some());
-    assert!(params.get("content").is_some());
+    assert!(params.contains_key("name"));
+    assert!(params.contains_key("content"));
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn test_systemd_unit_template_params() {
         serde_json::json!("[Unit]\nDescription={{ description }}"),
     );
 
-    assert!(params.get("template").is_some());
+    assert!(params.contains_key("template"));
 }
 
 #[test]
@@ -487,7 +487,7 @@ fn test_unit_state_values() {
         }
 
         assert!(
-            params.get("state").is_some(),
+            params.contains_key("state"),
             "State '{}' should be valid",
             state
         );
@@ -505,7 +505,7 @@ fn test_running_state_values() {
         params.insert("content".to_string(), serde_json::json!("[Unit]"));
 
         assert!(
-            params.get("running").is_some(),
+            params.contains_key("running"),
             "Running state '{}' should be valid",
             state
         );
@@ -537,7 +537,7 @@ fn test_systemd_unit_absent_params() {
 
     // state=absent doesn't require content
     assert_eq!(params.len(), 2);
-    assert!(params.get("content").is_none());
+    assert!(!params.contains_key("content"));
 }
 
 #[test]
@@ -549,7 +549,7 @@ fn test_systemd_unit_permissions_params() {
     params.insert("owner".to_string(), serde_json::json!("root"));
     params.insert("group".to_string(), serde_json::json!("root"));
 
-    assert!(params.get("mode").is_some());
-    assert!(params.get("owner").is_some());
-    assert!(params.get("group").is_some());
+    assert!(params.contains_key("mode"));
+    assert!(params.contains_key("owner"));
+    assert!(params.contains_key("group"));
 }

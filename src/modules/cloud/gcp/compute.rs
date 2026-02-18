@@ -104,7 +104,7 @@
 //! Manages service accounts and their keys.
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
+    Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
 use serde::{Deserialize, Serialize};
@@ -114,8 +114,10 @@ use std::time::Duration;
 /// Represents the desired state of a Compute Engine instance
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum InstanceState {
     /// Instance should be running
+    #[default]
     Running,
     /// Instance should be stopped (TERMINATED state in GCP)
     Stopped,
@@ -127,11 +129,6 @@ pub enum InstanceState {
     Reset,
 }
 
-impl Default for InstanceState {
-    fn default() -> Self {
-        Self::Running
-    }
-}
 
 impl InstanceState {
     fn from_str(s: &str) -> ModuleResult<Self> {
