@@ -342,12 +342,17 @@ impl TemplateEngine {
 
                 let templated = self.render_with_indexmap(s, vars)?;
 
+                // Optimization: fast check if string starts with digit or sign before attempting expensive float parse
+                let is_maybe_number = templated.as_bytes().first().map_or(false, |&c| {
+                    c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.'
+                });
+
                 // Try to parse as JSON if it looks like a structured value
                 if templated.starts_with('[')
                     || templated.starts_with('{')
                     || templated == "true"
                     || templated == "false"
-                    || templated.parse::<f64>().is_ok()
+                    || (is_maybe_number && templated.parse::<f64>().is_ok())
                 {
                     if let Ok(parsed) = serde_json::from_str::<JsonValue>(&templated) {
                         return Ok(Cow::Owned(parsed));
@@ -357,63 +362,67 @@ impl TemplateEngine {
             }
 
             JsonValue::Array(arr) => {
-                let mut results = Vec::with_capacity(arr.len());
-                let mut any_changed = false;
-
-                for v in arr {
+                // Optimization: lazy allocation. Only allocate new Vec if an element actually changes.
+                for (i, v) in arr.iter().enumerate() {
                     let res = self.render_value(v, vars)?;
                     if matches!(res, Cow::Owned(_)) {
-                        any_changed = true;
+                        // Found a change, need to construct new array
+                        let mut new_arr = Vec::with_capacity(arr.len());
+                        // Add unchanged elements up to this point
+                        new_arr.extend(arr.iter().take(i).cloned());
+                        // Add the changed element
+                        new_arr.push(res.into_owned());
+                        // Process the rest
+                        for v in arr.iter().skip(i + 1) {
+                            let res = self.render_value(v, vars)?;
+                            new_arr.push(res.into_owned());
+                        }
+                        return Ok(Cow::Owned(JsonValue::Array(new_arr)));
                     }
-                    results.push(res);
                 }
-
-                if !any_changed {
-                    return Ok(Cow::Borrowed(value));
-                }
-
-                let new_arr = results.into_iter().map(|c| c.into_owned()).collect();
-                Ok(Cow::Owned(JsonValue::Array(new_arr)))
+                // No changes
+                Ok(Cow::Borrowed(value))
             }
 
             JsonValue::Object(obj) => {
-                let mut new_entries = Vec::with_capacity(obj.len());
-                let mut any_changed = false;
-
-                for (k, v) in obj {
+                // Optimization: lazy allocation. Only allocate new Map if a key or value changes.
+                for (i, (k, v)) in obj.iter().enumerate() {
                     let key_changed = Self::is_template(k);
-                    let rendered_key = if key_changed {
-                        self.render_with_indexmap(k, vars)?
-                    } else {
-                        String::new()
-                    };
-
-                    if key_changed {
-                        any_changed = true;
-                    }
-
                     let val_res = self.render_value(v, vars)?;
-                    if matches!(val_res, Cow::Owned(_)) {
-                        any_changed = true;
+
+                    if key_changed || matches!(val_res, Cow::Owned(_)) {
+                        // Found a change, need to construct new map
+                        let mut map = serde_json::Map::with_capacity(obj.len());
+
+                        // Add unchanged entries up to this point
+                        for (prev_k, prev_v) in obj.iter().take(i) {
+                            map.insert(prev_k.clone(), prev_v.clone());
+                        }
+
+                        // Add the changed entry
+                        let new_key = if key_changed {
+                            self.render_with_indexmap(k, vars)?
+                        } else {
+                            k.clone()
+                        };
+                        map.insert(new_key, val_res.into_owned());
+
+                        // Process the rest
+                        for (k, v) in obj.iter().skip(i + 1) {
+                            let key_changed = Self::is_template(k);
+                            let new_key = if key_changed {
+                                self.render_with_indexmap(k, vars)?
+                            } else {
+                                k.clone()
+                            };
+                            let val_res = self.render_value(v, vars)?;
+                            map.insert(new_key, val_res.into_owned());
+                        }
+                        return Ok(Cow::Owned(JsonValue::Object(map)));
                     }
-
-                    new_entries.push((k, rendered_key, key_changed, val_res));
                 }
-
-                if !any_changed {
-                    return Ok(Cow::Borrowed(value));
-                }
-
-                let mut map = serde_json::Map::with_capacity(obj.len());
-                for (k, rendered_key, key_changed, val_res) in new_entries {
-                    let key = if key_changed {
-                        rendered_key
-                    } else {
-                        k.clone()
-                    };
-                    map.insert(key, val_res.into_owned());
-                }
-                Ok(Cow::Owned(JsonValue::Object(map)))
+                // No changes
+                Ok(Cow::Borrowed(value))
             }
         }
     }
