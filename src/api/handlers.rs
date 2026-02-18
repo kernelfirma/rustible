@@ -407,10 +407,16 @@ async fn run_playbook_job(
         task_timeout: 300,
         gather_facts: true,
         extra_vars: req.extra_vars,
-        r#become: false, // Default for API for now
+        auto_rollback: false,
+        forward_agent: false,
+        pipelining: true,
+        r#become: false,
         become_method: "sudo".to_string(),
         become_user: "root".to_string(),
         become_password: None,
+        distributed: false,
+        workers: 1,
+        distribution_strategy: "adaptive".to_string(),
     };
 
     // Create runtime context
