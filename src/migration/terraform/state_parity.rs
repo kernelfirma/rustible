@@ -146,13 +146,23 @@ impl TerraformStateValidator {
         tf_state_json: &str,
         rustible_state_json: &str,
     ) -> MigrationResult<MigrationReport> {
-        let tf_state: TfStateJson = serde_json::from_str(tf_state_json)
-            .map_err(|e| MigrationError::ParseError(format!("Terraform state: {}", e)))?;
-        let r_state: RustibleStateJson = serde_json::from_str(rustible_state_json)
-            .map_err(|e| MigrationError::ParseError(format!("Rustible state: {}", e)))?;
+        let tf_state: TfStateJson = serde_json::from_str(tf_state_json).map_err(|e| {
+            MigrationError::ParseError {
+                file: "terraform.tfstate".into(),
+                message: e.to_string(),
+            }
+        })?;
+        let r_state: RustibleStateJson =
+            serde_json::from_str(rustible_state_json).map_err(|e| {
+                MigrationError::ParseError {
+                    file: "rustible.state.json".into(),
+                    message: e.to_string(),
+                }
+            })?;
 
         let result = self.compare_states(&tf_state, &r_state);
         let mut report = self.build_report(&result);
+        report.compute_summary();
         report.compute_outcome(self.threshold);
         Ok(report)
     }
@@ -191,11 +201,12 @@ impl TerraformStateValidator {
             let tf_res = tf_resources[**key];
             let r_res = r_resources[**key];
 
+            let empty_attrs = HashMap::new();
             let tf_attrs: &HashMap<String, serde_json::Value> = tf_res
                 .instances
                 .first()
                 .map(|i| &i.attributes)
-                .unwrap_or(&HashMap::new());
+                .unwrap_or(&empty_attrs);
             let r_attrs = &r_res.attributes;
 
             let mut resource_has_mismatch = false;
@@ -304,38 +315,40 @@ impl TerraformStateValidator {
     }
 
     fn build_report(&self, result: &StateParityResult) -> MigrationReport {
-        let mut report = MigrationReport::new(
-            "Terraform State Parity Check",
-            "terraform.tfstate",
-            "provisioning.state.json",
-        );
+        let mut report =
+            MigrationReport::new("Terraform State Parity Check", "state_parity");
 
         // Resource count finding
-        report.add_finding(MigrationFinding {
-            name: "Resource Count".into(),
-            status: if result.missing_in_rustible.is_empty() && result.extra_in_rustible.is_empty()
+        report.findings.push(MigrationFinding {
+            source_item: "Resource Count".into(),
+            target_item: None,
+            status: if result.missing_in_rustible.is_empty()
+                && result.extra_in_rustible.is_empty()
             {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else {
-                FindingStatus::Fail
+                FindingStatus::Divergent
             },
-            severity: MigrationSeverity::Error,
             diagnostics: {
                 let mut d = Vec::new();
                 for r in &result.missing_in_rustible {
                     d.push(MigrationDiagnostic {
-                        category: DiagnosticCategory::MissingResource,
+                        category: DiagnosticCategory::MissingDependency,
                         severity: MigrationSeverity::Error,
+                        source_path: None,
+                        source_field: None,
                         message: format!("Resource {} exists in Terraform but not Rustible", r),
-                        context: None,
+                        suggestion: None,
                     });
                 }
                 for r in &result.extra_in_rustible {
                     d.push(MigrationDiagnostic {
-                        category: DiagnosticCategory::ExtraResource,
+                        category: DiagnosticCategory::AttributeMismatch,
                         severity: MigrationSeverity::Warning,
+                        source_path: None,
+                        source_field: None,
                         message: format!("Resource {} exists in Rustible but not Terraform", r),
-                        context: None,
+                        suggestion: None,
                     });
                 }
                 d
@@ -343,16 +356,16 @@ impl TerraformStateValidator {
         });
 
         // Attribute parity finding
-        report.add_finding(MigrationFinding {
-            name: "Attribute Parity".into(),
+        report.findings.push(MigrationFinding {
+            source_item: "Attribute Parity".into(),
+            target_item: None,
             status: if result.attribute_mismatches.is_empty() {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else if result.matched > 0 {
-                FindingStatus::Partial
+                FindingStatus::PartiallyMapped
             } else {
-                FindingStatus::Fail
+                FindingStatus::Divergent
             },
-            severity: MigrationSeverity::Warning,
             diagnostics: result
                 .attribute_mismatches
                 .iter()
@@ -373,56 +386,62 @@ impl TerraformStateValidator {
                         }
                     };
                     MigrationDiagnostic {
-                        category: DiagnosticCategory::AttributeDivergence,
+                        category: DiagnosticCategory::AttributeMismatch,
                         severity: MigrationSeverity::Warning,
+                        source_path: None,
+                        source_field: None,
                         message: msg,
-                        context: None,
+                        suggestion: None,
                     }
                 })
                 .collect(),
         });
 
         // Dependency parity finding
-        report.add_finding(MigrationFinding {
-            name: "Dependency Parity".into(),
+        report.findings.push(MigrationFinding {
+            source_item: "Dependency Parity".into(),
+            target_item: None,
             status: if result.dependency_mismatches.is_empty() {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else {
-                FindingStatus::Fail
+                FindingStatus::Divergent
             },
-            severity: MigrationSeverity::Warning,
             diagnostics: result
                 .dependency_mismatches
                 .iter()
                 .map(|m| MigrationDiagnostic {
-                    category: DiagnosticCategory::DependencyMismatch,
+                    category: DiagnosticCategory::SemanticDivergence,
                     severity: MigrationSeverity::Warning,
+                    source_path: None,
+                    source_field: None,
                     message: format!(
                         "{}: tf_only={:?}, rustible_only={:?}",
                         m.resource, m.only_in_terraform, m.only_in_rustible
                     ),
-                    context: None,
+                    suggestion: None,
                 })
                 .collect(),
         });
 
         // Output parity finding
-        report.add_finding(MigrationFinding {
-            name: "Output Parity".into(),
+        report.findings.push(MigrationFinding {
+            source_item: "Output Parity".into(),
+            target_item: None,
             status: if result.output_mismatches.is_empty() {
-                FindingStatus::Pass
+                FindingStatus::Matched
             } else {
-                FindingStatus::Fail
+                FindingStatus::Divergent
             },
-            severity: MigrationSeverity::Info,
             diagnostics: result
                 .output_mismatches
                 .iter()
                 .map(|m| MigrationDiagnostic {
                     category: DiagnosticCategory::OutputMismatch,
                     severity: MigrationSeverity::Info,
+                    source_path: None,
+                    source_field: None,
                     message: format!("Output '{}': {}", m.name, m.mismatch_type),
-                    context: None,
+                    suggestion: None,
                 })
                 .collect(),
         });
@@ -456,7 +475,7 @@ mod tests {
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
-            Some(crate::migration::MigrationOutcome::Pass)
+            crate::migration::report::MigrationOutcome::Pass
         );
     }
 
@@ -482,7 +501,7 @@ mod tests {
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
-            Some(crate::migration::MigrationOutcome::Fail)
+            crate::migration::report::MigrationOutcome::Fail
         );
     }
 
@@ -495,7 +514,7 @@ mod tests {
         let report = validator.validate_from_str(tf, r).unwrap();
         assert_eq!(
             report.outcome,
-            Some(crate::migration::MigrationOutcome::Pass)
+            crate::migration::report::MigrationOutcome::Pass
         );
     }
 }
