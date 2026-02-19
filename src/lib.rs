@@ -240,11 +240,6 @@ pub mod utils;
 /// including host vars, group vars, play vars, and extra vars from the command line.
 pub mod vars;
 
-/// Retry utilities with backoff and jitter strategies.
-pub mod retry;
-
-// Pre-execution validation with syntax checking, schema validation, and linting.
-// pub mod validation;  // TODO: Re-enable when validation is compatible
 
 // ============================================================================
 // Playbook Components
@@ -369,13 +364,6 @@ pub mod inventory;
 /// ```
 pub mod executor;
 
-/// Execution strategy implementations.
-///
-/// Defines different strategies for how tasks are distributed across hosts:
-/// - **Linear**: All hosts complete a task before moving to the next
-/// - **Free**: Each host proceeds independently at maximum speed
-/// - **Host-pinned**: Dedicated workers per host for optimal cache locality
-pub mod strategy;
 
 // ============================================================================
 // Caching System
@@ -580,8 +568,6 @@ pub mod callback;
 // Diagnostics and Debugging
 // ============================================================================
 
-/// Language Server Protocol (LSP) for IDE integration.
-// pub mod lsp;  // TODO: Re-enable when LSP is compatible
 /// Diagnostic tools for debugging and troubleshooting.
 ///
 /// Provides debugging capabilities: Debug Mode, Variable Inspection,

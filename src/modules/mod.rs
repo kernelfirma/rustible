@@ -35,7 +35,6 @@ pub mod meta;
 pub mod mount;
 pub mod network;
 pub mod package;
-pub mod parity;
 pub mod pause;
 pub mod pip;
 pub mod proxmox_lxc;
