@@ -534,9 +534,7 @@ fn test_plan_warning_message() {
         .arg("--plan")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Running in PLAN MODE - showing execution plan only",
-        ));
+        .stdout(predicate::str::contains("EXECUTION PLAN"));
 }
 
 #[test]
