@@ -105,7 +105,7 @@ cargo build --release --features full-cloud
 |---------|---------|----------|-------|
 | Resource graph (`resource_graph`) | No | Yes | Dependency resolution with topological sort, 45 tests |
 | State management (`state_management`) | No | Partial | Terraform-style state tracking |
-| Drift detection (`drift_detection`) | No | No | Experimental |
+| Drift detection (`drift_detection`) | No | Yes | Compare current vs desired state, 24 tests |
 | Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
 | Native bindings (`native_bindings`) | No | No | Experimental system integrations |
 
