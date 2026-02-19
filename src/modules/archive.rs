@@ -194,14 +194,22 @@ impl ArchiveModule {
             let mut builder = tar::Builder::new(encoder);
 
             for file_path in &files {
-                if file_path.is_file() {
-                    let meta = fs::metadata(file_path)?;
-                    total_size += meta.len();
+                let meta = fs::symlink_metadata(file_path)?;
+                let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
 
-                    let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
+                if meta.file_type().is_symlink() {
+                    let target = fs::read_link(file_path)?;
+                    let mut header = tar::Header::new_gnu();
+                    header.set_entry_type(tar::EntryType::Symlink);
+                    header.set_path(relative_path)?;
+                    header.set_link_name(target)?;
+                    header.set_size(0);
+                    header.set_cksum();
+                    builder.append(&header, &mut std::io::empty())?;
+                } else if meta.is_file() {
+                    total_size += meta.len();
                     builder.append_path_with_name(file_path, relative_path)?;
-                } else if file_path.is_dir() && file_path != source {
-                    let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
+                } else if meta.is_dir() && file_path != source {
                     builder.append_dir(relative_path, file_path)?;
                 }
             }
@@ -211,14 +219,22 @@ impl ArchiveModule {
             let mut builder = tar::Builder::new(dest_file);
 
             for file_path in &files {
-                if file_path.is_file() {
-                    let meta = fs::metadata(file_path)?;
-                    total_size += meta.len();
+                let meta = fs::symlink_metadata(file_path)?;
+                let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
 
-                    let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
+                if meta.file_type().is_symlink() {
+                    let target = fs::read_link(file_path)?;
+                    let mut header = tar::Header::new_gnu();
+                    header.set_entry_type(tar::EntryType::Symlink);
+                    header.set_path(relative_path)?;
+                    header.set_link_name(target)?;
+                    header.set_size(0);
+                    header.set_cksum();
+                    builder.append(&header, &mut std::io::empty())?;
+                } else if meta.is_file() {
+                    total_size += meta.len();
                     builder.append_path_with_name(file_path, relative_path)?;
-                } else if file_path.is_dir() && file_path != source {
-                    let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
+                } else if meta.is_dir() && file_path != source {
                     builder.append_dir(relative_path, file_path)?;
                 }
             }
@@ -276,9 +292,24 @@ impl ArchiveModule {
         for file_path in &files {
             let relative_path = file_path.strip_prefix(source).unwrap_or(file_path);
             let relative_str = relative_path.to_string_lossy();
+            let meta = fs::symlink_metadata(file_path)?;
 
-            if file_path.is_file() {
-                let meta = fs::metadata(file_path)?;
+            if meta.file_type().is_symlink() {
+                let target = fs::read_link(file_path)?;
+                let target_str = target.to_string_lossy();
+
+                // Set Unix permissions for symlink (S_IFLNK | 0777)
+                // 0o120000 is S_IFLNK
+                let symlink_options = options.unix_permissions(0o120777);
+
+                zip.start_file(relative_str.as_ref(), symlink_options)
+                    .map_err(|e| {
+                        ModuleError::ExecutionFailed(format!("Failed to add symlink: {}", e))
+                    })?;
+
+                use std::io::Write;
+                zip.write_all(target_str.as_bytes())?;
+            } else if meta.is_file() {
                 total_size += meta.len();
 
                 zip.start_file(relative_str.as_ref(), options)
@@ -288,7 +319,7 @@ impl ArchiveModule {
 
                 let mut file = File::open(file_path)?;
                 std::io::copy(&mut file, &mut zip)?;
-            } else if file_path.is_dir() && file_path != source {
+            } else if meta.is_dir() && file_path != source {
                 // Add directory entries with trailing slash
                 let dir_name = format!("{}/", relative_str);
                 zip.add_directory(&dir_name, options).map_err(|e| {
@@ -808,5 +839,65 @@ mod tests {
         params.insert("dest".to_string(), serde_json::json!("/tmp/test.tar.gz"));
         params.insert("compression_level".to_string(), serde_json::json!(6));
         assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_archive_symlink_security() {
+        use std::os::unix::fs::symlink;
+        let temp = TempDir::new().unwrap();
+        let source_dir = temp.path().join("source");
+        fs::create_dir(&source_dir).unwrap();
+
+        let sensitive_file = temp.path().join("sensitive.txt");
+        fs::write(&sensitive_file, "SECRET DATA").unwrap();
+
+        // Create a symlink in source dir pointing to sensitive file
+        let symlink_path = source_dir.join("link_to_sensitive");
+        symlink(&sensitive_file, &symlink_path).unwrap();
+
+        // Archive the directory
+        let dest_archive = temp.path().join("archive.tar");
+        let module = ArchiveModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("path".to_string(), serde_json::json!(source_dir.to_str().unwrap()));
+        params.insert("dest".to_string(), serde_json::json!(dest_archive.to_str().unwrap()));
+        params.insert("format".to_string(), serde_json::json!("tar"));
+
+        let context = ModuleContext::default();
+        module.execute(&params, &context).unwrap();
+
+        // Verify archive contents
+        let file = File::open(&dest_archive).unwrap();
+        let mut archive = tar::Archive::new(file);
+
+        let mut found_content = false;
+        let mut found_symlink = false;
+
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_string_lossy().to_string();
+
+            // Check for the link
+            if path.contains("link_to_sensitive") {
+                let header = entry.header();
+                if header.entry_type() == tar::EntryType::Symlink {
+                    found_symlink = true;
+                } else if header.entry_type() == tar::EntryType::Regular {
+                    let mut content = String::new();
+                    entry.read_to_string(&mut content).unwrap();
+                    if content == "SECRET DATA" {
+                        found_content = true;
+                    }
+                }
+            }
+        }
+
+        if found_content {
+            panic!("SECURITY VULNERABILITY: Archive module followed symlink and archived sensitive content!");
+        }
+
+        // After fix, this should be true
+        assert!(found_symlink, "Symlink should be preserved as symlink");
     }
 }
