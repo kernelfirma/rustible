@@ -142,7 +142,7 @@ cargo build --release --features full-cloud
 | `command` | Yes | Yes | 31 tests |
 | `shell` | Yes | Yes | 22 tests |
 | `raw` | Yes | No | Planned for v0.2 |
-| `script` | Yes | No | Planned for v0.2 |
+| `script` | Yes | Yes | 14 tests |
 
 #### System Administration
 | Module | Ansible | Rustible | Test Coverage |
