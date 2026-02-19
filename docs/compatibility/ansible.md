@@ -212,7 +212,7 @@ cargo build --release --features full-cloud
 | `ec2` / `aws_ec2` | Yes | Yes | Via AWS SDK |
 | `s3` / `aws_s3` | Yes | Yes | Via AWS SDK |
 | `iam_role` | Yes | Partial | Via AWS SDK |
-| `iam_policy` | Yes | Partial | Via AWS SDK |
+| `iam_policy` | Yes | Yes | Via AWS SDK |
 
 #### Azure Cloud Modules (`--features azure`) - Experimental
 | Module | Ansible | Rustible | Notes |
