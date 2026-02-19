@@ -110,6 +110,10 @@ pub mod winrm;
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 
+/// AWS Systems Manager (SSM) Session Manager connection support.
+#[cfg(feature = "aws")]
+pub mod ssm;
+
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::Path;
@@ -590,6 +594,13 @@ pub enum ConnectionType {
         port: u16,
         user: String,
     },
+    /// AWS SSM connection to EC2 instance
+    #[cfg(feature = "aws")]
+    Ssm {
+        instance_id: String,
+        region: Option<String>,
+        profile: Option<String>,
+    },
 }
 
 impl ConnectionType {
@@ -613,6 +624,18 @@ impl ConnectionType {
             #[cfg(feature = "winrm")]
             ConnectionType::WinRm { host, port, user } => {
                 format!("winrm://{}@{}:{}", user, host, port)
+            }
+            #[cfg(feature = "aws")]
+            ConnectionType::Ssm {
+                instance_id,
+                region,
+                ..
+            } => {
+                if let Some(r) = region {
+                    format!("ssm://{}@{}", instance_id, r)
+                } else {
+                    format!("ssm://{}", instance_id)
+                }
             }
         }
     }
@@ -725,6 +748,24 @@ impl ConnectionFactory {
             ));
         }
 
+        // Check for SSM connection
+        if host.starts_with("ssm://") {
+            let instance_id = host.strip_prefix("ssm://").unwrap().to_string();
+            #[cfg(feature = "aws")]
+            return Ok(ConnectionType::Ssm {
+                instance_id,
+                region: None,
+                profile: None,
+            });
+            #[cfg(not(feature = "aws"))]
+            {
+                let _ = instance_id;
+                return Err(ConnectionError::InvalidConfig(
+                    "AWS SSM support not available. Enable 'aws' feature.".to_string(),
+                ));
+            }
+        }
+
         // Default to SSH
         let host_config = self.config.get_host(host);
         let (actual_host, port, user) = if let Some(hc) = host_config {
@@ -823,6 +864,21 @@ impl ConnectionFactory {
                     .auth(winrm::WinRmAuth::ntlm(user, ""))
                     .connect()
                     .await?;
+                Ok(Arc::new(conn))
+            }
+            #[cfg(feature = "aws")]
+            ConnectionType::Ssm {
+                instance_id,
+                region,
+                profile,
+            } => {
+                let mut conn = ssm::SsmConnection::new(instance_id.clone());
+                if let Some(r) = region {
+                    conn = conn.with_region(r.clone());
+                }
+                if let Some(p) = profile {
+                    conn = conn.with_profile(p.clone());
+                }
                 Ok(Arc::new(conn))
             }
         }
