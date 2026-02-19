@@ -236,7 +236,7 @@ cargo build --release --features full-cloud
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `win_copy` | Yes | Partial | Requires WinRM |
-| `win_feature` | Yes | Partial | Requires WinRM |
+| `win_feature` | Yes | Yes | 3 tests, requires WinRM |
 | `win_service` | Yes | Partial | Requires WinRM |
 | `win_package` | Yes | Partial | Requires WinRM |
 | `win_user` | Yes | Partial | Requires WinRM |
