@@ -465,6 +465,9 @@ impl Executor {
                     self.run_host_pinned(&hosts, &all_tasks, tx_id.clone())
                         .await
                 }
+                ExecutionStrategy::DebugStrategy => {
+                    self.run_linear(&hosts, &all_tasks, tx_id.clone()).await
+                }
             }
         };
 
