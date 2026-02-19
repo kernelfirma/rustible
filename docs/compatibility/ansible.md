@@ -295,7 +295,7 @@ See [jinja2-filters.md](jinja2-filters.md) for the comprehensive filter gap list
 | `password` | Yes | Yes | Random passwords |
 | `pipe` | Yes | Yes | Command output |
 | `url` | Yes | Yes | HTTP/HTTPS fetch |
-| `template` | Yes | No | Planned |
+| `template` | Yes | Yes | MiniJinja rendering |
 | `items` | Yes | No | Planned |
 
 ---
