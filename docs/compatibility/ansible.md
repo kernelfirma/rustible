@@ -246,7 +246,7 @@ cargo build --release --features full-cloud
 |--------|---------|----------|-------|
 | `postgresql_db` | Yes | Disabled | Pending sqlx integration |
 | `postgresql_user` | Yes | Disabled | Pending sqlx integration |
-| `mysql_db` | Yes | Disabled | Pending sqlx integration |
+| `mysql_db` | Yes | Yes | Via sqlx, 6 tests, requires `database` feature |
 | `mysql_user` | Yes | Disabled | Pending sqlx integration |
 
 ---
