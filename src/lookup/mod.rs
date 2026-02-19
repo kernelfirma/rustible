@@ -12,6 +12,7 @@
 //! - [`PipeLookup`] - Execute commands and capture output
 //! - [`UrlLookup`] - Fetch content from HTTP/HTTPS URLs
 //! - [`TemplateLookup`] - Render template files using MiniJinja
+//! - [`ItemsLookup`] - Return items for list iteration
 //!
 //! # Example Usage
 //!
@@ -38,6 +39,7 @@
 
 pub mod env;
 pub mod file;
+pub mod items;
 pub mod password;
 pub mod pipe;
 pub mod template;
@@ -47,6 +49,7 @@ pub mod vault;
 
 pub use env::EnvLookup;
 pub use file::FileLookup;
+pub use items::ItemsLookup;
 pub use password::PasswordLookup;
 pub use pipe::PipeLookup;
 pub use template::TemplateLookup;
@@ -249,6 +252,7 @@ impl LookupRegistry {
         registry.register(Arc::new(PipeLookup::new()));
         registry.register(Arc::new(UrlLookup::new()));
         registry.register(Arc::new(TemplateLookup::new()));
+        registry.register(Arc::new(ItemsLookup::new()));
 
         // Register Vault lookup when experimental feature is enabled
         #[cfg(feature = "experimental")]
@@ -339,6 +343,7 @@ impl Default for LookupRegistry {
 pub mod prelude {
     pub use super::EnvLookup;
     pub use super::FileLookup;
+    pub use super::ItemsLookup;
     pub use super::Lookup;
     pub use super::LookupContext;
     pub use super::LookupError;
