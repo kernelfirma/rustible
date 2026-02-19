@@ -104,7 +104,7 @@ cargo build --release --features full-cloud
 | Feature | Ansible | Rustible | Notes |
 |---------|---------|----------|-------|
 | Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
-| State management (`state_management`) | No | Partial | Terraform-style state tracking |
+| State management (`state_management`) | No | Yes | Local/remote backends with locking, 52 tests |
 | Drift detection (`drift_detection`) | No | No | Experimental |
 | Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
 | Native bindings (`native_bindings`) | No | No | Experimental system integrations |
