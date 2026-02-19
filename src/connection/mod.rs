@@ -58,6 +58,9 @@ pub mod config;
 /// Docker container connection implementation.
 pub mod docker;
 
+/// Podman container connection implementation.
+pub mod podman;
+
 /// Local execution connection implementation.
 pub mod local;
 
@@ -581,6 +584,8 @@ pub enum ConnectionType {
     },
     /// Docker container connection
     Docker { container: String },
+    /// Podman container connection
+    Podman { container: String },
     /// Kubernetes pod connection
     Kubernetes {
         namespace: String,
@@ -610,6 +615,7 @@ impl ConnectionType {
             ConnectionType::Local => "local".to_string(),
             ConnectionType::Ssh { host, port, user } => format!("ssh://{}@{}:{}", user, host, port),
             ConnectionType::Docker { container } => format!("docker://{}", container),
+            ConnectionType::Podman { container } => format!("podman://{}", container),
             ConnectionType::Kubernetes {
                 namespace,
                 pod,
@@ -715,6 +721,12 @@ impl ConnectionFactory {
         if host.starts_with("docker://") {
             let container = host.strip_prefix("docker://").unwrap().to_string();
             return Ok(ConnectionType::Docker { container });
+        }
+
+        // Check for podman connection
+        if host.starts_with("podman://") {
+            let container = host.strip_prefix("podman://").unwrap().to_string();
+            return Ok(ConnectionType::Podman { container });
         }
 
         // Check for WinRM connection
@@ -829,6 +841,10 @@ impl ConnectionFactory {
             }
             ConnectionType::Docker { container } => {
                 let conn = docker::DockerConnection::new(container.clone());
+                Ok(Arc::new(conn))
+            }
+            ConnectionType::Podman { container } => {
+                let conn = podman::PodmanConnection::new(container.clone());
                 Ok(Arc::new(conn))
             }
             ConnectionType::Kubernetes {
@@ -1021,7 +1037,10 @@ impl ConnectionPool {
             } else {
                 without_user.to_string()
             }
-        } else if pool_key.starts_with("docker://") || pool_key.starts_with("local") {
+        } else if pool_key.starts_with("docker://")
+            || pool_key.starts_with("podman://")
+            || pool_key.starts_with("local")
+        {
             // For docker and local, use the full key as the host key
             pool_key.to_string()
         } else {
@@ -1308,6 +1327,9 @@ impl ConnectionBuilder {
                 "docker" => ConnectionType::Docker {
                     container: self.host.clone(),
                 },
+                "podman" => ConnectionType::Podman {
+                    container: self.host.clone(),
+                },
                 _ => ConnectionType::Ssh {
                     host: self.host.clone(),
                     port: self.port.unwrap_or(22),
@@ -1319,6 +1341,10 @@ impl ConnectionBuilder {
         } else if self.host.starts_with("docker://") {
             ConnectionType::Docker {
                 container: self.host.strip_prefix("docker://").unwrap().to_string(),
+            }
+        } else if self.host.starts_with("podman://") {
+            ConnectionType::Podman {
+                container: self.host.strip_prefix("podman://").unwrap().to_string(),
             }
         } else {
             ConnectionType::Ssh {
@@ -1375,6 +1401,9 @@ impl ConnectionBuilder {
             }
             ConnectionType::Docker { container } => {
                 Ok(Arc::new(docker::DockerConnection::new(container)))
+            }
+            ConnectionType::Podman { container } => {
+                Ok(Arc::new(podman::PodmanConnection::new(container)))
             }
             ConnectionType::Kubernetes {
                 namespace,

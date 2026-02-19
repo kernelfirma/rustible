@@ -94,7 +94,7 @@ cargo build --release --features full-cloud
 | Docker | Yes | Yes | `docker` | Via Bollard |
 | Kubernetes | Yes | Yes | `kubernetes` | Via kube-rs |
 | WinRM | Yes | Partial | `winrm` | Experimental |
-| Podman | Yes | No | - | Planned for v1.0 |
+| Podman | Yes | Yes | - | Via CLI |
 | AWS SSM | Yes | No | - | Planned for v1.0 |
 
 ---
