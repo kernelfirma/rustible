@@ -297,7 +297,7 @@ See [jinja2-filters.md](jinja2-filters.md) for the comprehensive filter gap list
 | `pipe` | Yes | Yes | Command output |
 | `url` | Yes | Yes | HTTP/HTTPS fetch |
 | `template` | Yes | No | Planned |
-| `items` | Yes | No | Planned |
+| `items` | Yes | Yes | List iteration |
 
 ---
 
