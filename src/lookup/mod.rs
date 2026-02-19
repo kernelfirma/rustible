@@ -11,6 +11,7 @@
 //! - [`PasswordLookup`] - Generate random passwords
 //! - [`PipeLookup`] - Execute commands and capture output
 //! - [`UrlLookup`] - Fetch content from HTTP/HTTPS URLs
+//! - [`TemplateLookup`] - Render template files using MiniJinja
 //!
 //! # Example Usage
 //!
@@ -39,6 +40,7 @@ pub mod env;
 pub mod file;
 pub mod password;
 pub mod pipe;
+pub mod template;
 pub mod url;
 #[cfg(feature = "experimental")]
 pub mod vault;
@@ -47,6 +49,7 @@ pub use env::EnvLookup;
 pub use file::FileLookup;
 pub use password::PasswordLookup;
 pub use pipe::PipeLookup;
+pub use template::TemplateLookup;
 pub use url::UrlLookup;
 #[cfg(feature = "experimental")]
 pub use vault::VaultLookup;
@@ -245,6 +248,7 @@ impl LookupRegistry {
         registry.register(Arc::new(PasswordLookup::new()));
         registry.register(Arc::new(PipeLookup::new()));
         registry.register(Arc::new(UrlLookup::new()));
+        registry.register(Arc::new(TemplateLookup::new()));
 
         // Register Vault lookup when experimental feature is enabled
         #[cfg(feature = "experimental")]
@@ -296,7 +300,7 @@ impl LookupRegistry {
 
         match plugin.lookup(args, context) {
             Ok(result) => Ok(result),
-            Err(e) if !context.fail_on_error => {
+            Err(_e) if !context.fail_on_error => {
                 // Return default value if fail_on_error is false
                 Ok(vec![context.default_value.clone().unwrap_or_default()])
             }
@@ -342,6 +346,7 @@ pub mod prelude {
     pub use super::LookupResult;
     pub use super::PasswordLookup;
     pub use super::PipeLookup;
+    pub use super::TemplateLookup;
     pub use super::UrlLookup;
     #[cfg(feature = "experimental")]
     pub use super::VaultLookup;
@@ -360,6 +365,7 @@ mod tests {
         assert!(registry.contains("password"));
         assert!(registry.contains("pipe"));
         assert!(registry.contains("url"));
+        assert!(registry.contains("template"));
     }
 
     #[test]
