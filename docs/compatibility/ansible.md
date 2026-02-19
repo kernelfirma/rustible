@@ -42,7 +42,7 @@ cargo build --release --features full-cloud
 | `azure` | Experimental | Azure cloud modules (stub) |
 | `gcp` | Beta | GCP cloud modules (Compute Engine) |
 | `database` | Experimental | Database modules (disabled) |
-| `winrm` | Experimental | Windows Remote Management |
+| `winrm` | Beta | Windows Remote Management |
 | `provisioning` | Experimental | Terraform-like provisioning |
 
 ---
@@ -232,7 +232,7 @@ cargo build --release --features full-cloud
 | `junos_config` | Yes | Yes | Juniper Junos |
 | `nxos_config` | Yes | Yes | Cisco NX-OS |
 
-#### Windows Modules (`--features winrm`) - Experimental
+#### Windows Modules (`--features winrm`)
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `win_copy` | Yes | Partial | Requires WinRM |
@@ -385,7 +385,7 @@ Both short names and FQCN work identically:
 
 3. **Some Jinja2 Filters**: A few Ansible-specific filters not yet implemented. See [jinja2-filters.md](jinja2-filters.md).
 
-4. **WinRM**: Experimental support, not production-ready.
+4. **WinRM**: Beta support with 5 modules (31 tests). Requires `winrm` feature flag.
 
 5. **Database Modules**: Currently disabled pending sqlx integration.
 
