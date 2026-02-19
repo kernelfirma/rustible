@@ -106,7 +106,7 @@ cargo build --release --features full-cloud
 | Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
 | State management (`state_management`) | No | Yes | Local/remote backends with locking, 52 tests |
 | Drift detection (`drift_detection`) | No | No | Experimental |
-| Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
+| Agent mode (`agent_mode`) | No | Yes | Persistent agent with polling, 5 tests |
 | Native bindings (`native_bindings`) | No | No | Experimental system integrations |
 
 ---
