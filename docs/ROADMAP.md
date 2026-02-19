@@ -54,11 +54,13 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 | Local | :white_check_mark: Complete | Direct localhost execution |
 | Docker | :white_check_mark: Complete | Container execution via Bollard |
 | Kubernetes | :white_check_mark: Complete | Pod execution via kube-rs (feature-gated) |
-| WinRM | :construction: In Progress | Windows remote management (feature-gated) |
+| WinRM | :test_tube: Beta | Windows remote management (feature-gated) |
+| Podman | :white_check_mark: Complete | Rootless container execution via Podman |
+| AWS SSM | :white_check_mark: Complete | EC2 Session Manager connection |
 | Jump Host | :white_check_mark: Complete | Bastion/jump host support |
 | SSH Agent | :white_check_mark: Complete | SSH agent forwarding |
 
-### Native Modules (50+ total)
+### Native Modules (60+ total)
 
 **File Operations:**
 - :white_check_mark: `file` - File/directory management
@@ -69,10 +71,13 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 - :white_check_mark: `stat` - File statistics
 - :white_check_mark: `archive` - Archive creation
 - :white_check_mark: `unarchive` - Archive extraction
+- :white_check_mark: `synchronize` - rsync-based file synchronization
 
 **Command Execution:**
 - :white_check_mark: `command` - Execute commands (no shell)
 - :white_check_mark: `shell` - Execute shell commands
+- :white_check_mark: `raw` - Raw command execution (no Python required)
+- :white_check_mark: `script` - Transfer and execute local scripts
 
 **Package Management:**
 - :white_check_mark: `package` - Generic package manager abstraction
@@ -106,6 +111,9 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 - :white_check_mark: `include_vars` - Include variable files
 - :white_check_mark: `facts` / `gather_facts` - Fact gathering
 - :white_check_mark: `uri` - HTTP/HTTPS requests
+- :white_check_mark: `get_url` - Download files from HTTP/HTTPS/FTP
+- :white_check_mark: `fail` - Fail with custom message
+- :white_check_mark: `meta` - Meta actions (flush handlers, end play, etc.)
 - :white_check_mark: `git` - Git repository management
 - :white_check_mark: `wait_for` - Wait for conditions (port, file, regex)
 - :white_check_mark: `pause` - Pause execution with prompt
@@ -153,6 +161,7 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 | Linear | :white_check_mark: Complete | Task-by-task across all hosts (Ansible default) |
 | Free | :white_check_mark: Complete | Maximum parallelism, hosts run independently |
 | HostPinned | :white_check_mark: Complete | Dedicated worker per host (connection affinity) |
+| Debug | :white_check_mark: Complete | Interactive step-through debugging (`--step`) |
 
 ### Advanced Execution Features
 
@@ -220,6 +229,8 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 | `password` | :white_check_mark: Complete | Generate random passwords |
 | `pipe` | :white_check_mark: Complete | Execute commands and capture output |
 | `url` | :white_check_mark: Complete | Fetch content from HTTP/HTTPS URLs |
+| `items` | :white_check_mark: Complete | Iterate over lists of items |
+| `template` | :white_check_mark: Complete | Render Jinja2 template strings |
 
 ### Dynamic Inventory Plugins
 
@@ -328,15 +339,16 @@ module.schema().validate(&task.args)?;
   db1.example.com.json
 ```
 
-### New Modules Planned
+### New Modules (Completed)
 
-| Module | Priority | Description |
-|--------|----------|-------------|
-| `fail` | High | Fail with custom message |
-| `meta` | High | Meta actions (flush handlers, etc.) |
-| `raw` | Medium | Raw command execution (no Python) |
-| `script` | Medium | Transfer and execute script |
-| `synchronize` | Low | rsync wrapper |
+| Module | Status | Description |
+|--------|--------|-------------|
+| `fail` | :white_check_mark: Complete | Fail with custom message |
+| `meta` | :white_check_mark: Complete | Meta actions (flush handlers, etc.) |
+| `raw` | :white_check_mark: Complete | Raw command execution (no Python) |
+| `script` | :white_check_mark: Complete | Transfer and execute script |
+| `synchronize` | :white_check_mark: Complete | rsync wrapper |
+| `get_url` | :white_check_mark: Complete | Download files from HTTP/HTTPS/FTP |
 
 ---
 
@@ -481,10 +493,10 @@ rustible run --agent-mode playbook.yml
 
 | Connection | Status | Target |
 |------------|--------|--------|
-| WinRM | :construction: In Progress | Windows remote management |
+| WinRM | :test_tube: Beta | Windows remote management |
 | Kubernetes | :white_check_mark: Complete | Pod execution |
-| Podman | Planned | Rootless containers |
-| AWS SSM | Planned | EC2 Session Manager |
+| Podman | :white_check_mark: Complete | Rootless container execution |
+| AWS SSM | :white_check_mark: Complete | EC2 Session Manager |
 
 ---
 
@@ -502,7 +514,7 @@ We track community requests and prioritize based on demand and alignment with pr
 
 | Request | Votes | Status | Priority |
 |---------|-------|--------|----------|
-| Podman connection support | - | Planned (v1.0) | Medium |
+| Podman connection support | - | :white_check_mark: Complete | Medium |
 | Web UI for playbook management | - | Under consideration | Low |
 | [Terraform integration](architecture/terraform-integration.md) | - | :construction: In Progress ([PR #152](https://github.com/adolago/rustible/pull/152)) | Medium |
 | [HashiCorp Vault + AWX/Tower](architecture/awx-vault-integration.md) | - | :construction: In Progress ([PR #153](https://github.com/adolago/rustible/pull/153)) | Medium |
@@ -511,7 +523,7 @@ We track community requests and prioritize based on demand and alignment with pr
 | [Compatibility gap plan](architecture/ansible-compat-gap.md) | - | Under consideration | Medium |
 | YAML anchor/alias support | - | Investigating | Medium |
 | Parallel role execution | - | Investigating | Medium |
-| Database modules (MySQL/PostgreSQL) | - | Planned (v0.2) | High |
+| Database modules (MySQL/PostgreSQL) | - | :white_check_mark: Complete | High |
 
 ### Feature Request Template
 
@@ -550,7 +562,7 @@ We welcome contributions from the community! Here's how to get started.
 
 2. **Set up development environment**
    ```bash
-   # Install Rust (1.75+)
+   # Install Rust (1.85+)
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
    # Build the project
@@ -729,6 +741,6 @@ Brief description of changes.
 
 ---
 
-*Last updated: December 2025*
+*Last updated: February 2026*
 
 *For the latest updates, see [GitHub Releases](https://github.com/rustible/rustible/releases)*

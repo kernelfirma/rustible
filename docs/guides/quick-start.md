@@ -47,9 +47,20 @@ Rustible supports multiple feature configurations:
 | `azure` | Azure cloud modules (experimental) |
 | `gcp` | GCP cloud modules (experimental) |
 | `hpc` | HPC modules (Slurm, GPU, OFED) |
-| `database` | Database modules (experimental) |
+| `slurm` | Slurm workload manager modules |
+| `gpu` | GPU management modules (NVIDIA) |
+| `pbs` | PBS Pro workload manager modules |
+| `lsf` | IBM Spectrum LSF modules |
+| `ofed` | InfiniBand/RDMA/OFED support |
+| `parallel_fs` | Parallel filesystem clients (Lustre, BeeGFS) |
+| `identity` | Kerberos and SSSD identity management |
+| `bare_metal` | PXE boot and Warewulf bare-metal provisioning |
+| `redfish` | Bare-metal BMC management via Redfish/IPMI |
+| `winrm` | Windows Remote Management (Beta) |
+| `database` | Database modules (PostgreSQL, MySQL) |
 | `full` | All core features enabled |
 | `full-cloud` | All features plus all cloud providers |
+| `full-hpc` | All features plus full HPC stack |
 
 ```bash
 # Pure Rust build (default)
@@ -185,7 +196,7 @@ Common host variables:
 | `ansible_port` | SSH port | 22 |
 | `ansible_user` | SSH username | Current user |
 | `ansible_ssh_private_key_file` | Path to SSH key | ~/.ssh/id_rsa |
-| `ansible_connection` | Connection type: `ssh`, `local` | ssh |
+| `ansible_connection` | Connection type: `ssh`, `local`, `docker`, `podman`, `kubernetes`, `ssm`, `winrm` | ssh |
 | `ansible_become` | Enable privilege escalation | false |
 | `ansible_become_user` | User to become | root |
 | `ansible_become_method` | Method: `sudo`, `su` | sudo |

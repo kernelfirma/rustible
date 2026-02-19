@@ -21,7 +21,7 @@ Comprehensive FAQ and troubleshooting guide for Rustible - the high-performance 
 ### Q: What are the system requirements for Rustible?
 
 **A:** Rustible requires:
-- **Rust 1.70+** (for building from source)
+- **Rust 1.85+** (for building from source)
 - **OpenSSL development headers** (if using `ssh2-backend` feature)
 - **Linux, macOS, or Windows** (with WSL2 recommended for Windows)
 
@@ -54,7 +54,21 @@ rustible --version
 | `russh` (default) | Pure Rust SSH backend - recommended |
 | `ssh2-backend` | Legacy SSH via libssh2 (requires C dependencies) |
 | `docker` | Docker container execution support |
-| `kubernetes` | Kubernetes pod execution (planned) |
+| `kubernetes` | Kubernetes pod execution |
+| `aws` | AWS cloud modules (EC2, S3, IAM) |
+| `hpc` | HPC modules (Slurm, GPU, OFED) |
+| `slurm` | Slurm workload manager modules |
+| `gpu` | GPU management modules (NVIDIA) |
+| `pbs` | PBS Pro workload manager modules |
+| `lsf` | IBM Spectrum LSF modules |
+| `ofed` | InfiniBand/RDMA/OFED support |
+| `parallel_fs` | Parallel filesystem clients (Lustre, BeeGFS) |
+| `identity` | Kerberos and SSSD identity management |
+| `bare_metal` | PXE boot and Warewulf provisioning |
+| `redfish` | Bare-metal BMC management via Redfish/IPMI |
+| `winrm` | Windows Remote Management (Beta) |
+| `database` | Database modules (PostgreSQL, MySQL) |
+| `full-hpc` | All features plus full HPC stack |
 | `pure-rust` | Minimal pure Rust build |
 | `full` | All features enabled |
 
@@ -227,7 +241,7 @@ rustible run playbook.yml
 
 ### Q: What modules are available in Rustible?
 
-**A:** Rustible includes 21+ native modules:
+**A:** Rustible includes 60+ native modules:
 
 **Package Management:**
 - `apt` - Debian/Ubuntu packages
@@ -726,10 +740,15 @@ rustible run playbook.yml -f 10
 | `docker` | docker_container, docker_image, docker_network, docker_volume, docker_compose | Stable |
 | `kubernetes` | k8s_deployment, k8s_service, k8s_configmap, k8s_secret, k8s_namespace | Stable |
 | `aws` | aws_ec2, aws_s3, aws_iam_role, aws_iam_policy | Stable |
+| `hpc` | slurm_*, pbs_*, nvidia_gpu, nvidia_driver, cuda, rdma_stack, lustre_*, beegfs_*, lmod, mpi, munge | Stable |
+| `lsf` | lsf_queue, lsf_host, lsf_policy | Stable |
+| `identity` | kerberos, sssd_config, sssd_domain | Stable |
+| `bare_metal` | pxe_profile, pxe_host, warewulf_node, warewulf_image | Stable |
+| `redfish` | redfish_power, redfish_info, ipmi_power, ipmi_boot | Stable |
+| `database` | postgresql_*, mysql_* | Stable |
+| `winrm` | win_copy, win_feature, win_service, win_package, win_user | Beta |
 | `azure` | azure_vm | Experimental |
 | `gcp` | gcp_compute | Experimental |
-| `winrm` | win_copy, win_feature, win_service, win_package, win_user | Experimental |
-| `database` | postgresql_*, mysql_* | Disabled (pending sqlx) |
 
 **Network device modules** (ios_config, eos_config, junos_config, nxos_config) are always available.
 

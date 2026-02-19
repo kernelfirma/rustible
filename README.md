@@ -71,6 +71,7 @@ Options:
   -c, --check              Dry run
   -v, --verbose            Increase verbosity
   -f, --forks <N>          Parallel processes [default: 10]
+      --step               Step through tasks interactively
 ```
 
 ### Additional Commands
@@ -100,13 +101,16 @@ rustible init <PATH>          # Initialize new project
 - **SSH** (default): Via russh
 - **Local**: Direct local execution
 - **Docker**: Container-based execution
-- **Kubernetes**: Pod execution (feature flag, implemented)
+- **Kubernetes**: Pod execution (feature flag)
+- **Podman**: Rootless container execution
+- **AWS SSM**: EC2 Session Manager connection
+- **WinRM**: Windows remote management (Beta, feature flag)
 
 ### Built-in Modules
 
-**Core modules**: command, shell, debug, set_fact, assert, pause, wait_for, stat
+**Core modules**: command, shell, raw, script, debug, set_fact, assert, fail, meta, pause, wait_for, stat
 
-**File operations**: copy, template, file, lineinfile, blockinfile, archive, unarchive
+**File operations**: copy, template, file, lineinfile, blockinfile, archive, unarchive, synchronize, get_url
 
 **Package management**: package, apt, yum, dnf, pip
 
@@ -125,7 +129,7 @@ rustible init <PATH>          # Initialize new project
 **Network devices** (feature flag): ios_config, eos_config, junos_config, nxos_config
 
 **HPC** (feature flag): Comprehensive HPC cluster management including:
-  - *Scheduler*: slurm_config, slurm_ops, slurm_node, slurm_partition, slurm_account, slurm_qos, slurm_job, slurm_queue, slurm_info, slurmrestd, pbs_job, pbs_queue, pbs_server, scheduler_orchestration, partition_policy
+  - *Scheduler*: slurm_config, slurm_ops, slurm_node, slurm_partition, slurm_account, slurm_qos, slurm_job, slurm_queue, slurm_info, slurmrestd, pbs_job, pbs_queue, pbs_server, scheduler_orchestration, partition_policy, lsf_queue, lsf_host, lsf_policy
   - *GPU*: nvidia_gpu, nvidia_driver, cuda
   - *InfiniBand/OFED*: rdma_stack, opensm, ib_partition, ib_diagnostics, ipoib
   - *Parallel Filesystems*: lustre_client, lustre_mount, lustre_ost, beegfs_client
@@ -173,6 +177,7 @@ cargo build --features docker,kubernetes,aws
 | `ofed` | InfiniBand/RDMA/OFED support |
 | `parallel_fs` | Parallel filesystem clients (Lustre, BeeGFS) |
 | `pbs` | PBS Pro workload manager modules |
+| `lsf` | IBM Spectrum LSF workload manager modules |
 | `identity` | Kerberos and SSSD identity management |
 | `bare_metal` | PXE boot and Warewulf bare-metal provisioning |
 | `distributed` | Distributed execution support |
@@ -185,14 +190,14 @@ cargo build --features docker,kubernetes,aws
 | `pure-rust` | Minimal pure Rust build (no C deps) |
 | `ssh2-backend` | Legacy SSH via libssh2 (C dependency) |
 | `startup-warmup` | Background warmup of lazy components |
-| `openstack` | OpenStack cloud provider (stub/experimental) |
+| `openstack` | OpenStack cloud provider (experimental) |
 | `redfish` | Bare-metal BMC management via Redfish/IPMI |
-| `database` | Database modules (PostgreSQL, MySQL) (stub/experimental) |
-| `winrm` | Windows Remote Management (stub/experimental) |
-| `azure` | Azure cloud modules (stub/experimental) |
-| `gcp` | GCP cloud modules (stub/experimental) |
-| `reqwest` | HTTP client backend (stub/experimental) |
-| `experimental` | Required opt-in for stubbed features (azure, gcp, database, winrm, reqwest, openstack, redfish) |
+| `database` | Database modules (PostgreSQL, MySQL) |
+| `winrm` | Windows Remote Management (Beta) |
+| `azure` | Azure cloud modules (experimental) |
+| `gcp` | GCP cloud modules (experimental) |
+| `reqwest` | HTTP client backend (experimental) |
+| `experimental` | Required opt-in for experimental features (azure, gcp, reqwest, openstack) |
 
 ## Performance
 

@@ -5,8 +5,8 @@ read_when: You're migrating from Ansible and need to understand compatibility, d
 
 # Migration Guide: From Ansible to Rustible
 
-**Last Updated:** 2025-12-25
-**Rustible Version:** v0.1.0-alpha
+**Last Updated:** 2026-02-19
+**Rustible Version:** v0.2.0-dev
 
 ---
 
@@ -113,7 +113,7 @@ Rustible supports the core Ansible functionality you use daily:
 
 ## Supported Modules
 
-Rustible includes 21 native modules covering core automation needs:
+Rustible includes 60+ native modules covering core automation needs:
 
 ### Package Management
 
@@ -187,7 +187,21 @@ Rustible modules are native Rust implementations, not Python scripts.
 - Core modules cover 90%+ of common use cases
 - Python fallback available for Ansible collection modules
 
-### 2. Connection Pooling is Automatic
+### 2. More Connection Types
+
+Rustible supports additional connection types beyond Ansible's defaults:
+
+| Connection | Description |
+|------------|-------------|
+| `ssh` | Default, via pure Rust russh with automatic pooling |
+| `local` | Direct localhost execution |
+| `docker` | Container execution via Bollard |
+| `podman` | Rootless container execution |
+| `kubernetes` | Pod execution via kube-rs (feature flag) |
+| `ssm` | AWS Systems Manager Session Manager |
+| `winrm` | Windows Remote Management (Beta, feature flag) |
+
+### 3. Connection Pooling is Automatic
 
 Unlike Ansible, Rustible automatically pools SSH connections.
 
@@ -200,7 +214,7 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=300s
 # Rustible: Connection pooling is automatic and faster (11x speedup)
 ```
 
-### 3. Execution Strategies
+### 4. Execution Strategies
 
 Rustible supports three execution strategies:
 
@@ -218,7 +232,7 @@ Rustible supports three execution strategies:
     - ...
 ```
 
-### 4. Plan Mode (New Feature)
+### 5. Plan Mode (New Feature)
 
 Rustible adds Terraform-style execution planning:
 
@@ -235,22 +249,17 @@ rustible run playbook.yml --plan
 #     [web3] will install package: nginx
 ```
 
-### 5. Module Availability
+### 6. Module Availability
 
-Not all Ansible modules are available natively. Check compatibility:
+Rustible now supports 60+ native modules. Most core Ansible modules have native implementations, and many more are available via feature flags:
 
-```bash
-# List available modules
-rustible --help  # Shows module list in documentation
-```
+- **Cloud modules** (feature flag): aws_ec2, aws_s3, azure_vm, gcp_compute
+- **Network modules**: ios_config, eos_config, junos_config, nxos_config
+- **Database modules** (feature flag): postgresql_db, postgresql_user, mysql_db, mysql_user
+- **Windows modules** (feature flag): win_copy, win_feature, win_service, win_package, win_user
+- **HPC modules** (feature flag): 50+ modules for Slurm, PBS, LSF, GPU, OFED, and more
 
-**Modules NOT yet implemented:**
-- Cloud provider modules (aws_*, azure_*, gcp_*)
-- Network modules (ios_*, nxos_*, junos_*)
-- Database modules (mysql_*, postgresql_*)
-- Windows modules (win_*)
-
-**Workaround:** Use `command` or `shell` modules for unsupported functionality.
+For unsupported modules, use `command`/`shell` as a workaround or enable Python fallback.
 
 ---
 
@@ -405,6 +414,7 @@ time rustible run playbook.yml -i inventory.yml
 | Option | Description |
 |--------|-------------|
 | `--plan` | Show execution plan without running (Terraform-style) |
+| `--step` | Step through tasks interactively |
 | `--strategy <linear\|free\|host_pinned>` | Override execution strategy |
 
 ---

@@ -92,6 +92,18 @@ For operators running Rustible in production environments.
 
 ---
 
+### HPC & Infrastructure
+
+For teams managing HPC clusters and high-performance infrastructure.
+
+| Order | Document | Purpose |
+|-------|----------|---------|
+| 1 | [HPC Quick Start](hpc/) | Getting started with HPC modules |
+| 2 | [Quick Start Guide](guides/quick-start.md) | Feature flags for HPC features |
+| 3 | [Performance Tuning](guides/performance-tuning.md) | Optimize for large-scale deployments |
+
+---
+
 ## Quick Reference
 
 | Topic | Document |
@@ -102,6 +114,8 @@ For operators running Rustible in production environments.
 | Inventory & Variables | [Inventory & Variables Guide](guides/03-inventory.md), [Variables Deep Dive](guides/04-variables.md) |
 | Callback plugins | [Callbacks Reference](reference/callbacks.md) |
 | CLI options | [CLI Reference](guides/cli-reference.md) |
+| Changelog | [CHANGELOG](CHANGELOG.md) |
+| Roadmap | [ROADMAP](ROADMAP.md) |
 
 ---
 
@@ -114,7 +128,11 @@ docs/
 │   └── modules/      # Individual module references
 ├── architecture/     # Design decisions and ADRs
 ├── development/      # Contributor guides
-└── security/         # Security documentation
+├── security/         # Security documentation
+├── hpc/              # HPC cluster management guides
+├── compatibility/    # Ansible compatibility matrices
+├── logging/          # Logging and output configuration
+└── performance/      # Performance tuning and benchmarks
 ```
 
 ---

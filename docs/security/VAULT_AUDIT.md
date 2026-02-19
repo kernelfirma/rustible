@@ -3,7 +3,7 @@
 **Audit Date:** 2025-12-25
 **Auditor:** Security Hardening Agent
 **Scope:** Vault implementation in `src/vault.rs`, `src/cli/commands/vault.rs`, and `src/vars/mod.rs`
-**Rust Version:** 1.75+
+**Rust Version:** 1.85+
 
 ---
 

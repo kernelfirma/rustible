@@ -36,7 +36,7 @@ We are committed to providing a welcoming and inclusive environment. Please be r
 
 ### Prerequisites
 
-- **Rust**: Version 1.75 or later
+- **Rust**: Version 1.85 or later
 - **Git**: For version control
 - **Build Tools**: Standard C/C++ toolchain for optional libssh2 backend
 

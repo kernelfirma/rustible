@@ -11,24 +11,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `regex_search` filter in template engine
 - Provisioning state backends (local, S3, GCS, Azure Blob, Consul, HTTP) with locking support
 - State lifecycle CLI (`provision init`, `provision migrate`, `provision import-terraform`)
+- `get_url` module for downloading files from HTTP/HTTPS/FTP (#774)
+- Podman connection type for rootless container execution (#761)
+- `items` lookup plugin for list iteration (#775)
+- `template` lookup plugin for inline Jinja2 rendering
+- `fail` module for failing with custom messages
+- `meta` module for meta actions (flush handlers, end play, etc.)
+- `raw` module for raw command execution without Python
+- `script` module for transferring and executing local scripts
+- `synchronize` module as rsync wrapper
+- `--step` flag for interactive task-by-task stepping
+- Debug execution strategy for step-through debugging
+- Vault `encrypt-string` output masking
+- LSF workload manager modules: lsf_queue, lsf_host, lsf_policy
+- AWS SSM (Session Manager) connection type
 
 #### HPC Modules
 - Unified scheduler abstraction layer with Slurm and PBS backends (#594)
 - Native Slurm runtime modules: slurm_node, slurm_partition, slurm_job, slurm_queue, slurm_info, slurm_account, slurm_qos, slurmrestd, scheduler_orchestration, partition_policy (#587, #629)
-- PBS Pro runtime modules: pbs_job, pbs_queue, pbs_server (#592)
+- PBS Pro runtime modules with reconciliation support: pbs_job, pbs_queue, pbs_server (#592)
 - GPU modules: nvidia_driver for driver lifecycle management (#620), cuda toolkit management (#628)
-- InfiniBand/OFED modules: ipoib interface configuration (#622), opensm subnet manager (#626), ib_partition key management (#627), ib_diagnostics validation (#635)
+- InfiniBand/OFED modules with kernel compatibility checks: ipoib interface configuration (#622), opensm subnet manager (#626), ib_partition key management (#627), ib_diagnostics validation (#635)
 - Parallel filesystem modules: lustre_mount with LNet-aware mounting (#616), lustre_ost lifecycle management (#630)
-- BeeGFS client enhancements: repo setup, tuning parameters, connectivity testing (#623)
+- BeeGFS client enhancements: repo setup, tuning parameters, connectivity testing, target configuration (#623)
 - Identity modules: kerberos client configuration (#624), sssd_config and sssd_domain (#625)
 - Bare-metal provisioning: ipmi_power and ipmi_boot for IPMI management (#617), redfish_power and redfish_info for Redfish BMC (#621), pxe_profile and pxe_host for PXE boot (#631), warewulf_node and warewulf_image for Warewulf provisioning (#632)
-- Lmod enhancements: source install and cache rebuild support (#634)
+- Lmod enhancements: source install, cache rebuild, and hierarchical modulepath support (#634)
 - HPC scale validation test suite (#633)
+
+### Changed
+- WinRM connection promoted from experimental to Beta status
+- Agent mode fully implemented for persistent remote execution
 
 ### Fixed
 - Monitoring setup test failing due to template syntax
 - Playbook parsing robustness and validation improvements
 - Command injection vulnerability in user module group handling (#507)
+- Command injection vulnerability in git module
+- Command injection vulnerability in cron module
+- Shell executable injection via sentinel values (#687)
+- Template rendering optimized with Cow allocation (#688)
 - Visual alignment for Unicode headers in CLI output (#596)
 - Constructed inventory expression evaluation optimized by removing Regex (#595)
 - Pre-existing CI build, test, and formatting failures resolved (#597)
