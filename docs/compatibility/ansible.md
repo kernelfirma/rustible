@@ -235,7 +235,7 @@ cargo build --release --features full-cloud
 #### Windows Modules (`--features winrm`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `win_copy` | Yes | Partial | Requires WinRM |
+| `win_copy` | Yes | Yes | 7 tests, requires WinRM |
 | `win_feature` | Yes | Partial | Requires WinRM |
 | `win_service` | Yes | Partial | Requires WinRM |
 | `win_package` | Yes | Partial | Requires WinRM |
