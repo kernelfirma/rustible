@@ -222,7 +222,7 @@ cargo build --release --features full-cloud
 #### GCP Cloud Modules (`--features gcp`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `gcp_compute_instance` | Yes | Stub | Experimental |
+| `gcp_compute_instance` | Yes | Yes | 15 tests |
 
 #### Network Device Modules (Always Available)
 | Module | Ansible | Rustible | Notes |
