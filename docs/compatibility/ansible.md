@@ -39,7 +39,7 @@ cargo build --release --features full-cloud
 | `docker` | Stable | Docker container execution |
 | `kubernetes` | Stable | Kubernetes pod execution |
 | `aws` | Stable | AWS cloud modules (EC2, S3, IAM) |
-| `azure` | Experimental | Azure cloud modules (stub) |
+| `azure` | Beta | Azure cloud modules (VM, resource groups) |
 | `gcp` | Experimental | GCP cloud modules (stub) |
 | `database` | Experimental | Database modules (disabled) |
 | `winrm` | Experimental | Windows Remote Management |
