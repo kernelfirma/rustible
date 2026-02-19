@@ -41,7 +41,7 @@ cargo build --release --features full-cloud
 | `aws` | Stable | AWS cloud modules (EC2, S3, IAM) |
 | `azure` | Experimental | Azure cloud modules (stub) |
 | `gcp` | Experimental | GCP cloud modules (stub) |
-| `database` | Experimental | Database modules (disabled) |
+| `database` | Beta | PostgreSQL and MySQL modules |
 | `winrm` | Experimental | Windows Remote Management |
 | `provisioning` | Experimental | Terraform-like provisioning |
 
@@ -241,7 +241,7 @@ cargo build --release --features full-cloud
 | `win_package` | Yes | Partial | Requires WinRM |
 | `win_user` | Yes | Partial | Requires WinRM |
 
-#### Database Modules (`--features database`) - Disabled
+#### Database Modules (`--features database`)
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `postgresql_db` | Yes | Disabled | Pending sqlx integration |
@@ -387,7 +387,7 @@ Both short names and FQCN work identically:
 
 4. **WinRM**: Experimental support, not production-ready.
 
-5. **Database Modules**: Currently disabled pending sqlx integration.
+5. **Database Modules**: Requires `database` feature flag. PostgreSQL and MySQL via sqlx.
 
 ---
 
