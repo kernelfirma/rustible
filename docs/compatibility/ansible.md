@@ -107,7 +107,7 @@ cargo build --release --features full-cloud
 | State management (`state_management`) | No | Partial | Terraform-style state tracking |
 | Drift detection (`drift_detection`) | No | Yes | Compare current vs desired state, 24 tests |
 | Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
-| Native bindings (`native_bindings`) | No | No | Experimental system integrations |
+| Native bindings (`native_bindings`) | No | Yes | APT, systemd, users (2,019 LOC, 16 tests) |
 
 ---
 
