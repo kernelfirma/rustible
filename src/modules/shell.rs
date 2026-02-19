@@ -444,6 +444,22 @@ impl Module for ShellModule {
         // Validate executable parameter for security to prevent injection
         if let Some(executable) = params.get_string("executable")? {
             validate_command_args(&executable)?;
+
+            // Prevent command execution hijacking via argument injection
+            // If executable contains "-c" (Posix) or "/c" (Windows), it might be used to
+            // execute an arbitrary command instead of the intended one, as we append
+            // our own -c flag.
+            let parts = shell_words::split(&executable).map_err(|e| {
+                ModuleError::InvalidParameter(format!("Invalid executable string: {}", e))
+            })?;
+
+            for part in parts {
+                if part == "-c" || part == "/c" || part == "/C" {
+                    return Err(ModuleError::InvalidParameter(
+                        "executable cannot contain command flags (-c, /c) as they are managed by the module".to_string(),
+                    ));
+                }
+            }
         }
 
         Ok(())
@@ -665,5 +681,53 @@ mod tests {
         // -c is appended.
         // cmd is escaped: print('hello') -> 'print('\''hello'\'')'
         assert_eq!(result, "/usr/bin/env python3 -c 'print('\\''hello'\\'')'");
+    }
+
+    #[test]
+    fn test_shell_executable_injection_prevention() {
+        let module = ShellModule;
+        let mut params: ModuleParams = HashMap::new();
+        // Malicious executable that tries to hijack command execution via -c
+        params.insert(
+            "executable".to_string(),
+            serde_json::json!("/bin/sh -c whoami"),
+        );
+        params.insert("cmd".to_string(), serde_json::json!("echo benign"));
+
+        // This should fail validation to prevent hijacking
+        match module.validate_params(&params) {
+            Ok(_) => panic!("Should reject executable with -c argument"),
+            Err(ModuleError::InvalidParameter(msg)) => {
+                assert!(msg.contains("executable cannot contain command flags"));
+            }
+            Err(e) => panic!("Unexpected error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_shell_execute_local_with_args() {
+        // This test requires a real shell on the system
+        #[cfg(unix)]
+        {
+            let module = ShellModule;
+            let mut params: ModuleParams = HashMap::new();
+            // Use 'echo' as executable to verify arguments are passed correctly.
+            // echo 'arg1' will print 'arg1'.
+            // The module appends -c cmd.
+            // So executing "echo arg1" with cmd "cmd1" results in: echo arg1 -c cmd1
+            params.insert(
+                "executable".to_string(),
+                serde_json::json!("/usr/bin/echo arg1"),
+            );
+            params.insert("cmd".to_string(), serde_json::json!("cmd1"));
+
+            let context = ModuleContext::default();
+            // This should succeed if execute_local correctly handles "echo arg1"
+            let result = module.execute(&params, &context).unwrap();
+
+            assert!(result.changed);
+            // Verify stdout contains the argument passed in executable
+            assert!(result.stdout.as_ref().unwrap().contains("arg1"));
+        }
     }
 }
