@@ -25,12 +25,18 @@ persistence mode, compute mode, ECC mode, and power limits via `nvidia-smi`.
 | gpu_id           | no       | -          | string | Target a specific GPU by index or UUID.                            |
 | ecc_mode         | no       | -          | bool   | Enable or disable ECC memory (requires reboot).                    |
 | power_limit      | no       | -          | u32    | Power limit in watts.                                              |
+| gres_config      | no       | `false`    | bool   | Generate Slurm GRES entries from detected GPUs.                    |
 
 ## Return Values
 
-| Key    | Type   | Description                                 |
-|--------|--------|---------------------------------------------|
-| status | string | Current implementation status (`stub`).      |
+| Key | Type | Description |
+|-----|------|-------------|
+| changed | boolean | Whether changes were made |
+| msg | string | Status message |
+| data.changes | array | List of applied changes |
+| data.gpu_count | integer | Number of GPUs detected |
+| data.gpus | array | GPU inventory (index, name, uuid, pci bus, memory) |
+| data.gres_config | array | Slurm GRES config entries (when `gres_config: true`) |
 
 ## Examples
 
@@ -58,7 +64,7 @@ persistence mode, compute mode, ECC mode, and power limits via `nvidia-smi`.
 ## Notes
 
 - Requires building with `--features hpc,gpu`.
-- Currently a stub implementation; nvidia-smi integration is planned.
+- Uses `nvidia-smi` for configuration and inventory; ensure it is on PATH.
 - ECC mode changes require a GPU reset or node reboot to take effect.
 - Persistence mode prevents the driver from unloading when no clients are active.
 - Power limit values must be within the GPU's supported range.
