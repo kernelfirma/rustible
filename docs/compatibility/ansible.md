@@ -43,7 +43,7 @@ cargo build --release --features full-cloud
 | `gcp` | Experimental | GCP cloud modules (stub) |
 | `database` | Experimental | Database modules (disabled) |
 | `winrm` | Experimental | Windows Remote Management |
-| `provisioning` | Experimental | Terraform-like provisioning |
+| `provisioning` | Beta | Terraform-like provisioning (state, plans, apply) |
 
 ---
 
