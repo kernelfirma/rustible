@@ -103,7 +103,7 @@ cargo build --release --features full-cloud
 
 | Feature | Ansible | Rustible | Notes |
 |---------|---------|----------|-------|
-| Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
+| Resource graph (`resource_graph`) | No | Yes | Dependency resolution with topological sort, 45 tests |
 | State management (`state_management`) | No | Partial | Terraform-style state tracking |
 | Drift detection (`drift_detection`) | No | No | Experimental |
 | Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
