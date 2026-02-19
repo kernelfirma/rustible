@@ -65,7 +65,7 @@ cargo build --release --features full-cloud
 | Vault encryption | Yes | Yes | Different format (AES-256-GCM) |
 | Check mode | Yes | Yes | `--check` flag |
 | Diff mode | Yes | Yes | `--diff` flag |
-| Async tasks (`async_tasks`) | Yes | Partial | Beta async execution |
+| Async tasks (`async_tasks`) | Yes | Yes | Full async/poll support |
 | Delegation (`delegate_to`) | Yes | Yes | Targeted host delegation |
 | Run once (`run_once`) | Yes | Yes | Single host execution |
 | SSH pipelining (`ssh_pipelining`) | Yes | Yes | Reduce SSH round trips |
