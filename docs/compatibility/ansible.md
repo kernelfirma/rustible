@@ -244,7 +244,7 @@ cargo build --release --features full-cloud
 #### Database Modules (`--features database`) - Disabled
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `postgresql_db` | Yes | Disabled | Pending sqlx integration |
+| `postgresql_db` | Yes | Yes | Via sqlx, 6 tests |
 | `postgresql_user` | Yes | Disabled | Pending sqlx integration |
 | `mysql_db` | Yes | Disabled | Pending sqlx integration |
 | `mysql_user` | Yes | Disabled | Pending sqlx integration |
