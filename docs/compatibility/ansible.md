@@ -217,7 +217,7 @@ cargo build --release --features full-cloud
 #### Azure Cloud Modules (`--features azure`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `azure_rm_virtualmachine` | Yes | Stub | Experimental |
+| `azure_rm_virtualmachine` | Yes | Yes | 20 tests |
 
 #### GCP Cloud Modules (`--features gcp`) - Experimental
 | Module | Ansible | Rustible | Notes |
