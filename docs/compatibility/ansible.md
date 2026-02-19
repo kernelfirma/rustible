@@ -171,7 +171,7 @@ cargo build --release --features full-cloud
 |--------|---------|----------|---------------|
 | `uri` | Yes | Yes | 25 tests |
 | `wait_for` | Yes | Yes | 37 tests |
-| `get_url` | Yes | No | Use `uri` |
+| `get_url` | Yes | Yes | 11 tests |
 
 #### Utility & Logic
 | Module | Ansible | Rustible | Test Coverage |
