@@ -22,6 +22,7 @@ pub mod facts;
 pub mod fail;
 pub mod file;
 pub mod firewalld;
+pub mod get_url;
 pub mod git;
 pub mod group;
 pub mod hostname;
@@ -1607,6 +1608,7 @@ impl ModuleRegistry {
             ],
             // Network modules
             Network: [
+                get_url::GetUrlModule,
                 uri::UriModule,
                 known_hosts::KnownHostsModule,
                 authorized_key::AuthorizedKeyModule,
