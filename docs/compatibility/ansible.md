@@ -108,6 +108,7 @@ cargo build --release --features full-cloud
 | Drift detection (`drift_detection`) | No | No | Experimental |
 | Agent mode (`agent_mode`) | No | Yes | Persistent agent with polling, 5 tests |
 | Native bindings (`native_bindings`) | No | No | Experimental system integrations |
+| Lockfiles (`lockfiles`) | No | Yes | Provider lockfiles and state locking, 17 tests |
 
 ---
 
