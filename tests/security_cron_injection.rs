@@ -97,38 +97,19 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
 
-        let _ = module.execute(&params, &context);
+        let result = module.execute(&params, &context);
+
+        // The cron module should reject the newline-injected job parameter
+        // before any commands are executed, preventing the injection entirely
+        assert!(
+            result.is_err(),
+            "Cron module should reject job parameters containing newlines"
+        );
 
         let commands = executed_commands.lock().unwrap();
-        // The last command should be the set_crontab command
-        if let Some(cmd) = commands.last() {
-            println!("Executed command: {}", cmd);
-
-            // Extract delimiter from "cat << 'DELIMITER'"
-            let re = Regex::new(r"cat << '([^']+)'").unwrap();
-            if let Some(caps) = re.captures(cmd) {
-                let delimiter = caps.get(1).unwrap().as_str();
-                println!("Using delimiter: {}", delimiter);
-
-                // Verify delimiter is randomized (not just RUSTIBLE_EOF)
-                assert!(delimiter.starts_with("RUSTIBLE_EOF_"));
-                assert_ne!(delimiter, "RUSTIBLE_EOF");
-
-                // Verify the payload is present but harmlessly wrapped
-                // It should appear as text within the heredoc
-                assert!(cmd.contains("RUSTIBLE_EOF\ntouch /tmp/pwned"));
-
-                // Verify the content is followed by the delimiter (closing the heredoc)
-                assert!(
-                    cmd.trim().ends_with(delimiter),
-                    "Command should end with delimiter: {}",
-                    delimiter
-                );
-            } else {
-                panic!("Command does not match expected heredoc pattern: {}", cmd);
-            }
-        } else {
-            panic!("No commands executed");
-        }
+        assert!(
+            commands.is_empty(),
+            "No commands should be executed when injection is detected"
+        );
     }
 }

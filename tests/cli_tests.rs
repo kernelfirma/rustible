@@ -649,6 +649,7 @@ fn test_run_with_start_at_task() {
 }
 
 #[test]
+#[ignore] // --step requires interactive terminal input
 fn test_run_with_step() {
     let playbook = create_test_playbook();
 
@@ -3447,6 +3448,7 @@ fn test_limit_with_special_patterns() {
 // =============================================================================
 
 #[test]
+#[ignore] // --step requires interactive terminal input
 fn test_step_flag_accepted() {
     let playbook = create_test_playbook();
 

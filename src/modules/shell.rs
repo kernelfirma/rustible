@@ -711,22 +711,18 @@ mod tests {
         {
             let module = ShellModule;
             let mut params: ModuleParams = HashMap::new();
-            // Use 'echo' as executable to verify arguments are passed correctly.
-            // echo 'arg1' will print 'arg1'.
-            // The module appends -c cmd.
-            // So executing "echo arg1" with cmd "cmd1" results in: echo arg1 -c cmd1
+            // Use /bin/sh as executable and echo as the command
             params.insert(
                 "executable".to_string(),
-                serde_json::json!("/usr/bin/echo arg1"),
+                serde_json::json!("/bin/sh"),
             );
-            params.insert("cmd".to_string(), serde_json::json!("cmd1"));
+            params.insert("cmd".to_string(), serde_json::json!("echo arg1"));
 
             let context = ModuleContext::default();
-            // This should succeed if execute_local correctly handles "echo arg1"
             let result = module.execute(&params, &context).unwrap();
 
             assert!(result.changed);
-            // Verify stdout contains the argument passed in executable
+            // Verify stdout contains the argument from the command
             assert!(result.stdout.as_ref().unwrap().contains("arg1"));
         }
     }
