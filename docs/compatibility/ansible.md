@@ -80,7 +80,7 @@ cargo build --release --features full-cloud
 | `free` | Yes | Yes | Maximum parallelism |
 | `host_pinned` | Yes | Yes | Connection affinity |
 | `serial` | Yes | Yes | Batch execution (serial_execution) |
-| `debug` | Yes | No | Planned |
+| `debug` | Yes | Yes | Interactive task debugging |
 
 ---
 

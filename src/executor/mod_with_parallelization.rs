@@ -110,6 +110,8 @@ pub enum ExecutionStrategy {
     Free,
     /// Pin tasks to specific hosts
     HostPinned,
+    /// Debug strategy for interactive task debugging
+    DebugStrategy,
 }
 
 /// Statistics collected during execution

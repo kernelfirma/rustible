@@ -10,6 +10,7 @@
 /// | Linear | All hosts complete task N before task N+1 | Default, predictable |
 /// | Free | Each host runs independently | Maximum throughput |
 /// | HostPinned | Dedicated worker per host | Connection reuse |
+/// | Debug | Step through tasks with verbose output | Interactive debugging |
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionStrategy {
     /// Run each task on all hosts before moving to the next task.
@@ -29,4 +30,11 @@ pub enum ExecutionStrategy {
     /// Similar to `Free` but optimizes for connection reuse and
     /// cache locality by keeping the same worker for each host.
     HostPinned,
+
+    /// Debug strategy for interactive task debugging.
+    ///
+    /// Executes tasks one at a time with verbose output including
+    /// variable inspection on failure. Useful for troubleshooting
+    /// playbook issues.
+    DebugStrategy,
 }

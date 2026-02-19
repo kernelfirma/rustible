@@ -139,4 +139,10 @@ pub enum ExecutionStrategy {
     /// Similar to `Free` but optimizes for connection reuse and
     /// cache locality by keeping the same worker for each host.
     HostPinned,
+
+    /// Debug strategy for interactive task debugging.
+    ///
+    /// Executes tasks one at a time with verbose output including
+    /// variable inspection on failure.
+    DebugStrategy,
 }

@@ -565,6 +565,10 @@ impl Executor {
                     self.run_host_pinned(&batch_hosts_owned, tasks, tx_id.clone())
                         .await?
                 }
+                ExecutionStrategy::DebugStrategy => {
+                    self.run_linear(&batch_hosts_owned, tasks, tx_id.clone())
+                        .await?
+                }
             };
 
             // Count failures in this batch
