@@ -1145,6 +1145,7 @@ pub fn test_executor_config() -> ExecutorConfig {
         distributed: false,
         workers: 1,
         distribution_strategy: "adaptive".to_string(),
+        step: false,
     }
 }
 
@@ -1169,6 +1170,7 @@ pub fn test_check_mode_config() -> ExecutorConfig {
         distributed: false,
         workers: 1,
         distribution_strategy: "adaptive".to_string(),
+        step: false,
     }
 }
 

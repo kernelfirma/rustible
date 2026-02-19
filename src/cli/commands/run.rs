@@ -676,6 +676,7 @@ impl RunArgs {
             distributed: self.distributed,
             workers: self.workers,
             distribution_strategy: self.distribution_strategy.clone(),
+            step: self.step,
         };
 
         // Create executor with runtime context
