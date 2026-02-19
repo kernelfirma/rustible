@@ -1723,6 +1723,13 @@ impl ModuleRegistry {
                 hpc::NvidiaGpuModule,
                 hpc::NvidiaDriverModule,
                 hpc::CudaToolkitModule,
+                hpc::DcgmModule,
+                hpc::NvidiaContainerToolkitModule,
+                hpc::FabricManagerModule,
+                hpc::MigConfigModule,
+                hpc::GdrcopyModule,
+                hpc::NcclModule,
+                hpc::NvidiaPeermemModule,
             ],
         );
 
