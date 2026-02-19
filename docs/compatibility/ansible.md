@@ -40,9 +40,9 @@ cargo build --release --features full-cloud
 | `kubernetes` | Stable | Kubernetes pod execution |
 | `aws` | Stable | AWS cloud modules (EC2, S3, IAM) |
 | `azure` | Experimental | Azure cloud modules (stub) |
-| `gcp` | Beta | GCP cloud modules (Compute Engine) |
+| `gcp` | Experimental | GCP cloud modules (stub) |
 | `database` | Experimental | Database modules (disabled) |
-| `winrm` | Beta | Windows Remote Management |
+| `winrm` | Experimental | Windows Remote Management |
 | `provisioning` | Experimental | Terraform-like provisioning |
 
 ---
@@ -94,7 +94,7 @@ cargo build --release --features full-cloud
 | Docker | Yes | Yes | `docker` | Via Bollard |
 | Kubernetes | Yes | Yes | `kubernetes` | Via kube-rs |
 | WinRM | Yes | Partial | `winrm` | Experimental |
-| Podman | Yes | Yes | - | Via CLI |
+| Podman | Yes | No | - | Planned for v1.0 |
 | AWS SSM | Yes | No | - | Planned for v1.0 |
 
 ---
@@ -104,11 +104,11 @@ cargo build --release --features full-cloud
 | Feature | Ansible | Rustible | Notes |
 |---------|---------|----------|-------|
 | Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
-| State management (`state_management`) | No | Yes | Local/remote backends with locking, 52 tests |
+| State management (`state_management`) | No | Partial | Terraform-style state tracking |
 | Drift detection (`drift_detection`) | No | No | Experimental |
-| Agent mode (`agent_mode`) | No | Yes | Persistent agent with polling, 5 tests |
+| Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
 | Native bindings (`native_bindings`) | No | No | Experimental system integrations |
-| Lockfiles (`lockfiles`) | No | Yes | Provider lockfiles and state locking, 17 tests |
+| Checkpoints/rollback (`checkpoints`) | No | Yes | Checkpoint and rollback support, 18 tests |
 
 ---
 
@@ -143,7 +143,7 @@ cargo build --release --features full-cloud
 | `command` | Yes | Yes | 31 tests |
 | `shell` | Yes | Yes | 22 tests |
 | `raw` | Yes | No | Planned for v0.2 |
-| `script` | Yes | Yes | 14 tests |
+| `script` | Yes | No | Planned for v0.2 |
 
 #### System Administration
 | Module | Ansible | Rustible | Test Coverage |
@@ -181,7 +181,7 @@ cargo build --release --features full-cloud
 | `set_fact` | Yes | Yes | Needs tests |
 | `assert` | Yes | Yes | Needs tests |
 | `fail` | Yes | No | Planned for v0.2 |
-| `meta` | Yes | Yes | 11 tests |
+| `meta` | Yes | No | Planned for v0.2 |
 | `include_vars` | Yes | Yes | Needs tests |
 | `pause` | Yes | Yes | 31 tests |
 | `git` | Yes | Yes | 23 tests |
@@ -213,7 +213,7 @@ cargo build --release --features full-cloud
 | `ec2` / `aws_ec2` | Yes | Yes | Via AWS SDK |
 | `s3` / `aws_s3` | Yes | Yes | Via AWS SDK |
 | `iam_role` | Yes | Partial | Via AWS SDK |
-| `iam_policy` | Yes | Yes | Via AWS SDK |
+| `iam_policy` | Yes | Partial | Via AWS SDK |
 
 #### Azure Cloud Modules (`--features azure`) - Experimental
 | Module | Ansible | Rustible | Notes |
@@ -233,22 +233,22 @@ cargo build --release --features full-cloud
 | `junos_config` | Yes | Yes | Juniper Junos |
 | `nxos_config` | Yes | Yes | Cisco NX-OS |
 
-#### Windows Modules (`--features winrm`)
+#### Windows Modules (`--features winrm`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `win_copy` | Yes | Partial | Requires WinRM |
-| `win_feature` | Yes | Yes | 3 tests, requires WinRM |
+| `win_feature` | Yes | Partial | Requires WinRM |
 | `win_service` | Yes | Partial | Requires WinRM |
-| `win_package` | Yes | Yes | 5 tests, requires WinRM |
+| `win_package` | Yes | Partial | Requires WinRM |
 | `win_user` | Yes | Partial | Requires WinRM |
 
 #### Database Modules (`--features database`) - Disabled
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `postgresql_db` | Yes | Disabled | Pending sqlx integration |
-| `postgresql_user` | Yes | Yes | Via sqlx, 5 tests |
+| `postgresql_user` | Yes | Disabled | Pending sqlx integration |
 | `mysql_db` | Yes | Disabled | Pending sqlx integration |
-| `mysql_user` | Yes | Yes | Via sqlx, 8 tests, requires `database` feature |
+| `mysql_user` | Yes | Disabled | Pending sqlx integration |
 
 ---
 
@@ -386,7 +386,7 @@ Both short names and FQCN work identically:
 
 3. **Some Jinja2 Filters**: A few Ansible-specific filters not yet implemented. See [jinja2-filters.md](jinja2-filters.md).
 
-4. **WinRM**: Beta support with 5 modules (31 tests). Requires `winrm` feature flag.
+4. **WinRM**: Experimental support, not production-ready.
 
 5. **Database Modules**: Currently disabled pending sqlx integration.
 
