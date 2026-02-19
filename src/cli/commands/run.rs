@@ -371,6 +371,7 @@ fn handle_execution_event(
                 timestamp: timestamp(),
             });
         }
+        rustible::executor::ExecutionEvent::TaskStartGlobal(_) => {}
         rustible::executor::ExecutionEvent::HostTaskComplete(host, task_name, result) => {
             let key = format!("{}::{}", host, task_name);
             let duration_ms = bundle
@@ -708,12 +709,46 @@ impl RunArgs {
             executor = executor.with_recovery_manager(recovery_manager);
         }
 
-        if let Some(bundle) = output_bundle.as_ref() {
+        // Setup event callback for CLI output and bundle
+        let output = ctx.output.clone();
+        let bundle_callback = if let Some(bundle) = output_bundle.as_ref() {
             let bundle = Arc::clone(bundle);
-            let callback: rustible::executor::EventCallback =
-                Arc::new(move |event| handle_execution_event(&bundle, event));
-            executor = executor.with_event_callback(callback);
-        }
+            Some(Arc::new(move |event| handle_execution_event(&bundle, event))
+                as rustible::executor::EventCallback)
+        } else {
+            None
+        };
+
+        let callback: rustible::executor::EventCallback =
+            Arc::new(move |event: rustible::executor::ExecutionEvent| {
+                // CLI output
+                match &event {
+                    rustible::executor::ExecutionEvent::PlayStart(name) => output.play_header(name),
+                    rustible::executor::ExecutionEvent::TaskStartGlobal(name) => {
+                        output.task_header(name)
+                    }
+                    rustible::executor::ExecutionEvent::HostTaskComplete(host, _, result) => {
+                        // Map executor task status to CLI task status
+                        let status = match result.status {
+                            rustible::executor::task::TaskStatus::Ok => TaskStatus::Ok,
+                            rustible::executor::task::TaskStatus::Changed => TaskStatus::Changed,
+                            rustible::executor::task::TaskStatus::Failed => TaskStatus::Failed,
+                            rustible::executor::task::TaskStatus::Skipped => TaskStatus::Skipped,
+                            rustible::executor::task::TaskStatus::Unreachable => {
+                                TaskStatus::Unreachable
+                            }
+                        };
+                        output.task_result(host, status, result.msg.as_deref(), None);
+                    }
+                    _ => {}
+                }
+
+                // Bundle output
+                if let Some(cb) = &bundle_callback {
+                    cb(event);
+                }
+            });
+        executor = executor.with_event_callback(callback);
 
         // Run playbook using executor
         ctx.output

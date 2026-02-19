@@ -233,13 +233,17 @@ impl OutputFormatter {
             host.to_string()
         };
 
+        let mut buffer = String::new();
+        use std::fmt::Write;
+
         match status {
             TaskStatus::Ok
             | TaskStatus::Changed
             | TaskStatus::Skipped
             | TaskStatus::Rescued
             | TaskStatus::Ignored => {
-                print!(
+                let _ = write!(
+                    buffer,
                     "{}{:width$}: [{}]",
                     status_str,
                     "",
@@ -248,7 +252,8 @@ impl OutputFormatter {
                 );
             }
             TaskStatus::Failed | TaskStatus::Unreachable => {
-                print!(
+                let _ = write!(
+                    buffer,
                     "{}{:width$}: [{}]",
                     status_str,
                     "",
@@ -259,25 +264,25 @@ impl OutputFormatter {
         }
 
         if let Some(msg) = message {
-            print!(" => {}", msg);
+            let _ = write!(buffer, " => {}", msg);
         }
 
         if let Some(d) = duration {
             let duration_str = format_duration(d);
             if self.use_color {
                 if d.as_secs() >= 5 {
-                    print!("  {}", duration_str.red());
+                    let _ = write!(buffer, "  {}", duration_str.red());
                 } else if d.as_secs() >= 1 {
-                    print!("  {}", duration_str.yellow());
+                    let _ = write!(buffer, "  {}", duration_str.yellow());
                 } else {
-                    print!("  {}", duration_str.dimmed());
+                    let _ = write!(buffer, "  {}", duration_str.dimmed());
                 }
             } else {
-                print!("  {}", duration_str);
+                let _ = write!(buffer, "  {}", duration_str);
             }
         }
 
-        println!();
+        println!("{}", buffer);
     }
 
     /// Print task result with detailed output

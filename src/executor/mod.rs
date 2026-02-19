@@ -217,6 +217,8 @@ pub enum ExecutionEvent {
     PlayStart(String),
     /// Task execution started
     TaskStart { task: String, host: Option<String> },
+    /// Task execution started globally (all hosts)
+    TaskStartGlobal(String),
     /// Task completed on a host
     HostTaskComplete(String, String, TaskResult), // host, task_name, result
     /// Playbook execution finished
@@ -930,6 +932,8 @@ impl Executor {
         let mut step_mode = self.config.step;
 
         for task in tasks {
+            self.emit_event(ExecutionEvent::TaskStartGlobal(task.name.clone()));
+
             // Determine which hosts should run this task based on block state
             let active_hosts: Vec<_> = hosts
                 .iter()
