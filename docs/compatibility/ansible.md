@@ -179,7 +179,7 @@ cargo build --release --features full-cloud
 | `debug` | Yes | Yes | Needs tests |
 | `set_fact` | Yes | Yes | Needs tests |
 | `assert` | Yes | Yes | Needs tests |
-| `fail` | Yes | No | Planned for v0.2 |
+| `fail` | Yes | Yes | 5 tests |
 | `meta` | Yes | No | Planned for v0.2 |
 | `include_vars` | Yes | Yes | Needs tests |
 | `pause` | Yes | Yes | 31 tests |
