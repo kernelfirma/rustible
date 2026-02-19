@@ -239,7 +239,7 @@ cargo build --release --features full-cloud
 | `win_feature` | Yes | Partial | Requires WinRM |
 | `win_service` | Yes | Yes | 6 tests, requires WinRM |
 | `win_package` | Yes | Partial | Requires WinRM |
-| `win_user` | Yes | Partial | Requires WinRM |
+| `win_user` | Yes | Yes | 5 tests, requires WinRM |
 
 #### Database Modules (`--features database`) - Disabled
 | Module | Ansible | Rustible | Notes |
