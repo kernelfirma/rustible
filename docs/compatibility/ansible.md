@@ -214,7 +214,7 @@ cargo build --release --features full-cloud
 | `iam_role` | Yes | Partial | Via AWS SDK |
 | `iam_policy` | Yes | Partial | Via AWS SDK |
 
-#### Azure Cloud Modules (`--features azure`) - Experimental
+#### Azure Cloud Modules (`--features azure`)
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
 | `azure_rm_virtualmachine` | Yes | Stub | Experimental |
