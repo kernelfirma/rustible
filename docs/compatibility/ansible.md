@@ -199,7 +199,7 @@ cargo build --release --features full-cloud
 #### Kubernetes Modules (`--features kubernetes`)
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `k8s` | Yes | Partial | Via kube-rs |
+| `k8s` | Yes | Yes | Via kube-rs, 18 tests |
 | `k8s_deployment` | Yes | Yes | - |
 | `k8s_service` | Yes | Yes | - |
 | `k8s_configmap` | Yes | Yes | - |
