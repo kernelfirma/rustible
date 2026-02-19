@@ -40,7 +40,7 @@ cargo build --release --features full-cloud
 | `kubernetes` | Stable | Kubernetes pod execution |
 | `aws` | Stable | AWS cloud modules (EC2, S3, IAM) |
 | `azure` | Experimental | Azure cloud modules (stub) |
-| `gcp` | Experimental | GCP cloud modules (stub) |
+| `gcp` | Beta | GCP cloud modules (Compute Engine) |
 | `database` | Experimental | Database modules (disabled) |
 | `winrm` | Experimental | Windows Remote Management |
 | `provisioning` | Experimental | Terraform-like provisioning |
