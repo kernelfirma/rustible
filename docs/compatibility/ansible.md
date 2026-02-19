@@ -39,11 +39,11 @@ cargo build --release --features full-cloud
 | `docker` | Stable | Docker container execution |
 | `kubernetes` | Stable | Kubernetes pod execution |
 | `aws` | Stable | AWS cloud modules (EC2, S3, IAM) |
-| `azure` | Beta | Azure cloud modules (VM, resource groups) |
+| `azure` | Experimental | Azure cloud modules (stub) |
 | `gcp` | Experimental | GCP cloud modules (stub) |
-| `database` | Beta | PostgreSQL and MySQL modules |
+| `database` | Experimental | Database modules (disabled) |
 | `winrm` | Experimental | Windows Remote Management |
-| `provisioning` | Beta | Terraform-like provisioning (state, plans, apply) |
+| `provisioning` | Experimental | Terraform-like provisioning |
 
 ---
 
@@ -65,7 +65,7 @@ cargo build --release --features full-cloud
 | Vault encryption | Yes | Yes | Different format (AES-256-GCM) |
 | Check mode | Yes | Yes | `--check` flag |
 | Diff mode | Yes | Yes | `--diff` flag |
-| Async tasks (`async_tasks`) | Yes | Yes | Full async/poll support |
+| Async tasks (`async_tasks`) | Yes | Partial | Beta async execution |
 | Delegation (`delegate_to`) | Yes | Yes | Targeted host delegation |
 | Run once (`run_once`) | Yes | Yes | Single host execution |
 | SSH pipelining (`ssh_pipelining`) | Yes | Yes | Reduce SSH round trips |
@@ -80,7 +80,7 @@ cargo build --release --features full-cloud
 | `free` | Yes | Yes | Maximum parallelism |
 | `host_pinned` | Yes | Yes | Connection affinity |
 | `serial` | Yes | Yes | Batch execution (serial_execution) |
-| `debug` | Yes | Yes | Interactive task debugging |
+| `debug` | Yes | No | Planned |
 
 ---
 
@@ -93,9 +93,9 @@ cargo build --release --features full-cloud
 | Local | Yes | Yes | `local` (default) | Direct execution |
 | Docker | Yes | Yes | `docker` | Via Bollard |
 | Kubernetes | Yes | Yes | `kubernetes` | Via kube-rs |
-| WinRM | Yes | Yes | `winrm` | Beta |
+| WinRM | Yes | Partial | `winrm` | Experimental |
 | Podman | Yes | No | - | Planned for v1.0 |
-| AWS SSM | Yes | Yes | `aws` | Via AWS CLI |
+| AWS SSM | Yes | No | - | Planned for v1.0 |
 
 ---
 
@@ -103,11 +103,11 @@ cargo build --release --features full-cloud
 
 | Feature | Ansible | Rustible | Notes |
 |---------|---------|----------|-------|
-| Resource graph (`resource_graph`) | No | Yes | Dependency resolution with topological sort, 45 tests |
+| Resource graph (`resource_graph`) | No | Partial | Terraform-like dependencies |
 | State management (`state_management`) | No | Partial | Terraform-style state tracking |
-| Drift detection (`drift_detection`) | No | Yes | Compare current vs desired state, 24 tests |
+| Drift detection (`drift_detection`) | No | No | Experimental |
 | Agent mode (`agent_mode`) | No | No | Experimental persistent agent |
-| Native bindings (`native_bindings`) | No | Yes | APT, systemd, users (2,019 LOC, 16 tests) |
+| Native bindings (`native_bindings`) | No | No | Experimental system integrations |
 
 ---
 
@@ -141,7 +141,7 @@ cargo build --release --features full-cloud
 |--------|---------|----------|---------------|
 | `command` | Yes | Yes | 31 tests |
 | `shell` | Yes | Yes | 22 tests |
-| `raw` | Yes | Yes | 7 tests |
+| `raw` | Yes | No | Planned for v0.2 |
 | `script` | Yes | No | Planned for v0.2 |
 
 #### System Administration
@@ -171,7 +171,7 @@ cargo build --release --features full-cloud
 |--------|---------|----------|---------------|
 | `uri` | Yes | Yes | 25 tests |
 | `wait_for` | Yes | Yes | 37 tests |
-| `get_url` | Yes | Yes | 11 tests |
+| `get_url` | Yes | No | Use `uri` |
 
 #### Utility & Logic
 | Module | Ansible | Rustible | Test Coverage |
@@ -179,8 +179,8 @@ cargo build --release --features full-cloud
 | `debug` | Yes | Yes | Needs tests |
 | `set_fact` | Yes | Yes | Needs tests |
 | `assert` | Yes | Yes | Needs tests |
-| `fail` | Yes | Yes | 5 tests |
-| `meta` | Yes | No | Planned for v0.2 |
+| `fail` | Yes | No | Planned for v0.2 |
+| `meta` | Yes | Yes | 11 tests |
 | `include_vars` | Yes | Yes | Needs tests |
 | `pause` | Yes | Yes | 31 tests |
 | `git` | Yes | Yes | 23 tests |
@@ -199,7 +199,7 @@ cargo build --release --features full-cloud
 #### Kubernetes Modules (`--features kubernetes`)
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `k8s` | Yes | Yes | Via kube-rs, 18 tests |
+| `k8s` | Yes | Partial | Via kube-rs |
 | `k8s_deployment` | Yes | Yes | - |
 | `k8s_service` | Yes | Yes | - |
 | `k8s_configmap` | Yes | Yes | - |
@@ -211,18 +211,18 @@ cargo build --release --features full-cloud
 |--------|---------|----------|-------|
 | `ec2` / `aws_ec2` | Yes | Yes | Via AWS SDK |
 | `s3` / `aws_s3` | Yes | Yes | Via AWS SDK |
-| `iam_role` | Yes | Yes | Via AWS SDK |
+| `iam_role` | Yes | Partial | Via AWS SDK |
 | `iam_policy` | Yes | Partial | Via AWS SDK |
 
-#### Azure Cloud Modules (`--features azure`)
+#### Azure Cloud Modules (`--features azure`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `azure_rm_virtualmachine` | Yes | Yes | 20 tests |
+| `azure_rm_virtualmachine` | Yes | Stub | Experimental |
 
-#### GCP Cloud Modules (`--features gcp`)
+#### GCP Cloud Modules (`--features gcp`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `gcp_compute_instance` | Yes | Yes | 15 tests |
+| `gcp_compute_instance` | Yes | Stub | Experimental |
 
 #### Network Device Modules (Always Available)
 | Module | Ansible | Rustible | Notes |
@@ -235,18 +235,18 @@ cargo build --release --features full-cloud
 #### Windows Modules (`--features winrm`) - Experimental
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `win_copy` | Yes | Yes | 7 tests, requires WinRM |
+| `win_copy` | Yes | Partial | Requires WinRM |
 | `win_feature` | Yes | Partial | Requires WinRM |
-| `win_service` | Yes | Yes | 6 tests, requires WinRM |
+| `win_service` | Yes | Partial | Requires WinRM |
 | `win_package` | Yes | Partial | Requires WinRM |
-| `win_user` | Yes | Yes | 5 tests, requires WinRM |
+| `win_user` | Yes | Partial | Requires WinRM |
 
-#### Database Modules (`--features database`)
+#### Database Modules (`--features database`) - Disabled
 | Module | Ansible | Rustible | Notes |
 |--------|---------|----------|-------|
-| `postgresql_db` | Yes | Yes | Via sqlx, 6 tests |
+| `postgresql_db` | Yes | Disabled | Pending sqlx integration |
 | `postgresql_user` | Yes | Disabled | Pending sqlx integration |
-| `mysql_db` | Yes | Yes | Via sqlx, 6 tests, requires `database` feature |
+| `mysql_db` | Yes | Disabled | Pending sqlx integration |
 | `mysql_user` | Yes | Disabled | Pending sqlx integration |
 
 ---
@@ -295,7 +295,7 @@ See [jinja2-filters.md](jinja2-filters.md) for the comprehensive filter gap list
 | `password` | Yes | Yes | Random passwords |
 | `pipe` | Yes | Yes | Command output |
 | `url` | Yes | Yes | HTTP/HTTPS fetch |
-| `template` | Yes | Yes | MiniJinja rendering |
+| `template` | Yes | No | Planned |
 | `items` | Yes | No | Planned |
 
 ---
@@ -387,7 +387,7 @@ Both short names and FQCN work identically:
 
 4. **WinRM**: Experimental support, not production-ready.
 
-5. **Database Modules**: Requires `database` feature flag. PostgreSQL and MySQL via sqlx.
+5. **Database Modules**: Currently disabled pending sqlx integration.
 
 ---
 
