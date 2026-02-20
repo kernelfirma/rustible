@@ -39,8 +39,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rustible::modules::{
-    Diff, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams, ModuleRegistry,
-    ParallelizationHint, ParamExt,
+    validate_command_args, Diff, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams,
+    ModuleRegistry, ParallelizationHint, ParamExt,
 };
 
 // ============================================================================
@@ -149,6 +149,30 @@ fn generate_context_with_vars(num_vars: usize) -> ModuleContext {
 // ============================================================================
 // PARAMETER PARSING BENCHMARKS
 // ============================================================================
+
+fn bench_validate_command_args(c: &mut Criterion) {
+    let mut group = c.benchmark_group("validate_command_args");
+
+    // Fast path: safe alphanumeric
+    let safe_simple = "nginx -t";
+    group.bench_function("safe_simple", |b| {
+        b.iter(|| validate_command_args(black_box(safe_simple)))
+    });
+
+    // Slow path: safe but quoted (this is what we are optimizing)
+    let safe_quoted = "echo \"hello world\"";
+    group.bench_function("safe_quoted", |b| {
+        b.iter(|| validate_command_args(black_box(safe_quoted)))
+    });
+
+    // Error path: dangerous
+    let dangerous = "sh -c 'echo pwned' #";
+    group.bench_function("dangerous", |b| {
+        b.iter(|| validate_command_args(black_box(dangerous)))
+    });
+
+    group.finish();
+}
 
 fn bench_parameter_parsing(c: &mut Criterion) {
     let mut group = c.benchmark_group("parameter_parsing");
@@ -1079,6 +1103,7 @@ fn bench_ansible_comparison_baseline(c: &mut Criterion) {
 
 criterion_group!(
     parameter_benches,
+    bench_validate_command_args,
     bench_parameter_parsing,
     bench_parameter_validation_overhead,
 );

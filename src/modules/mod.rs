@@ -393,21 +393,15 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ));
     }
 
-    // Fast path: scan for characters that are known to be safe.
-    // If the string contains only safe characters, we can skip the detailed check.
-    // This avoids checking 24 patterns for every safe string (O(N) vs O(M*N)).
-    //
-    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
-    // Removed % because it can be used for variable expansion on Windows
-    let is_safe = args.bytes().all(|b| {
-        matches!(b,
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
-            b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
-            b'+' | b'=' | b',' | b'@'
-        )
-    });
+    // Optimized check: scan for any dangerous character in a single pass.
+    // This replaces the previous fast-path (which only allowed alphanumeric/safe chars)
+    // and the O(24*N) loop for quoted strings.
+    const DANGEROUS_CHARS: &[char] = &[
+        '$', '`', '&', '|', ';', '<', '>', '\n', '\r', '{', '}', '(', ')', '[', ']', '*', '?',
+        '!', '\\', '#',
+    ];
 
-    if is_safe {
+    if args.find(DANGEROUS_CHARS).is_none() {
         return Ok(());
     }
 
