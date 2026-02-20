@@ -189,10 +189,7 @@ fn parse_dcgmi_diag(output: &str, level: u32) -> DcgmDiagResult {
         if parts.len() >= 3 {
             let test_name = parts[1].trim();
             let result = parts[2].trim();
-            if test_name.is_empty()
-                || test_name.starts_with('-')
-                || test_name.starts_with('=')
-            {
+            if test_name.is_empty() || test_name.starts_with('-') || test_name.starts_with('=') {
                 continue;
             }
             if result.to_lowercase().contains("fail") {
@@ -250,9 +247,7 @@ impl Module for DcgmModule {
         let health_watches = params.get_bool_or("health_watches", false);
         let diag_level = params.get_u32("diag_level")?;
         let exporter = params.get_bool_or("exporter", false);
-        let exporter_port = params
-            .get_u32("exporter_port")?
-            .unwrap_or(9400);
+        let exporter_port = params.get_u32("exporter_port")?.unwrap_or(9400);
         let exporter_counters = params.get_string("exporter_counters")?;
 
         validate_operation_mode(&operation_mode)?;
@@ -262,11 +257,8 @@ impl Module for DcgmModule {
 
         // -- state=absent --
         if state == "absent" {
-            let (installed, _, _) = run_cmd(
-                connection,
-                "command -v dcgmi >/dev/null 2>&1",
-                context,
-            )?;
+            let (installed, _, _) =
+                run_cmd(connection, "command -v dcgmi >/dev/null 2>&1", context)?;
 
             if !installed {
                 return Ok(ModuleOutput::ok("DCGM is not installed"));
@@ -276,16 +268,8 @@ impl Module for DcgmModule {
                 return Ok(ModuleOutput::changed("Would remove DCGM packages"));
             }
 
-            let _ = run_cmd(
-                connection,
-                "systemctl stop nvidia-dcgm.service",
-                context,
-            );
-            let _ = run_cmd(
-                connection,
-                "systemctl disable nvidia-dcgm.service",
-                context,
-            );
+            let _ = run_cmd(connection, "systemctl stop nvidia-dcgm.service", context);
+            let _ = run_cmd(connection, "systemctl disable nvidia-dcgm.service", context);
 
             let remove_cmd = match os_family {
                 "rhel" => "dnf remove -y datacenter-gpu-manager dcgm-exporter",
@@ -299,11 +283,8 @@ impl Module for DcgmModule {
         // -- state=present --
 
         // Step 1: Install DCGM
-        let (dcgm_installed, _, _) = run_cmd(
-            connection,
-            "command -v dcgmi >/dev/null 2>&1",
-            context,
-        )?;
+        let (dcgm_installed, _, _) =
+            run_cmd(connection, "command -v dcgmi >/dev/null 2>&1", context)?;
 
         if !dcgm_installed {
             if context.check_mode {
@@ -355,11 +336,7 @@ impl Module for DcgmModule {
                 context,
             )?;
             if svc_active {
-                run_cmd_ok(
-                    connection,
-                    "systemctl stop nvidia-dcgm.service",
-                    context,
-                )?;
+                run_cmd_ok(connection, "systemctl stop nvidia-dcgm.service", context)?;
                 changed = true;
                 changes.push("Stopped nvidia-dcgm.service for embedded mode".to_string());
             }
@@ -386,11 +363,8 @@ impl Module for DcgmModule {
                 changes.push(format!("Would run DCGM diagnostics level {}", level));
                 None
             } else {
-                let diag_stdout = run_cmd_ok(
-                    connection,
-                    &format!("dcgmi diag -r {}", level),
-                    context,
-                )?;
+                let diag_stdout =
+                    run_cmd_ok(connection, &format!("dcgmi diag -r {}", level), context)?;
                 let result = parse_dcgmi_diag(&diag_stdout, level);
                 if !result.passed {
                     changes.push(format!(
@@ -430,17 +404,11 @@ impl Module for DcgmModule {
 
             // Configure exporter port via environment override
             if !context.check_mode {
-                let env_line = format!(
-                    "DCGM_EXPORTER_LISTEN=:{}",
-                    exporter_port
-                );
+                let env_line = format!("DCGM_EXPORTER_LISTEN=:{}", exporter_port);
                 let env_file = "/etc/default/dcgm-exporter";
                 let mut env_content = env_line.clone();
                 if let Some(ref counters) = exporter_counters {
-                    env_content.push_str(&format!(
-                        "\nDCGM_EXPORTER_COLLECTORS={}",
-                        counters
-                    ));
+                    env_content.push_str(&format!("\nDCGM_EXPORTER_COLLECTORS={}", counters));
                 }
                 run_cmd_ok(
                     connection,
@@ -630,7 +598,10 @@ mod tests {
 
     #[test]
     fn test_detect_os_family() {
-        assert_eq!(detect_os_family("ID_LIKE=\"rhel centos fedora\""), Some("rhel"));
+        assert_eq!(
+            detect_os_family("ID_LIKE=\"rhel centos fedora\""),
+            Some("rhel")
+        );
         assert_eq!(detect_os_family("ID=ubuntu\nVERSION=22.04"), Some("debian"));
         assert_eq!(detect_os_family("ID=freebsd"), None);
     }
@@ -655,9 +626,6 @@ mod tests {
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["port"], 9400);
-        assert_eq!(
-            json["counters_file"],
-            "/etc/dcgm-exporter/counters.csv"
-        );
+        assert_eq!(json["counters_file"], "/etc/dcgm-exporter/counters.csv");
     }
 }

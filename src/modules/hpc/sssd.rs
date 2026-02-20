@@ -141,9 +141,7 @@ fn parse_sssd_conf(content: &str) -> HashMap<String, HashMap<String, String>> {
         // Section header
         if trimmed.starts_with('[') && trimmed.ends_with(']') {
             current_section = trimmed[1..trimmed.len() - 1].to_string();
-            sections
-                .entry(current_section.clone())
-                .or_default();
+            sections.entry(current_section.clone()).or_default();
             continue;
         }
 
@@ -229,17 +227,11 @@ fn validate_tls_certs(
     let mut errors = Vec::new();
 
     // Check that the certificate file exists
-    let (cert_exists, _, _) = run_cmd(
-        connection,
-        &format!("test -f '{}'", tls_cert_path),
-        context,
-    )?;
+    let (cert_exists, _, _) =
+        run_cmd(connection, &format!("test -f '{}'", tls_cert_path), context)?;
 
     if !cert_exists {
-        errors.push(format!(
-            "TLS certificate file not found: {}",
-            tls_cert_path
-        ));
+        errors.push(format!("TLS certificate file not found: {}", tls_cert_path));
         return Ok(PreflightResult {
             passed: false,
             warnings,
@@ -305,11 +297,9 @@ fn parse_cert_expiry_warning(enddate_output: &str) -> Option<String> {
                 _ => None,
             };
 
-            if let (Some(_month_num), Ok(year), Ok(day)) = (
-                month,
-                year_str.parse::<i32>(),
-                day_str.parse::<u32>(),
-            ) {
+            if let (Some(_month_num), Ok(year), Ok(day)) =
+                (month, year_str.parse::<i32>(), day_str.parse::<u32>())
+            {
                 return Some(format!(
                     "TLS certificate expires on {} {} {} (year {}). \
                      Verify it is not within 30 days of expiry.",
@@ -841,8 +831,7 @@ impl Module for SssdDomainModule {
                             check_nss_pam_health(connection, context, Some(user.as_str()))?;
                         diagnostics.insert(
                             "nss_pam_health".to_string(),
-                            serde_json::to_value(&nss_result)
-                                .unwrap_or(serde_json::json!(null)),
+                            serde_json::to_value(&nss_result).unwrap_or(serde_json::json!(null)),
                         );
                     }
                 }
@@ -899,8 +888,7 @@ impl Module for SssdDomainModule {
 
             // NSS/PAM health check
             if let Some(ref user) = test_user {
-                let nss_result =
-                    check_nss_pam_health(connection, context, Some(user.as_str()))?;
+                let nss_result = check_nss_pam_health(connection, context, Some(user.as_str()))?;
                 diagnostics.insert(
                     "nss_pam_health".to_string(),
                     serde_json::to_value(&nss_result).unwrap_or(serde_json::json!(null)),
@@ -1069,10 +1057,7 @@ krb5_realm = CORP.LOCAL
         assert!(parsed.contains_key("domain/EXAMPLE.COM"));
         let domain1 = &parsed["domain/EXAMPLE.COM"];
         assert_eq!(domain1.get("id_provider").unwrap(), "ldap");
-        assert_eq!(
-            domain1.get("ldap_uri").unwrap(),
-            "ldaps://ldap.example.com"
-        );
+        assert_eq!(domain1.get("ldap_uri").unwrap(), "ldaps://ldap.example.com");
         assert_eq!(domain1.get("krb5_realm").unwrap(), "EXAMPLE.COM");
         assert_eq!(
             domain1.get("ldap_search_base").unwrap(),

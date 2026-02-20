@@ -266,12 +266,9 @@ impl Module for IbDiagnosticsModule {
             .get_string("output_dir")?
             .unwrap_or_else(|| "/tmp/ib_diagnostics".to_string());
         let auto_drain = params.get_bool_or("auto_drain", false);
-        let threshold_symbol_errors = params
-            .get_u32("threshold_symbol_errors")?
-            .unwrap_or(10) as u64;
-        let threshold_link_downed = params
-            .get_u32("threshold_link_downed")?
-            .unwrap_or(5) as u64;
+        let threshold_symbol_errors =
+            params.get_u32("threshold_symbol_errors")?.unwrap_or(10) as u64;
+        let threshold_link_downed = params.get_u32("threshold_link_downed")?.unwrap_or(5) as u64;
         let drain_reason = params
             .get_string("drain_reason")?
             .unwrap_or_else(|| "IB diagnostics threshold exceeded".to_string());
@@ -348,8 +345,7 @@ impl Module for IbDiagnosticsModule {
             .map(|output| parse_counter_values(output))
             .unwrap_or_default();
 
-        let (overall_verdict, counter_verdicts) =
-            generate_verdict(&counter_values, &thresholds);
+        let (overall_verdict, counter_verdicts) = generate_verdict(&counter_values, &thresholds);
 
         // Optionally trigger drain
         let drain_cmd = if auto_drain && overall_verdict == "fail" {

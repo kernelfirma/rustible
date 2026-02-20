@@ -712,10 +712,7 @@ mod tests {
             let module = ShellModule;
             let mut params: ModuleParams = HashMap::new();
             // Use /bin/sh as executable and echo as the command
-            params.insert(
-                "executable".to_string(),
-                serde_json::json!("/bin/sh"),
-            );
+            params.insert("executable".to_string(), serde_json::json!("/bin/sh"));
             params.insert("cmd".to_string(), serde_json::json!("echo arg1"));
 
             let context = ModuleContext::default();

@@ -136,10 +136,7 @@ fn gpu_selector_arg(gpu_id: &Option<String>) -> String {
 }
 
 fn parse_power_limit(value: &str) -> Option<f64> {
-    let token = value
-        .split_whitespace()
-        .next()
-        .unwrap_or("");
+    let token = value.split_whitespace().next().unwrap_or("");
     token.parse::<f64>().ok()
 }
 
@@ -386,8 +383,7 @@ impl Module for NvidiaGpuModule {
             let current = self
                 .query_single_value(connection, context, "persistence_mode", &gpu_id)
                 .unwrap_or_default();
-            let current_enabled = current.first()
-                .and_then(|value| parse_enabled_flag(value));
+            let current_enabled = current.first().and_then(|value| parse_enabled_flag(value));
 
             if current_enabled != Some(persistence_mode) {
                 if context.check_mode {
@@ -427,8 +423,8 @@ impl Module for NvidiaGpuModule {
 
                 if !svc_active || !svc_enabled {
                     if context.check_mode {
-                        changes.push("Would enable and start nvidia-persistenced.service"
-                            .to_string());
+                        changes
+                            .push("Would enable and start nvidia-persistenced.service".to_string());
                     } else {
                         run_cmd_ok(
                             connection,
@@ -436,9 +432,7 @@ impl Module for NvidiaGpuModule {
                             context,
                         )?;
                         changed = true;
-                        changes.push(
-                            "Enabled and started nvidia-persistenced.service".to_string(),
-                        );
+                        changes.push("Enabled and started nvidia-persistenced.service".to_string());
                     }
                 }
             } else {
@@ -471,8 +465,7 @@ impl Module for NvidiaGpuModule {
             let current = self
                 .query_single_value(connection, context, "compute_mode", &gpu_id)
                 .unwrap_or_default();
-            let current_mode = current.first()
-                .map(|value| value.trim().to_lowercase());
+            let current_mode = current.first().map(|value| value.trim().to_lowercase());
 
             if current_mode.as_deref() != Some(desired_label.as_str()) {
                 if context.check_mode {
@@ -495,8 +488,7 @@ impl Module for NvidiaGpuModule {
             let current = self
                 .query_single_value(connection, context, "ecc.mode.current", &gpu_id)
                 .unwrap_or_default();
-            let current_enabled = current.first()
-                .and_then(|value| parse_enabled_flag(value));
+            let current_enabled = current.first().and_then(|value| parse_enabled_flag(value));
 
             if current_enabled != Some(ecc_mode) {
                 if context.check_mode {
@@ -504,11 +496,7 @@ impl Module for NvidiaGpuModule {
                 } else {
                     run_cmd_ok(
                         connection,
-                        &format!(
-                            "nvidia-smi{} -e {}",
-                            selector,
-                            if ecc_mode { 1 } else { 0 }
-                        ),
+                        &format!("nvidia-smi{} -e {}", selector, if ecc_mode { 1 } else { 0 }),
                         context,
                     )?;
                     changed = true;
@@ -523,8 +511,7 @@ impl Module for NvidiaGpuModule {
             let current = self
                 .query_single_value(connection, context, "power.limit", &gpu_id)
                 .unwrap_or_default();
-            let current_limit = current.first()
-                .and_then(|value| parse_power_limit(value));
+            let current_limit = current.first().and_then(|value| parse_power_limit(value));
 
             let needs_update = current_limit
                 .map(|limit| (limit - power_limit as f64).abs() > 0.1)
@@ -532,10 +519,7 @@ impl Module for NvidiaGpuModule {
 
             if needs_update {
                 if context.check_mode {
-                    changes.push(format!(
-                        "Would set power_limit={}{}",
-                        power_limit, selector
-                    ));
+                    changes.push(format!("Would set power_limit={}{}", power_limit, selector));
                 } else {
                     run_cmd_ok(
                         connection,
@@ -543,10 +527,7 @@ impl Module for NvidiaGpuModule {
                         context,
                     )?;
                     changed = true;
-                    changes.push(format!(
-                        "Set power_limit={}{}",
-                        power_limit, selector
-                    ));
+                    changes.push(format!("Set power_limit={}{}", power_limit, selector));
                 }
             }
         }

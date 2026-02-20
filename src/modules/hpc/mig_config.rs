@@ -110,12 +110,20 @@ fn parse_gpu_instances(output: &str) -> Vec<MigInstance> {
     let mut instances = Vec::new();
     for line in output.lines() {
         let line = line.trim();
-        if !line.starts_with('|') || line.contains("GPU instances") || line.contains("GPU   Name") || line.contains("ID") {
+        if !line.starts_with('|')
+            || line.contains("GPU instances")
+            || line.contains("GPU   Name")
+            || line.contains("ID")
+        {
             continue;
         }
         // Strip leading/trailing '|' and parse columns
         let inner = line.trim_matches('|').trim();
-        if inner.starts_with('=') || inner.starts_with('-') || inner.starts_with('+') || inner.is_empty() {
+        if inner.starts_with('=')
+            || inner.starts_with('-')
+            || inner.starts_with('+')
+            || inner.is_empty()
+        {
             continue;
         }
         let parts: Vec<&str> = inner.split_whitespace().collect();
@@ -179,16 +187,8 @@ fn validate_profile(profile: &str) -> bool {
     if parts.len() != 2 {
         return false;
     }
-    let slice_ok = parts[0].ends_with('g')
-        && parts[0]
-            .trim_end_matches('g')
-            .parse::<u32>()
-            .is_ok();
-    let mem_ok = parts[1].ends_with("gb")
-        && parts[1]
-            .trim_end_matches("gb")
-            .parse::<u32>()
-            .is_ok();
+    let slice_ok = parts[0].ends_with('g') && parts[0].trim_end_matches('g').parse::<u32>().is_ok();
+    let mem_ok = parts[1].ends_with("gb") && parts[1].trim_end_matches("gb").parse::<u32>().is_ok();
     slice_ok && mem_ok
 }
 
@@ -354,15 +354,9 @@ impl Module for MigConfigModule {
                         // Create new instances
                         let profiles_arg = profile_list.join(",");
                         let create_cmd = if auto_create_compute {
-                            format!(
-                                "nvidia-smi mig -cgi {} -C -i {}",
-                                profiles_arg, gpu_id
-                            )
+                            format!("nvidia-smi mig -cgi {} -C -i {}", profiles_arg, gpu_id)
                         } else {
-                            format!(
-                                "nvidia-smi mig -cgi {} -i {}",
-                                profiles_arg, gpu_id
-                            )
+                            format!("nvidia-smi mig -cgi {} -i {}", profiles_arg, gpu_id)
                         };
 
                         run_cmd_ok(connection, &create_cmd, context)?;

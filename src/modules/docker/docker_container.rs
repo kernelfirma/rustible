@@ -33,8 +33,8 @@
 
 #[cfg(feature = "docker")]
 use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions,
-    RestartContainerOptions, StartContainerOptions, StopContainerOptions,
+    Config, CreateContainerOptions, RemoveContainerOptions, RestartContainerOptions,
+    StartContainerOptions, StopContainerOptions,
 };
 #[cfg(feature = "docker")]
 use bollard::models::{

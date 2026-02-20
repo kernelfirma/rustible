@@ -282,11 +282,7 @@ pub enum ServerSideEncryption {
 
 impl ServerSideEncryption {
     fn from_str(s: &str) -> ModuleResult<Self> {
-        match s
-            .to_uppercase()
-            .replace(['-', ':'], "_")
-            .as_str()
-        {
+        match s.to_uppercase().replace(['-', ':'], "_").as_str() {
             "AES256" | "AES_256" | "SSE_S3" => Ok(ServerSideEncryption::Aes256),
             "AWS_KMS" | "AWSKMS" | "KMS" | "SSE_KMS" => Ok(ServerSideEncryption::AwsKms),
             "SSE_C" | "CUSTOMER" | "CUSTOMER_PROVIDED" => {

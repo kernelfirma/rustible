@@ -201,14 +201,13 @@ impl Module for NvidiaContainerToolkitModule {
 
         // -- state=absent --
         if state == "absent" {
-            let (installed, _, _) = run_cmd(
-                connection,
-                "command -v nvidia-ctk >/dev/null 2>&1",
-                context,
-            )?;
+            let (installed, _, _) =
+                run_cmd(connection, "command -v nvidia-ctk >/dev/null 2>&1", context)?;
 
             if !installed {
-                return Ok(ModuleOutput::ok("NVIDIA Container Toolkit is not installed"));
+                return Ok(ModuleOutput::ok(
+                    "NVIDIA Container Toolkit is not installed",
+                ));
             }
 
             if context.check_mode {
@@ -274,11 +273,8 @@ impl Module for NvidiaContainerToolkitModule {
         }
 
         // Step 2: Install toolkit
-        let (toolkit_installed, _, _) = run_cmd(
-            connection,
-            "command -v nvidia-ctk >/dev/null 2>&1",
-            context,
-        )?;
+        let (toolkit_installed, _, _) =
+            run_cmd(connection, "command -v nvidia-ctk >/dev/null 2>&1", context)?;
 
         if !toolkit_installed {
             if context.check_mode {
@@ -286,7 +282,9 @@ impl Module for NvidiaContainerToolkitModule {
             } else {
                 let install_cmd = match os_family {
                     "rhel" => "dnf install -y nvidia-container-toolkit",
-                    _ => "DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-container-toolkit",
+                    _ => {
+                        "DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-container-toolkit"
+                    }
                 };
                 run_cmd_ok(connection, install_cmd, context)?;
                 changed = true;
@@ -296,10 +294,7 @@ impl Module for NvidiaContainerToolkitModule {
 
         // Step 3: Configure runtime
         if !context.check_mode {
-            let configure_cmd = format!(
-                "nvidia-ctk runtime configure --runtime={}",
-                runtime
-            );
+            let configure_cmd = format!("nvidia-ctk runtime configure --runtime={}", runtime);
             let (ok, _, _) = run_cmd(connection, &configure_cmd, context)?;
             if ok {
                 changes.push(format!("Configured {} runtime for NVIDIA", runtime));
@@ -316,7 +311,10 @@ impl Module for NvidiaContainerToolkitModule {
                     context,
                 )?;
                 changed = true;
-                changes.push(format!("Applied custom toolkit config from {}", config_path));
+                changes.push(format!(
+                    "Applied custom toolkit config from {}",
+                    config_path
+                ));
             }
 
             // Restart runtime service
@@ -345,7 +343,13 @@ impl Module for NvidiaContainerToolkitModule {
             } else {
                 run_cmd_ok(
                     connection,
-                    &format!("mkdir -p {}", cdi_output.rsplit_once('/').map(|(d, _)| d).unwrap_or("/etc/cdi")),
+                    &format!(
+                        "mkdir -p {}",
+                        cdi_output
+                            .rsplit_once('/')
+                            .map(|(d, _)| d)
+                            .unwrap_or("/etc/cdi")
+                    ),
                     context,
                 )?;
                 let (ok, _, _) = run_cmd(
@@ -362,11 +366,8 @@ impl Module for NvidiaContainerToolkitModule {
 
         // Step 5: Collect status info
         let status = if !context.check_mode {
-            let (ok, stdout, _) = run_cmd(
-                connection,
-                "nvidia-container-cli info 2>/dev/null",
-                context,
-            )?;
+            let (ok, stdout, _) =
+                run_cmd(connection, "nvidia-container-cli info 2>/dev/null", context)?;
             if ok {
                 let mut s = parse_container_cli_info(&stdout);
                 s.runtime = runtime.clone();

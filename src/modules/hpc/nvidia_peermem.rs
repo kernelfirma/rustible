@@ -79,14 +79,7 @@ fn parse_driver_version(nvidia_smi_output: &str) -> Option<String> {
     if version.is_empty() {
         return None;
     }
-    Some(
-        version
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-    )
+    Some(version.lines().next().unwrap_or("").trim().to_string())
 }
 
 /// Parse the major version number from a driver version string like "535.183.01".
@@ -172,9 +165,8 @@ impl Module for NvidiaPeermemModule {
             )?;
             if autoload_exists {
                 if context.check_mode {
-                    changes.push(
-                        "Would remove /etc/modules-load.d/nvidia-peermem.conf".to_string(),
-                    );
+                    changes
+                        .push("Would remove /etc/modules-load.d/nvidia-peermem.conf".to_string());
                 } else {
                     run_cmd_ok(
                         connection,
@@ -217,10 +209,8 @@ impl Module for NvidiaPeermemModule {
             }
 
             if changed {
-                return Ok(
-                    ModuleOutput::changed("Removed nvidia-peermem")
-                        .with_data("changes", serde_json::json!(changes)),
-                );
+                return Ok(ModuleOutput::changed("Removed nvidia-peermem")
+                    .with_data("changes", serde_json::json!(changes)));
             }
 
             return Ok(ModuleOutput::ok("nvidia-peermem is not loaded"));
@@ -323,9 +313,8 @@ impl Module for NvidiaPeermemModule {
 
             if !autoload_exists {
                 if context.check_mode {
-                    changes.push(
-                        "Would create /etc/modules-load.d/nvidia-peermem.conf".to_string(),
-                    );
+                    changes
+                        .push("Would create /etc/modules-load.d/nvidia-peermem.conf".to_string());
                 } else {
                     run_cmd_ok(
                         connection,
@@ -363,10 +352,7 @@ impl Module for NvidiaPeermemModule {
         }
 
         let mut output = if changed {
-            ModuleOutput::changed(format!(
-                "Applied {} nvidia-peermem changes",
-                changes.len()
-            ))
+            ModuleOutput::changed(format!("Applied {} nvidia-peermem changes", changes.len()))
         } else {
             ModuleOutput::ok("nvidia-peermem is loaded and configured")
         };
