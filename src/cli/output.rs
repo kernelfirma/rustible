@@ -124,18 +124,30 @@ impl OutputFormatter {
         }
 
         let width = measure_text_width(title);
-        let horizontal = "─".repeat(width + 4);
+        let horizontal = "─".repeat(width + 2);
 
         if self.use_color {
-            println!("\n{}", format!("┌{}┐", horizontal).bright_blue());
             println!(
-                "{}",
-                format!("│  {}  │", title).bright_blue().bold()
+                "\n{}{}{}",
+                "┌".bright_blue(),
+                horizontal.bright_blue(),
+                "┐".bright_blue()
             );
-            println!("{}\n", format!("└{}┘", horizontal).bright_blue());
+            println!(
+                "{} {} {}",
+                "│".bright_blue(),
+                title.bright_blue().bold(),
+                "│".bright_blue()
+            );
+            println!(
+                "{}{}{}\n",
+                "└".bright_blue(),
+                horizontal.bright_blue(),
+                "┘".bright_blue()
+            );
         } else {
             println!("\n┌{}┐", horizontal);
-            println!("│  {}  │", title);
+            println!("│ {} │", title);
             println!("└{}┘\n", horizontal);
         }
     }
