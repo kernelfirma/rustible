@@ -176,11 +176,14 @@ pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult
     }
 
     // Reject shell metacharacters that enable command injection
-    const SHELL_METACHARACTERS: &[char] = &[
-        '$', '`', '|', '&', ';', '<', '>', '(', ')', '\n', '\r', '\t', '\\', '!',
-    ];
-
-    if value.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+    // Optimization: Check bytes directly to avoid UTF-8 decoding and linear slice scan.
+    // All these metacharacters are ASCII (single byte), so this is safe and correct even for UTF-8 strings.
+    if value.bytes().any(|b| matches!(b,
+        b'$' | b'`' | b'|' | b'&' | b';' | b'<' | b'>' | b'(' | b')' | b'\n' | b'\r' | b'\t' | b'\\' | b'!'
+    )) {
+        const SHELL_METACHARACTERS: &[char] = &[
+            '$', '`', '|', '&', ';', '<', '>', '(', ')', '\n', '\r', '\t', '\\', '!',
+        ];
         let found_chars: Vec<String> = value
             .chars()
             .filter(|c| SHELL_METACHARACTERS.contains(c))
