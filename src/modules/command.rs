@@ -12,7 +12,7 @@ use super::{
     ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
-use crate::utils::{cmd_escape, powershell_escape, shell_escape};
+use crate::utils::{cmd_arg_escape, powershell_escape, shell_escape};
 use once_cell::sync::Lazy;
 use std::path::Path;
 use std::process::Command;
@@ -89,7 +89,7 @@ impl CommandModule {
             let escaped_args: Vec<std::borrow::Cow<'_, str>> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
-                    "cmd" => cmd_escape(arg),
+                    "cmd" => cmd_arg_escape(arg),
                     "powershell" => powershell_escape(arg),
                     "posix" | "sh" | "bash" => shell_escape(arg),
                     _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility

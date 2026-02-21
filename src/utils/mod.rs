@@ -192,6 +192,39 @@ pub fn cmd_escape(s: &str) -> Cow<'_, str> {
     Cow::Owned(escaped)
 }
 
+/// Escape a string for use as a single argument in Windows cmd.exe.
+///
+/// This function wraps the string in double quotes and escapes any internal double quotes,
+/// similar to `cmd_escape`. Additionally, it escapes `%` characters by replacing them
+/// with `%""` to prevent variable expansion inside the quoted string.
+///
+/// This is crucial because `cmd.exe` performs variable expansion even inside double quotes.
+/// By inserting an empty string `""` after the `%`, we break the variable name token
+/// without changing the value (since `""` is empty), effectively preventing expansion.
+///
+/// # Arguments
+///
+/// * `s` - The argument string to escape
+///
+/// # Returns
+///
+/// * The escaped argument string safe for cmd.exe execution as a literal
+pub fn cmd_arg_escape(s: &str) -> Cow<'_, str> {
+    let mut escaped = String::with_capacity(s.len() + 16);
+    escaped.push('"');
+
+    for c in s.chars() {
+        match c {
+            '"' => escaped.push_str("\"\""),
+            '%' => escaped.push_str("%\"\""),
+            _ => escaped.push(c),
+        }
+    }
+
+    escaped.push('"');
+    Cow::Owned(escaped)
+}
+
 /// Escapes a string for safe use in PowerShell commands.
 ///
 /// This function handles special characters that could cause issues
@@ -324,6 +357,17 @@ mod tests {
         assert_eq!(cmd_escape("foo&bar"), "\"foo&bar\"");
         assert_eq!(cmd_escape("foo|bar"), "\"foo|bar\"");
         assert_eq!(cmd_escape(""), "\"\"");
+    }
+
+    #[test]
+    fn test_cmd_arg_escape() {
+        assert_eq!(cmd_arg_escape("simple"), "\"simple\"");
+        assert_eq!(cmd_arg_escape("with space"), "\"with space\"");
+        assert_eq!(cmd_arg_escape("with\"quote"), "\"with\"\"quote\"");
+        // Verify % is escaped with %""
+        assert_eq!(cmd_arg_escape("%USERNAME%"), "\"%\"\"USERNAME%\"\"\"");
+        assert_eq!(cmd_arg_escape("100%"), "\"100%\"\"\"");
+        assert_eq!(cmd_arg_escape(""), "\"\"");
     }
 
     #[test]

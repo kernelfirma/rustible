@@ -409,10 +409,11 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // check if it actually contains any characters that are part of dangerous patterns.
     // If it doesn't contain any of these characters, it's safe even if it has quotes.
     //
-    // Dangerous characters: $ ( { ` & | ; > < \n \r } ) [ ] * ? ! \ #
-    let has_dangerous_chars = args.bytes().any(|b| matches!(b,
-        b'$' | b'(' | b'{' | b'`' | b'&' | b'|' | b';' | b'>' | b'<' | b'\n' | b'\r' |
-        b'}' | b')' | b'[' | b']' | b'*' | b'?' | b'!' | b'\\' | b'#'
+    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
+    let is_safe = args.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+        b'+' | b'=' | b',' | b'@'
     ));
 
     if !has_dangerous_chars {
@@ -444,6 +445,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("!", "history expansion !"),
         ("\\", "shell escaping \\"),
         ("$", "variable expansion $"),
+        ("%", "variable expansion %"),
         ("#", "shell comment #"),
         ("%", "variable expansion %"),
         ("^", "shell escape ^"),
@@ -2097,6 +2099,7 @@ mod tests {
         // Extended checks
         assert!(validate_command_args("bash;echo").is_err());
         assert!(validate_command_args("cmd&").is_err());
+        assert!(validate_command_args("echo %USERNAME%").is_err());
     }
 
     #[test]
