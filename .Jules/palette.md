@@ -53,6 +53,6 @@
 **Learning:** Legacy CLI tools often use ASCII characters (like `*`) for separators, which can feel dated. Replacing them with Unicode box-drawing characters (like `─`) creates a cleaner, more continuous visual flow that matches modern design sensibilities without sacrificing terminal compatibility.
 **Action:** Replace repeated ASCII separator characters with their Unicode box-drawing equivalents (`─`, `━`, `═`) in headers and banners to improve visual polish.
 
-## 2024-05-25 - [Framed Banners for Context Switching]
-**Learning:** Simple horizontal lines often get lost in verbose CLI output. Framing major context switches (like starting a playbook) with a full Unicode box (`┌`, `│`, `└`) creates a strong visual anchor that helps users rapidly identify the beginning of a new execution phase.
-**Action:** Use box-drawing characters to enclose high-level banners, ensuring proper padding calculation (`measure_text_width`) to handle Unicode titles correctly.
+## 2024-05-27 - [Aggregated Summaries in CLI Output]
+**Learning:** In multi-host CLI executions, individual host results can scroll off-screen, making it difficult to assess overall success/failure at a glance. Adding a distinct "TOTALS" row at the bottom provides immediate, high-level feedback that is essential for larger deployments.
+**Action:** For commands that execute across multiple items/hosts, calculate and display an aggregated summary row (e.g., "TOTALS") aligned with the detail columns to allow quick validation of the entire operation.
