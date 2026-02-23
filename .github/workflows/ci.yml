@@ -123,6 +123,77 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --features ${{ matrix.features }}
 
+  # Gate major optional feature bundles to avoid regressions in less-used modules
+  feature_matrix:
+    name: Feature Bundle Gate (${{ matrix.bundle.name }})
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle:
+          - name: aws
+            features: aws
+            mode: test
+          - name: docker
+            features: docker
+            mode: test
+          - name: api
+            features: api
+            mode: test
+          - name: database
+            features: database
+            mode: test
+          - name: provisioning
+            features: provisioning
+            mode: test
+          - name: aggregate
+            features: full-provisioning,api,database
+            mode: compile
+
+    steps:
+      - name: Free disk space
+        run: |
+          # Remove unnecessary large directories to free up disk space (~15GB)
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          # Additional cleanup for more space (~10GB more)
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/share/swift
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bundle-${{ matrix.bundle.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bundle-${{ matrix.bundle.name }}-cargo-
+            ${{ runner.os }}-bundle-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Compile bundle
+        run: cargo check --all-targets --features "${{ matrix.bundle.features }}" --verbose
+
+      - name: Run bundle tests
+        if: matrix.bundle.mode == 'test'
+        run: cargo test --lib --features "${{ matrix.bundle.features }}" --verbose -- --test-threads=1
+        env:
+          RUST_LOG: debug
+
   # Security audit using cargo-audit
   security:
     name: Security Audit
@@ -215,7 +286,7 @@ jobs:
   # Build release artifacts for all platforms
   build:
     name: Build (${{ matrix.target }})
-    needs: [test, security]
+    needs: [test, feature_matrix, security]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -305,7 +376,7 @@ jobs:
   # Summary job that requires all other jobs to pass
   ci-success:
     name: CI Success
-    needs: [check, test, security, coverage, build]
+    needs: [check, test, feature_matrix, security, coverage, build]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -313,7 +384,9 @@ jobs:
         run: |
           if [[ "${{ needs.check.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.feature_matrix.result }}" != "success" ]] || \
              [[ "${{ needs.security.result }}" != "success" ]] || \
+             [[ "${{ needs.coverage.result }}" != "success" ]] || \
              [[ "${{ needs.build.result }}" != "success" ]]; then
             echo "One or more jobs failed"
             exit 1
