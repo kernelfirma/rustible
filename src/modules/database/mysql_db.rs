@@ -73,6 +73,32 @@ pub struct DatabaseInfo {
 pub struct MysqlDbModule;
 
 impl MysqlDbModule {
+    /// Validate a MySQL identifier (encoding, collation, etc.) to prevent SQL injection.
+    /// Only allows alphanumeric characters, underscores, and hyphens.
+    fn validate_mysql_identifier(value: &str, param_name: &str) -> ModuleResult<()> {
+        if value.is_empty() {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} cannot be empty",
+                param_name
+            )));
+        }
+        if value.len() > 64 {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} cannot exceed 64 characters",
+                param_name
+            )));
+        }
+        for c in value.chars() {
+            if !c.is_ascii_alphanumeric() && c != '_' && c != '-' {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "{} contains invalid character: '{}'. Only alphanumeric, underscore, and hyphen are allowed",
+                    param_name, c
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Validate database name to prevent SQL injection
     fn validate_db_name(name: &str) -> ModuleResult<()> {
         if name.is_empty() {
@@ -205,10 +231,12 @@ impl MysqlDbModule {
         let mut query = format!("CREATE DATABASE `{}`", db_name);
 
         if let Some(enc) = encoding {
+            Self::validate_mysql_identifier(enc, "encoding")?;
             query.push_str(&format!(" CHARACTER SET {}", enc));
         }
 
         if let Some(coll) = collation {
+            Self::validate_mysql_identifier(coll, "collation")?;
             query.push_str(&format!(" COLLATE {}", coll));
         }
 
@@ -243,12 +271,14 @@ impl MysqlDbModule {
 
         if let Some(enc) = encoding {
             if enc != current.encoding {
+                Self::validate_mysql_identifier(enc, "encoding")?;
                 query.push_str(&format!(" CHARACTER SET {}", enc));
             }
         }
 
         if let Some(coll) = collation {
             if coll != current.collation {
+                Self::validate_mysql_identifier(coll, "collation")?;
                 query.push_str(&format!(" COLLATE {}", coll));
             }
         }

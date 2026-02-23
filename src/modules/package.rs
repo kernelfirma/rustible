@@ -7,8 +7,9 @@ use super::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
+use crate::connection::{Connection, ExecuteOptions};
+use crate::utils::shell_escape;
 use std::collections::HashMap;
-use std::process::Command;
 
 /// Supported package managers
 #[derive(Debug, Clone, PartialEq)]
@@ -23,7 +24,10 @@ pub enum PackageManager {
 }
 
 impl PackageManager {
-    pub fn detect() -> Option<Self> {
+    pub async fn detect_remote(
+        conn: &(dyn Connection + Send + Sync),
+        options: Option<ExecuteOptions>,
+    ) -> Option<Self> {
         // Check for package managers in order of preference
         let managers = [
             ("apt-get", PackageManager::Apt),
@@ -36,13 +40,11 @@ impl PackageManager {
         ];
 
         for (cmd, manager) in managers {
-            if Command::new("which")
-                .arg(cmd)
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-            {
-                return Some(manager);
+            let which_cmd = format!("which {}", cmd);
+            if let Ok(result) = conn.execute(&which_cmd, options.clone()).await {
+                if result.success {
+                    return Some(manager);
+                }
             }
         }
 
@@ -113,59 +115,63 @@ impl PackageManager {
         }
     }
 
-    pub fn is_installed(&self, package: &str) -> ModuleResult<bool> {
-        let result = match self {
-            PackageManager::Apt => Command::new("dpkg")
-                .args(["-s", package])
-                .output()
-                .map(|o| o.status.success()),
-            PackageManager::Dnf | PackageManager::Yum => Command::new("rpm")
-                .args(["-q", package])
-                .output()
-                .map(|o| o.status.success()),
-            PackageManager::Pacman => Command::new("pacman")
-                .args(["-Q", package])
-                .output()
-                .map(|o| o.status.success()),
-            PackageManager::Zypper => Command::new("rpm")
-                .args(["-q", package])
-                .output()
-                .map(|o| o.status.success()),
-            PackageManager::Apk => Command::new("apk")
-                .args(["info", "-e", package])
-                .output()
-                .map(|o| o.status.success()),
-            PackageManager::Brew => Command::new("brew")
-                .args(["list", package])
-                .output()
-                .map(|o| o.status.success()),
+    pub async fn is_installed_remote(
+        &self,
+        package: &str,
+        conn: &(dyn Connection + Send + Sync),
+        options: Option<ExecuteOptions>,
+    ) -> ModuleResult<bool> {
+        let escaped_pkg = shell_escape(package);
+        let cmd = match self {
+            PackageManager::Apt => format!("dpkg -s {} 2>/dev/null", escaped_pkg),
+            PackageManager::Dnf | PackageManager::Yum => {
+                format!("rpm -q {} 2>/dev/null", escaped_pkg)
+            }
+            PackageManager::Pacman => format!("pacman -Q {} 2>/dev/null", escaped_pkg),
+            PackageManager::Zypper => format!("rpm -q {} 2>/dev/null", escaped_pkg),
+            PackageManager::Apk => format!("apk info -e {} 2>/dev/null", escaped_pkg),
+            PackageManager::Brew => format!("brew list {} 2>/dev/null", escaped_pkg),
         };
 
-        result.map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to check package status: {}", e))
-        })
+        match conn.execute(&cmd, options).await {
+            Ok(result) => Ok(result.success),
+            Err(e) => Err(ModuleError::ExecutionFailed(format!(
+                "Failed to check package status: {}",
+                e
+            ))),
+        }
     }
 
-    pub fn get_installed_version(&self, package: &str) -> ModuleResult<Option<String>> {
-        let output = match self {
-            PackageManager::Apt => Command::new("dpkg-query")
-                .args(["-W", "-f=${Version}", package])
-                .output(),
-            PackageManager::Dnf | PackageManager::Yum | PackageManager::Zypper => {
-                Command::new("rpm")
-                    .args(["-q", "--qf", "%{VERSION}-%{RELEASE}", package])
-                    .output()
+    pub async fn get_installed_version_remote(
+        &self,
+        package: &str,
+        conn: &(dyn Connection + Send + Sync),
+        options: Option<ExecuteOptions>,
+    ) -> ModuleResult<Option<String>> {
+        let escaped_pkg = shell_escape(package);
+        let cmd = match self {
+            PackageManager::Apt => {
+                format!(
+                    "dpkg-query -W -f='${{Version}}' {} 2>/dev/null",
+                    escaped_pkg
+                )
             }
-            PackageManager::Pacman => Command::new("pacman").args(["-Q", package]).output(),
-            PackageManager::Apk => Command::new("apk").args(["version", package]).output(),
-            PackageManager::Brew => Command::new("brew")
-                .args(["info", "--json=v1", package])
-                .output(),
+            PackageManager::Dnf | PackageManager::Yum | PackageManager::Zypper => {
+                format!(
+                    "rpm -q --qf '%{{VERSION}}-%{{RELEASE}}' {} 2>/dev/null",
+                    escaped_pkg
+                )
+            }
+            PackageManager::Pacman => format!("pacman -Q {} 2>/dev/null", escaped_pkg),
+            PackageManager::Apk => format!("apk version {} 2>/dev/null", escaped_pkg),
+            PackageManager::Brew => {
+                format!("brew info --json=v1 {} 2>/dev/null", escaped_pkg)
+            }
         };
 
-        match output {
-            Ok(o) if o.status.success() => {
-                let version = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        match conn.execute(&cmd, options).await {
+            Ok(result) if result.success => {
+                let version = result.stdout.trim().to_string();
                 if version.is_empty() {
                     Ok(None)
                 } else {
@@ -220,28 +226,50 @@ impl std::str::FromStr for PackageState {
 pub struct PackageModule;
 
 impl PackageModule {
-    pub fn run_package_command(
+    /// Build execution options with become/sudo if needed
+    fn build_exec_options(context: &ModuleContext) -> ExecuteOptions {
+        let mut options = ExecuteOptions::new();
+
+        if context.r#become {
+            options.escalate = true;
+            options.escalate_user = context
+                .become_user
+                .clone()
+                .or_else(|| Some("root".to_string()));
+            options.escalate_method = context.become_method.clone();
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
+        }
+
+        if let Some(ref work_dir) = context.work_dir {
+            options = options.with_cwd(work_dir);
+        }
+
+        options
+    }
+
+    /// Run a package command remotely via the connection
+    async fn run_package_command_remote(
         cmd: &[&str],
         packages: &[String],
+        conn: &(dyn Connection + Send + Sync),
+        options: Option<ExecuteOptions>,
     ) -> ModuleResult<(bool, String, String)> {
         if cmd.is_empty() {
             return Err(ModuleError::ExecutionFailed("Empty command".to_string()));
         }
 
-        let mut command = Command::new(cmd[0]);
-        if cmd.len() > 1 {
-            command.args(&cmd[1..]);
-        }
-        command.args(packages);
+        let escaped_packages: Vec<std::borrow::Cow<'_, str>> =
+            packages.iter().map(|p| shell_escape(p)).collect();
 
-        let output = command.output().map_err(|e| {
+        let cmd_string = format!("{} {}", cmd.join(" "), escaped_packages.join(" "));
+
+        let result = conn.execute(&cmd_string, options).await.map_err(|e| {
             ModuleError::ExecutionFailed(format!("Failed to execute package command: {}", e))
         })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        Ok((output.status.success(), stdout, stderr))
+        Ok((result.success, result.stdout, result.stderr))
     }
 }
 
@@ -272,151 +300,244 @@ impl Module for PackageModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        // Get package manager
-        let pkg_manager = if let Some(pm_str) = params.get_string("use")? {
-            PackageManager::from_str(&pm_str)?
-        } else {
-            PackageManager::detect().ok_or_else(|| {
-                ModuleError::ExecutionFailed("Could not detect package manager".to_string())
-            })?
-        };
-
-        // Get packages - can be a single package or a list
-        let packages: Vec<String> = if let Some(names) = params.get_vec_string("name")? {
-            names
-        } else {
-            vec![params.get_string_required("name")?]
-        };
-
-        let state_str = params
-            .get_string("state")?
-            .unwrap_or_else(|| "present".to_string());
-        let state = PackageState::from_str(&state_str)?;
-        let update_cache = params.get_bool_or("update_cache", false);
-
-        // Update cache if requested
-        if update_cache {
-            if context.check_mode {
-                // In check mode, just note we would update
-            } else {
-                let update_cmd = pkg_manager.update_cmd();
-                let mut cmd = Command::new(update_cmd[0]);
-                if update_cmd.len() > 1 {
-                    cmd.args(&update_cmd[1..]);
-                }
-                let _ = cmd.output(); // Ignore errors for cache update
-            }
-        }
-
-        // Track what we'll do
-        let mut to_install: Vec<String> = Vec::new();
-        let mut to_remove: Vec<String> = Vec::new();
-        let mut already_ok: Vec<String> = Vec::new();
-
-        for package in &packages {
-            let is_installed = pkg_manager.is_installed(package)?;
-
-            match state {
-                PackageState::Present => {
-                    if is_installed {
-                        already_ok.push(package.clone());
-                    } else {
-                        to_install.push(package.clone());
-                    }
-                }
-                PackageState::Absent => {
-                    if is_installed {
-                        to_remove.push(package.clone());
-                    } else {
-                        already_ok.push(package.clone());
-                    }
-                }
-                PackageState::Latest => {
-                    // For 'latest', we always try to install/upgrade
-                    to_install.push(package.clone());
-                }
-            }
-        }
-
-        // Check mode - return what would happen
-        if context.check_mode {
-            if to_install.is_empty() && to_remove.is_empty() {
-                return Ok(ModuleOutput::ok(format!(
-                    "All packages already in desired state: {}",
-                    already_ok.join(", ")
-                )));
-            }
-
-            let mut msg = String::new();
-            if !to_install.is_empty() {
-                msg.push_str(&format!("Would install: {}. ", to_install.join(", ")));
-            }
-            if !to_remove.is_empty() {
-                msg.push_str(&format!("Would remove: {}. ", to_remove.join(", ")));
-            }
-
-            return Ok(ModuleOutput::changed(msg.trim().to_string()));
-        }
-
-        // Perform the actual operations
-        let mut changed = false;
-        let mut results: HashMap<String, String> = HashMap::new();
-
-        if !to_install.is_empty() {
-            let install_cmd = pkg_manager.install_cmd();
-            let (success, stdout, stderr) = Self::run_package_command(&install_cmd, &to_install)?;
-
-            if !success {
-                return Err(ModuleError::ExecutionFailed(format!(
-                    "Failed to install packages: {}",
-                    if stderr.is_empty() { stdout } else { stderr }
-                )));
-            }
-
-            changed = true;
-            for pkg in &to_install {
-                results.insert(pkg.clone(), "installed".to_string());
-            }
-        }
-
-        if !to_remove.is_empty() {
-            let remove_cmd = pkg_manager.remove_cmd();
-            let (success, stdout, stderr) = Self::run_package_command(&remove_cmd, &to_remove)?;
-
-            if !success {
-                return Err(ModuleError::ExecutionFailed(format!(
-                    "Failed to remove packages: {}",
-                    if stderr.is_empty() { stdout } else { stderr }
-                )));
-            }
-
-            changed = true;
-            for pkg in &to_remove {
-                results.insert(pkg.clone(), "removed".to_string());
-            }
-        }
-
-        for pkg in &already_ok {
-            results.insert(pkg.clone(), "ok".to_string());
-        }
-
-        if changed {
-            let mut msg = String::new();
-            if !to_install.is_empty() {
-                msg.push_str(&format!("Installed: {}. ", to_install.join(", ")));
-            }
-            if !to_remove.is_empty() {
-                msg.push_str(&format!("Removed: {}. ", to_remove.join(", ")));
-            }
-
-            Ok(ModuleOutput::changed(msg.trim().to_string())
-                .with_data("results", serde_json::json!(results)))
-        } else {
-            Ok(
-                ModuleOutput::ok("All packages already in desired state".to_string())
-                    .with_data("results", serde_json::json!(results)),
+        // Get connection from context
+        let conn = context.connection.as_ref().ok_or_else(|| {
+            ModuleError::ExecutionFailed(
+                "No connection available in context. Package module requires a remote connection."
+                    .to_string(),
             )
-        }
+        })?;
+
+        // Build execution options with become/sudo
+        let exec_options = Self::build_exec_options(context);
+
+        // Use tokio runtime to execute async operations
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                // Get package manager
+                let pkg_manager = if let Some(pm_str) = params.get_string("use")? {
+                    PackageManager::from_str(&pm_str)?
+                } else {
+                    PackageManager::detect_remote(conn.as_ref(), Some(exec_options.clone()))
+                        .await
+                        .ok_or_else(|| {
+                            ModuleError::ExecutionFailed(
+                                "Could not detect package manager".to_string(),
+                            )
+                        })?
+                };
+
+                // Get packages - can be a single package or a list
+                let packages: Vec<String> =
+                    if let Some(names) = params.get_vec_string("name")? {
+                        names
+                    } else {
+                        vec![params.get_string_required("name")?]
+                    };
+
+                let state_str = params
+                    .get_string("state")?
+                    .unwrap_or_else(|| "present".to_string());
+                let state = PackageState::from_str(&state_str)?;
+                let update_cache = params.get_bool_or("update_cache", false);
+
+                let mut changed = false;
+                let mut messages: Vec<String> = Vec::new();
+                let mut all_stdout = String::new();
+                let mut all_stderr = String::new();
+
+                // Update cache if requested
+                if update_cache {
+                    if context.check_mode {
+                        messages.push("Would update cache".to_string());
+                    } else {
+                        let update_cmd = pkg_manager.update_cmd();
+                        let cmd_string = update_cmd.join(" ");
+                        // Ignore errors for cache update (matches previous behavior)
+                        let _ = conn
+                            .execute(&cmd_string, Some(exec_options.clone()))
+                            .await;
+                    }
+                }
+
+                // Track what we'll do
+                let mut to_install: Vec<String> = Vec::new();
+                let mut to_remove: Vec<String> = Vec::new();
+                let mut already_ok: Vec<String> = Vec::new();
+
+                for package in &packages {
+                    let is_installed = pkg_manager
+                        .is_installed_remote(
+                            package,
+                            conn.as_ref(),
+                            Some(exec_options.clone()),
+                        )
+                        .await?;
+
+                    match state {
+                        PackageState::Present => {
+                            if is_installed {
+                                already_ok.push(package.clone());
+                            } else {
+                                to_install.push(package.clone());
+                            }
+                        }
+                        PackageState::Absent => {
+                            if is_installed {
+                                to_remove.push(package.clone());
+                            } else {
+                                already_ok.push(package.clone());
+                            }
+                        }
+                        PackageState::Latest => {
+                            // For 'latest', we always try to install/upgrade
+                            to_install.push(package.clone());
+                        }
+                    }
+                }
+
+                // Check mode - return what would happen
+                if context.check_mode {
+                    if to_install.is_empty() && to_remove.is_empty() {
+                        let mut msg = if !already_ok.is_empty() {
+                            format!(
+                                "All packages already in desired state: {}",
+                                already_ok.join(", ")
+                            )
+                        } else {
+                            String::new()
+                        };
+                        if !messages.is_empty() {
+                            if !msg.is_empty() {
+                                msg.push_str(". ");
+                            }
+                            msg.push_str(&messages.join(". "));
+                        }
+                        if messages.iter().any(|m| m.starts_with("Would")) {
+                            return Ok(ModuleOutput::changed(msg));
+                        }
+                        return Ok(ModuleOutput::ok(msg));
+                    }
+
+                    if !to_install.is_empty() {
+                        messages
+                            .push(format!("Would install: {}", to_install.join(", ")));
+                    }
+                    if !to_remove.is_empty() {
+                        messages
+                            .push(format!("Would remove: {}", to_remove.join(", ")));
+                    }
+
+                    return Ok(ModuleOutput::changed(messages.join(". ")));
+                }
+
+                // Perform the actual operations
+                let mut results: HashMap<String, String> = HashMap::new();
+
+                if !to_install.is_empty() {
+                    let install_cmd = pkg_manager.install_cmd();
+                    let (success, stdout, stderr) =
+                        Self::run_package_command_remote(
+                            &install_cmd,
+                            &to_install,
+                            conn.as_ref(),
+                            Some(exec_options.clone()),
+                        )
+                        .await?;
+
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to install packages: {}",
+                            if stderr.is_empty() {
+                                stdout
+                            } else {
+                                stderr
+                            }
+                        )));
+                    }
+
+                    changed = true;
+                    for pkg in &to_install {
+                        results.insert(pkg.clone(), "installed".to_string());
+                    }
+                    messages
+                        .push(format!("Installed: {}", to_install.join(", ")));
+                    all_stdout.push_str(&stdout);
+                    all_stderr.push_str(&stderr);
+                }
+
+                if !to_remove.is_empty() {
+                    let remove_cmd = pkg_manager.remove_cmd();
+                    let (success, stdout, stderr) =
+                        Self::run_package_command_remote(
+                            &remove_cmd,
+                            &to_remove,
+                            conn.as_ref(),
+                            Some(exec_options.clone()),
+                        )
+                        .await?;
+
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to remove packages: {}",
+                            if stderr.is_empty() {
+                                stdout
+                            } else {
+                                stderr
+                            }
+                        )));
+                    }
+
+                    changed = true;
+                    for pkg in &to_remove {
+                        results.insert(pkg.clone(), "removed".to_string());
+                    }
+                    messages.push(format!("Removed: {}", to_remove.join(", ")));
+                    all_stdout.push_str(&stdout);
+                    all_stderr.push_str(&stderr);
+                }
+
+                for pkg in &already_ok {
+                    results.insert(pkg.clone(), "ok".to_string());
+                }
+
+                // Build final output
+                let msg = if messages.is_empty() {
+                    "All packages already in desired state".to_string()
+                } else {
+                    messages.join(". ")
+                };
+
+                let mut output = if changed {
+                    ModuleOutput::changed(msg)
+                } else {
+                    ModuleOutput::ok(msg)
+                };
+
+                output = output.with_data("results", serde_json::json!(results));
+
+                // Add stdout/stderr if present
+                if !all_stdout.is_empty() || !all_stderr.is_empty() {
+                    output = output.with_command_output(
+                        if all_stdout.is_empty() {
+                            None
+                        } else {
+                            Some(all_stdout)
+                        },
+                        if all_stderr.is_empty() {
+                            None
+                        } else {
+                            Some(all_stderr)
+                        },
+                        Some(0),
+                    );
+                }
+
+                Ok(output)
+            })
+        });
+
+        result
     }
 }
 

@@ -11,6 +11,8 @@ use super::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::connection::ExecuteOptions;
+use crate::utils::shell_escape;
 use serde_json::json;
 use std::path::Path;
 
@@ -27,7 +29,7 @@ impl Module for StatModule {
     }
 
     fn classification(&self) -> ModuleClassification {
-        ModuleClassification::NativeTransport
+        ModuleClassification::RemoteCommand
     }
 
     fn required_params(&self) -> &[&'static str] {
@@ -37,22 +39,200 @@ impl Module for StatModule {
     fn execute(
         &self,
         params: &ModuleParams,
-        _context: &ModuleContext,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
         let path_str = params.get_string_required("path")?;
-        let path = Path::new(&path_str);
         let follow = params.get_bool_or("follow", true);
         let get_checksum = params.get_bool_or("checksum", false);
         let checksum_algorithm = params
             .get_string("checksum_algorithm")?
             .unwrap_or_else(|| "sha1".to_string());
 
-        // Execute locally (remote execution would require connection in ModuleContext)
-        self.execute_local(path, follow, get_checksum, &checksum_algorithm)
+        if let Some(ref conn) = context.connection {
+            // Remote execution via connection
+            let exec_options = Self::build_exec_options(context);
+            let conn = conn.clone();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    Self::execute_remote(
+                        conn.as_ref(),
+                        &path_str,
+                        follow,
+                        get_checksum,
+                        &checksum_algorithm,
+                        Some(exec_options),
+                    )
+                    .await
+                })
+            })
+        } else {
+            // Local execution fallback
+            let path = Path::new(&path_str);
+            self.execute_local(path, follow, get_checksum, &checksum_algorithm)
+        }
     }
 }
 
 impl StatModule {
+    /// Build execution options with become/sudo if needed
+    fn build_exec_options(context: &ModuleContext) -> ExecuteOptions {
+        let mut options = ExecuteOptions::new();
+
+        if context.r#become {
+            options.escalate = true;
+            options.escalate_user = context
+                .become_user
+                .clone()
+                .or_else(|| Some("root".to_string()));
+            options.escalate_method = context.become_method.clone();
+            options.escalate_password = context.become_password.clone();
+        }
+
+        options
+    }
+
+    /// Execute stat on a remote system via connection
+    async fn execute_remote(
+        conn: &(dyn crate::connection::Connection + Send + Sync),
+        path_str: &str,
+        follow: bool,
+        get_checksum: bool,
+        checksum_algorithm: &str,
+        options: Option<ExecuteOptions>,
+    ) -> ModuleResult<ModuleOutput> {
+        // Build the stat command
+        // %F=file type, %s=size, %a=octal mode, %u=uid, %g=gid, %X=atime, %Y=mtime, %h=hard links, %i=inode
+        let stat_cmd = if follow {
+            format!(
+                "stat -L -c '%F|%s|%a|%u|%g|%X|%Y|%h|%i' {} 2>/dev/null || echo 'NOTFOUND'",
+                shell_escape(path_str)
+            )
+        } else {
+            format!(
+                "stat -c '%F|%s|%a|%u|%g|%X|%Y|%h|%i' {} 2>/dev/null || echo 'NOTFOUND'",
+                shell_escape(path_str)
+            )
+        };
+
+        let result = conn
+            .execute(&stat_cmd, options.clone())
+            .await
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to execute stat command: {}", e))
+            })?;
+
+        let output = result.stdout.trim().to_string();
+
+        // Check if path does not exist
+        if output == "NOTFOUND" || output.is_empty() {
+            return Ok(
+                ModuleOutput::ok(format!("Path '{}' does not exist", path_str)).with_data(
+                    "stat",
+                    json!({
+                        "exists": false,
+                        "path": path_str,
+                    }),
+                ),
+            );
+        }
+
+        // Parse the stat output: "file_type|size|mode|uid|gid|atime|mtime|nlink|inode"
+        let parts: Vec<&str> = output.split('|').collect();
+        if parts.len() < 9 {
+            return Err(ModuleError::ExecutionFailed(format!(
+                "Unexpected stat output format: {}",
+                output
+            )));
+        }
+
+        let file_type = parts[0];
+        let size: u64 = parts[1].parse().unwrap_or(0);
+        let mode_str = parts[2];
+        let mode: u32 = u32::from_str_radix(mode_str, 8).unwrap_or(0);
+        let uid: u32 = parts[3].parse().unwrap_or(0);
+        let gid: u32 = parts[4].parse().unwrap_or(0);
+        let atime: i64 = parts[5].parse().unwrap_or(0);
+        let mtime: i64 = parts[6].parse().unwrap_or(0);
+
+        // Determine file type flags from %F output
+        let is_file = file_type == "regular file" || file_type == "regular empty file";
+        let is_dir = file_type == "directory";
+        let is_symlink = file_type == "symbolic link";
+
+        // Build stat data
+        let mut stat_data = json!({
+            "exists": true,
+            "path": path_str,
+            "mode": format!("{:04o}", mode),
+            "isdir": is_dir,
+            "isreg": is_file,
+            "islnk": is_symlink,
+            "size": size,
+            "uid": uid,
+            "gid": gid,
+            "atime": atime,
+            "mtime": mtime,
+            "readable": true,
+            "writeable": (mode & 0o200) != 0,
+            "executable": (mode & 0o111) != 0,
+        });
+
+        // Get checksum if requested and it's a regular file
+        if get_checksum && is_file {
+            let algorithm = match checksum_algorithm.to_lowercase().as_str() {
+                "md5" => "md5",
+                "sha256" => "sha256",
+                "sha512" => "sha512",
+                _ => "sha1",
+            };
+            let checksum_cmd = format!(
+                "{}sum {} | cut -d' ' -f1",
+                algorithm,
+                shell_escape(path_str)
+            );
+
+            let cksum_result = conn
+                .execute(&checksum_cmd, options.clone())
+                .await
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!(
+                        "Failed to execute checksum command: {}",
+                        e
+                    ))
+                })?;
+
+            let checksum = cksum_result.stdout.trim().to_string();
+            if !checksum.is_empty() && cksum_result.success {
+                if let Some(stat_obj) = stat_data.as_object_mut() {
+                    stat_obj.insert("checksum".to_string(), json!(checksum));
+                }
+            }
+        }
+
+        // Get symlink target if it's a symlink
+        if is_symlink {
+            let link_cmd = format!("readlink {}", shell_escape(path_str));
+            let link_result = conn
+                .execute(&link_cmd, options.clone())
+                .await
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to read symlink: {}", e))
+                })?;
+
+            let target = link_result.stdout.trim().to_string();
+            if !target.is_empty() && link_result.success {
+                if let Some(stat_obj) = stat_data.as_object_mut() {
+                    stat_obj.insert("lnk_source".to_string(), json!(target));
+                }
+            }
+        }
+
+        Ok(
+            ModuleOutput::ok(format!("Retrieved stats for '{}'", path_str))
+                .with_data("stat", stat_data),
+        )
+    }
+
     /// Execute stat on local system
     fn execute_local(
         &self,

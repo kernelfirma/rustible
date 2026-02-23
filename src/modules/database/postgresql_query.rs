@@ -240,15 +240,28 @@ impl PostgresqlQueryModule {
 
         // Set search path if specified
         if let Some(ref search_path) = config.search_path {
+            // Validate search_path: only allow comma-separated identifiers
+            for schema in search_path.split(',') {
+                let schema = schema.trim();
+                if !schema
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '"')
+                {
+                    return Err(ModuleError::InvalidParameter(format!(
+                        "Invalid character in search_path schema: '{}'",
+                        schema
+                    )));
+                }
+            }
             let set_path = format!("SET search_path TO {};", search_path);
             processed_sql = format!("{} {}", set_path, processed_sql);
         }
 
-        // Build full command
+        // Build full command using shell_escape for the SQL argument
         let cmd = format!(
-            "psql {} -c \"{}\"",
+            "psql {} -c {}",
             psql_opts.join(" "),
-            processed_sql.replace('"', "\\\"")
+            shell_escape(&processed_sql)
         );
 
         let (success, stdout, stderr) =
@@ -298,6 +311,19 @@ impl PostgresqlQueryModule {
         // Set search path if specified
         let mut preamble = String::new();
         if let Some(ref search_path) = config.search_path {
+            // Validate search_path: only allow comma-separated identifiers
+            for schema in search_path.split(',') {
+                let schema = schema.trim();
+                if !schema
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '"')
+                {
+                    return Err(ModuleError::InvalidParameter(format!(
+                        "Invalid character in search_path schema: '{}'",
+                        schema
+                    )));
+                }
+            }
             preamble = format!("SET search_path TO {};", search_path);
         }
 
@@ -306,7 +332,7 @@ impl PostgresqlQueryModule {
             psql_opts.push("-1".to_string()); // Single transaction
         }
 
-        // Build full command
+        // Build full command using shell_escape for the preamble argument
         let cmd = if preamble.is_empty() {
             format!(
                 "psql {} -f {}",
@@ -315,9 +341,9 @@ impl PostgresqlQueryModule {
             )
         } else {
             format!(
-                "psql {} -c \"{}\" -f {}",
+                "psql {} -c {} -f {}",
                 psql_opts.join(" "),
-                preamble,
+                shell_escape(&preamble),
                 shell_escape(script_path)
             )
         };

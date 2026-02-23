@@ -106,6 +106,28 @@ pub struct PrivilegeSpec {
 }
 
 impl PrivilegeSpec {
+    /// Validate a MySQL identifier (database or table name) to prevent backtick injection.
+    /// Allows alphanumeric, underscore, dollar, hyphen, and wildcard (*).
+    fn validate_identifier(name: &str, param_name: &str) -> ModuleResult<()> {
+        if name == "*" {
+            return Ok(());
+        }
+        for c in name.chars() {
+            if !c.is_ascii_alphanumeric() && c != '_' && c != '$' && c != '-' {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "{} contains invalid character: '{}'. Only alphanumeric, underscore, dollar, and hyphen are allowed",
+                    param_name, c
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Escape backticks within a MySQL identifier (double them)
+    fn escape_backtick(name: &str) -> String {
+        name.replace('`', "``")
+    }
+
     /// Parse privilege string like "db.table:PRIV1,PRIV2"
     fn parse(spec: &str) -> ModuleResult<Self> {
         let parts: Vec<&str> = spec.split(':').collect();
@@ -123,6 +145,10 @@ impl PrivilegeSpec {
                 parts[0]
             )));
         }
+
+        // Validate database and table identifiers
+        Self::validate_identifier(db_table[0], "database name")?;
+        Self::validate_identifier(db_table[1], "table name")?;
 
         let privileges: Vec<String> = parts[1]
             .split(',')
@@ -213,13 +239,13 @@ impl PrivilegeSpec {
         let db = if self.database == "*" {
             "*".to_string()
         } else {
-            format!("`{}`", self.database)
+            format!("`{}`", Self::escape_backtick(&self.database))
         };
 
         let table = if self.table == "*" {
             "*".to_string()
         } else {
-            format!("`{}`", self.table)
+            format!("`{}`", Self::escape_backtick(&self.table))
         };
 
         format!("{}.{}", db, table)

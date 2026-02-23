@@ -36,6 +36,7 @@ pub mod mount;
 pub mod network;
 pub mod package;
 pub mod pause;
+pub mod ping;
 pub mod pip;
 pub mod proxmox_lxc;
 pub mod proxmox_vm;
@@ -1599,6 +1600,7 @@ impl ModuleRegistry {
                 fail::FailModule,
                 include_vars::IncludeVarsModule,
                 meta::MetaModule,
+                ping::PingModule,
                 set_fact::SetFactModule,
             ],
             // Facts gathering
@@ -2522,8 +2524,8 @@ mod tests {
         // Commands category should have 4 modules
         assert_eq!(stats.get(&ModuleCategory::Commands), Some(&4));
 
-        // Logic category should have 6 modules
-        assert_eq!(stats.get(&ModuleCategory::Logic), Some(&6));
+        // Logic category should have 7 modules (assert, debug, fail, include_vars, meta, ping, set_fact)
+        assert_eq!(stats.get(&ModuleCategory::Logic), Some(&7));
 
         // All counted modules should be non-zero
         for (category, count) in &stats {

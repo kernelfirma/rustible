@@ -7,9 +7,11 @@ use super::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::connection::{Connection, ExecuteOptions};
 use crate::utils::shell_escape;
 use std::path::Path;
-use std::process::Command;
+use std::sync::Arc;
+use tokio::runtime::Handle;
 
 /// Configuration for SSH key handling
 #[derive(Debug, Clone, Default)]
@@ -52,10 +54,10 @@ impl SshConfig {
         }
     }
 
-    /// Apply SSH configuration to a Command
-    fn apply_to_command(&self, command: &mut Command) {
+    /// Apply SSH configuration to ExecuteOptions
+    fn apply_to_options(&self, options: &mut ExecuteOptions) {
         if let Some(ssh_cmd) = self.build_ssh_command() {
-            command.env("GIT_SSH_COMMAND", ssh_cmd);
+            options.env.insert("GIT_SSH_COMMAND".to_string(), ssh_cmd);
         }
     }
 }
@@ -75,63 +77,151 @@ struct CloneConfig {
 pub struct GitModule;
 
 impl GitModule {
-    /// Check if git is installed
-    fn check_git_installed() -> ModuleResult<bool> {
-        let output = Command::new("git")
-            .arg("--version")
-            .output()
-            .map_err(|_| ModuleError::ExecutionFailed("git is not installed".to_string()))?;
-        Ok(output.status.success())
+    /// Get execution options with become support if needed
+    fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
+        let mut options = ExecuteOptions::new();
+        if context.r#become {
+            options = options.with_escalation(context.become_user.clone());
+            if let Some(ref method) = context.become_method {
+                options.escalate_method = Some(method.clone());
+            }
+            if let Some(ref password) = context.become_password {
+                options.escalate_password = Some(password.clone());
+            }
+        }
+        options
     }
 
-    /// Check if a directory is a git repository
-    fn is_git_repo(dest: &str) -> bool {
-        Path::new(&format!("{}/.git", dest)).exists() || Self::is_bare_repo(dest)
+    /// Build execution options with SSH configuration applied
+    fn build_git_exec_options(
+        context: &ModuleContext,
+        ssh_config: &SshConfig,
+    ) -> ExecuteOptions {
+        let mut options = Self::get_exec_options(context);
+        ssh_config.apply_to_options(&mut options);
+        options
     }
 
-    /// Check if a directory is a bare git repository
-    fn is_bare_repo(dest: &str) -> bool {
-        // A bare repo has HEAD file directly in the directory
-        Path::new(&format!("{}/HEAD", dest)).exists()
-            && Path::new(&format!("{}/objects", dest)).exists()
+    /// Execute a command via connection
+    fn run_command(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        command: &str,
+        options: ExecuteOptions,
+    ) -> ModuleResult<(bool, String, String)> {
+        let connection = connection.clone();
+        let command = command.to_string();
+        let fut = async move { connection.execute(&command, Some(options)).await };
+
+        let result = if let Ok(handle) = Handle::try_current() {
+            std::thread::scope(|s| s.spawn(move || handle.block_on(fut)).join()).map_err(|_| {
+                ModuleError::ExecutionFailed("Tokio runtime thread panicked".to_string())
+            })?
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
+                })?;
+            rt.block_on(fut)
+        }
+        .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
+
+        Ok((result.success, result.stdout, result.stderr))
+    }
+
+    /// Execute a git command via connection, requiring success
+    fn run_git_command(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        command: &str,
+        options: ExecuteOptions,
+        error_msg: &str,
+    ) -> ModuleResult<String> {
+        let (success, stdout, stderr) = Self::run_command(connection, command, options)?;
+        if !success {
+            return Err(ModuleError::CommandFailed {
+                code: -1,
+                message: format!("{}: {}", error_msg, stderr),
+            });
+        }
+        Ok(stdout)
+    }
+
+    /// Check if git is installed on the remote host
+    fn check_git_installed(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        context: &ModuleContext,
+    ) -> ModuleResult<bool> {
+        let options = Self::get_exec_options(context);
+        let (success, _, _) = Self::run_command(connection, "git --version", options)?;
+        Ok(success)
+    }
+
+    /// Check if a directory is a git repository via connection
+    fn is_git_repo(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<bool> {
+        let escaped = shell_escape(dest);
+        // Check for .git directory (normal repo) or bare repo (HEAD + objects)
+        let cmd = format!(
+            "test -d {}/.git || ( test -f {}/HEAD && test -d {}/objects )",
+            escaped, escaped, escaped
+        );
+        let options = Self::get_exec_options(context);
+        let (success, _, _) = Self::run_command(connection, &cmd, options)?;
+        Ok(success)
+    }
+
+    /// Check if a directory is a bare git repository via connection
+    fn is_bare_repo(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<bool> {
+        let escaped = shell_escape(dest);
+        let cmd = format!(
+            "test -f {}/HEAD && test -d {}/objects",
+            escaped, escaped
+        );
+        let options = Self::get_exec_options(context);
+        let (success, _, _) = Self::run_command(connection, &cmd, options)?;
+        Ok(success)
     }
 
     /// Get the current HEAD commit hash
-    fn get_current_version(dest: &str) -> ModuleResult<Option<String>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("rev-parse")
-            .arg("HEAD")
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to get current version: {}", e))
-            })?;
+    fn get_current_version(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<Option<String>> {
+        let cmd = format!("git -C {} rev-parse HEAD", shell_escape(dest));
+        let options = Self::get_exec_options(context);
+        let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
-        if output.status.success() {
-            Ok(Some(
-                String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            ))
+        if success {
+            Ok(Some(stdout.trim().to_string()))
         } else {
             Ok(None)
         }
     }
 
     /// Get the current branch name
-    fn get_current_branch(dest: &str) -> ModuleResult<Option<String>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("rev-parse")
-            .arg("--abbrev-ref")
-            .arg("HEAD")
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to get current branch: {}", e))
-            })?;
+    fn get_current_branch(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<Option<String>> {
+        let cmd = format!(
+            "git -C {} rev-parse --abbrev-ref HEAD",
+            shell_escape(dest)
+        );
+        let options = Self::get_exec_options(context);
+        let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
-        if output.status.success() {
-            let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if success {
+            let branch = stdout.trim().to_string();
             if branch == "HEAD" {
                 // Detached HEAD state
                 Ok(None)
@@ -144,44 +234,40 @@ impl GitModule {
     }
 
     /// Get the remote URL of the repository
-    fn get_remote_url(dest: &str, remote: &str) -> ModuleResult<Option<String>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("config")
-            .arg("--get")
-            .arg(format!("remote.{}.url", remote))
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to get remote URL: {}", e))
-            })?;
+    fn get_remote_url(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        remote: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<Option<String>> {
+        let cmd = format!(
+            "git -C {} config --get remote.{}.url",
+            shell_escape(dest),
+            shell_escape(remote)
+        );
+        let options = Self::get_exec_options(context);
+        let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
-        if output.status.success() {
-            Ok(Some(
-                String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            ))
+        if success {
+            Ok(Some(stdout.trim().to_string()))
         } else {
             Ok(None)
         }
     }
 
     /// Get list of local changes (for diff output)
-    fn get_local_changes(dest: &str) -> ModuleResult<Vec<String>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("status")
-            .arg("--porcelain")
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to get local changes: {}", e))
-            })?;
+    #[allow(dead_code)]
+    fn get_local_changes(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<Vec<String>> {
+        let cmd = format!("git -C {} status --porcelain", shell_escape(dest));
+        let options = Self::get_exec_options(context);
+        let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
-        if output.status.success() {
-            let changes: Vec<String> = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(|s| s.to_string())
-                .collect();
+        if success {
+            let changes: Vec<String> = stdout.lines().map(|s| s.to_string()).collect();
             Ok(changes)
         } else {
             Ok(vec![])
@@ -189,23 +275,24 @@ impl GitModule {
     }
 
     /// Get commit log between two versions
-    fn get_commit_log(dest: &str, from: &str, to: &str) -> ModuleResult<Vec<String>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("log")
-            .arg("--oneline")
-            .arg(format!("{}..{}", from, to))
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to get commit log: {}", e))
-            })?;
+    fn get_commit_log(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        from: &str,
+        to: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<Vec<String>> {
+        let cmd = format!(
+            "git -C {} log --oneline {}..{}",
+            shell_escape(dest),
+            shell_escape(from),
+            shell_escape(to)
+        );
+        let options = Self::get_exec_options(context);
+        let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
-        if output.status.success() {
-            let commits: Vec<String> = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(|s| s.to_string())
-                .collect();
+        if success {
+            let commits: Vec<String> = stdout.lines().map(|s| s.to_string()).collect();
             Ok(commits)
         } else {
             Ok(vec![])
@@ -213,19 +300,22 @@ impl GitModule {
     }
 
     /// Verify GPG signature of a commit
-    fn verify_commit(dest: &str, commit: &str, gpg_whitelist: &[String]) -> ModuleResult<bool> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("verify-commit")
-            .arg("--raw")
-            .arg(commit)
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to verify commit signature: {}", e))
-            })?;
+    fn verify_commit(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        commit: &str,
+        gpg_whitelist: &[String],
+        context: &ModuleContext,
+    ) -> ModuleResult<bool> {
+        let cmd = format!(
+            "git -C {} verify-commit --raw {}",
+            shell_escape(dest),
+            shell_escape(commit)
+        );
+        let options = Self::get_exec_options(context);
+        let (success, _, stderr) = Self::run_command(connection, &cmd, options)?;
 
-        if !output.status.success() {
+        if !success {
             return Ok(false);
         }
 
@@ -235,7 +325,6 @@ impl GitModule {
         }
 
         // Check if the signature key is in the whitelist
-        let stderr = String::from_utf8_lossy(&output.stderr);
         for fingerprint in gpg_whitelist {
             if stderr.contains(fingerprint) {
                 return Ok(true);
@@ -246,56 +335,44 @@ impl GitModule {
     }
 
     /// Discard local modifications
-    fn reset_hard(dest: &str) -> ModuleResult<()> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("reset")
-            .arg("--hard")
-            .arg("HEAD")
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to reset repository: {}", e))
-            })?;
+    fn reset_hard(
+        connection: &Arc<dyn Connection + Send + Sync>,
+        dest: &str,
+        context: &ModuleContext,
+    ) -> ModuleResult<()> {
+        let escaped = shell_escape(dest);
+        let cmd = format!("git -C {} reset --hard HEAD", escaped);
+        let options = Self::get_exec_options(context);
+        let (success, _, stderr) = Self::run_command(connection, &cmd, options)?;
 
-        if !output.status.success() {
+        if !success {
             return Err(ModuleError::CommandFailed {
-                code: output.status.code().unwrap_or(-1),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
+                code: -1,
+                message: stderr,
             });
         }
 
         // Also clean untracked files
-        let _ = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("clean")
-            .arg("-fd")
-            .output();
+        let clean_cmd = format!("git -C {} clean -fd", escaped);
+        let options = Self::get_exec_options(context);
+        let _ = Self::run_command(connection, &clean_cmd, options);
 
         Ok(())
     }
 
-    /// Set file permissions (umask) for a command
-    fn apply_umask(command: &mut Command, umask: Option<&str>) {
+    /// Build umask prefix for a command
+    fn umask_prefix(umask: Option<&str>) -> String {
         if let Some(mask) = umask {
-            // On Unix, set umask via environment
-            #[cfg(unix)]
-            {
-                // We can't directly set umask for a subprocess, but we can use
-                // a wrapper script approach or document the limitation
-                command.env("GIT_UMASK", mask);
-            }
-            #[cfg(not(unix))]
-            {
-                let _ = mask; // Silence unused variable warning
-            }
+            format!("umask {} && ", shell_escape(mask))
+        } else {
+            String::new()
         }
     }
 
     /// Clone a git repository
     #[allow(clippy::too_many_arguments)]
     fn clone_repo(
+        connection: &Arc<dyn Connection + Send + Sync>,
         repo: &str,
         dest: &str,
         version: Option<&str>,
@@ -304,94 +381,80 @@ impl GitModule {
         remote: &str,
         umask: Option<&str>,
         track_submodules: bool,
-        _context: &ModuleContext,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        let mut command = Command::new("git");
-        command.arg("clone");
-
-        // Apply SSH configuration
-        ssh_config.apply_to_command(&mut command);
-
-        // Apply umask
-        Self::apply_umask(&mut command, umask);
+        let mut parts = vec!["git".to_string(), "clone".to_string()];
 
         // Bare repository
         if clone_config.bare {
-            command.arg("--bare");
+            parts.push("--bare".to_string());
         }
 
         // Shallow clone
         if let Some(d) = clone_config.depth {
-            command.arg("--depth").arg(d.to_string());
+            parts.push("--depth".to_string());
+            parts.push(d.to_string());
         }
 
         // Single branch (implied with depth, but can be explicit)
         if clone_config.single_branch {
-            command.arg("--single-branch");
+            parts.push("--single-branch".to_string());
         }
 
         // Separate git directory
         if let Some(ref git_dir) = clone_config.separate_git_dir {
-            command.arg("--separate-git-dir").arg(git_dir);
+            parts.push("--separate-git-dir".to_string());
+            parts.push(shell_escape(git_dir).into_owned());
         }
 
         // Branch/tag to clone
         if let Some(v) = version {
-            command.arg("--branch").arg(v);
+            parts.push("--branch".to_string());
+            parts.push(shell_escape(v).into_owned());
         }
 
         // Custom remote name
         if remote != "origin" {
-            command.arg("--origin").arg(remote);
+            parts.push("--origin".to_string());
+            parts.push(shell_escape(remote).into_owned());
         }
 
         // Recursive submodules
         if clone_config.recursive {
-            command.arg("--recurse-submodules");
+            parts.push("--recurse-submodules".to_string());
             if track_submodules {
-                command.arg("--remote-submodules");
+                parts.push("--remote-submodules".to_string());
             }
         }
 
-        command.arg(repo).arg(dest);
+        parts.push(shell_escape(repo).into_owned());
+        parts.push(shell_escape(dest).into_owned());
 
-        let output = command.output().map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to clone repository: {}", e))
-        })?;
+        let prefix = Self::umask_prefix(umask);
+        let cmd = format!("{}{}", prefix, parts.join(" "));
+        let options = Self::build_git_exec_options(context, ssh_config);
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ModuleError::CommandFailed {
-                code: output.status.code().unwrap_or(-1),
-                message: stderr.to_string(),
-            });
-        }
+        Self::run_git_command(connection, &cmd, options, "Failed to clone repository")?;
 
         // If refspec is specified, fetch it separately
         if let Some(ref refspec) = clone_config.refspec {
-            let mut fetch_cmd = Command::new("git");
-            fetch_cmd
-                .arg("-C")
-                .arg(dest)
-                .arg("fetch")
-                .arg(remote)
-                .arg(refspec);
-            ssh_config.apply_to_command(&mut fetch_cmd);
-
-            let fetch_output = fetch_cmd.output().map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to fetch refspec: {}", e))
-            })?;
-
-            if !fetch_output.status.success() {
-                let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-                return Err(ModuleError::CommandFailed {
-                    code: fetch_output.status.code().unwrap_or(-1),
-                    message: format!("Failed to fetch refspec '{}': {}", refspec, stderr),
-                });
-            }
+            let fetch_cmd = format!(
+                "git -C {} fetch {} {}",
+                shell_escape(dest),
+                shell_escape(remote),
+                shell_escape(refspec)
+            );
+            let options = Self::build_git_exec_options(context, ssh_config);
+            Self::run_git_command(
+                connection,
+                &fetch_cmd,
+                options,
+                &format!("Failed to fetch refspec '{}'", refspec),
+            )?;
         }
 
-        let new_version = Self::get_current_version(dest)?.unwrap_or_else(|| "unknown".to_string());
+        let new_version =
+            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
 
         Ok(
             ModuleOutput::changed(format!("Cloned repository '{}' to '{}'", repo, dest))
@@ -411,6 +474,7 @@ impl GitModule {
     /// Update (pull) a git repository
     #[allow(clippy::too_many_arguments)]
     fn update_repo(
+        connection: &Arc<dyn Connection + Send + Sync>,
         dest: &str,
         version: Option<&str>,
         remote: &str,
@@ -420,9 +484,11 @@ impl GitModule {
         refspec: Option<&str>,
         context: &ModuleContext,
     ) -> ModuleResult<(bool, String, String, Vec<String>)> {
+        let escaped_dest = shell_escape(dest);
+
         // Get current version before update
         let before_version =
-            Self::get_current_version(dest)?.unwrap_or_else(|| "unknown".to_string());
+            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
 
         if context.check_mode {
             return Ok((false, before_version.clone(), before_version, vec![]));
@@ -430,94 +496,83 @@ impl GitModule {
 
         // If force, reset local changes first
         if force {
-            Self::reset_hard(dest)?;
+            Self::reset_hard(connection, dest, context)?;
         }
 
         // Fetch updates
-        let mut fetch_cmd = Command::new("git");
-        fetch_cmd.arg("-C").arg(dest).arg("fetch").arg(remote);
-
-        if let Some(rs) = refspec {
-            fetch_cmd.arg(rs);
-        }
-
-        ssh_config.apply_to_command(&mut fetch_cmd);
-
-        let fetch_output = fetch_cmd
-            .output()
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to fetch updates: {}", e)))?;
-
-        if !fetch_output.status.success() {
+        let fetch_cmd = if let Some(rs) = refspec {
+            format!(
+                "git -C {} fetch {} {}",
+                escaped_dest,
+                shell_escape(remote),
+                shell_escape(rs)
+            )
+        } else {
+            format!(
+                "git -C {} fetch {}",
+                escaped_dest,
+                shell_escape(remote)
+            )
+        };
+        let options = Self::build_git_exec_options(context, ssh_config);
+        let (success, _, stderr) = Self::run_command(connection, &fetch_cmd, options)?;
+        if !success {
             return Err(ModuleError::CommandFailed {
-                code: fetch_output.status.code().unwrap_or(-1),
-                message: String::from_utf8_lossy(&fetch_output.stderr).to_string(),
+                code: -1,
+                message: stderr,
             });
         }
 
         // Checkout the specified version or default branch
         let checkout_target = if let Some(v) = version {
-            v.to_string()
+            shell_escape(v).into_owned()
         } else {
-            format!("{}/HEAD", remote)
+            format!("{}/HEAD", shell_escape(remote))
         };
 
-        let checkout_output = Command::new("git")
-            .arg("-C")
-            .arg(dest)
-            .arg("checkout")
-            .arg(&checkout_target)
-            .output()
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to checkout version: {}", e))
-            })?;
-
-        if !checkout_output.status.success() {
+        let checkout_cmd = format!(
+            "git -C {} checkout {}",
+            escaped_dest, checkout_target
+        );
+        let options = Self::get_exec_options(context);
+        let (success, _, stderr) = Self::run_command(connection, &checkout_cmd, options)?;
+        if !success {
             return Err(ModuleError::CommandFailed {
-                code: checkout_output.status.code().unwrap_or(-1),
-                message: String::from_utf8_lossy(&checkout_output.stderr).to_string(),
+                code: -1,
+                message: stderr,
             });
         }
 
         // If on a branch, pull the latest changes
-        let current_branch = Self::get_current_branch(dest)?;
+        let current_branch = Self::get_current_branch(connection, dest, context)?;
         if current_branch.is_some() {
-            let mut pull_cmd = Command::new("git");
-            pull_cmd.arg("-C").arg(dest).arg("pull");
-
-            if force {
-                pull_cmd.arg("--force");
-            } else {
-                pull_cmd.arg("--ff-only");
-            }
-
-            ssh_config.apply_to_command(&mut pull_cmd);
-
-            let _ = pull_cmd.output();
+            let pull_flag = if force { "--force" } else { "--ff-only" };
+            let pull_cmd = format!(
+                "git -C {} pull {}",
+                escaped_dest, pull_flag
+            );
+            let options = Self::build_git_exec_options(context, ssh_config);
+            let _ = Self::run_command(connection, &pull_cmd, options);
         }
 
         // Update submodules if needed
         if track_submodules {
-            let mut submodule_cmd = Command::new("git");
-            submodule_cmd
-                .arg("-C")
-                .arg(dest)
-                .arg("submodule")
-                .arg("update")
-                .arg("--init")
-                .arg("--recursive")
-                .arg("--remote");
-
-            ssh_config.apply_to_command(&mut submodule_cmd);
-            let _ = submodule_cmd.output();
+            let submodule_cmd = format!(
+                "git -C {} submodule update --init --recursive --remote",
+                escaped_dest
+            );
+            let options = Self::build_git_exec_options(context, ssh_config);
+            let _ = Self::run_command(connection, &submodule_cmd, options);
         }
 
         // Get version after update
         let after_version =
-            Self::get_current_version(dest)?.unwrap_or_else(|| "unknown".to_string());
+            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
 
         // Get commit log if versions differ
         let commits = if before_version != after_version {
-            Self::get_commit_log(dest, &before_version, &after_version).unwrap_or_default()
+            Self::get_commit_log(connection, dest, &before_version, &after_version, context)
+                .unwrap_or_default()
         } else {
             vec![]
         };
@@ -631,6 +686,13 @@ impl Module for GitModule {
         params: &ModuleParams,
         context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
+        // Get connection from context
+        let connection = context.connection.as_ref().ok_or_else(|| {
+            ModuleError::ExecutionFailed(
+                "Git module requires a connection for remote execution".to_string(),
+            )
+        })?;
+
         // Extract required parameters
         let repo = params.get_string_required("repo")?;
         let dest = params.get_string_required("dest")?;
@@ -689,14 +751,14 @@ impl Module for GitModule {
         };
 
         // Check if git is installed
-        if !Self::check_git_installed()? {
+        if !Self::check_git_installed(connection, context)? {
             return Err(ModuleError::ExecutionFailed(
                 "git is not installed on the system".to_string(),
             ));
         }
 
         // Check if destination exists and is a git repo
-        let is_repo = Self::is_git_repo(&dest);
+        let is_repo = Self::is_git_repo(connection, &dest, context)?;
 
         if !is_repo {
             // Repository doesn't exist
@@ -720,6 +782,7 @@ impl Module for GitModule {
             }
 
             return Self::clone_repo(
+                connection,
                 &repo,
                 &dest,
                 version.as_deref(),
@@ -733,7 +796,7 @@ impl Module for GitModule {
         }
 
         // Repository exists - check if it's the same repo
-        let current_remote = Self::get_remote_url(&dest, &remote)?;
+        let current_remote = Self::get_remote_url(connection, &dest, &remote, context)?;
         if let Some(ref current) = current_remote {
             if current != &repo {
                 return Err(ModuleError::ExecutionFailed(format!(
@@ -751,6 +814,7 @@ impl Module for GitModule {
         // Repository exists and is correct, update if requested
         if update {
             let (changed, new_version, old_version, commits) = Self::update_repo(
+                connection,
                 &dest,
                 version.as_deref(),
                 &remote,
@@ -764,7 +828,7 @@ impl Module for GitModule {
             // Verify GPG signature if requested
             if verify_commit
                 && changed
-                && !Self::verify_commit(&dest, &new_version, &gpg_whitelist)?
+                && !Self::verify_commit(connection, &dest, &new_version, &gpg_whitelist, context)?
             {
                 return Err(ModuleError::ExecutionFailed(format!(
                     "GPG signature verification failed for commit {}",
@@ -777,13 +841,15 @@ impl Module for GitModule {
                 let diff_before = format!(
                     "commit: {}\nbranch: {}",
                     &old_version[..8.min(old_version.len())],
-                    Self::get_current_branch(&dest)?.unwrap_or_else(|| "detached".to_string())
+                    Self::get_current_branch(connection, &dest, context)?
+                        .unwrap_or_else(|| "detached".to_string())
                 );
 
                 let mut diff_after = format!(
                     "commit: {}\nbranch: {}",
                     &new_version[..8.min(new_version.len())],
-                    Self::get_current_branch(&dest)?.unwrap_or_else(|| "detached".to_string())
+                    Self::get_current_branch(connection, &dest, context)?
+                        .unwrap_or_else(|| "detached".to_string())
                 );
 
                 if !commits.is_empty() {
@@ -818,7 +884,8 @@ impl Module for GitModule {
         } else {
             // Just check current version
             let current_version =
-                Self::get_current_version(&dest)?.unwrap_or_else(|| "unknown".to_string());
+                Self::get_current_version(connection, &dest, context)?
+                    .unwrap_or_else(|| "unknown".to_string());
 
             Ok(ModuleOutput::ok(format!(
                 "Repository exists at version '{}'",
@@ -833,8 +900,16 @@ impl Module for GitModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::local::LocalConnection;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use tempfile::TempDir;
+
+    /// Helper to create a ModuleContext with a LocalConnection
+    fn context_with_local_connection() -> ModuleContext {
+        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
+        ModuleContext::default().with_connection(conn)
+    }
 
     #[test]
     fn test_git_module_validate_params() {
@@ -939,7 +1014,7 @@ mod tests {
             serde_json::json!(dest_path.to_str().unwrap()),
         );
 
-        let context = ModuleContext::default().with_check_mode(true);
+        let context = context_with_local_connection().with_check_mode(true);
         let result = module.check(&params, &context).unwrap();
 
         assert!(result.changed);
@@ -964,7 +1039,7 @@ mod tests {
         );
         params.insert("clone".to_string(), serde_json::json!(false));
 
-        let context = ModuleContext::default();
+        let context = context_with_local_connection();
         let result = module.execute(&params, &context).unwrap();
 
         assert!(!result.changed);
@@ -1086,15 +1161,17 @@ mod tests {
     fn test_is_bare_repo() {
         let temp = TempDir::new().unwrap();
         let dest = temp.path().to_str().unwrap();
+        let conn: Arc<dyn Connection + Send + Sync> = Arc::new(LocalConnection::new());
+        let context = ModuleContext::default();
 
         // Not a bare repo
-        assert!(!GitModule::is_bare_repo(dest));
+        assert!(!GitModule::is_bare_repo(&conn, dest, &context).unwrap());
 
         // Create fake bare repo structure
         std::fs::write(temp.path().join("HEAD"), "ref: refs/heads/main\n").unwrap();
         std::fs::create_dir(temp.path().join("objects")).unwrap();
 
-        assert!(GitModule::is_bare_repo(dest));
+        assert!(GitModule::is_bare_repo(&conn, dest, &context).unwrap());
     }
 
     #[test]

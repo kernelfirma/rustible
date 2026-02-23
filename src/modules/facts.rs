@@ -902,53 +902,70 @@ impl Module for FactsModule {
             .get_vec_string("gather_subset")?
             .unwrap_or_else(|| vec!["all".to_string()]);
 
-        let gather_all = gather_subset.contains(&"all".to_string());
+        let all_facts = if let Some(ref conn) = context.connection {
+            // Remote execution: use the async gather_facts_via_connection
+            let conn = conn.clone();
+            let subset = gather_subset.clone();
+            let handle = tokio::runtime::Handle::try_current().map_err(|_| {
+                crate::modules::ModuleError::ExecutionFailed(
+                    "No tokio runtime available".to_string(),
+                )
+            })?;
+            std::thread::scope(|s| {
+                s.spawn(|| {
+                    handle.block_on(gather_facts_via_connection(&conn, Some(&subset)))
+                })
+                .join()
+                .map_err(|_| {
+                    crate::modules::ModuleError::ExecutionFailed(
+                        "Facts gathering thread panicked".to_string(),
+                    )
+                })
+            })?
+        } else {
+            // Local fallback: use the synchronous local methods
+            let gather_all = gather_subset.contains(&"all".to_string());
+            let mut facts = HashMap::new();
 
-        let mut all_facts = HashMap::new();
-
-        // Always gather OS facts
-        if gather_all
-            || gather_subset.contains(&"os".to_string())
-            || gather_subset.contains(&"min".to_string())
-        {
-            for (k, v) in Self::gather_os_facts() {
-                all_facts.insert(k, v);
+            if gather_all
+                || gather_subset.contains(&"os".to_string())
+                || gather_subset.contains(&"min".to_string())
+            {
+                for (k, v) in Self::gather_os_facts() {
+                    facts.insert(k, v);
+                }
             }
-        }
 
-        // Gather hardware facts
-        if gather_all || gather_subset.contains(&"hardware".to_string()) {
-            for (k, v) in Self::gather_hardware_facts() {
-                all_facts.insert(k, v);
+            if gather_all || gather_subset.contains(&"hardware".to_string()) {
+                for (k, v) in Self::gather_hardware_facts() {
+                    facts.insert(k, v);
+                }
             }
-        }
 
-        // Gather network facts
-        if gather_all || gather_subset.contains(&"network".to_string()) {
-            for (k, v) in Self::gather_network_facts() {
-                all_facts.insert(k, v);
+            if gather_all || gather_subset.contains(&"network".to_string()) {
+                for (k, v) in Self::gather_network_facts() {
+                    facts.insert(k, v);
+                }
             }
-        }
 
-        // Gather date/time facts
-        if gather_all || gather_subset.contains(&"date_time".to_string()) {
-            for (k, v) in Self::gather_date_facts() {
-                all_facts.insert(k, v);
+            if gather_all || gather_subset.contains(&"date_time".to_string()) {
+                for (k, v) in Self::gather_date_facts() {
+                    facts.insert(k, v);
+                }
             }
-        }
 
-        // Gather environment facts
-        if gather_all || gather_subset.contains(&"env".to_string()) {
-            for (k, v) in Self::gather_env_facts() {
-                all_facts.insert(k, v);
+            if gather_all || gather_subset.contains(&"env".to_string()) {
+                for (k, v) in Self::gather_env_facts() {
+                    facts.insert(k, v);
+                }
             }
-        }
+
+            facts
+        };
 
         // Convert to serde_json::Value
         let facts_json: serde_json::Map<String, serde_json::Value> =
             all_facts.into_iter().collect();
-
-        let _ = context;
 
         Ok(ModuleOutput::ok("Facts gathered successfully")
             .with_data("ansible_facts", serde_json::Value::Object(facts_json)))
