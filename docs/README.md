@@ -13,6 +13,7 @@ read_when: You're entering the documentation and need to find the right resource
 | CLI Reference | [guides/cli-reference.md](guides/cli-reference.md) |
 | Module Reference | [reference/modules/](reference/modules/) |
 | Architecture | [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) |
+| Beta Sign-Off | [development/BETA_SIGNOFF_REQUIREMENTS.md](development/BETA_SIGNOFF_REQUIREMENTS.md) |
 
 ## Structure
 
