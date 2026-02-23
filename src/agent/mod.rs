@@ -53,11 +53,15 @@
 //! }
 //! ```
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 
 /// Agent errors
 #[derive(Error, Debug)]
@@ -405,12 +409,70 @@ impl Default for AgentBuilder {
     }
 }
 
+#[derive(Debug, Clone)]
+enum AgentTransportAddress {
+    Tcp(String),
+    #[cfg(unix)]
+    Unix(PathBuf),
+}
+
+impl AgentTransportAddress {
+    fn parse(address: &str) -> AgentResult<Self> {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(AgentError::ConnectionFailed(
+                "Agent address cannot be empty".to_string(),
+            ));
+        }
+
+        if let Some(addr) = address.strip_prefix("tcp://") {
+            return Ok(Self::Tcp(addr.to_string()));
+        }
+
+        if let Some(path) = address.strip_prefix("unix://") {
+            #[cfg(unix)]
+            {
+                return Ok(Self::Unix(PathBuf::from(path)));
+            }
+
+            #[cfg(not(unix))]
+            {
+                return Err(AgentError::ConnectionFailed(
+                    "Unix sockets are not supported on this platform".to_string(),
+                ));
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            if address.starts_with('/')
+                || address.starts_with("./")
+                || address.starts_with("../")
+                || address.ends_with(".sock")
+            {
+                return Ok(Self::Unix(PathBuf::from(address)));
+            }
+        }
+
+        Ok(Self::Tcp(address.to_string()))
+    }
+}
+
+fn rpc_error(code: i32, message: impl Into<String>) -> AgentRpcError {
+    AgentRpcError {
+        code,
+        message: message.into(),
+        data: None,
+    }
+}
+
 /// Agent runtime for executing on target hosts
 pub struct AgentRuntime {
     config: AgentConfig,
     start_time: Instant,
     tasks_executed: std::sync::atomic::AtomicU64,
     tasks_running: std::sync::atomic::AtomicUsize,
+    shutdown_requested: AtomicBool,
 }
 
 impl AgentRuntime {
@@ -421,18 +483,221 @@ impl AgentRuntime {
             start_time: Instant::now(),
             tasks_executed: std::sync::atomic::AtomicU64::new(0),
             tasks_running: std::sync::atomic::AtomicUsize::new(0),
+            shutdown_requested: AtomicBool::new(false),
         }
     }
 
     /// Start the agent runtime
     pub async fn start(&self) -> AgentResult<()> {
+        use std::sync::atomic::Ordering;
+
         // Ensure work directory exists
         std::fs::create_dir_all(&self.config.work_dir)?;
+        self.shutdown_requested.store(false, Ordering::SeqCst);
 
-        // TODO: Implement actual socket listener
-        // This is a placeholder for the full implementation
+        match AgentTransportAddress::parse(&self.config.listen)? {
+            AgentTransportAddress::Tcp(address) => self.serve_tcp(&address).await,
+            #[cfg(unix)]
+            AgentTransportAddress::Unix(path) => self.serve_unix(&path).await,
+        }
+    }
+
+    async fn serve_tcp(&self, address: &str) -> AgentResult<()> {
+        use std::sync::atomic::Ordering;
+
+        let listener = TcpListener::bind(address).await.map_err(|e| {
+            AgentError::ConnectionFailed(format!("Failed to bind TCP listener {}: {}", address, e))
+        })?;
+
+        loop {
+            if self.shutdown_requested.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let (stream, _) = listener.accept().await.map_err(|e| {
+                AgentError::ConnectionFailed(format!(
+                    "Failed to accept TCP connection on {}: {}",
+                    address, e
+                ))
+            })?;
+
+            self.handle_connection(stream).await?;
+        }
 
         Ok(())
+    }
+
+    #[cfg(unix)]
+    async fn serve_unix(&self, path: &std::path::Path) -> AgentResult<()> {
+        use std::sync::atomic::Ordering;
+        use tokio::net::UnixListener;
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        if path.exists() {
+            match std::fs::remove_file(path) {
+                Ok(_) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(AgentError::Io(e)),
+            }
+        }
+
+        struct SocketCleanup {
+            path: PathBuf,
+        }
+
+        impl Drop for SocketCleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.path);
+            }
+        }
+
+        let listener = UnixListener::bind(path).map_err(|e| {
+            AgentError::ConnectionFailed(format!(
+                "Failed to bind Unix listener {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
+        let _cleanup = SocketCleanup {
+            path: path.to_path_buf(),
+        };
+
+        loop {
+            if self.shutdown_requested.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let (stream, _) = listener.accept().await.map_err(|e| {
+                AgentError::ConnectionFailed(format!(
+                    "Failed to accept Unix connection on {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?;
+
+            self.handle_connection(stream).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_connection<S>(&self, stream: S) -> AgentResult<()>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        let bytes_read = reader.read_line(&mut line).await.map_err(|e| {
+            AgentError::ConnectionFailed(format!("Failed reading agent request: {}", e))
+        })?;
+
+        if bytes_read == 0 {
+            return Ok(());
+        }
+
+        let request = match serde_json::from_str::<AgentRequest>(line.trim_end()) {
+            Ok(request) => request,
+            Err(err) => {
+                let response = AgentResponse {
+                    id: "invalid".to_string(),
+                    result: None,
+                    error: Some(rpc_error(-32700, format!("Invalid request JSON: {}", err))),
+                };
+                return self.write_response(reader.into_inner(), &response).await;
+            }
+        };
+
+        let response = self.handle_request(request).await;
+        self.write_response(reader.into_inner(), &response).await
+    }
+
+    async fn write_response<S>(&self, mut stream: S, response: &AgentResponse) -> AgentResult<()>
+    where
+        S: AsyncWrite + Unpin,
+    {
+        let payload = serde_json::to_string(response)
+            .map_err(|e| AgentError::Serialization(e.to_string()))?;
+
+        stream
+            .write_all(payload.as_bytes())
+            .await
+            .map_err(|e| AgentError::ConnectionFailed(format!("Failed writing response: {}", e)))?;
+        stream.write_all(b"\n").await.map_err(|e| {
+            AgentError::ConnectionFailed(format!("Failed writing response newline: {}", e))
+        })?;
+        stream.flush().await.map_err(|e| {
+            AgentError::ConnectionFailed(format!("Failed flushing response: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    async fn handle_request(&self, request: AgentRequest) -> AgentResponse {
+        use serde_json::json;
+        use std::sync::atomic::Ordering;
+
+        match request.method {
+            AgentMethod::Execute => {
+                let params = match request.params.clone() {
+                    Some(value) => match serde_json::from_value::<ExecuteParams>(value) {
+                        Ok(params) => params,
+                        Err(_) => {
+                            return AgentResponse {
+                                id: request.id,
+                                result: None,
+                                error: Some(rpc_error(-32602, "Invalid params for execute")),
+                            };
+                        }
+                    },
+                    None => {
+                        return AgentResponse {
+                            id: request.id,
+                            result: None,
+                            error: Some(rpc_error(-32602, "Missing params for execute")),
+                        };
+                    }
+                };
+
+                match self.execute(params).await {
+                    Ok(result) => AgentResponse {
+                        id: request.id,
+                        result: Some(json!(result)),
+                        error: None,
+                    },
+                    Err(err) => AgentResponse {
+                        id: request.id,
+                        result: None,
+                        error: Some(rpc_error(-32000, err.to_string())),
+                    },
+                }
+            }
+            AgentMethod::Ping => AgentResponse {
+                id: request.id,
+                result: Some(json!({"ok": true})),
+                error: None,
+            },
+            AgentMethod::Status => AgentResponse {
+                id: request.id,
+                result: Some(json!(self.status())),
+                error: None,
+            },
+            AgentMethod::Shutdown => {
+                self.shutdown_requested.store(true, Ordering::SeqCst);
+                AgentResponse {
+                    id: request.id,
+                    result: Some(json!({"ok": true})),
+                    error: None,
+                }
+            }
+            _ => AgentResponse {
+                id: request.id,
+                result: None,
+                error: Some(rpc_error(-32601, "Method not supported")),
+            },
+        }
     }
 
     /// Execute a command
@@ -556,9 +821,29 @@ impl AgentClient {
 
     /// Check if agent is running
     pub async fn ping(&self) -> AgentResult<bool> {
-        // TODO: Implement actual socket communication
-        // For now, this is a placeholder
-        Err(AgentError::AgentNotRunning(self.host.clone()))
+        let request = AgentRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            method: AgentMethod::Ping,
+            params: None,
+        };
+
+        let response = self.send_request(request).await?;
+        let payload = response
+            .result
+            .ok_or_else(|| AgentError::ProtocolError("Missing ping result".to_string()))?;
+
+        match payload {
+            serde_json::Value::Bool(ok) => Ok(ok),
+            serde_json::Value::Object(map) => map
+                .get("ok")
+                .and_then(serde_json::Value::as_bool)
+                .ok_or_else(|| {
+                    AgentError::ProtocolError("Invalid ping result payload".to_string())
+                }),
+            _ => Err(AgentError::ProtocolError(
+                "Invalid ping result payload".to_string(),
+            )),
+        }
     }
 
     /// Execute a command on the remote agent
@@ -572,26 +857,138 @@ impl AgentClient {
             ),
         };
 
-        self.send_request(request).await
+        let response = self.send_request(request).await?;
+        self.decode_result(response)
     }
 
     /// Send a request and wait for response
-    async fn send_request(&self, _request: AgentRequest) -> AgentResult<ExecuteResult> {
-        // TODO: Implement actual socket communication
-        // This is a placeholder for the full implementation
-        Err(AgentError::AgentNotRunning(self.host.clone()))
+    async fn send_request(&self, request: AgentRequest) -> AgentResult<AgentResponse> {
+        let payload = format!(
+            "{}\n",
+            serde_json::to_string(&request)
+                .map_err(|e| AgentError::Serialization(e.to_string()))?
+        );
+        let endpoint = AgentTransportAddress::parse(&self.address)?;
+        let request_id = request.id.clone();
+
+        let response_line = tokio::time::timeout(self.timeout, async {
+            match endpoint {
+                AgentTransportAddress::Tcp(address) => {
+                    let stream = tokio::net::TcpStream::connect(&address)
+                        .await
+                        .map_err(|e| self.map_connect_error(e, &address))?;
+                    self.exchange_stream(stream, &payload).await
+                }
+                #[cfg(unix)]
+                AgentTransportAddress::Unix(path) => {
+                    let display = path.display().to_string();
+                    let stream = tokio::net::UnixStream::connect(&path)
+                        .await
+                        .map_err(|e| self.map_connect_error(e, &display))?;
+                    self.exchange_stream(stream, &payload).await
+                }
+            }
+        })
+        .await
+        .map_err(|_| {
+            AgentError::Timeout(format!(
+                "Request {} timed out after {:?}",
+                request_id, self.timeout
+            ))
+        })??;
+
+        let response: AgentResponse = serde_json::from_str(response_line.trim_end())
+            .map_err(|e| AgentError::Serialization(e.to_string()))?;
+
+        if response.id != request.id {
+            return Err(AgentError::ProtocolError(format!(
+                "Mismatched response id: expected {}, got {}",
+                request.id, response.id
+            )));
+        }
+
+        if let Some(err) = response.error.as_ref() {
+            return Err(AgentError::ProtocolError(format!(
+                "RPC error {}: {}",
+                err.code, err.message
+            )));
+        }
+
+        Ok(response)
     }
 
     /// Get agent status
     pub async fn status(&self) -> AgentResult<AgentStatus> {
-        // TODO: Implement actual socket communication
-        Err(AgentError::AgentNotRunning(self.host.clone()))
+        let request = AgentRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            method: AgentMethod::Status,
+            params: None,
+        };
+
+        let response = self.send_request(request).await?;
+        self.decode_result(response)
     }
 
     /// Shutdown the remote agent
     pub async fn shutdown(&self) -> AgentResult<()> {
-        // TODO: Implement actual socket communication
-        Err(AgentError::AgentNotRunning(self.host.clone()))
+        let request = AgentRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            method: AgentMethod::Shutdown,
+            params: None,
+        };
+
+        let _ = self.send_request(request).await?;
+        Ok(())
+    }
+
+    async fn exchange_stream<S>(&self, mut stream: S, payload: &str) -> AgentResult<String>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        stream
+            .write_all(payload.as_bytes())
+            .await
+            .map_err(|e| AgentError::ConnectionFailed(format!("Failed to send request: {}", e)))?;
+        stream
+            .flush()
+            .await
+            .map_err(|e| AgentError::ConnectionFailed(format!("Failed to flush request: {}", e)))?;
+
+        let mut reader = BufReader::new(stream);
+        let mut response_line = String::new();
+        let bytes_read = reader.read_line(&mut response_line).await.map_err(|e| {
+            AgentError::ConnectionFailed(format!("Failed to read response payload: {}", e))
+        })?;
+
+        if bytes_read == 0 {
+            return Err(AgentError::ProtocolError(
+                "Agent closed connection without response".to_string(),
+            ));
+        }
+
+        Ok(response_line)
+    }
+
+    fn map_connect_error(&self, error: std::io::Error, address: &str) -> AgentError {
+        match error.kind() {
+            std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::NotFound => AgentError::AgentNotRunning(self.host.clone()),
+            _ => {
+                AgentError::ConnectionFailed(format!("Failed connecting to {}: {}", address, error))
+            }
+        }
+    }
+
+    fn decode_result<T>(&self, response: AgentResponse) -> AgentResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        let payload = response
+            .result
+            .ok_or_else(|| AgentError::ProtocolError("Missing response result".to_string()))?;
+        serde_json::from_value(payload).map_err(|e| AgentError::Serialization(e.to_string()))
     }
 }
 
@@ -654,6 +1051,32 @@ pub fn verify_checksum(path: &std::path::Path, expected: &str) -> AgentResult<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use tokio::time::{sleep, timeout};
+
+    fn reserve_tcp_address() -> String {
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("should bind ephemeral port");
+        let address = listener
+            .local_addr()
+            .expect("listener should expose local address");
+        drop(listener);
+        address.to_string()
+    }
+
+    async fn wait_for_agent(client: &AgentClient) {
+        for _ in 0..100 {
+            match client.ping().await {
+                Ok(true) => return,
+                Ok(false) => sleep(Duration::from_millis(20)).await,
+                Err(AgentError::AgentNotRunning(_)) | Err(AgentError::ConnectionFailed(_)) => {
+                    sleep(Duration::from_millis(20)).await;
+                }
+                Err(err) => panic!("unexpected error while waiting for agent: {}", err),
+            }
+        }
+        panic!("agent did not become ready in time");
+    }
 
     #[test]
     fn test_agent_config_default() {
@@ -709,5 +1132,74 @@ mod tests {
         let status = runtime.status();
         assert_eq!(status.tasks_executed, 0);
         assert_eq!(status.tasks_running, 0);
+    }
+
+    #[tokio::test]
+    async fn test_agent_client_not_running_for_unbound_tcp_address() {
+        let address = reserve_tcp_address();
+        let client =
+            AgentClient::new("local-test", &address).with_timeout(Duration::from_millis(250));
+
+        let err = client.ping().await.expect_err("expected ping to fail");
+        assert!(matches!(
+            err,
+            AgentError::AgentNotRunning(ref host) if host == "local-test"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_agent_runtime_client_rpc_roundtrip_over_tcp() {
+        let listen = reserve_tcp_address();
+        let work_dir = tempfile::tempdir().expect("tempdir should be created");
+
+        let config = AgentConfig {
+            listen: listen.clone(),
+            work_dir: work_dir.path().join("work"),
+            ..AgentConfig::default()
+        };
+
+        let runtime = Arc::new(AgentRuntime::new(config));
+        let runtime_task = {
+            let runtime = Arc::clone(&runtime);
+            tokio::spawn(async move { runtime.start().await })
+        };
+
+        let client = AgentClient::new("local-test", &listen).with_timeout(Duration::from_secs(1));
+        wait_for_agent(&client).await;
+
+        assert!(client.ping().await.expect("ping should succeed"));
+
+        let status_before = client.status().await.expect("status should succeed");
+        assert_eq!(status_before.tasks_executed, 0);
+
+        let result = client
+            .execute(ExecuteParams {
+                command: "printf rustible-agent-rpc".to_string(),
+                cwd: None,
+                env: HashMap::new(),
+                timeout: None,
+                user: None,
+                group: None,
+                shell: true,
+            })
+            .await
+            .expect("execute should succeed");
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "rustible-agent-rpc");
+
+        let status_after = client.status().await.expect("status should succeed");
+        assert_eq!(status_after.tasks_executed, 1);
+        assert_eq!(status_after.tasks_running, 0);
+
+        client.shutdown().await.expect("shutdown should succeed");
+        let runtime_result = timeout(Duration::from_secs(2), runtime_task)
+            .await
+            .expect("runtime should exit promptly")
+            .expect("runtime task should join");
+        assert!(
+            runtime_result.is_ok(),
+            "runtime returned error: {:?}",
+            runtime_result
+        );
     }
 }
