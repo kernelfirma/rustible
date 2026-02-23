@@ -41,6 +41,8 @@ use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+#[cfg(not(feature = "kubernetes"))]
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 
 #[cfg(feature = "kubernetes")]
@@ -527,6 +529,338 @@ impl K8sServiceModule {
     }
 }
 
+#[cfg(not(feature = "kubernetes"))]
+impl K8sServiceModule {
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| rt.block_on(conn.execute(cmd, None)))
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e))
+                })?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to run command: {}", e))
+                })?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn execute_cli(
+        &self,
+        params: &ModuleParams,
+        context: &ModuleContext,
+    ) -> ModuleResult<ModuleOutput> {
+        let config = ServiceConfig::from_params(params)?;
+        let name_escaped = shell_escape(&config.name);
+        let ns_escaped = shell_escape(&config.namespace);
+
+        // Check if service already exists
+        let check_cmd = format!(
+            "kubectl get service {} -n {} -o json 2>/dev/null",
+            name_escaped, ns_escaped
+        );
+        let (exists, existing_json, _) = Self::run_cmd(&check_cmd, context)?;
+
+        match config.state {
+            ServiceState::Absent => {
+                if !exists {
+                    return Ok(ModuleOutput::ok(format!(
+                        "Service '{}/{}' already absent",
+                        config.namespace, config.name
+                    )));
+                }
+
+                if context.check_mode {
+                    return Ok(ModuleOutput::changed(format!(
+                        "Would delete Service '{}/{}'",
+                        config.namespace, config.name
+                    )));
+                }
+
+                let delete_cmd = format!(
+                    "kubectl delete service {} -n {}",
+                    name_escaped, ns_escaped
+                );
+                let (success, _, stderr) = Self::run_cmd(&delete_cmd, context)?;
+                if !success {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "Failed to delete Service: {}",
+                        stderr
+                    )));
+                }
+
+                Ok(ModuleOutput::changed(format!(
+                    "Deleted Service '{}/{}'",
+                    config.namespace, config.name
+                )))
+            }
+            ServiceState::Present => {
+                // Build labels
+                let mut labels = config.labels.clone();
+                if !labels.contains_key("app") {
+                    labels.insert("app".to_string(), config.name.clone());
+                }
+
+                let labels_json: serde_json::Value = labels
+                    .iter()
+                    .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                    .collect::<serde_json::Map<String, serde_json::Value>>()
+                    .into();
+
+                let annotations_json: serde_json::Value = if config.annotations.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    config
+                        .annotations
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<String, serde_json::Value>>()
+                        .into()
+                };
+
+                // Build ports
+                let ports_json: serde_json::Value = if config.ports.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    let ports: Vec<serde_json::Value> = config
+                        .ports
+                        .iter()
+                        .map(|p| {
+                            let mut port_obj = serde_json::json!({
+                                "port": p.port,
+                                "protocol": p.protocol,
+                            });
+                            if let Some(tp) = p.target_port {
+                                port_obj["targetPort"] = serde_json::json!(tp);
+                            }
+                            if let Some(np) = p.node_port {
+                                port_obj["nodePort"] = serde_json::json!(np);
+                            }
+                            if let Some(ref name) = p.name {
+                                port_obj["name"] = serde_json::json!(name);
+                            }
+                            port_obj
+                        })
+                        .collect();
+                    serde_json::json!(ports)
+                };
+
+                // Build selector
+                let selector_json: serde_json::Value =
+                    if config.service_type != ServiceType::ExternalName && !config.selector.is_empty()
+                    {
+                        config
+                            .selector
+                            .iter()
+                            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                            .collect::<serde_json::Map<String, serde_json::Value>>()
+                            .into()
+                    } else {
+                        serde_json::Value::Null
+                    };
+
+                // Build spec
+                let mut spec = serde_json::json!({
+                    "type": config.service_type.to_k8s_string(),
+                });
+
+                if !ports_json.is_null() {
+                    spec["ports"] = ports_json;
+                }
+                if !selector_json.is_null() {
+                    spec["selector"] = selector_json;
+                }
+                if let Some(ref cip) = config.cluster_ip {
+                    spec["clusterIP"] = serde_json::json!(cip);
+                }
+                if !config.external_ips.is_empty() {
+                    spec["externalIPs"] = serde_json::json!(config.external_ips);
+                }
+                if let Some(ref en) = config.external_name {
+                    spec["externalName"] = serde_json::json!(en);
+                }
+                if let Some(ref lbip) = config.load_balancer_ip {
+                    spec["loadBalancerIP"] = serde_json::json!(lbip);
+                }
+                if let Some(ref sa) = config.session_affinity {
+                    spec["sessionAffinity"] = serde_json::json!(sa);
+                }
+
+                let mut manifest = serde_json::json!({
+                    "apiVersion": "v1",
+                    "kind": "Service",
+                    "metadata": {
+                        "name": config.name,
+                        "namespace": config.namespace,
+                        "labels": labels_json,
+                    },
+                    "spec": spec,
+                });
+
+                if !config.annotations.is_empty() {
+                    manifest["metadata"]["annotations"] = annotations_json;
+                }
+
+                if exists {
+                    // Parse existing for comparison
+                    if let Ok(existing) = serde_json::from_str::<serde_json::Value>(&existing_json)
+                    {
+                        let existing_type = existing
+                            .pointer("/spec/type")
+                            .and_then(|v| v.as_str());
+                        let desired_type = Some(config.service_type.to_k8s_string());
+
+                        let existing_selector = existing.pointer("/spec/selector");
+                        let desired_selector = manifest.pointer("/spec/selector");
+
+                        // Compare ports (simplified)
+                        let existing_ports = existing.pointer("/spec/ports");
+                        let desired_ports = manifest.pointer("/spec/ports");
+
+                        let ports_match = match (existing_ports, desired_ports) {
+                            (Some(ep), Some(dp)) => {
+                                if let (Some(ea), Some(da)) = (ep.as_array(), dp.as_array()) {
+                                    if ea.len() != da.len() {
+                                        false
+                                    } else {
+                                        ea.iter().zip(da.iter()).all(|(e, d)| {
+                                            e.get("port") == d.get("port")
+                                                && e.get("targetPort") == d.get("targetPort")
+                                        })
+                                    }
+                                } else {
+                                    false
+                                }
+                            }
+                            (None, None) => true,
+                            _ => false,
+                        };
+
+                        if existing_type == desired_type.as_deref()
+                            && existing_selector == desired_selector
+                            && ports_match
+                        {
+                            let cluster_ip = existing
+                                .pointer("/spec/clusterIP")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            return Ok(ModuleOutput::ok(format!(
+                                "Service '{}/{}' is up to date",
+                                config.namespace, config.name
+                            ))
+                            .with_data("cluster_ip", serde_json::json!(cluster_ip)));
+                        }
+                    }
+
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would update Service '{}/{}'",
+                            config.namespace, config.name
+                        )));
+                    }
+
+                    // Preserve existing clusterIP if not explicitly set
+                    if config.cluster_ip.is_none() {
+                        if let Ok(existing) =
+                            serde_json::from_str::<serde_json::Value>(&existing_json)
+                        {
+                            if let Some(cip) = existing
+                                .pointer("/spec/clusterIP")
+                                .and_then(|v| v.as_str())
+                            {
+                                manifest["spec"]["clusterIP"] = serde_json::json!(cip);
+                            }
+                        }
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to update Service: {}",
+                            stderr
+                        )));
+                    }
+
+                    // Get the updated service info for cluster_ip
+                    let get_cmd = format!(
+                        "kubectl get service {} -n {} -o json 2>/dev/null",
+                        name_escaped, ns_escaped
+                    );
+                    let (_, updated_json, _) = Self::run_cmd(&get_cmd, context)?;
+                    let cluster_ip = serde_json::from_str::<serde_json::Value>(&updated_json)
+                        .ok()
+                        .and_then(|v| {
+                            v.pointer("/spec/clusterIP")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        });
+
+                    Ok(ModuleOutput::changed(format!(
+                        "Updated Service '{}/{}'",
+                        config.namespace, config.name
+                    ))
+                    .with_data("cluster_ip", serde_json::json!(cluster_ip)))
+                } else {
+                    // Create new service
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would create Service '{}/{}'",
+                            config.namespace, config.name
+                        )));
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to create Service: {}",
+                            stderr
+                        )));
+                    }
+
+                    // Get the created service info for cluster_ip
+                    let get_cmd = format!(
+                        "kubectl get service {} -n {} -o json 2>/dev/null",
+                        name_escaped, ns_escaped
+                    );
+                    let (_, created_json, _) = Self::run_cmd(&get_cmd, context)?;
+                    let cluster_ip = serde_json::from_str::<serde_json::Value>(&created_json)
+                        .ok()
+                        .and_then(|v| {
+                            v.pointer("/spec/clusterIP")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        });
+
+                    Ok(ModuleOutput::changed(format!(
+                        "Created Service '{}/{}'",
+                        config.namespace, config.name
+                    ))
+                    .with_data("cluster_ip", serde_json::json!(cluster_ip)))
+                }
+            }
+        }
+    }
+}
+
 impl Module for K8sServiceModule {
     fn name(&self) -> &'static str {
         "k8s_service"
@@ -567,12 +901,10 @@ impl Module for K8sServiceModule {
     #[cfg(not(feature = "kubernetes"))]
     fn execute(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Kubernetes support requires the 'kubernetes' feature".to_string(),
-        ))
+        self.execute_cli(params, context)
     }
 }
 

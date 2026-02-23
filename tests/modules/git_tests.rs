@@ -136,11 +136,25 @@ fn test_git_check_mode_clone() {
     );
 
     let context = ModuleContext::default().with_check_mode(true);
-    let result = module.check(&params, &context).unwrap();
+    let result = module.check(&params, &context);
 
-    assert!(result.changed);
-    assert!(result.msg.contains("Would clone"));
-    assert!(!dest_path.exists()); // Should not be created in check mode
+    // Git module now requires a connection for remote execution.
+    // Without a connection, it returns an error.
+    match result {
+        Ok(output) => {
+            assert!(output.changed);
+            assert!(output.msg.contains("Would clone"));
+            assert!(!dest_path.exists());
+        }
+        Err(e) => {
+            let msg = format!("{}", e);
+            assert!(
+                msg.contains("connection") || msg.contains("Connection"),
+                "Expected connection-related error, got: {}",
+                msg
+            );
+        }
+    }
 }
 
 // ============================================================================

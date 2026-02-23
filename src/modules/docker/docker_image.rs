@@ -568,14 +568,303 @@ impl DockerImageModule {
 
 #[cfg(not(feature = "docker"))]
 impl DockerImageModule {
-    fn execute_stub(
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| {
+                rt.block_on(conn.execute(cmd, None))
+            }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to run command: {}", e)))?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn execute_cli(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Docker module requires 'docker' feature to be enabled".to_string(),
-        ))
+        use crate::utils::shell_escape;
+
+        let config = ImageConfig::from_params(params)?;
+        let full_ref = config.full_reference();
+        let escaped_ref = shell_escape(&full_ref);
+
+        // Check if image exists
+        let check_cmd = format!("docker image inspect {} 2>/dev/null", escaped_ref);
+        let (exists, _, _) = Self::run_cmd(&check_cmd, context)?;
+
+        let mut changed = false;
+        let mut messages = Vec::new();
+
+        match config.state {
+            ImageState::Absent => {
+                if exists {
+                    if context.check_mode {
+                        messages.push(format!("Would remove image '{}'", full_ref));
+                        changed = true;
+                    } else {
+                        let mut rm_cmd = format!("docker rmi {}", escaped_ref);
+                        if config.force {
+                            rm_cmd = format!("docker rmi --force {}", escaped_ref);
+                        }
+                        let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to remove image '{}': {}",
+                                full_ref,
+                                stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Removed image '{}'", full_ref));
+                        changed = true;
+                    }
+                } else {
+                    messages.push(format!("Image '{}' does not exist", full_ref));
+                }
+            }
+
+            ImageState::Present => {
+                match config.source {
+                    ImageSource::Pull => {
+                        if !exists {
+                            if context.check_mode {
+                                messages.push(format!("Would pull image '{}'", full_ref));
+                                changed = true;
+                            } else {
+                                let pull_cmd = format!("docker pull {}", escaped_ref);
+                                let (ok, _, stderr) = Self::run_cmd(&pull_cmd, context)?;
+                                if !ok {
+                                    return Err(ModuleError::ExecutionFailed(format!(
+                                        "Failed to pull image '{}': {}",
+                                        full_ref,
+                                        stderr.trim()
+                                    )));
+                                }
+                                messages.push(format!("Pulled image '{}'", full_ref));
+                                changed = true;
+                            }
+                        } else {
+                            messages.push(format!("Image '{}' already exists", full_ref));
+                        }
+                    }
+                    ImageSource::Build => {
+                        if context.check_mode {
+                            messages.push(format!("Would build image '{}'", full_ref));
+                            changed = true;
+                        } else {
+                            let build_path = config.build.path.as_ref().ok_or_else(|| {
+                                ModuleError::MissingParameter(
+                                    "build.path is required for building images".to_string(),
+                                )
+                            })?;
+                            let mut build_cmd = format!(
+                                "docker build -t {} {}",
+                                escaped_ref,
+                                shell_escape(build_path)
+                            );
+                            if config.build.dockerfile != "Dockerfile" {
+                                build_cmd.push_str(&format!(
+                                    " --file {}",
+                                    shell_escape(&config.build.dockerfile)
+                                ));
+                            }
+                            if config.build.nocache {
+                                build_cmd.push_str(" --no-cache");
+                            }
+                            for (k, v) in &config.build.args {
+                                build_cmd.push_str(&format!(
+                                    " --build-arg {}={}",
+                                    shell_escape(k),
+                                    shell_escape(v)
+                                ));
+                            }
+                            let (ok, _, stderr) = Self::run_cmd(&build_cmd, context)?;
+                            if !ok {
+                                return Err(ModuleError::ExecutionFailed(format!(
+                                    "Failed to build image '{}': {}",
+                                    full_ref,
+                                    stderr.trim()
+                                )));
+                            }
+                            messages.push(format!("Built image '{}'", full_ref));
+                            changed = true;
+                        }
+                    }
+                    ImageSource::Load => {
+                        if !exists {
+                            let archive_path = config.archive_path.as_ref().ok_or_else(|| {
+                                ModuleError::MissingParameter(
+                                    "archive_path is required for source=load".to_string(),
+                                )
+                            })?;
+                            if context.check_mode {
+                                messages
+                                    .push(format!("Would load image from '{}'", archive_path));
+                                changed = true;
+                            } else {
+                                let load_cmd = format!(
+                                    "docker load -i {}",
+                                    shell_escape(archive_path)
+                                );
+                                let (ok, _, stderr) = Self::run_cmd(&load_cmd, context)?;
+                                if !ok {
+                                    return Err(ModuleError::ExecutionFailed(format!(
+                                        "Failed to load image from '{}': {}",
+                                        archive_path,
+                                        stderr.trim()
+                                    )));
+                                }
+                                messages.push(format!("Loaded image from '{}'", archive_path));
+                                changed = true;
+                            }
+                        } else {
+                            messages.push(format!("Image '{}' already exists", full_ref));
+                        }
+                    }
+                    ImageSource::Local => {
+                        if !exists {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Image '{}' does not exist locally",
+                                full_ref
+                            )));
+                        }
+                        messages.push(format!("Image '{}' exists locally", full_ref));
+                    }
+                }
+            }
+
+            ImageState::Build => {
+                if context.check_mode {
+                    messages.push(format!("Would build image '{}'", full_ref));
+                    changed = true;
+                } else {
+                    let build_path = config.build.path.as_ref().ok_or_else(|| {
+                        ModuleError::MissingParameter(
+                            "build.path is required for building images".to_string(),
+                        )
+                    })?;
+                    let mut build_cmd = format!(
+                        "docker build -t {} {}",
+                        escaped_ref,
+                        shell_escape(build_path)
+                    );
+                    if config.build.dockerfile != "Dockerfile" {
+                        build_cmd.push_str(&format!(
+                            " --file {}",
+                            shell_escape(&config.build.dockerfile)
+                        ));
+                    }
+                    if config.build.nocache {
+                        build_cmd.push_str(" --no-cache");
+                    }
+                    for (k, v) in &config.build.args {
+                        build_cmd.push_str(&format!(
+                            " --build-arg {}={}",
+                            shell_escape(k),
+                            shell_escape(v)
+                        ));
+                    }
+                    let (ok, _, stderr) = Self::run_cmd(&build_cmd, context)?;
+                    if !ok {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to build image '{}': {}",
+                            full_ref,
+                            stderr.trim()
+                        )));
+                    }
+                    messages.push(format!("Built image '{}'", full_ref));
+                    changed = true;
+                }
+            }
+        }
+
+        // Handle push if requested
+        if config.push && config.state != ImageState::Absent {
+            if context.check_mode {
+                messages.push(format!("Would push image '{}'", full_ref));
+                changed = true;
+            } else {
+                // Tag for repository if specified
+                if let Some(ref repo) = config.repository {
+                    let tag_target = format!("{}:{}", repo, config.tag);
+                    let tag_cmd = format!(
+                        "docker tag {} {}",
+                        escaped_ref,
+                        shell_escape(&tag_target)
+                    );
+                    let (ok, _, stderr) = Self::run_cmd(&tag_cmd, context)?;
+                    if !ok {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to tag image: {}",
+                            stderr.trim()
+                        )));
+                    }
+                    let push_cmd = format!("docker push {}", shell_escape(&tag_target));
+                    let (ok, _, stderr) = Self::run_cmd(&push_cmd, context)?;
+                    if !ok {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to push image '{}': {}",
+                            tag_target,
+                            stderr.trim()
+                        )));
+                    }
+                    messages.push(format!("Pushed image '{}'", tag_target));
+                } else {
+                    let push_cmd = format!("docker push {}", escaped_ref);
+                    let (ok, _, stderr) = Self::run_cmd(&push_cmd, context)?;
+                    if !ok {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to push image '{}': {}",
+                            full_ref,
+                            stderr.trim()
+                        )));
+                    }
+                    messages.push(format!("Pushed image '{}'", full_ref));
+                }
+                changed = true;
+            }
+        }
+
+        // Get image info for output
+        let image_info = if !context.check_mode {
+            let info_cmd = format!(
+                "docker image inspect --format '{{{{json .}}}}' {}",
+                escaped_ref
+            );
+            if let Ok((true, stdout, _)) = Self::run_cmd(&info_cmd, context) {
+                serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
+                    serde_json::json!({ "name": full_ref })
+                })
+            } else {
+                serde_json::json!({ "name": full_ref, "exists": false })
+            }
+        } else {
+            serde_json::json!({ "name": full_ref })
+        };
+
+        let msg = if messages.is_empty() {
+            format!("Image '{}' is in desired state", full_ref)
+        } else {
+            messages.join(". ")
+        };
+
+        if changed {
+            Ok(ModuleOutput::changed(msg).with_data("image", image_info))
+        } else {
+            Ok(ModuleOutput::ok(msg).with_data("image", image_info))
+        }
     }
 }
 
@@ -625,7 +914,7 @@ impl Module for DockerImageModule {
 
         #[cfg(not(feature = "docker"))]
         {
-            self.execute_stub(params, context)
+            self.execute_cli(params, context)
         }
     }
 }

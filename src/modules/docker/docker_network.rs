@@ -484,14 +484,247 @@ impl DockerNetworkModule {
 
 #[cfg(not(feature = "docker"))]
 impl DockerNetworkModule {
-    fn execute_stub(
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| {
+                rt.block_on(conn.execute(cmd, None))
+            }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to run command: {}", e)))?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn execute_cli(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Docker module requires 'docker' feature to be enabled".to_string(),
-        ))
+        use crate::utils::shell_escape;
+
+        let config = NetworkConfig::from_params(params)?;
+        let escaped_name = shell_escape(&config.name);
+
+        // Check if network exists
+        let check_cmd = format!("docker network inspect {} 2>/dev/null", escaped_name);
+        let (exists, _, _) = Self::run_cmd(&check_cmd, context)?;
+
+        let mut changed = false;
+        let mut messages = Vec::new();
+
+        match config.state {
+            NetworkState::Absent => {
+                if exists {
+                    if context.check_mode {
+                        messages.push(format!("Would remove network '{}'", config.name));
+                        changed = true;
+                    } else {
+                        // Disconnect all containers if force is set
+                        if config.force {
+                            let inspect_cmd = format!(
+                                "docker network inspect --format '{{{{json .Containers}}}}' {}",
+                                escaped_name
+                            );
+                            if let Ok((true, stdout, _)) = Self::run_cmd(&inspect_cmd, context) {
+                                if let Ok(serde_json::Value::Object(containers)) =
+                                    serde_json::from_str(stdout.trim())
+                                {
+                                    for container_id in containers.keys() {
+                                        let disconnect_cmd = format!(
+                                            "docker network disconnect {} {}",
+                                            escaped_name,
+                                            shell_escape(container_id)
+                                        );
+                                        let _ = Self::run_cmd(&disconnect_cmd, context);
+                                    }
+                                }
+                            }
+                        }
+                        let rm_cmd = format!("docker network rm {}", escaped_name);
+                        let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to remove network '{}': {}",
+                                config.name,
+                                stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Removed network '{}'", config.name));
+                        changed = true;
+                    }
+                } else {
+                    messages.push(format!("Network '{}' does not exist", config.name));
+                }
+            }
+
+            NetworkState::Present => {
+                if !exists {
+                    if context.check_mode {
+                        messages.push(format!("Would create network '{}'", config.name));
+                        changed = true;
+                    } else {
+                        let mut create_cmd = format!(
+                            "docker network create --driver {} {}",
+                            shell_escape(config.driver.as_str()),
+                            escaped_name
+                        );
+
+                        // Add IPAM options
+                        if let Some(ref ipam) = config.ipam {
+                            for subnet_cfg in &ipam.config {
+                                create_cmd.push_str(&format!(
+                                    " --subnet {}",
+                                    shell_escape(&subnet_cfg.subnet)
+                                ));
+                                if let Some(ref gw) = subnet_cfg.gateway {
+                                    create_cmd
+                                        .push_str(&format!(" --gateway {}", shell_escape(gw)));
+                                }
+                                if let Some(ref range) = subnet_cfg.ip_range {
+                                    create_cmd.push_str(&format!(
+                                        " --ip-range {}",
+                                        shell_escape(range)
+                                    ));
+                                }
+                            }
+                        }
+
+                        if config.internal {
+                            create_cmd.push_str(" --internal");
+                        }
+                        if config.enable_ipv6 {
+                            create_cmd.push_str(" --ipv6");
+                        }
+
+                        for (k, v) in &config.labels {
+                            create_cmd.push_str(&format!(
+                                " --label {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+                        for (k, v) in &config.driver_options {
+                            create_cmd.push_str(&format!(
+                                " --opt {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+
+                        let (ok, _, stderr) = Self::run_cmd(&create_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to create network '{}': {}",
+                                config.name,
+                                stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Created network '{}'", config.name));
+                        changed = true;
+                    }
+                } else {
+                    messages.push(format!("Network '{}' already exists", config.name));
+                }
+
+                // Handle container connections
+                if !config.connected.is_empty() && (exists || !context.check_mode) {
+                    // Get currently connected containers
+                    let mut currently_connected = Vec::new();
+                    let inspect_cmd = format!(
+                        "docker network inspect --format '{{{{json .Containers}}}}' {}",
+                        escaped_name
+                    );
+                    if let Ok((true, stdout, _)) = Self::run_cmd(&inspect_cmd, context) {
+                        if let Ok(serde_json::Value::Object(containers)) =
+                            serde_json::from_str(stdout.trim())
+                        {
+                            // The keys are container IDs; extract Name from each value
+                            for (_id, info) in &containers {
+                                if let Some(name) = info.get("Name").and_then(|n| n.as_str()) {
+                                    currently_connected.push(name.to_string());
+                                }
+                            }
+                            // Also add the IDs themselves for matching
+                            for id in containers.keys() {
+                                currently_connected.push(id.clone());
+                            }
+                        }
+                    }
+
+                    for container in &config.connected {
+                        if !currently_connected.contains(container) {
+                            if context.check_mode {
+                                messages.push(format!(
+                                    "Would connect container '{}' to network",
+                                    container
+                                ));
+                                changed = true;
+                            } else {
+                                let connect_cmd = format!(
+                                    "docker network connect {} {}",
+                                    escaped_name,
+                                    shell_escape(container)
+                                );
+                                let (ok, _, stderr) = Self::run_cmd(&connect_cmd, context)?;
+                                if !ok {
+                                    return Err(ModuleError::ExecutionFailed(format!(
+                                        "Failed to connect container '{}' to network '{}': {}",
+                                        container,
+                                        config.name,
+                                        stderr.trim()
+                                    )));
+                                }
+                                messages.push(format!(
+                                    "Connected container '{}' to network",
+                                    container
+                                ));
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get network info for output
+        let network_info = if !context.check_mode {
+            let info_cmd = format!(
+                "docker network inspect --format '{{{{json .}}}}' {}",
+                escaped_name
+            );
+            if let Ok((true, stdout, _)) = Self::run_cmd(&info_cmd, context) {
+                serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
+                    serde_json::json!({ "name": config.name })
+                })
+            } else {
+                serde_json::json!({ "name": config.name, "exists": false })
+            }
+        } else {
+            serde_json::json!({ "name": config.name })
+        };
+
+        let msg = if messages.is_empty() {
+            format!("Network '{}' is in desired state", config.name)
+        } else {
+            messages.join(". ")
+        };
+
+        if changed {
+            Ok(ModuleOutput::changed(msg).with_data("network", network_info))
+        } else {
+            Ok(ModuleOutput::ok(msg).with_data("network", network_info))
+        }
     }
 }
 
@@ -538,7 +771,7 @@ impl Module for DockerNetworkModule {
 
         #[cfg(not(feature = "docker"))]
         {
-            self.execute_stub(params, context)
+            self.execute_cli(params, context)
         }
     }
 }

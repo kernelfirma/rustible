@@ -43,6 +43,8 @@ use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+#[cfg(not(feature = "kubernetes"))]
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 
 #[cfg(feature = "kubernetes")]
@@ -548,6 +550,314 @@ impl K8sDeploymentModule {
     }
 }
 
+#[cfg(not(feature = "kubernetes"))]
+impl K8sDeploymentModule {
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| rt.block_on(conn.execute(cmd, None)))
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e))
+                })?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to run command: {}", e))
+                })?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn execute_cli(
+        &self,
+        params: &ModuleParams,
+        context: &ModuleContext,
+    ) -> ModuleResult<ModuleOutput> {
+        let config = DeploymentConfig::from_params(params)?;
+        let name_escaped = shell_escape(&config.name);
+        let ns_escaped = shell_escape(&config.namespace);
+
+        // Check if deployment already exists
+        let check_cmd = format!(
+            "kubectl get deployment {} -n {} -o json 2>/dev/null",
+            name_escaped, ns_escaped
+        );
+        let (exists, existing_json, _) = Self::run_cmd(&check_cmd, context)?;
+
+        match config.state {
+            DeploymentState::Absent => {
+                if !exists {
+                    return Ok(ModuleOutput::ok(format!(
+                        "Deployment '{}/{}' already absent",
+                        config.namespace, config.name
+                    )));
+                }
+
+                if context.check_mode {
+                    return Ok(ModuleOutput::changed(format!(
+                        "Would delete Deployment '{}/{}'",
+                        config.namespace, config.name
+                    )));
+                }
+
+                let delete_cmd = format!(
+                    "kubectl delete deployment {} -n {}",
+                    name_escaped, ns_escaped
+                );
+                let (success, _, stderr) = Self::run_cmd(&delete_cmd, context)?;
+                if !success {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "Failed to delete Deployment: {}",
+                        stderr
+                    )));
+                }
+
+                Ok(ModuleOutput::changed(format!(
+                    "Deleted Deployment '{}/{}'",
+                    config.namespace, config.name
+                )))
+            }
+            DeploymentState::Present => {
+                let image = config.image.as_ref().ok_or_else(|| {
+                    ModuleError::MissingParameter(
+                        "image is required for state=present".to_string(),
+                    )
+                })?;
+
+                let container_name = config
+                    .container_name
+                    .clone()
+                    .unwrap_or_else(|| config.name.clone());
+
+                // Build labels with app label for selector
+                let mut labels = config.labels.clone();
+                if !labels.contains_key("app") {
+                    labels.insert("app".to_string(), config.name.clone());
+                }
+
+                let labels_json: serde_json::Value = labels
+                    .iter()
+                    .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                    .collect::<serde_json::Map<String, serde_json::Value>>()
+                    .into();
+
+                let annotations_json: serde_json::Value = if config.annotations.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    config
+                        .annotations
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<String, serde_json::Value>>()
+                        .into()
+                };
+
+                // Build container ports
+                let ports_json: serde_json::Value = if let Some(port) = config.container_port {
+                    serde_json::json!([{"containerPort": port}])
+                } else {
+                    serde_json::Value::Null
+                };
+
+                // Build environment variables
+                let env_json: serde_json::Value = if config.env.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    let env_vars: Vec<serde_json::Value> = config
+                        .env
+                        .iter()
+                        .map(|(k, v)| serde_json::json!({"name": k, "value": v}))
+                        .collect();
+                    serde_json::json!(env_vars)
+                };
+
+                // Build strategy
+                let strategy_json = match config.strategy {
+                    UpdateStrategy::Recreate => serde_json::json!({"type": "Recreate"}),
+                    UpdateStrategy::RollingUpdate => {
+                        let mut rolling = serde_json::Map::new();
+                        if let Some(ref ms) = config.max_surge {
+                            rolling.insert(
+                                "maxSurge".to_string(),
+                                serde_json::json!(ms),
+                            );
+                        }
+                        if let Some(ref mu) = config.max_unavailable {
+                            rolling.insert(
+                                "maxUnavailable".to_string(),
+                                serde_json::json!(mu),
+                            );
+                        }
+                        serde_json::json!({
+                            "type": "RollingUpdate",
+                            "rollingUpdate": rolling,
+                        })
+                    }
+                };
+
+                // Build container spec
+                let mut container = serde_json::json!({
+                    "name": container_name,
+                    "image": image,
+                });
+                if !ports_json.is_null() {
+                    container["ports"] = ports_json;
+                }
+                if !env_json.is_null() {
+                    container["env"] = env_json;
+                }
+
+                // Build the full manifest
+                let mut manifest = serde_json::json!({
+                    "apiVersion": "apps/v1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "name": config.name,
+                        "namespace": config.namespace,
+                        "labels": labels_json,
+                    },
+                    "spec": {
+                        "replicas": config.replicas,
+                        "selector": {
+                            "matchLabels": labels_json,
+                        },
+                        "strategy": strategy_json,
+                        "template": {
+                            "metadata": {
+                                "labels": labels_json,
+                            },
+                            "spec": {
+                                "containers": [container],
+                            },
+                        },
+                    },
+                });
+
+                if !config.annotations.is_empty() {
+                    manifest["metadata"]["annotations"] = annotations_json;
+                }
+
+                if exists {
+                    // Check if update is needed
+                    if let Ok(existing) = serde_json::from_str::<serde_json::Value>(&existing_json)
+                    {
+                        let existing_replicas = existing
+                            .pointer("/spec/replicas")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(1);
+                        let existing_image = existing
+                            .pointer("/spec/template/spec/containers/0/image")
+                            .and_then(|v| v.as_str());
+                        let existing_labels = existing.pointer("/metadata/labels");
+                        let desired_labels = manifest.pointer("/metadata/labels");
+
+                        if existing_replicas == config.replicas as i64
+                            && existing_image == Some(image.as_str())
+                            && existing_labels == desired_labels
+                        {
+                            return Ok(ModuleOutput::ok(format!(
+                                "Deployment '{}/{}' is up to date",
+                                config.namespace, config.name
+                            ))
+                            .with_data("replicas", serde_json::json!(config.replicas)));
+                        }
+                    }
+
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would update Deployment '{}/{}'",
+                            config.namespace, config.name
+                        )));
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to update Deployment: {}",
+                            stderr
+                        )));
+                    }
+
+                    // Wait for deployment if requested
+                    if config.wait {
+                        let wait_cmd = format!(
+                            "kubectl rollout status deployment/{} -n {} --timeout={}s",
+                            name_escaped, ns_escaped, config.wait_timeout
+                        );
+                        let (ok, _, stderr) = Self::run_cmd(&wait_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Timeout waiting for Deployment '{}' to be ready: {}",
+                                config.name, stderr
+                            )));
+                        }
+                    }
+
+                    Ok(ModuleOutput::changed(format!(
+                        "Updated Deployment '{}/{}'",
+                        config.namespace, config.name
+                    ))
+                    .with_data("replicas", serde_json::json!(config.replicas)))
+                } else {
+                    // Create new deployment
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would create Deployment '{}/{}'",
+                            config.namespace, config.name
+                        )));
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to create Deployment: {}",
+                            stderr
+                        )));
+                    }
+
+                    // Wait for deployment if requested
+                    if config.wait {
+                        let wait_cmd = format!(
+                            "kubectl rollout status deployment/{} -n {} --timeout={}s",
+                            name_escaped, ns_escaped, config.wait_timeout
+                        );
+                        let (ok, _, stderr) = Self::run_cmd(&wait_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Timeout waiting for Deployment '{}' to be ready: {}",
+                                config.name, stderr
+                            )));
+                        }
+                    }
+
+                    Ok(ModuleOutput::changed(format!(
+                        "Created Deployment '{}/{}'",
+                        config.namespace, config.name
+                    ))
+                    .with_data("replicas", serde_json::json!(config.replicas)))
+                }
+            }
+        }
+    }
+}
+
 impl Module for K8sDeploymentModule {
     fn name(&self) -> &'static str {
         "k8s_deployment"
@@ -588,12 +898,10 @@ impl Module for K8sDeploymentModule {
     #[cfg(not(feature = "kubernetes"))]
     fn execute(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Kubernetes support requires the 'kubernetes' feature".to_string(),
-        ))
+        self.execute_cli(params, context)
     }
 }
 

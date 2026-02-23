@@ -31,6 +31,8 @@ use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+#[cfg(not(feature = "kubernetes"))]
+use crate::utils::shell_escape;
 use std::collections::HashMap;
 
 #[cfg(feature = "kubernetes")]
@@ -487,6 +489,319 @@ impl K8sNamespaceModule {
     }
 }
 
+#[cfg(not(feature = "kubernetes"))]
+impl K8sNamespaceModule {
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| rt.block_on(conn.execute(cmd, None)))
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e))
+                })?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to run command: {}", e))
+                })?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Validate namespace name according to Kubernetes naming rules
+    fn validate_namespace_name(name: &str) -> ModuleResult<()> {
+        if name.is_empty() {
+            return Err(ModuleError::InvalidParameter(
+                "Namespace name cannot be empty".to_string(),
+            ));
+        }
+
+        if name.len() > 63 {
+            return Err(ModuleError::InvalidParameter(
+                "Namespace name cannot exceed 63 characters".to_string(),
+            ));
+        }
+
+        if !name
+            .chars()
+            .next()
+            .map(|c| c.is_alphanumeric())
+            .unwrap_or(false)
+        {
+            return Err(ModuleError::InvalidParameter(
+                "Namespace name must start with an alphanumeric character".to_string(),
+            ));
+        }
+
+        if !name
+            .chars()
+            .last()
+            .map(|c| c.is_alphanumeric())
+            .unwrap_or(false)
+        {
+            return Err(ModuleError::InvalidParameter(
+                "Namespace name must end with an alphanumeric character".to_string(),
+            ));
+        }
+
+        for c in name.chars() {
+            if !c.is_ascii_lowercase() && !c.is_ascii_digit() && c != '-' {
+                return Err(ModuleError::InvalidParameter(format!(
+                    "Namespace name can only contain lowercase letters, digits, and hyphens. Invalid character: '{}'",
+                    c
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn execute_cli(
+        &self,
+        params: &ModuleParams,
+        context: &ModuleContext,
+    ) -> ModuleResult<ModuleOutput> {
+        let config = NamespaceConfig::from_params(params)?;
+
+        // Validate namespace name
+        Self::validate_namespace_name(&config.name)?;
+
+        let name_escaped = shell_escape(&config.name);
+
+        // Check if namespace already exists
+        let check_cmd = format!(
+            "kubectl get namespace {} -o json 2>/dev/null",
+            name_escaped
+        );
+        let (exists, existing_json, _) = Self::run_cmd(&check_cmd, context)?;
+
+        match config.state {
+            NamespaceState::Absent => {
+                if !exists {
+                    return Ok(ModuleOutput::ok(format!(
+                        "Namespace '{}' already absent",
+                        config.name
+                    )));
+                }
+
+                // Check if namespace is terminating
+                if let Ok(existing) = serde_json::from_str::<serde_json::Value>(&existing_json) {
+                    if existing.pointer("/status/phase").and_then(|v| v.as_str())
+                        == Some("Terminating")
+                    {
+                        return Ok(ModuleOutput::ok(format!(
+                            "Namespace '{}' is already being terminated",
+                            config.name
+                        )));
+                    }
+                }
+
+                if context.check_mode {
+                    return Ok(ModuleOutput::changed(format!(
+                        "Would delete Namespace '{}'",
+                        config.name
+                    )));
+                }
+
+                let delete_cmd = format!("kubectl delete namespace {}", name_escaped);
+                let (success, _, stderr) = Self::run_cmd(&delete_cmd, context)?;
+                if !success {
+                    return Err(ModuleError::ExecutionFailed(format!(
+                        "Failed to delete Namespace: {}",
+                        stderr
+                    )));
+                }
+
+                // Wait for namespace deletion if requested
+                if config.wait {
+                    let deadline =
+                        std::time::Instant::now() + std::time::Duration::from_secs(config.wait_timeout);
+                    loop {
+                        if std::time::Instant::now() > deadline {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Timeout waiting for Namespace '{}' to be deleted",
+                                config.name
+                            )));
+                        }
+                        let (still_exists, _, _) = Self::run_cmd(&check_cmd, context)?;
+                        if !still_exists {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    }
+                }
+
+                Ok(ModuleOutput::changed(format!(
+                    "Deleted Namespace '{}'",
+                    config.name
+                )))
+            }
+            NamespaceState::Present => {
+                // Build the manifest
+                let labels_json: serde_json::Value = if config.labels.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    config
+                        .labels
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<String, serde_json::Value>>()
+                        .into()
+                };
+
+                let annotations_json: serde_json::Value = if config.annotations.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    config
+                        .annotations
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<String, serde_json::Value>>()
+                        .into()
+                };
+
+                let mut manifest = serde_json::json!({
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {
+                        "name": config.name,
+                    },
+                });
+
+                if !config.labels.is_empty() {
+                    manifest["metadata"]["labels"] = labels_json;
+                }
+                if !config.annotations.is_empty() {
+                    manifest["metadata"]["annotations"] = annotations_json;
+                }
+
+                if exists {
+                    // Check if terminating
+                    if let Ok(existing) = serde_json::from_str::<serde_json::Value>(&existing_json)
+                    {
+                        if existing.pointer("/status/phase").and_then(|v| v.as_str())
+                            == Some("Terminating")
+                        {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Namespace '{}' is being terminated and cannot be updated",
+                                config.name
+                            )));
+                        }
+
+                        // Check if update is needed
+                        let existing_labels = existing.pointer("/metadata/labels");
+                        let desired_labels = manifest.pointer("/metadata/labels");
+                        let existing_annotations = existing.pointer("/metadata/annotations");
+                        let desired_annotations = manifest.pointer("/metadata/annotations");
+
+                        if existing_labels == desired_labels
+                            && existing_annotations == desired_annotations
+                        {
+                            let status = existing
+                                .pointer("/status/phase")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            return Ok(ModuleOutput::ok(format!(
+                                "Namespace '{}' is up to date",
+                                config.name
+                            ))
+                            .with_data("status", serde_json::json!(status)));
+                        }
+                    }
+
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would update Namespace '{}'",
+                            config.name
+                        )));
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to update Namespace: {}",
+                            stderr
+                        )));
+                    }
+
+                    Ok(
+                        ModuleOutput::changed(format!("Updated Namespace '{}'", config.name))
+                            .with_data("status", serde_json::json!("Active")),
+                    )
+                } else {
+                    // Create new namespace
+                    if context.check_mode {
+                        return Ok(ModuleOutput::changed(format!(
+                            "Would create Namespace '{}'",
+                            config.name
+                        )));
+                    }
+
+                    let apply_cmd = format!(
+                        "echo {} | kubectl apply -f -",
+                        shell_escape(&manifest.to_string())
+                    );
+                    let (success, _, stderr) = Self::run_cmd(&apply_cmd, context)?;
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to create Namespace: {}",
+                            stderr
+                        )));
+                    }
+
+                    // Wait for namespace to be active if requested
+                    if config.wait {
+                        let deadline = std::time::Instant::now()
+                            + std::time::Duration::from_secs(config.wait_timeout);
+                        loop {
+                            if std::time::Instant::now() > deadline {
+                                return Err(ModuleError::ExecutionFailed(format!(
+                                    "Timeout waiting for Namespace '{}' to be active",
+                                    config.name
+                                )));
+                            }
+                            let check_active_cmd = format!(
+                                "kubectl get namespace {} -o json 2>/dev/null",
+                                name_escaped
+                            );
+                            let (ok, json_out, _) = Self::run_cmd(&check_active_cmd, context)?;
+                            if ok {
+                                if let Ok(ns) =
+                                    serde_json::from_str::<serde_json::Value>(&json_out)
+                                {
+                                    if ns.pointer("/status/phase").and_then(|v| v.as_str())
+                                        == Some("Active")
+                                    {
+                                        break;
+                                    }
+                                }
+                            }
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                        }
+                    }
+
+                    Ok(
+                        ModuleOutput::changed(format!("Created Namespace '{}'", config.name))
+                            .with_data("status", serde_json::json!("Active")),
+                    )
+                }
+            }
+        }
+    }
+}
+
 impl Module for K8sNamespaceModule {
     fn name(&self) -> &'static str {
         "k8s_namespace"
@@ -527,12 +842,10 @@ impl Module for K8sNamespaceModule {
     #[cfg(not(feature = "kubernetes"))]
     fn execute(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Kubernetes support requires the 'kubernetes' feature".to_string(),
-        ))
+        self.execute_cli(params, context)
     }
 }
 

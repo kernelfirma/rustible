@@ -292,14 +292,184 @@ impl DockerVolumeModule {
 
 #[cfg(not(feature = "docker"))]
 impl DockerVolumeModule {
-    fn execute_stub(
+    fn run_cmd(cmd: &str, context: &ModuleContext) -> ModuleResult<(bool, String, String)> {
+        if let Some(conn) = context.connection.as_ref() {
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
+            let result = tokio::task::block_in_place(|| {
+                rt.block_on(conn.execute(cmd, None))
+            }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
+            Ok((result.success, result.stdout, result.stderr))
+        } else {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to run command: {}", e)))?;
+            Ok((
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn execute_cli(
         &self,
-        _params: &ModuleParams,
-        _context: &ModuleContext,
+        params: &ModuleParams,
+        context: &ModuleContext,
     ) -> ModuleResult<ModuleOutput> {
-        Err(ModuleError::Unsupported(
-            "Docker module requires 'docker' feature to be enabled".to_string(),
-        ))
+        use crate::utils::shell_escape;
+
+        let config = VolumeConfig::from_params(params)?;
+        let escaped_name = shell_escape(&config.name);
+
+        // Check if volume exists
+        let check_cmd = format!("docker volume inspect {} 2>/dev/null", escaped_name);
+        let (exists, _, _) = Self::run_cmd(&check_cmd, context)?;
+
+        let mut changed = false;
+        let mut messages = Vec::new();
+
+        match config.state {
+            VolumeState::Absent => {
+                if exists {
+                    if context.check_mode {
+                        messages.push(format!("Would remove volume '{}'", config.name));
+                        changed = true;
+                    } else {
+                        let mut rm_cmd = format!("docker volume rm {}", escaped_name);
+                        if config.force {
+                            rm_cmd = format!("docker volume rm --force {}", escaped_name);
+                        }
+                        let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to remove volume '{}': {}", config.name, stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Removed volume '{}'", config.name));
+                        changed = true;
+                    }
+                } else {
+                    messages.push(format!("Volume '{}' does not exist", config.name));
+                }
+            }
+
+            VolumeState::Present => {
+                if exists && config.recreate {
+                    if context.check_mode {
+                        messages.push(format!("Would recreate volume '{}'", config.name));
+                        changed = true;
+                    } else {
+                        // Remove first
+                        let mut rm_cmd = format!("docker volume rm {}", escaped_name);
+                        if config.force {
+                            rm_cmd = format!("docker volume rm --force {}", escaped_name);
+                        }
+                        let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to remove volume '{}' for recreation: {}", config.name, stderr.trim()
+                            )));
+                        }
+
+                        // Create
+                        let mut create_cmd = format!(
+                            "docker volume create --name {} --driver {}",
+                            escaped_name,
+                            shell_escape(&config.driver)
+                        );
+                        for (k, v) in &config.labels {
+                            create_cmd.push_str(&format!(
+                                " --label {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+                        for (k, v) in &config.driver_options {
+                            create_cmd.push_str(&format!(
+                                " --opt {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+                        let (ok, _, stderr) = Self::run_cmd(&create_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to create volume '{}': {}", config.name, stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Recreated volume '{}'", config.name));
+                        changed = true;
+                    }
+                } else if !exists {
+                    if context.check_mode {
+                        messages.push(format!("Would create volume '{}'", config.name));
+                        changed = true;
+                    } else {
+                        let mut create_cmd = format!(
+                            "docker volume create --name {} --driver {}",
+                            escaped_name,
+                            shell_escape(&config.driver)
+                        );
+                        for (k, v) in &config.labels {
+                            create_cmd.push_str(&format!(
+                                " --label {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+                        for (k, v) in &config.driver_options {
+                            create_cmd.push_str(&format!(
+                                " --opt {}={}",
+                                shell_escape(k),
+                                shell_escape(v)
+                            ));
+                        }
+                        let (ok, _, stderr) = Self::run_cmd(&create_cmd, context)?;
+                        if !ok {
+                            return Err(ModuleError::ExecutionFailed(format!(
+                                "Failed to create volume '{}': {}", config.name, stderr.trim()
+                            )));
+                        }
+                        messages.push(format!("Created volume '{}'", config.name));
+                        changed = true;
+                    }
+                } else {
+                    messages.push(format!("Volume '{}' already exists", config.name));
+                }
+            }
+        }
+
+        // Get volume info for output
+        let volume_info = if !context.check_mode {
+            let info_cmd = format!(
+                "docker volume inspect --format '{{{{json .}}}}' {}",
+                escaped_name
+            );
+            if let Ok((true, stdout, _)) = Self::run_cmd(&info_cmd, context) {
+                serde_json::from_str(stdout.trim()).unwrap_or_else(|_| serde_json::json!({
+                    "name": config.name,
+                }))
+            } else {
+                serde_json::json!({ "name": config.name, "exists": false })
+            }
+        } else {
+            serde_json::json!({ "name": config.name })
+        };
+
+        let msg = if messages.is_empty() {
+            format!("Volume '{}' is in desired state", config.name)
+        } else {
+            messages.join(". ")
+        };
+
+        if changed {
+            Ok(ModuleOutput::changed(msg).with_data("volume", volume_info))
+        } else {
+            Ok(ModuleOutput::ok(msg).with_data("volume", volume_info))
+        }
     }
 }
 
@@ -346,7 +516,7 @@ impl Module for DockerVolumeModule {
 
         #[cfg(not(feature = "docker"))]
         {
-            self.execute_stub(params, context)
+            self.execute_cli(params, context)
         }
     }
 }

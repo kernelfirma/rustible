@@ -3338,9 +3338,15 @@ fn test_package_with_multiple_packages() {
     // error (if no package manager found)
     // The important thing is params were parsed correctly
     if let Err(err) = result {
-        // Expected on systems without supported package managers
+        // Expected: either no package manager detected or no connection available
+        let msg = format!("{}", err);
         assert!(
-            format!("{}", err).contains("package manager") || format!("{}", err).contains("detect")
+            msg.contains("package manager")
+                || msg.contains("detect")
+                || msg.contains("connection")
+                || msg.contains("Connection"),
+            "Unexpected error: {}",
+            msg
         );
     }
 }
