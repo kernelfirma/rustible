@@ -136,8 +136,6 @@ pub mod slurm_node;
 #[cfg(feature = "slurm")]
 pub mod slurm_partition;
 #[cfg(feature = "slurm")]
-pub mod slurm_queue;
-#[cfg(feature = "slurm")]
 pub mod slurmrestd;
 #[cfg(feature = "identity")]
 pub mod sssd;
@@ -235,8 +233,6 @@ pub use slurm_job::SlurmJobModule;
 pub use slurm_node::SlurmNodeModule;
 #[cfg(feature = "slurm")]
 pub use slurm_partition::SlurmPartitionModule;
-#[cfg(feature = "slurm")]
-pub use slurm_queue::SlurmQueueModule;
 #[cfg(feature = "slurm")]
 pub use slurmrestd::SlurmrestdModule;
 #[cfg(feature = "identity")]

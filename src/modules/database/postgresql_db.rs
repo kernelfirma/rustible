@@ -1014,7 +1014,7 @@ impl Module for PostgresqlDbModule {
         std::thread::scope(|s| {
             s.spawn(|| handle.block_on(module.execute_async(&params, &context, connection)))
                 .join()
-                .unwrap()
+                .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".into()))?
         })
     }
 

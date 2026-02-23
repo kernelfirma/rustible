@@ -324,7 +324,7 @@ impl MysqlPrivsModule {
             std::thread::scope(|s| {
                 s.spawn(|| handle.block_on(f))
                     .join()
-                    .expect("Thread panicked")
+                    .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".into()))?
             })
         } else {
             let rt = tokio::runtime::Runtime::new().map_err(|e| {

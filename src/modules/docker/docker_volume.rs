@@ -340,7 +340,7 @@ impl Module for DockerVolumeModule {
             std::thread::scope(|s| {
                 s.spawn(|| rt.block_on(self.execute_async(&params, &context)))
                     .join()
-                    .unwrap()
+                    .map_err(|_| ModuleError::ExecutionFailed("Thread panicked".into()))?
             })
         }
 
