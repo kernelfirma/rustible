@@ -343,7 +343,7 @@ impl TemplateEngine {
                 let templated = self.render_with_indexmap(s, vars)?;
 
                 // Optimization: fast check if string starts with digit or sign before attempting expensive float parse
-                let is_maybe_number = templated.as_bytes().first().map_or(false, |&c| {
+                let is_maybe_number = templated.as_bytes().first().is_some_and(|&c| {
                     c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.'
                 });
 
@@ -1009,23 +1009,16 @@ fn format_json_with_indent<T: serde::Serialize>(
     value: &T,
     indent: usize,
 ) -> std::result::Result<String, minijinja::Error> {
-    // Pre-allocate buffer to avoid reallocations for small JSONs
     let mut buf = Vec::with_capacity(128);
 
-    // Optimization: avoid allocating vector for indentation if small enough (<= 32 spaces)
     const SPACES: [u8; 32] = [b' '; 32];
-    let indent_vec = if indent > 32 {
-        Some(vec![b' '; indent])
+    let indent_bytes = if indent <= 32 {
+        std::borrow::Cow::Borrowed(&SPACES[0..indent])
     } else {
-        None
+        std::borrow::Cow::Owned(vec![b' '; indent])
     };
 
-    let indent_bytes = match &indent_vec {
-        Some(v) => v.as_slice(),
-        None => &SPACES[..indent],
-    };
-
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(indent_bytes);
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser).map_err(|e| {
         minijinja::Error::new(
@@ -1034,9 +1027,8 @@ fn format_json_with_indent<T: serde::Serialize>(
         )
     })?;
 
-    // Optimization: serde_json output is guaranteed to be valid UTF-8
-    // This skips the O(n) UTF-8 validation
-    unsafe { Ok(String::from_utf8_unchecked(buf)) }
+    // Safety: serde_json always produces valid UTF-8
+    Ok(unsafe { String::from_utf8_unchecked(buf) })
 }
 
 fn filter_mandatory(
