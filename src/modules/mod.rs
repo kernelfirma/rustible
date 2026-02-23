@@ -409,14 +409,12 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // check if it actually contains any characters that are part of dangerous patterns.
     // If it doesn't contain any of these characters, it's safe even if it has quotes.
     //
-    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @, %
-    let is_safe = args.bytes().all(|b| {
-        matches!(b,
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
-            b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
-            b'+' | b'=' | b',' | b'@' | b'%'
-        )
-    });
+    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
+    let is_safe = args.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+        b'+' | b'=' | b',' | b'@'
+    ));
 
     if !has_dangerous_chars {
         return Ok(());
@@ -449,7 +447,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("$", "variable expansion $"),
         ("#", "shell comment #"),
         ("%", "variable expansion %"),
-        ("^", "shell escape ^"),
+        ("^", "cmd.exe escape ^"),
     ];
 
     for (pattern, description) in dangerous_patterns {
@@ -2108,6 +2106,13 @@ mod tests {
         // Currently, without the fix, this test would fail (because it returns Ok).
         // The goal is to make this test pass by fixing the code to return Err.
         assert!(validate_command_args("bash -c 'echo pwned' #").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_args_rejects_windows_metachars() {
+        assert!(validate_command_args("echo %USERNAME%").is_err());
+        assert!(validate_command_args("echo ^& calc.exe").is_err());
+        assert!(validate_command_args("%COMSPEC%").is_err());
     }
 
     #[test]

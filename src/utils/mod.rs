@@ -168,6 +168,10 @@ pub fn cmd_escape(s: &str) -> Cow<'_, str> {
     for c in s.chars() {
         if c == '"' {
             escaped.push_str("\"\"");
+        } else if c == '%' {
+            // Insert empty string ("") after % to prevent variable expansion in cmd.exe
+            // e.g. %VAR% becomes %""VAR%""
+            escaped.push_str("%\"\"");
         } else {
             escaped.push(c);
         }
@@ -353,6 +357,11 @@ mod tests {
         assert_eq!(cmd_escape("foo&bar"), "\"foo&bar\"");
         assert_eq!(cmd_escape("foo|bar"), "\"foo|bar\"");
         assert_eq!(cmd_escape(""), "\"\"");
+
+        // Test environment variable expansion prevention
+        // % is replaced with %"" which breaks the variable token in cmd.exe
+        assert_eq!(cmd_escape("%USERNAME%"), "\"%\"\"USERNAME%\"\"\"");
+        assert_eq!(cmd_escape("foo%bar"), "\"foo%\"\"bar\"");
     }
 
     #[test]
