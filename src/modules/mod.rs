@@ -405,6 +405,20 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         return Ok(());
     }
 
+    // Fast path 2: If the string fails the first check (e.g. because of quotes),
+    // check if it actually contains any characters that are part of dangerous patterns.
+    // If it doesn't contain any of these characters, it's safe even if it has quotes.
+    //
+    // Dangerous characters: $ ( { ` & | ; > < \n \r } ) [ ] * ? ! \ #
+    let has_dangerous_chars = args.bytes().any(|b| matches!(b,
+        b'$' | b'(' | b'{' | b'`' | b'&' | b'|' | b';' | b'>' | b'<' | b'\n' | b'\r' |
+        b'}' | b')' | b'[' | b']' | b'*' | b'?' | b'!' | b'\\' | b'#'
+    ));
+
+    if !has_dangerous_chars {
+        return Ok(());
+    }
+
     // Dangerous patterns that indicate command injection
     let dangerous_patterns = [
         ("$(", "command substitution $()"),
