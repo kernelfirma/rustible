@@ -624,10 +624,13 @@ impl ExpressionEvaluator {
     fn parse_is_defined(expr: &str) -> Option<&str> {
         // Pattern: "var is defined"
         let parts: Vec<&str> = expr.split_whitespace().collect();
-        if parts.len() == 3 && parts[1] == "is" && parts[2] == "defined"
-            && Self::is_valid_var_path(parts[0]) {
-                return Some(parts[0]);
-            }
+        if parts.len() == 3
+            && parts[1] == "is"
+            && parts[2] == "defined"
+            && Self::is_valid_var_path(parts[0])
+        {
+            return Some(parts[0]);
+        }
         None
     }
 
@@ -638,10 +641,13 @@ impl ExpressionEvaluator {
             if Self::is_valid_var_path(parts[0]) {
                 return Some(parts[0]);
             }
-        } else if parts.len() == 3 && parts[1] == "is" && parts[2] == "undefined"
-            && Self::is_valid_var_path(parts[0]) {
-                return Some(parts[0]);
-            }
+        } else if parts.len() == 3
+            && parts[1] == "is"
+            && parts[2] == "undefined"
+            && Self::is_valid_var_path(parts[0])
+        {
+            return Some(parts[0]);
+        }
         None
     }
 

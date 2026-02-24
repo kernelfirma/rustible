@@ -146,18 +146,15 @@ impl TerraformStateValidator {
         tf_state_json: &str,
         rustible_state_json: &str,
     ) -> MigrationResult<MigrationReport> {
-        let tf_state: TfStateJson = serde_json::from_str(tf_state_json).map_err(|e| {
-            MigrationError::ParseError {
+        let tf_state: TfStateJson =
+            serde_json::from_str(tf_state_json).map_err(|e| MigrationError::ParseError {
                 file: "terraform.tfstate".into(),
                 message: e.to_string(),
-            }
-        })?;
+            })?;
         let r_state: RustibleStateJson =
-            serde_json::from_str(rustible_state_json).map_err(|e| {
-                MigrationError::ParseError {
-                    file: "rustible.state.json".into(),
-                    message: e.to_string(),
-                }
+            serde_json::from_str(rustible_state_json).map_err(|e| MigrationError::ParseError {
+                file: "rustible.state.json".into(),
+                message: e.to_string(),
             })?;
 
         let result = self.compare_states(&tf_state, &r_state);
@@ -315,15 +312,13 @@ impl TerraformStateValidator {
     }
 
     fn build_report(&self, result: &StateParityResult) -> MigrationReport {
-        let mut report =
-            MigrationReport::new("Terraform State Parity Check", "state_parity");
+        let mut report = MigrationReport::new("Terraform State Parity Check", "state_parity");
 
         // Resource count finding
         report.findings.push(MigrationFinding {
             source_item: "Resource Count".into(),
             target_item: None,
-            status: if result.missing_in_rustible.is_empty()
-                && result.extra_in_rustible.is_empty()
+            status: if result.missing_in_rustible.is_empty() && result.extra_in_rustible.is_empty()
             {
                 FindingStatus::Matched
             } else {

@@ -267,10 +267,7 @@ impl AptNative {
         s.split(',')
             .map(|dep| {
                 // Extract just the package name, ignoring version constraints
-                dep.split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string()
+                dep.split_whitespace().next().unwrap_or("").to_string()
             })
             .filter(|s| !s.is_empty())
             .collect()

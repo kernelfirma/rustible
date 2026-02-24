@@ -768,11 +768,13 @@ fn test_parse_key_with_unicode_comment() {
 
 #[test]
 fn test_parse_keys_from_file_format() {
-    let lines = ["# This is a comment".to_string(),
+    let lines = [
+        "# This is a comment".to_string(),
         "".to_string(),
         TEST_RSA_KEY.to_string(),
         "# Another comment".to_string(),
-        TEST_ED25519_KEY.to_string()];
+        TEST_ED25519_KEY.to_string(),
+    ];
 
     let keys: Vec<_> = lines
         .iter()

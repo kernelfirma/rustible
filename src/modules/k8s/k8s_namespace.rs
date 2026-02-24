@@ -577,10 +577,7 @@ impl K8sNamespaceModule {
         let name_escaped = shell_escape(&config.name);
 
         // Check if namespace already exists
-        let check_cmd = format!(
-            "kubectl get namespace {} -o json 2>/dev/null",
-            name_escaped
-        );
+        let check_cmd = format!("kubectl get namespace {} -o json 2>/dev/null", name_escaped);
         let (exists, existing_json, _) = Self::run_cmd(&check_cmd, context)?;
 
         match config.state {
@@ -622,8 +619,8 @@ impl K8sNamespaceModule {
 
                 // Wait for namespace deletion if requested
                 if config.wait {
-                    let deadline =
-                        std::time::Instant::now() + std::time::Duration::from_secs(config.wait_timeout);
+                    let deadline = std::time::Instant::now()
+                        + std::time::Duration::from_secs(config.wait_timeout);
                     loop {
                         if std::time::Instant::now() > deadline {
                             return Err(ModuleError::ExecutionFailed(format!(
@@ -778,8 +775,7 @@ impl K8sNamespaceModule {
                             );
                             let (ok, json_out, _) = Self::run_cmd(&check_active_cmd, context)?;
                             if ok {
-                                if let Ok(ns) =
-                                    serde_json::from_str::<serde_json::Value>(&json_out)
+                                if let Ok(ns) = serde_json::from_str::<serde_json::Value>(&json_out)
                                 {
                                     if ns.pointer("/status/phase").and_then(|v| v.as_str())
                                         == Some("Active")

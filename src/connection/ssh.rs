@@ -311,8 +311,7 @@ impl SshConnection {
 
         debug!(methods = %methods, "Available authentication methods");
 
-        if supports_auth_method(methods, "keyboard-interactive") && host_config.password.is_none()
-        {
+        if supports_auth_method(methods, "keyboard-interactive") && host_config.password.is_none() {
             debug!("Keyboard-interactive auth available but no password provided");
         }
 

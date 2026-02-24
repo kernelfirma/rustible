@@ -912,15 +912,13 @@ impl Module for FactsModule {
                 )
             })?;
             std::thread::scope(|s| {
-                s.spawn(|| {
-                    handle.block_on(gather_facts_via_connection(&conn, Some(&subset)))
-                })
-                .join()
-                .map_err(|_| {
-                    crate::modules::ModuleError::ExecutionFailed(
-                        "Facts gathering thread panicked".to_string(),
-                    )
-                })
+                s.spawn(|| handle.block_on(gather_facts_via_connection(&conn, Some(&subset))))
+                    .join()
+                    .map_err(|_| {
+                        crate::modules::ModuleError::ExecutionFailed(
+                            "Facts gathering thread panicked".to_string(),
+                        )
+                    })
             })?
         } else {
             // Local fallback: use the synchronous local methods

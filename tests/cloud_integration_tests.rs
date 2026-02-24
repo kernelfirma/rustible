@@ -486,12 +486,14 @@ mod cloud_patterns {
         // Common compute instance states across providers
         let common_states = vec!["running", "stopped", "terminated"];
         let aws_states = ["running", "stopped", "terminated", "rebooted"];
-        let azure_states = ["present",
+        let azure_states = [
+            "present",
             "absent",
             "running",
             "stopped",
             "deallocated",
-            "restarted"];
+            "restarted",
+        ];
         let gcp_states = ["running", "stopped", "terminated", "reset"];
 
         // All providers support basic states
@@ -619,7 +621,7 @@ mod cloud_patterns {
 // ============================================================================
 
 mod cloud_rate_limiting {
-    
+
     use rustible::modules::ParallelizationHint;
 
     #[test]
@@ -680,7 +682,6 @@ mod cloud_rate_limiting {
 // ============================================================================
 
 mod cloud_credentials {
-    
 
     #[test]
     fn test_aws_credential_env_vars() {

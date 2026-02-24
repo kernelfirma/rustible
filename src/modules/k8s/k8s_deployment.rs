@@ -628,9 +628,7 @@ impl K8sDeploymentModule {
             }
             DeploymentState::Present => {
                 let image = config.image.as_ref().ok_or_else(|| {
-                    ModuleError::MissingParameter(
-                        "image is required for state=present".to_string(),
-                    )
+                    ModuleError::MissingParameter("image is required for state=present".to_string())
                 })?;
 
                 let container_name = config
@@ -686,16 +684,10 @@ impl K8sDeploymentModule {
                     UpdateStrategy::RollingUpdate => {
                         let mut rolling = serde_json::Map::new();
                         if let Some(ref ms) = config.max_surge {
-                            rolling.insert(
-                                "maxSurge".to_string(),
-                                serde_json::json!(ms),
-                            );
+                            rolling.insert("maxSurge".to_string(), serde_json::json!(ms));
                         }
                         if let Some(ref mu) = config.max_unavailable {
-                            rolling.insert(
-                                "maxUnavailable".to_string(),
-                                serde_json::json!(mu),
-                            );
+                            rolling.insert("maxUnavailable".to_string(), serde_json::json!(mu));
                         }
                         serde_json::json!({
                             "type": "RollingUpdate",

@@ -845,14 +845,8 @@ async fn test_partial_host_failure() {
                     total_unreachable += 1;
                 }
             }
-            println!(
-                "Stats: ok={}, unreachable={}",
-                total_ok, total_unreachable
-            );
-            assert!(
-                total_unreachable >= 1,
-                "Should have at least 1 unreachable"
-            );
+            println!("Stats: ok={}, unreachable={}", total_ok, total_unreachable);
+            assert!(total_unreachable >= 1, "Should have at least 1 unreachable");
             assert!(total_ok >= 2, "Should have at least 2 successful");
         }
         Err(e) => {

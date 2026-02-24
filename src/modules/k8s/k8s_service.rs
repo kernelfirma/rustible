@@ -588,10 +588,8 @@ impl K8sServiceModule {
                     )));
                 }
 
-                let delete_cmd = format!(
-                    "kubectl delete service {} -n {}",
-                    name_escaped, ns_escaped
-                );
+                let delete_cmd =
+                    format!("kubectl delete service {} -n {}", name_escaped, ns_escaped);
                 let (success, _, stderr) = Self::run_cmd(&delete_cmd, context)?;
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -657,18 +655,19 @@ impl K8sServiceModule {
                 };
 
                 // Build selector
-                let selector_json: serde_json::Value =
-                    if config.service_type != ServiceType::ExternalName && !config.selector.is_empty()
-                    {
-                        config
-                            .selector
-                            .iter()
-                            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
-                            .collect::<serde_json::Map<String, serde_json::Value>>()
-                            .into()
-                    } else {
-                        serde_json::Value::Null
-                    };
+                let selector_json: serde_json::Value = if config.service_type
+                    != ServiceType::ExternalName
+                    && !config.selector.is_empty()
+                {
+                    config
+                        .selector
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<String, serde_json::Value>>()
+                        .into()
+                } else {
+                    serde_json::Value::Null
+                };
 
                 // Build spec
                 let mut spec = serde_json::json!({
@@ -716,9 +715,7 @@ impl K8sServiceModule {
                     // Parse existing for comparison
                     if let Ok(existing) = serde_json::from_str::<serde_json::Value>(&existing_json)
                     {
-                        let existing_type = existing
-                            .pointer("/spec/type")
-                            .and_then(|v| v.as_str());
+                        let existing_type = existing.pointer("/spec/type").and_then(|v| v.as_str());
                         let desired_type = Some(config.service_type.to_k8s_string());
 
                         let existing_selector = existing.pointer("/spec/selector");
@@ -775,9 +772,8 @@ impl K8sServiceModule {
                         if let Ok(existing) =
                             serde_json::from_str::<serde_json::Value>(&existing_json)
                         {
-                            if let Some(cip) = existing
-                                .pointer("/spec/clusterIP")
-                                .and_then(|v| v.as_str())
+                            if let Some(cip) =
+                                existing.pointer("/spec/clusterIP").and_then(|v| v.as_str())
                             {
                                 manifest["spec"]["clusterIP"] = serde_json::json!(cip);
                             }

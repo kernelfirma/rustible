@@ -1036,13 +1036,7 @@ impl RunArgs {
                 emit_plan_line(
                     ctx,
                     plan_lines,
-                    format!(
-                        "\n  {} Task {}/{}: {}",
-                        ">",
-                        task_num,
-                        total,
-                        task_name
-                    ),
+                    format!("\n  {} Task {}/{}: {}", ">", task_num, total, task_name),
                 );
                 emit_plan_line(ctx, plan_lines, format!("    Module: {}", module));
 

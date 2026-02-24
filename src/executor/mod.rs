@@ -135,9 +135,8 @@ use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
 use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
-use dialoguer::theme::ColorfulTheme;
 use console::Term;
-use colored::Colorize;
+use dialoguer::theme::ColorfulTheme;
 
 /// Errors that can occur during playbook and task execution.
 ///
@@ -1016,19 +1015,21 @@ impl Executor {
                             // Skip this task
                             for h in hosts {
                                 if let Some(res) = results.get_mut(h) {
-                                     res.stats.skipped += 1;
+                                    res.stats.skipped += 1;
                                 }
                             }
                             continue_outer_loop = true;
                             break;
-                        },
+                        }
                         "c" | "cont" | "continue" => {
                             step_mode = false;
                             break;
-                        },
+                        }
                         "a" | "abort" => {
-                            return Err(ExecutorError::Other("Execution aborted by user".to_string()));
-                        },
+                            return Err(ExecutorError::Other(
+                                "Execution aborted by user".to_string(),
+                            ));
+                        }
                         _ => {
                             println!("Invalid option. Options: [y]es, [n]o, [c]ontinue, [a]bort");
                             continue;
@@ -1036,7 +1037,9 @@ impl Executor {
                     }
                 }
 
-                if continue_outer_loop { continue; }
+                if continue_outer_loop {
+                    continue;
+                }
             }
 
             self.emit_event(ExecutionEvent::TaskStartGlobal(task.name.clone()));
@@ -2237,9 +2240,11 @@ impl Executor {
                     };
 
                     let content = tokio::fs::read_to_string(&full_path).await.map_err(|e| {
-                        ExecutorError::IoError(std::io::Error::other(
-                            format!("Failed to read vars file {}: {}", full_path.display(), e),
-                        ))
+                        ExecutorError::IoError(std::io::Error::other(format!(
+                            "Failed to read vars file {}: {}",
+                            full_path.display(),
+                            e
+                        )))
                     })?;
 
                     let yaml_vars: IndexMap<String, serde_yaml::Value> =

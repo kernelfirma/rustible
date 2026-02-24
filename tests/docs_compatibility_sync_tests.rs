@@ -1141,14 +1141,15 @@ impl<'a> SyncChecker<'a> {
         // Check all features/modules that should be in matrix
         for feature in &self.registry.features {
             if feature.status.should_be_in_matrix()
-                && !self.docs.matrix_entries.contains_key(&feature.name) {
-                    issues.push(SyncIssue {
-                        item_type: "matrix".to_string(),
-                        name: feature.name.clone(),
-                        issue: "Feature missing from compatibility matrix".to_string(),
-                        severity: SyncSeverity::Error,
-                    });
-                }
+                && !self.docs.matrix_entries.contains_key(&feature.name)
+            {
+                issues.push(SyncIssue {
+                    item_type: "matrix".to_string(),
+                    name: feature.name.clone(),
+                    issue: "Feature missing from compatibility matrix".to_string(),
+                    severity: SyncSeverity::Error,
+                });
+            }
         }
 
         for module in &self.registry.modules {

@@ -59,8 +59,7 @@ pub enum ReferenceType {
 // ============================================================================
 
 /// Complete infrastructure configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InfrastructureConfig {
     /// Provider configurations
     #[serde(default)]
@@ -124,7 +123,6 @@ pub struct TerraformConfig {
     #[serde(flatten)]
     pub config: Value,
 }
-
 
 impl InfrastructureConfig {
     /// Create a new empty configuration

@@ -44,8 +44,7 @@ use crate::provisioning::traits::{
 // ============================================================================
 
 /// Route configuration for a route table
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RouteConfig {
     /// Destination CIDR block for the route
     pub cidr_block: Option<String>,
@@ -1161,4 +1160,3 @@ mod tests {
         assert!(diff.requires_replacement);
     }
 }
-

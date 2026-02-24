@@ -97,9 +97,9 @@ impl Lookup for TemplateLookup {
                 .get_template("_lookup")
                 .map_err(|e| LookupError::Other(format!("Failed to get template: {}", e)))?;
 
-            let rendered = tmpl.render(&context.vars).map_err(|e| {
-                LookupError::Other(format!("Template render error: {}", e))
-            })?;
+            let rendered = tmpl
+                .render(&context.vars)
+                .map_err(|e| LookupError::Other(format!("Template render error: {}", e)))?;
 
             results.push(rendered);
         }
@@ -185,10 +185,7 @@ mod tests {
 
         let lookup = TemplateLookup::new();
         let mut vars = HashMap::new();
-        vars.insert(
-            "items".to_string(),
-            serde_json::json!(["a", "b", "c"]),
-        );
+        vars.insert("items".to_string(), serde_json::json!(["a", "b", "c"]));
         let context = LookupContext::new().with_vars(vars);
 
         let result = lookup

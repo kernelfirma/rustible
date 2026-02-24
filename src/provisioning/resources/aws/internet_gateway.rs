@@ -31,9 +31,8 @@ use aws_sdk_ec2::Client;
 
 use crate::provisioning::error::{ProvisioningError, ProvisioningResult};
 use crate::provisioning::traits::{
-    ChangeType, FieldType, ProviderContext, Resource, ResourceDependency,
-    ResourceDiff, ResourceReadResult, ResourceResult, ResourceSchema, ResourceTimeouts,
-    SchemaField,
+    ChangeType, FieldType, ProviderContext, Resource, ResourceDependency, ResourceDiff,
+    ResourceReadResult, ResourceResult, ResourceSchema, ResourceTimeouts, SchemaField,
 };
 
 // ============================================================================

@@ -550,7 +550,6 @@ impl SystemdNative {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

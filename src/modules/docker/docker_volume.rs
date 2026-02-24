@@ -296,16 +296,19 @@ impl DockerVolumeModule {
         if let Some(conn) = context.connection.as_ref() {
             let rt = tokio::runtime::Handle::try_current()
                 .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
-            let result = tokio::task::block_in_place(|| {
-                rt.block_on(conn.execute(cmd, None))
-            }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
+            let result = tokio::task::block_in_place(|| rt.block_on(conn.execute(cmd, None)))
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e))
+                })?;
             Ok((result.success, result.stdout, result.stderr))
         } else {
             let output = std::process::Command::new("sh")
                 .arg("-c")
                 .arg(cmd)
                 .output()
-                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to run command: {}", e)))?;
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to run command: {}", e))
+                })?;
             Ok((
                 output.status.success(),
                 String::from_utf8_lossy(&output.stdout).to_string(),
@@ -345,7 +348,9 @@ impl DockerVolumeModule {
                         let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
                         if !ok {
                             return Err(ModuleError::ExecutionFailed(format!(
-                                "Failed to remove volume '{}': {}", config.name, stderr.trim()
+                                "Failed to remove volume '{}': {}",
+                                config.name,
+                                stderr.trim()
                             )));
                         }
                         messages.push(format!("Removed volume '{}'", config.name));
@@ -370,7 +375,9 @@ impl DockerVolumeModule {
                         let (ok, _, stderr) = Self::run_cmd(&rm_cmd, context)?;
                         if !ok {
                             return Err(ModuleError::ExecutionFailed(format!(
-                                "Failed to remove volume '{}' for recreation: {}", config.name, stderr.trim()
+                                "Failed to remove volume '{}' for recreation: {}",
+                                config.name,
+                                stderr.trim()
                             )));
                         }
 
@@ -397,7 +404,9 @@ impl DockerVolumeModule {
                         let (ok, _, stderr) = Self::run_cmd(&create_cmd, context)?;
                         if !ok {
                             return Err(ModuleError::ExecutionFailed(format!(
-                                "Failed to create volume '{}': {}", config.name, stderr.trim()
+                                "Failed to create volume '{}': {}",
+                                config.name,
+                                stderr.trim()
                             )));
                         }
                         messages.push(format!("Recreated volume '{}'", config.name));
@@ -430,7 +439,9 @@ impl DockerVolumeModule {
                         let (ok, _, stderr) = Self::run_cmd(&create_cmd, context)?;
                         if !ok {
                             return Err(ModuleError::ExecutionFailed(format!(
-                                "Failed to create volume '{}': {}", config.name, stderr.trim()
+                                "Failed to create volume '{}': {}",
+                                config.name,
+                                stderr.trim()
                             )));
                         }
                         messages.push(format!("Created volume '{}'", config.name));
@@ -449,9 +460,11 @@ impl DockerVolumeModule {
                 escaped_name
             );
             if let Ok((true, stdout, _)) = Self::run_cmd(&info_cmd, context) {
-                serde_json::from_str(stdout.trim()).unwrap_or_else(|_| serde_json::json!({
-                    "name": config.name,
-                }))
+                serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
+                    serde_json::json!({
+                        "name": config.name,
+                    })
+                })
             } else {
                 serde_json::json!({ "name": config.name, "exists": false })
             }

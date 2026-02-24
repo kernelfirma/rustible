@@ -479,10 +479,8 @@ impl K8sSecretModule {
                     )));
                 }
 
-                let delete_cmd = format!(
-                    "kubectl delete secret {} -n {}",
-                    name_escaped, ns_escaped
-                );
+                let delete_cmd =
+                    format!("kubectl delete secret {} -n {}", name_escaped, ns_escaped);
                 let (success, _, stderr) = Self::run_cmd(&delete_cmd, context)?;
                 if !success {
                     return Err(ModuleError::ExecutionFailed(format!(

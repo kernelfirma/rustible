@@ -197,7 +197,8 @@ fn filter_replace(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected string".to_string(),
     })?;
 
-    let old = args.first()
+    let old = args
+        .first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "replace".to_string(),
@@ -989,7 +990,8 @@ fn filter_map(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let attr = args.first()
+    let attr = args
+        .first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "map".to_string(),
@@ -1016,7 +1018,8 @@ fn filter_select(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array".to_string(),
     })?;
 
-    let test = args.first()
+    let test = args
+        .first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "select".to_string(),
@@ -1068,7 +1071,8 @@ fn filter_selectattr(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array of objects".to_string(),
     })?;
 
-    let attr = args.first()
+    let attr = args
+        .first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "selectattr".to_string(),
@@ -1114,7 +1118,8 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
         message: "Expected array of objects".to_string(),
     })?;
 
-    let attr = args.first()
+    let attr = args
+        .first()
         .and_then(|v| v.as_str())
         .ok_or_else(|| FilterError::InvalidInput {
             filter: "groupby".to_string(),
@@ -1128,10 +1133,7 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
         if let Value::Object(obj) = item {
             if let Some(key_value) = obj.get(attr) {
                 let key = key_value.to_string();
-                groups
-                    .entry(key)
-                    .or_default()
-                    .push(item.clone());
+                groups.entry(key).or_default().push(item.clone());
             }
         }
     }
@@ -1147,7 +1149,8 @@ fn filter_groupby(value: &Value, args: &[Value]) -> FilterResult<Value> {
 // ============== Date/Time Filters ==============
 
 fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
-    let format = args.first()
+    let format = args
+        .first()
         .and_then(|v| v.as_str())
         .unwrap_or("%Y-%m-%d %H:%M:%S");
 
@@ -1160,8 +1163,7 @@ fn filter_strftime(value: &Value, args: &[Value]) -> FilterResult<Value> {
         }
         Value::Number(n) => {
             // Unix timestamp
-            n.as_i64()
-                .and_then(|ts| Utc.timestamp_opt(ts, 0).single())
+            n.as_i64().and_then(|ts| Utc.timestamp_opt(ts, 0).single())
         }
         _ => None,
     };

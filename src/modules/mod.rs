@@ -409,12 +409,14 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // check if it actually contains any characters that are part of dangerous patterns.
     // If it doesn't contain any of these characters, it's safe even if it has quotes.
     //
-    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
-    let is_safe = args.bytes().all(|b| matches!(b,
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
-        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
-        b'+' | b'=' | b',' | b'@'
-    ));
+    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @, %
+    let is_safe = args.bytes().all(|b| {
+        matches!(b,
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+            b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+            b'+' | b'=' | b',' | b'@' | b'%'
+        )
+    });
 
     if !has_dangerous_chars {
         return Ok(());

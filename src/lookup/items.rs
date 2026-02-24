@@ -124,9 +124,7 @@ mod tests {
     fn test_items_lookup_preserves_order() {
         let lookup = ItemsLookup::new();
         let context = LookupContext::default();
-        let result = lookup
-            .lookup(&["z", "a", "m", "b"], &context)
-            .unwrap();
+        let result = lookup.lookup(&["z", "a", "m", "b"], &context).unwrap();
         assert_eq!(result, vec!["z", "a", "m", "b"]);
     }
 }

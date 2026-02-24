@@ -93,7 +93,10 @@ impl SsmConnection {
             .stderr(Stdio::piped());
 
         let output = cmd.output().await.map_err(|e| {
-            ConnectionError::ExecutionFailed(format!("Failed to execute aws ssm send-command: {}", e))
+            ConnectionError::ExecutionFailed(format!(
+                "Failed to execute aws ssm send-command: {}",
+                e
+            ))
         })?;
 
         if !output.status.success() {
@@ -181,10 +184,7 @@ impl SsmConnection {
                 .stderr(Stdio::piped());
 
             let output = cmd.output().await.map_err(|e| {
-                ConnectionError::ExecutionFailed(format!(
-                    "Failed to get command invocation: {}",
-                    e
-                ))
+                ConnectionError::ExecutionFailed(format!("Failed to get command invocation: {}", e))
             })?;
 
             let stdout_raw = String::from_utf8_lossy(&output.stdout);
@@ -200,10 +200,10 @@ impl SsmConnection {
             }
 
             // Parse the result
-            let ssm_stdout = Self::extract_json_field(&stdout_raw, "StandardOutputContent")
-                .unwrap_or_default();
-            let ssm_stderr = Self::extract_json_field(&stdout_raw, "StandardErrorContent")
-                .unwrap_or_default();
+            let ssm_stdout =
+                Self::extract_json_field(&stdout_raw, "StandardOutputContent").unwrap_or_default();
+            let ssm_stderr =
+                Self::extract_json_field(&stdout_raw, "StandardErrorContent").unwrap_or_default();
             let exit_code = Self::extract_json_field(&stdout_raw, "ResponseCode")
                 .and_then(|s| s.parse::<i32>().ok())
                 .unwrap_or(-1);
@@ -340,11 +340,7 @@ impl Connection for SsmConnection {
         let encoded = base64::engine::general_purpose::STANDARD.encode(content);
 
         // Write via base64 decode on remote
-        let write_cmd = format!(
-            "echo '{}' | base64 -d > {}",
-            encoded,
-            remote_path.display()
-        );
+        let write_cmd = format!("echo '{}' | base64 -d > {}", encoded, remote_path.display());
         let result = self.execute(&write_cmd, None).await?;
         if !result.success {
             return Err(ConnectionError::TransferFailed(format!(
@@ -385,10 +381,7 @@ impl Connection for SsmConnection {
 
         if let Some(parent) = local_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create local directory: {}",
-                    e
-                ))
+                ConnectionError::TransferFailed(format!("Failed to create local directory: {}", e))
             })?;
         }
 
@@ -420,9 +413,7 @@ impl Connection for SsmConnection {
         use base64::Engine;
         base64::engine::general_purpose::STANDARD
             .decode(result.stdout.trim())
-            .map_err(|e| {
-                ConnectionError::TransferFailed(format!("Failed to decode base64: {}", e))
-            })
+            .map_err(|e| ConnectionError::TransferFailed(format!("Failed to decode base64: {}", e)))
     }
 
     async fn path_exists(&self, path: &Path) -> ConnectionResult<bool> {

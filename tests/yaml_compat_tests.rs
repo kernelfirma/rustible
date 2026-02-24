@@ -617,10 +617,7 @@ fn test_empty_collections() {
     }
 
     assert!(play.vars.get("null_value").is_some_and(|v| v.is_null()));
-    assert!(play
-        .vars
-        .get("explicit_null")
-        .is_some_and(|v| v.is_null()));
+    assert!(play.vars.get("explicit_null").is_some_and(|v| v.is_null()));
 }
 
 // ============================================================================

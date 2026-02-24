@@ -12,7 +12,8 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use clap::{Parser, Subcommand};
-use dialoguer::{theme::ColorfulTheme, Input};
+use colored::Colorize;
+use dialoguer::theme::ColorfulTheme;
 use rand::rngs::OsRng;
 use rand::Rng;
 use std::fs;
@@ -656,9 +657,21 @@ impl VaultArgs {
                 let encrypted_string = if let Some(ref s) = args.string {
                     s.clone()
                 } else if std::io::stdin().is_terminal() {
-                    Input::with_theme(&ColorfulTheme::default())
-                        .with_prompt("📝 Enter encrypted string")
-                        .interact_text()?
+                    println!(
+                        "{}",
+                        "📝 Enter encrypted string (press Enter twice to finish):".bold()
+                    );
+                    let mut lines = Vec::new();
+                    let stdin = io::stdin();
+                    loop {
+                        let mut line = String::new();
+                        stdin.read_line(&mut line)?;
+                        if line.trim().is_empty() {
+                            break;
+                        }
+                        lines.push(line);
+                    }
+                    lines.concat()
                 } else {
                     let mut input = String::new();
                     io::stdin().read_line(&mut input)?;

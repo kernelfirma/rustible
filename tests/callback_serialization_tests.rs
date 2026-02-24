@@ -32,7 +32,6 @@ pub enum TaskStatus {
     Unreachable,
 }
 
-
 /// Test version of TaskResult
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskResult {

@@ -440,11 +440,11 @@ impl ProvisioningExecutor {
                 .get(&id.resource_type)
                 .and_then(|r| r.get(&id.name))
             {
-                    for (key, value) in config_map {
-                        if !attrs_map.contains_key(key) {
-                            attrs_map.insert(key.clone(), value.clone());
-                        }
+                for (key, value) in config_map {
+                    if !attrs_map.contains_key(key) {
+                        attrs_map.insert(key.clone(), value.clone());
                     }
+                }
             }
         }
 

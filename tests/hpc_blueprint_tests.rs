@@ -168,10 +168,7 @@ fn test_all_group_vars_parse_as_valid_yaml() {
         for entry in std::fs::read_dir(dir_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path
-                .extension()
-                .is_some_and(|e| e == "yml" || e == "yaml")
-            {
+            if path.extension().is_some_and(|e| e == "yml" || e == "yaml") {
                 let content = std::fs::read_to_string(&path).unwrap();
                 let _: serde_yaml::Value = serde_yaml::from_str(&content).unwrap_or_else(|e| {
                     panic!("Failed to parse {}: {}", path.display(), e);

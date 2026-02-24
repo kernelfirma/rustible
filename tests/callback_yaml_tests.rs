@@ -834,8 +834,9 @@ mod yaml_escaping_tests {
             callback.on_task_complete(&result).await;
 
             let output = writer.get_output();
-            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| panic!("Reserved word '{}' should be properly handled",
-                message));
+            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| {
+                panic!("Reserved word '{}' should be properly handled", message)
+            });
             assert!(
                 !docs.is_empty(),
                 "Output for '{}' should not be empty",
@@ -866,8 +867,9 @@ mod yaml_escaping_tests {
             callback.on_task_complete(&result).await;
 
             let output = writer.get_output();
-            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| panic!("Numeric string '{}' should produce valid YAML",
-                message));
+            let docs = validate_yaml_documents(&output).unwrap_or_else(|_| {
+                panic!("Numeric string '{}' should produce valid YAML", message)
+            });
             assert!(!docs.is_empty());
         }
     }

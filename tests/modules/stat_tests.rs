@@ -32,10 +32,7 @@ fn test_stat_module_description() {
 #[test]
 fn test_stat_module_classification() {
     let module = StatModule;
-    assert_eq!(
-        module.classification(),
-        ModuleClassification::RemoteCommand
-    );
+    assert_eq!(module.classification(), ModuleClassification::RemoteCommand);
 }
 
 #[test]

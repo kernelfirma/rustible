@@ -328,12 +328,11 @@ impl Module for PackageModule {
                 };
 
                 // Get packages - can be a single package or a list
-                let packages: Vec<String> =
-                    if let Some(names) = params.get_vec_string("name")? {
-                        names
-                    } else {
-                        vec![params.get_string_required("name")?]
-                    };
+                let packages: Vec<String> = if let Some(names) = params.get_vec_string("name")? {
+                    names
+                } else {
+                    vec![params.get_string_required("name")?]
+                };
 
                 let state_str = params
                     .get_string("state")?
@@ -354,9 +353,7 @@ impl Module for PackageModule {
                         let update_cmd = pkg_manager.update_cmd();
                         let cmd_string = update_cmd.join(" ");
                         // Ignore errors for cache update (matches previous behavior)
-                        let _ = conn
-                            .execute(&cmd_string, Some(exec_options.clone()))
-                            .await;
+                        let _ = conn.execute(&cmd_string, Some(exec_options.clone())).await;
                     }
                 }
 
@@ -367,11 +364,7 @@ impl Module for PackageModule {
 
                 for package in &packages {
                     let is_installed = pkg_manager
-                        .is_installed_remote(
-                            package,
-                            conn.as_ref(),
-                            Some(exec_options.clone()),
-                        )
+                        .is_installed_remote(package, conn.as_ref(), Some(exec_options.clone()))
                         .await?;
 
                     match state {
@@ -420,12 +413,10 @@ impl Module for PackageModule {
                     }
 
                     if !to_install.is_empty() {
-                        messages
-                            .push(format!("Would install: {}", to_install.join(", ")));
+                        messages.push(format!("Would install: {}", to_install.join(", ")));
                     }
                     if !to_remove.is_empty() {
-                        messages
-                            .push(format!("Would remove: {}", to_remove.join(", ")));
+                        messages.push(format!("Would remove: {}", to_remove.join(", ")));
                     }
 
                     return Ok(ModuleOutput::changed(messages.join(". ")));
@@ -436,23 +427,18 @@ impl Module for PackageModule {
 
                 if !to_install.is_empty() {
                     let install_cmd = pkg_manager.install_cmd();
-                    let (success, stdout, stderr) =
-                        Self::run_package_command_remote(
-                            &install_cmd,
-                            &to_install,
-                            conn.as_ref(),
-                            Some(exec_options.clone()),
-                        )
-                        .await?;
+                    let (success, stdout, stderr) = Self::run_package_command_remote(
+                        &install_cmd,
+                        &to_install,
+                        conn.as_ref(),
+                        Some(exec_options.clone()),
+                    )
+                    .await?;
 
                     if !success {
                         return Err(ModuleError::ExecutionFailed(format!(
                             "Failed to install packages: {}",
-                            if stderr.is_empty() {
-                                stdout
-                            } else {
-                                stderr
-                            }
+                            if stderr.is_empty() { stdout } else { stderr }
                         )));
                     }
 
@@ -460,31 +446,25 @@ impl Module for PackageModule {
                     for pkg in &to_install {
                         results.insert(pkg.clone(), "installed".to_string());
                     }
-                    messages
-                        .push(format!("Installed: {}", to_install.join(", ")));
+                    messages.push(format!("Installed: {}", to_install.join(", ")));
                     all_stdout.push_str(&stdout);
                     all_stderr.push_str(&stderr);
                 }
 
                 if !to_remove.is_empty() {
                     let remove_cmd = pkg_manager.remove_cmd();
-                    let (success, stdout, stderr) =
-                        Self::run_package_command_remote(
-                            &remove_cmd,
-                            &to_remove,
-                            conn.as_ref(),
-                            Some(exec_options.clone()),
-                        )
-                        .await?;
+                    let (success, stdout, stderr) = Self::run_package_command_remote(
+                        &remove_cmd,
+                        &to_remove,
+                        conn.as_ref(),
+                        Some(exec_options.clone()),
+                    )
+                    .await?;
 
                     if !success {
                         return Err(ModuleError::ExecutionFailed(format!(
                             "Failed to remove packages: {}",
-                            if stderr.is_empty() {
-                                stdout
-                            } else {
-                                stderr
-                            }
+                            if stderr.is_empty() { stdout } else { stderr }
                         )));
                     }
 
