@@ -410,6 +410,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // If it doesn't contain any of these characters, it's safe even if it has quotes.
     //
     // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
+    // Removed % because it's dangerous on Windows (environment variable expansion)
     let is_safe = args.bytes().all(|b| matches!(b,
         b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
         b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
@@ -446,8 +447,8 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("\\", "shell escaping \\"),
         ("$", "variable expansion $"),
         ("#", "shell comment #"),
-        ("%", "variable expansion %"),
-        ("^", "cmd.exe escape character"),
+        ("%", "Windows environment variable %"),
+        ("^", "Windows escape character ^"),
     ];
 
     for (pattern, description) in dangerous_patterns {
