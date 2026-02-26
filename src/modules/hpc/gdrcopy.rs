@@ -208,11 +208,7 @@ impl Module for GdrcopyModule {
                 if context.check_mode {
                     changes.push("Would remove /etc/modules-load.d/gdrdrv.conf".to_string());
                 } else {
-                    run_cmd_ok(
-                        connection,
-                        "rm -f /etc/modules-load.d/gdrdrv.conf",
-                        context,
-                    )?;
+                    run_cmd_ok(connection, "rm -f /etc/modules-load.d/gdrdrv.conf", context)?;
                     changes.push("Removed /etc/modules-load.d/gdrdrv.conf".to_string());
                 }
             }
@@ -237,10 +233,8 @@ impl Module for GdrcopyModule {
                 .with_data("changes", serde_json::json!(changes)));
             }
 
-            return Ok(
-                ModuleOutput::changed("Removed GDRCopy")
-                    .with_data("changes", serde_json::json!(changes)),
-            );
+            return Ok(ModuleOutput::changed("Removed GDRCopy")
+                .with_data("changes", serde_json::json!(changes)));
         }
 
         // -- state=present --
@@ -443,7 +437,10 @@ gdrcopy_sanity: PASSED
 
     #[test]
     fn test_detect_os_family() {
-        assert_eq!(detect_os_family("ID_LIKE=\"rhel centos fedora\""), Some("rhel"));
+        assert_eq!(
+            detect_os_family("ID_LIKE=\"rhel centos fedora\""),
+            Some("rhel")
+        );
         assert_eq!(detect_os_family("ID=ubuntu\nVERSION=22.04"), Some("debian"));
         assert_eq!(detect_os_family("ID=freebsd"), None);
     }

@@ -174,14 +174,7 @@ fn parse_nccl_version(output: &str) -> Option<String> {
         return None;
     }
     // Take the first line only
-    Some(
-        version
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-    )
+    Some(version.lines().next().unwrap_or("").trim().to_string())
 }
 
 // ---- NCCL Module ----
@@ -234,14 +227,18 @@ impl Module for NcclModule {
 
             let remove_cmd = match os_family {
                 "rhel" => "dnf remove -y libnccl libnccl-devel",
-                _ => "DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y libnccl2 libnccl-dev",
+                _ => {
+                    "DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y libnccl2 libnccl-dev"
+                }
             };
             let _ = run_cmd(connection, remove_cmd, context);
             let _ = run_cmd(connection, "rm -f /etc/nccl.conf", context);
 
             return Ok(
-                ModuleOutput::changed("Removed NCCL packages and configuration")
-                    .with_data("changes", serde_json::json!(["Removed NCCL packages", "Removed /etc/nccl.conf"])),
+                ModuleOutput::changed("Removed NCCL packages and configuration").with_data(
+                    "changes",
+                    serde_json::json!(["Removed NCCL packages", "Removed /etc/nccl.conf"]),
+                ),
             );
         }
 
@@ -320,7 +317,11 @@ impl Module for NcclModule {
                 "all_reduce_perf -b 8 -e 128M -f 2 -g 1 2>&1",
                 context,
             )?;
-            let combined = if ok { stdout } else { format!("{}\n{}", stdout, stderr) };
+            let combined = if ok {
+                stdout
+            } else {
+                format!("{}\n{}", stdout, stderr)
+            };
             let result = parse_nccl_test_output(&combined);
             if result.passed {
                 if let Some(bw) = result.bandwidth_gb_s {
@@ -479,10 +480,7 @@ mod tests {
             parse_nccl_version("2.29.3-1+cuda12.9"),
             Some("2.29.3-1+cuda12.9".to_string())
         );
-        assert_eq!(
-            parse_nccl_version("2.29.3\n"),
-            Some("2.29.3".to_string())
-        );
+        assert_eq!(parse_nccl_version("2.29.3\n"), Some("2.29.3".to_string()));
         assert_eq!(parse_nccl_version(""), None);
         assert_eq!(
             parse_nccl_version("  2.29.3  \n"),
@@ -492,7 +490,10 @@ mod tests {
 
     #[test]
     fn test_detect_os_family() {
-        assert_eq!(detect_os_family("ID_LIKE=\"rhel centos fedora\""), Some("rhel"));
+        assert_eq!(
+            detect_os_family("ID_LIKE=\"rhel centos fedora\""),
+            Some("rhel")
+        );
         assert_eq!(detect_os_family("ID=ubuntu\nVERSION=22.04"), Some("debian"));
         assert_eq!(detect_os_family("ID=freebsd"), None);
     }

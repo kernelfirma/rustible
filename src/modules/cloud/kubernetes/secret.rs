@@ -43,8 +43,8 @@
 //! ```
 
 use crate::modules::{
-    Diff, Module, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams,
-    ModuleResult, ParallelizationHint, ParamExt,
+    Diff, Module, ModuleClassification, ModuleContext, ModuleOutput, ModuleParams, ModuleResult,
+    ParallelizationHint, ParamExt,
 };
 use serde_json::json;
 use std::collections::BTreeMap;

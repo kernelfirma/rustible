@@ -107,14 +107,7 @@ fn parse_driver_version(nvidia_smi_output: &str) -> Option<String> {
         return None;
     }
     // Take only the first line in case of multi-GPU output
-    Some(
-        version
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-    )
+    Some(version.lines().next().unwrap_or("").trim().to_string())
 }
 
 /// Validate fabric mode parameter.
@@ -297,11 +290,7 @@ impl Module for FabricManagerModule {
         let config_content = generate_fm_config(&fabric_mode, fault_tolerance, log_level);
 
         if !context.check_mode {
-            run_cmd_ok(
-                connection,
-                "mkdir -p /etc/nvidia-fabricmanager",
-                context,
-            )?;
+            run_cmd_ok(connection, "mkdir -p /etc/nvidia-fabricmanager", context)?;
 
             // Check if config differs
             let (exists, current_content, _) = run_cmd(
@@ -375,10 +364,7 @@ impl Module for FabricManagerModule {
         };
 
         let mut output = if changed {
-            ModuleOutput::changed(format!(
-                "Applied {} Fabric Manager changes",
-                changes.len()
-            ))
+            ModuleOutput::changed(format!("Applied {} Fabric Manager changes", changes.len()))
         } else {
             ModuleOutput::ok("Fabric Manager is installed and configured")
         };
@@ -467,7 +453,10 @@ mod tests {
 
     #[test]
     fn test_detect_os_family() {
-        assert_eq!(detect_os_family("ID_LIKE=\"rhel centos fedora\""), Some("rhel"));
+        assert_eq!(
+            detect_os_family("ID_LIKE=\"rhel centos fedora\""),
+            Some("rhel")
+        );
         assert_eq!(detect_os_family("ID=ubuntu\nVERSION=22.04"), Some("debian"));
         assert_eq!(detect_os_family("ID=freebsd"), None);
     }

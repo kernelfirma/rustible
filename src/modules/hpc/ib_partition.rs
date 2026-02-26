@@ -250,10 +250,7 @@ fn detect_pkey_conflicts(entries: &[PartitionEntry]) -> PreflightResult {
     }
     for (pkey, count) in &pkey_counts {
         if *count > 1 {
-            errors.push(format!(
-                "Duplicate pkey {} appears {} times",
-                pkey, count
-            ));
+            errors.push(format!("Duplicate pkey {} appears {} times", pkey, count));
         }
     }
 
@@ -514,9 +511,12 @@ impl Module for IbPartitionModule {
                 return Ok(
                     ModuleOutput::ok(format!("Partition key {} not present", pkey))
                         .with_data("pkey", serde_json::json!(pkey))
-                        .with_data("diagnostics", serde_json::json!({
-                            "preflight_warnings": preflight_warnings,
-                        })),
+                        .with_data(
+                            "diagnostics",
+                            serde_json::json!({
+                                "preflight_warnings": preflight_warnings,
+                            }),
+                        ),
                 );
             }
 
@@ -524,9 +524,12 @@ impl Module for IbPartitionModule {
                 return Ok(
                     ModuleOutput::changed(format!("Would remove partition key {}", pkey))
                         .with_data("pkey", serde_json::json!(pkey))
-                        .with_data("diagnostics", serde_json::json!({
-                            "preflight_warnings": preflight_warnings,
-                        })),
+                        .with_data(
+                            "diagnostics",
+                            serde_json::json!({
+                                "preflight_warnings": preflight_warnings,
+                            }),
+                        ),
                 );
             }
 
@@ -553,9 +556,12 @@ impl Module for IbPartitionModule {
             return Ok(
                 ModuleOutput::changed(format!("Removed partition key {}", pkey))
                     .with_data("pkey", serde_json::json!(pkey))
-                    .with_data("diagnostics", serde_json::json!({
-                        "preflight_warnings": preflight_warnings,
-                    })),
+                    .with_data(
+                        "diagnostics",
+                        serde_json::json!({
+                            "preflight_warnings": preflight_warnings,
+                        }),
+                    ),
             );
         }
 
@@ -589,27 +595,31 @@ impl Module for IbPartitionModule {
                 return Ok(
                     ModuleOutput::ok(format!("Partition key {} already configured", pkey))
                         .with_data("pkey", serde_json::json!(pkey))
-                        .with_data("diagnostics", serde_json::json!({
-                            "preflight_warnings": full_preflight.warnings,
-                            "drift": serde_json::json!([]),
-                        })),
+                        .with_data(
+                            "diagnostics",
+                            serde_json::json!({
+                                "preflight_warnings": full_preflight.warnings,
+                                "drift": serde_json::json!([]),
+                            }),
+                        ),
                 );
             }
 
             // There is drift -- update the entry.
             if context.check_mode {
-                return Ok(
-                    ModuleOutput::changed(format!(
-                        "Would update partition key {} ({} change(s))",
-                        pkey,
-                        drift.len()
-                    ))
-                    .with_data("pkey", serde_json::json!(pkey))
-                    .with_data("diagnostics", serde_json::json!({
+                return Ok(ModuleOutput::changed(format!(
+                    "Would update partition key {} ({} change(s))",
+                    pkey,
+                    drift.len()
+                ))
+                .with_data("pkey", serde_json::json!(pkey))
+                .with_data(
+                    "diagnostics",
+                    serde_json::json!({
                         "preflight_warnings": full_preflight.warnings,
                         "drift": drift,
-                    })),
-                );
+                    }),
+                ));
             }
 
             // Rewrite the config with the desired entry replacing the current one.
@@ -636,19 +646,20 @@ impl Module for IbPartitionModule {
                 context,
             )?;
 
-            return Ok(
-                ModuleOutput::changed(format!(
-                    "Updated partition key {} ({} change(s))",
-                    pkey,
-                    drift.len()
-                ))
-                .with_data("pkey", serde_json::json!(pkey))
-                .with_data("members", serde_json::json!(members))
-                .with_data("diagnostics", serde_json::json!({
+            return Ok(ModuleOutput::changed(format!(
+                "Updated partition key {} ({} change(s))",
+                pkey,
+                drift.len()
+            ))
+            .with_data("pkey", serde_json::json!(pkey))
+            .with_data("members", serde_json::json!(members))
+            .with_data(
+                "diagnostics",
+                serde_json::json!({
                     "preflight_warnings": full_preflight.warnings,
                     "drift": drift,
-                })),
-            );
+                }),
+            ));
         }
 
         // Entry does not exist -- add it.
@@ -656,9 +667,12 @@ impl Module for IbPartitionModule {
             return Ok(
                 ModuleOutput::changed(format!("Would add partition key {}", pkey))
                     .with_data("pkey", serde_json::json!(pkey))
-                    .with_data("diagnostics", serde_json::json!({
-                        "preflight_warnings": full_preflight.warnings,
-                    })),
+                    .with_data(
+                        "diagnostics",
+                        serde_json::json!({
+                            "preflight_warnings": full_preflight.warnings,
+                        }),
+                    ),
             );
         }
 
@@ -674,9 +688,12 @@ impl Module for IbPartitionModule {
             ModuleOutput::changed(format!("Added partition key {}", pkey))
                 .with_data("pkey", serde_json::json!(pkey))
                 .with_data("members", serde_json::json!(members))
-                .with_data("diagnostics", serde_json::json!({
-                    "preflight_warnings": full_preflight.warnings,
-                })),
+                .with_data(
+                    "diagnostics",
+                    serde_json::json!({
+                        "preflight_warnings": full_preflight.warnings,
+                    }),
+                ),
         )
     }
 
@@ -1002,18 +1019,12 @@ MyPartition=0x8001, ipoib : guid1=full ;
         let current = PartitionEntry {
             pkey: "0x8001".to_string(),
             ipoib: false,
-            members: vec![
-                "guid1=full".to_string(),
-                "guid2=limited".to_string(),
-            ],
+            members: vec!["guid1=full".to_string(), "guid2=limited".to_string()],
         };
         let desired = PartitionEntry {
             pkey: "0x8001".to_string(),
             ipoib: true,
-            members: vec![
-                "guid1=limited".to_string(),
-                "guid3=full".to_string(),
-            ],
+            members: vec!["guid1=limited".to_string(), "guid3=full".to_string()],
         };
         let drift = reconcile_members(&current, &desired);
         // ipoib change + guid1 access change + guid3 add + guid2 remove = 4

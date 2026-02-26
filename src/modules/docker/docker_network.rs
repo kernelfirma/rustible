@@ -23,9 +23,7 @@
 #[cfg(feature = "docker")]
 use bollard::models::{Ipam, IpamConfig};
 #[cfg(feature = "docker")]
-use bollard::network::{
-    ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions,
-};
+use bollard::network::{ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions};
 #[cfg(feature = "docker")]
 use bollard::Docker;
 

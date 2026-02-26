@@ -96,10 +96,7 @@ fn run_cmd_ok(
 /// Valid formats: `<IPv4>@<network>` where network is `tcp`, `tcp1`, `o2ib`, `o2ib0`, etc.
 /// Examples: `10.0.0.1@tcp`, `192.168.1.100@o2ib`, `10.0.0.1@tcp0`
 fn is_valid_nid(nid: &str) -> bool {
-    let re = Regex::new(
-        r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})@(tcp|o2ib)\d*$",
-    )
-    .unwrap();
+    let re = Regex::new(r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})@(tcp|o2ib)\d*$").unwrap();
     if !re.is_match(nid) {
         return false;
     }
@@ -320,15 +317,9 @@ fn remount_with_rollback(
         let rollback_cmd = format!("mount -o remount,'{}' '{}'", prev_opts, mount_point);
         let (rollback_ok, _, rollback_stderr) = run_cmd(connection, &rollback_cmd, context)?;
         if rollback_ok {
-            details.push(format!(
-                "Rolled back to previous options: {}",
-                prev_opts
-            ));
+            details.push(format!("Rolled back to previous options: {}", prev_opts));
         } else {
-            details.push(format!(
-                "Rollback also failed: {}",
-                rollback_stderr.trim()
-            ));
+            details.push(format!("Rollback also failed: {}", rollback_stderr.trim()));
         }
     }
 
@@ -375,10 +366,7 @@ fn mount_health_output(
         for line in stat_stdout.lines() {
             let trimmed = line.trim();
             if trimmed.contains("Type:") {
-                health.insert(
-                    "stat_type".to_string(),
-                    serde_json::json!(trimmed),
-                );
+                health.insert("stat_type".to_string(), serde_json::json!(trimmed));
                 break;
             }
         }
@@ -667,8 +655,13 @@ impl LustreMountModule {
 
         // Fstab convergence check and management
         if manage_fstab {
-            let drift =
-                fstab_convergence_check(connection, context, lustre_source, mount_point, mount_options)?;
+            let drift = fstab_convergence_check(
+                connection,
+                context,
+                lustre_source,
+                mount_point,
+                mount_options,
+            )?;
             if !drift.is_empty() {
                 output_data.insert("fstab_drift".to_string(), serde_json::json!(drift));
             }
@@ -707,11 +700,14 @@ impl LustreMountModule {
             }
         } else if mount_options != "defaults" {
             // Already mounted -- check if options need a remount
-            let drift_items =
-                fstab_convergence_check(connection, context, lustre_source, mount_point, mount_options)?;
-            let options_drifted = drift_items
-                .iter()
-                .any(|d| d.field == "mount_options");
+            let drift_items = fstab_convergence_check(
+                connection,
+                context,
+                lustre_source,
+                mount_point,
+                mount_options,
+            )?;
+            let options_drifted = drift_items.iter().any(|d| d.field == "mount_options");
             if options_drifted && !context.check_mode {
                 let (remount_ok, remount_details) =
                     remount_with_rollback(connection, context, mount_point, mount_options)?;
@@ -796,13 +792,17 @@ impl LustreMountModule {
 
         if mp_in_fstab {
             // Entry exists for mount point -- check for drift
-            let drift =
-                fstab_convergence_check(connection, context, lustre_source, mount_point, mount_options)?;
+            let drift = fstab_convergence_check(
+                connection,
+                context,
+                lustre_source,
+                mount_point,
+                mount_options,
+            )?;
 
             if !drift.is_empty() {
                 if context.check_mode {
-                    let drift_fields: Vec<String> =
-                        drift.iter().map(|d| d.field.clone()).collect();
+                    let drift_fields: Vec<String> = drift.iter().map(|d| d.field.clone()).collect();
                     changes.push(format!(
                         "Would update fstab entry for {} (drifted fields: {})",
                         mount_point,
@@ -973,10 +973,7 @@ mod tests {
         health.insert("use_percent".to_string(), serde_json::json!("50%"));
         health.insert("mounted_on".to_string(), serde_json::json!("/mnt/scratch"));
         health.insert("accessible".to_string(), serde_json::json!(true));
-        health.insert(
-            "mount_point".to_string(),
-            serde_json::json!("/mnt/scratch"),
-        );
+        health.insert("mount_point".to_string(), serde_json::json!("/mnt/scratch"));
 
         let value = serde_json::Value::Object(health);
         assert!(value.is_object());

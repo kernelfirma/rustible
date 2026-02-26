@@ -253,8 +253,7 @@ fn orchestrate_dkms_rebuild(
                     let (install_ok, install_stdout, install_stderr) =
                         run_cmd(connection, &install_cmd, context)?;
                     if install_ok {
-                        details
-                            .push(format!("DKMS install succeeded for nvidia/{}", version));
+                        details.push(format!("DKMS install succeeded for nvidia/{}", version));
                     } else {
                         verified = false;
                         warnings.push(format!(
@@ -849,7 +848,9 @@ impl Module for NvidiaDriverModule {
                 changes.len()
             ))))
         } else {
-            Ok(build_output(ModuleOutput::ok("NVIDIA driver is configured")))
+            Ok(build_output(ModuleOutput::ok(
+                "NVIDIA driver is configured",
+            )))
         }
     }
 
@@ -950,10 +951,7 @@ ID=freebsd
         // Minimal version string
         assert_eq!(parse_kernel_version("5.4"), Some((5, 4)));
         // With trailing whitespace from uname output
-        assert_eq!(
-            parse_kernel_version("  5.15.0-91-generic\n"),
-            Some((5, 15))
-        );
+        assert_eq!(parse_kernel_version("  5.15.0-91-generic\n"), Some((5, 15)));
         // Empty / invalid input
         assert_eq!(parse_kernel_version(""), None);
         assert_eq!(parse_kernel_version("not-a-version"), None);
@@ -1010,7 +1008,7 @@ ID=freebsd
             gpu_count: 4,
             ecc_errors: vec!["GPU 0 'A100': 3 corrected ECC errors detected".to_string()],
             temperature_warnings: vec![
-                "GPU 1 'A100': temperature 92C exceeds 85C threshold".to_string(),
+                "GPU 1 'A100': temperature 92C exceeds 85C threshold".to_string()
             ],
             power_issues: vec!["GPU 2 'A100': abnormal power draw 0.0W".to_string()],
         };

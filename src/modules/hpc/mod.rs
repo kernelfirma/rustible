@@ -152,11 +152,11 @@ pub use cuda::CudaToolkitModule;
 #[cfg(feature = "gpu")]
 pub use dcgm::DcgmModule;
 pub use discovery::HpcDiscoveryModule;
+#[cfg(feature = "gpu")]
+pub use fabric_manager::FabricManagerModule;
 pub use facts::HpcFactsModule;
 #[cfg(feature = "parallel_fs")]
 pub use fs::{BeegfsClientModule, LustreClientModule};
-#[cfg(feature = "gpu")]
-pub use fabric_manager::FabricManagerModule;
 #[cfg(feature = "gpu")]
 pub use gdrcopy::GdrcopyModule;
 #[cfg(feature = "gpu")]

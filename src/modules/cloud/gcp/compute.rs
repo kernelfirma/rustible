@@ -129,7 +129,6 @@ pub enum InstanceState {
     Reset,
 }
 
-
 impl InstanceState {
     fn from_str(s: &str) -> ModuleResult<Self> {
         match s.to_lowercase().as_str() {

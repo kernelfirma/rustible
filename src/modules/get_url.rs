@@ -183,11 +183,9 @@ impl Module for GetUrlModule {
             }
         }
 
-        let bytes = rt
-            .block_on(async { response.bytes().await })
-            .map_err(|e| {
-                ModuleError::ExecutionFailed(format!("Failed to read response body: {}", e))
-            })?;
+        let bytes = rt.block_on(async { response.bytes().await }).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to read response body: {}", e))
+        })?;
 
         // Verify checksum if provided
         if let Some(ref cksum) = checksum {
@@ -220,10 +218,9 @@ impl Module for GetUrlModule {
             dest,
             bytes.len()
         ));
-        output.data.insert(
-            "dest".to_string(),
-            serde_json::Value::String(dest.clone()),
-        );
+        output
+            .data
+            .insert("dest".to_string(), serde_json::Value::String(dest.clone()));
         output
             .data
             .insert("url".to_string(), serde_json::Value::String(url));

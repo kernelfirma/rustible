@@ -154,7 +154,10 @@ fn check_bmc_reachability(
                 PreflightResult {
                     passed: false,
                     warnings: Vec::new(),
-                    errors: vec![format!("BMC network unreachable (transient): {}", stderr.trim())],
+                    errors: vec![format!(
+                        "BMC network unreachable (transient): {}",
+                        stderr.trim()
+                    )],
                 }
             } else if lower.contains("password") || lower.contains("auth") {
                 PreflightResult {
@@ -168,7 +171,10 @@ fn check_bmc_reachability(
             } else {
                 PreflightResult {
                     passed: false,
-                    warnings: vec![format!("BMC probe failed with unknown error: {}", stderr.trim())],
+                    warnings: vec![format!(
+                        "BMC probe failed with unknown error: {}",
+                        stderr.trim()
+                    )],
                     errors: vec![format!("BMC unreachable: {}", stderr.trim())],
                 }
             }
@@ -362,13 +368,21 @@ impl Module for IpmiPowerModule {
 
         // Execute power action with retry
         let cmd = format!("{} chassis power {}", base, action);
-        let (success, _stdout, stderr, retries_needed) =
-            run_cmd_with_retry(connection, &cmd, context, "power action", max_retries, initial_delay_ms)?;
+        let (success, _stdout, stderr, retries_needed) = run_cmd_with_retry(
+            connection,
+            &cmd,
+            context,
+            "power action",
+            max_retries,
+            initial_delay_ms,
+        )?;
 
         if !success {
             return Err(ModuleError::ExecutionFailed(format!(
                 "Power {} failed after {} retries: {}",
-                action, retries_needed, stderr.trim()
+                action,
+                retries_needed,
+                stderr.trim()
             )));
         }
 
@@ -512,13 +526,20 @@ impl Module for IpmiBootModule {
         }
 
         // Execute bootdev command with retry
-        let (success, _stdout, stderr, retries_needed) =
-            run_cmd_with_retry(connection, &cmd, context, "bootdev", max_retries, initial_delay_ms)?;
+        let (success, _stdout, stderr, retries_needed) = run_cmd_with_retry(
+            connection,
+            &cmd,
+            context,
+            "bootdev",
+            max_retries,
+            initial_delay_ms,
+        )?;
 
         if !success {
             return Err(ModuleError::ExecutionFailed(format!(
                 "Boot device set failed after {} retries: {}",
-                retries_needed, stderr.trim()
+                retries_needed,
+                stderr.trim()
             )));
         }
 
@@ -669,8 +690,8 @@ mod tests {
         ];
         for msg in &network_errors {
             let lower = msg.to_lowercase();
-            let is_transient = lower.contains("unable to establish")
-                || lower.contains("connection timed out");
+            let is_transient =
+                lower.contains("unable to establish") || lower.contains("connection timed out");
             assert!(
                 is_transient,
                 "Expected transient classification for: {}",

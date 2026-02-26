@@ -22,9 +22,7 @@
 //! - `repository`: Registry repository for push
 
 #[cfg(feature = "docker")]
-use bollard::image::{
-    BuildImageOptions, CreateImageOptions, RemoveImageOptions, TagImageOptions,
-};
+use bollard::image::{BuildImageOptions, CreateImageOptions, RemoveImageOptions, TagImageOptions};
 #[cfg(feature = "docker")]
 use bollard::Docker;
 #[cfg(feature = "docker")]
@@ -273,7 +271,6 @@ impl DockerImageModule {
 
     /// Build image from Dockerfile
     async fn build_image(docker: &Docker, config: &ImageConfig) -> ModuleResult<()> {
-        
         use tar::Builder;
 
         let build_path = config.build.path.as_ref().ok_or_else(|| {

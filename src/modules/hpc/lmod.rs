@@ -139,10 +139,7 @@ fn configure_hierarchical_modulepath(
         let escaped = lmodrc_content.replace('\'', "'\\''");
         run_cmd_ok(
             connection,
-            &format!(
-                "printf '%s\\n' '{}' > /etc/lmod/lmodrc.lua",
-                escaped
-            ),
+            &format!("printf '%s\\n' '{}' > /etc/lmod/lmodrc.lua", escaped),
             context,
         )?;
     }
@@ -152,8 +149,7 @@ fn configure_hierarchical_modulepath(
     for base in modulepaths {
         for level in hierarchy {
             let dir = format!("{}/{}", base, level);
-            let (exists, _, _) =
-                run_cmd(connection, &format!("test -d '{}'", dir), context)?;
+            let (exists, _, _) = run_cmd(connection, &format!("test -d '{}'", dir), context)?;
             if !exists {
                 if !context.check_mode {
                     run_cmd_ok(connection, &format!("mkdir -p '{}'", dir), context)?;
@@ -183,10 +179,7 @@ fn enforce_version_policies(
             Some(v) => v,
             None => continue,
         };
-        let version_content = format!(
-            "#%Module\nset ModulesVersion \"{}\"",
-            version
-        );
+        let version_content = format!("#%Module\nset ModulesVersion \"{}\"", version);
 
         // Write .version in the first modulepath that contains the module dir,
         // or the first modulepath by default.
@@ -199,11 +192,7 @@ fn enforce_version_policies(
         let version_file = format!("{}/.version", module_dir);
 
         if !context.check_mode {
-            run_cmd_ok(
-                connection,
-                &format!("mkdir -p '{}'", module_dir),
-                context,
-            )?;
+            run_cmd_ok(connection, &format!("mkdir -p '{}'", module_dir), context)?;
             let escaped = version_content.replace('\'', "'\\''");
             run_cmd_ok(
                 connection,
@@ -233,8 +222,7 @@ fn detect_modulepath_drift(
 
     // Check each configured directory exists
     for dir in modulepaths {
-        let (exists, _, _) =
-            run_cmd(connection, &format!("test -d '{}'", dir), context)?;
+        let (exists, _, _) = run_cmd(connection, &format!("test -d '{}'", dir), context)?;
         if !exists {
             drift.push(DriftItem {
                 field: format!("modulepath_dir:{}", dir),
@@ -505,12 +493,8 @@ impl Module for LmodModule {
         if let Some(dv_value) = params.get("default_versions") {
             if let Some(dv_map) = dv_value.as_object() {
                 if !dv_map.is_empty() {
-                    let ver_changes = enforce_version_policies(
-                        connection,
-                        context,
-                        &effective_paths,
-                        dv_map,
-                    )?;
+                    let ver_changes =
+                        enforce_version_policies(connection, context, &effective_paths, dv_map)?;
                     if !ver_changes.is_empty() {
                         changed = true;
                         changes.extend(ver_changes);
@@ -552,8 +536,14 @@ impl Module for LmodModule {
             .with_data("changes", serde_json::json!(changes))
             .with_data("os_family", serde_json::json!(os_family))
             .with_data("modulepath_drift", serde_json::json!(drift))
-            .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
-            .with_data("default_versions_set", serde_json::json!(default_versions_set)));
+            .with_data(
+                "hierarchy_configured",
+                serde_json::json!(hierarchy_configured),
+            )
+            .with_data(
+                "default_versions_set",
+                serde_json::json!(default_versions_set),
+            ));
         }
 
         if changed {
@@ -562,15 +552,27 @@ impl Module for LmodModule {
                     .with_data("changes", serde_json::json!(changes))
                     .with_data("os_family", serde_json::json!(os_family))
                     .with_data("modulepath_drift", serde_json::json!(drift))
-                    .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
-                    .with_data("default_versions_set", serde_json::json!(default_versions_set)),
+                    .with_data(
+                        "hierarchy_configured",
+                        serde_json::json!(hierarchy_configured),
+                    )
+                    .with_data(
+                        "default_versions_set",
+                        serde_json::json!(default_versions_set),
+                    ),
             )
         } else {
             Ok(ModuleOutput::ok("Lmod is configured and up to date")
                 .with_data("os_family", serde_json::json!(os_family))
                 .with_data("modulepath_drift", serde_json::json!(drift))
-                .with_data("hierarchy_configured", serde_json::json!(hierarchy_configured))
-                .with_data("default_versions_set", serde_json::json!(default_versions_set)))
+                .with_data(
+                    "hierarchy_configured",
+                    serde_json::json!(hierarchy_configured),
+                )
+                .with_data(
+                    "default_versions_set",
+                    serde_json::json!(default_versions_set),
+                ))
         }
     }
 
@@ -688,9 +690,11 @@ mod tests {
     #[test]
     fn test_drift_detection_missing_dir() {
         // Simulate drift items for directories that would be missing
-        let configured_paths = ["/opt/modulefiles".to_string(),
+        let configured_paths = [
+            "/opt/modulefiles".to_string(),
             "/missing/path".to_string(),
-            "/also/missing".to_string()];
+            "/also/missing".to_string(),
+        ];
 
         // Simulate checking: first exists, second and third do not
         let dir_exists = [true, false, false];

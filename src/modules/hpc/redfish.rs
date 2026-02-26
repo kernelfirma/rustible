@@ -309,10 +309,7 @@ fn firmware_precheck(firmware_json: &str) -> PreflightResult {
 
     for member in &members {
         let name = member.get("Name").and_then(|v| v.as_str()).unwrap_or("");
-        let version = member
-            .get("Version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let version = member.get("Version").and_then(|v| v.as_str()).unwrap_or("");
 
         let name_lower = name.to_lowercase();
         if name_lower.contains("bmc")
@@ -1143,10 +1140,7 @@ mod tests {
         assert_eq!(detect_vendor(r#"{"Manufacturer": ""}"#), "unknown");
 
         // Other vendor falls back to lowercased name
-        assert_eq!(
-            detect_vendor(r#"{"Manufacturer": "Fujitsu"}"#),
-            "fujitsu"
-        );
+        assert_eq!(detect_vendor(r#"{"Manufacturer": "Fujitsu"}"#), "fujitsu");
     }
 
     #[test]

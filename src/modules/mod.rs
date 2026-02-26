@@ -394,12 +394,15 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // If the string contains only safe characters, we can skip the detailed check.
     // This avoids checking 24 patterns for every safe string (O(N) vs O(M*N)).
     //
-    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @, %
-    let is_safe = args.bytes().all(|b| matches!(b,
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
-        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
-        b'+' | b'=' | b',' | b'@' | b'%'
-    ));
+    // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
+    // Removed % because it can be used for variable expansion on Windows
+    let is_safe = args.bytes().all(|b| {
+        matches!(b,
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+            b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+            b'+' | b'=' | b',' | b'@'
+        )
+    });
 
     if is_safe {
         return Ok(());
@@ -431,6 +434,8 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("\\", "shell escaping \\"),
         ("$", "variable expansion $"),
         ("#", "shell comment #"),
+        ("%", "variable expansion %"),
+        ("^", "shell escape ^"),
     ];
 
     for (pattern, description) in dangerous_patterns {
