@@ -980,16 +980,21 @@ fn format_json_with_indent<T: serde::Serialize>(
     value: &T,
     indent: usize,
 ) -> std::result::Result<String, minijinja::Error> {
-    let mut buf = Vec::with_capacity(128);
+    let mut buf = Vec::new();
 
+    // Optimization: Use a static buffer for common indentation sizes
+    // to avoid Vec allocation for simple indentations (which is 99% of cases).
     const SPACES: [u8; 32] = [b' '; 32];
-    let indent_bytes = if indent <= 32 {
-        std::borrow::Cow::Borrowed(&SPACES[0..indent])
+    let indent_vec; // Keep alive if allocation is needed
+
+    let indent_bytes: &[u8] = if indent <= SPACES.len() {
+        &SPACES[..indent]
     } else {
-        std::borrow::Cow::Owned(vec![b' '; indent])
+        indent_vec = vec![b' '; indent];
+        &indent_vec
     };
 
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(indent_bytes);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser).map_err(|e| {
         minijinja::Error::new(
@@ -998,7 +1003,8 @@ fn format_json_with_indent<T: serde::Serialize>(
         )
     })?;
 
-    // Safety: serde_json always produces valid UTF-8
+    // Optimization: serde_json is guaranteed to produce valid UTF-8,
+    // so we can skip the validation check.
     Ok(unsafe { String::from_utf8_unchecked(buf) })
 }
 

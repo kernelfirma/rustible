@@ -972,6 +972,28 @@ fn bench_filter_title_opt(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_filter_to_nice_json_opt(c: &mut Criterion) {
+    let mut group = c.benchmark_group("filter_to_nice_json_optimization");
+
+    let engine = TemplateEngine::new();
+    let mut vars = HashMap::new();
+
+    let data = generate_complex_vars();
+    vars.insert("data".to_string(), serde_json::to_value(data).unwrap());
+
+    let template = "{{ data | to_nice_json }}";
+
+    group.bench_function("to_nice_json_complex", |b| {
+        b.iter(|| {
+            engine
+                .render(black_box(template), black_box(&vars))
+                .unwrap()
+        })
+    });
+
+    group.finish();
+}
+
 // ============================================================================
 // Criterion Groups and Main
 // ============================================================================
@@ -981,6 +1003,7 @@ criterion_group!(
     bench_to_nice_json_opt,
     bench_filter_join_opt,
     bench_filter_title_opt,
+    bench_filter_to_nice_json_opt,
 );
 
 criterion_group!(
