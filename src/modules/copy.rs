@@ -96,24 +96,62 @@ impl CopyModule {
         }
     }
 
-    fn copy_content(content: &str, dest: &Path) -> ModuleResult<()> {
-        let mut file = fs::File::create(dest)?;
-        file.write_all(content.as_bytes())?;
+    fn copy_content(content: &str, dest: &Path, mode: Option<u32>) -> ModuleResult<()> {
+        // Use secure_write_file for atomic creation and permission setting
+        crate::utils::secure_write_file(dest, content, true, mode).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", dest.display(), e))
+        })?;
         Ok(())
     }
 
-    fn copy_file(src: &Path, dest: &Path, force: bool) -> ModuleResult<()> {
-        if dest.exists() && !force {
-            let dest_meta = fs::metadata(dest)?;
-            if dest_meta.permissions().readonly() {
-                return Err(ModuleError::PermissionDenied(format!(
-                    "Destination '{}' is read-only and force is not set",
-                    dest.display()
-                )));
+    fn copy_file(src: &Path, dest: &Path, force: bool, mode: Option<u32>) -> ModuleResult<()> {
+        if dest.exists() {
+            if !force {
+                let dest_meta = fs::metadata(dest)?;
+                if dest_meta.permissions().readonly() {
+                    return Err(ModuleError::PermissionDenied(format!(
+                        "Destination '{}' is read-only and force is not set",
+                        dest.display()
+                    )));
+                }
             }
         }
 
-        fs::copy(src, dest)?;
+        // Open destination file with specific options for security
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+
+        #[cfg(unix)]
+        if let Some(m) = mode {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(m);
+        }
+
+        let mut dest_file = options.open(dest)?;
+        let mut src_file = fs::File::open(src)?;
+
+        std::io::copy(&mut src_file, &mut dest_file)?;
+
+        // Ensure permissions are set correctly
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let target_mode = if let Some(m) = mode {
+                m
+            } else {
+                // If mode is not specified, preserve source mode
+                let src_meta = src_file.metadata()?;
+                src_meta.permissions().mode() & 0o7777
+            };
+
+            let metadata = dest_file.metadata()?;
+            if (metadata.permissions().mode() & 0o7777) != target_mode {
+                let mut perms = metadata.permissions();
+                perms.set_mode(target_mode);
+                dest_file.set_permissions(perms)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -635,13 +673,15 @@ impl CopyModule {
 
         // Perform the copy to temp or final destination
         if let Some(ref content_str) = source_content {
-            Self::copy_content(content_str, &temp_dest)?;
+            Self::copy_content(content_str, &temp_dest, mode)?;
         } else if let Some(ref resolved) = resolved_src {
-            Self::copy_file(resolved, &temp_dest, force)?;
+            Self::copy_file(resolved, &temp_dest, force, mode)?;
         }
 
-        // Set permissions on temp file
-        Self::set_permissions(&temp_dest, mode)?;
+        // Permissions are handled inside copy_content/copy_file via secure methods,
+        // but we still need to report changes. Since we're writing new content,
+        // we can assume we've set them correctly.
+        // Self::set_permissions(&temp_dest, mode)?; // Redundant now
 
         // Run validation if specified
         if let Some(validate_cmd) = validate {
