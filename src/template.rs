@@ -580,29 +580,75 @@ fn filter_upper(value: &str) -> String {
 }
 
 fn filter_capitalize(value: &str) -> String {
+    if value.is_empty() {
+        return String::new();
+    }
+
+    // Fast path: pure ASCII
+    if value.is_ascii() {
+        let mut result = String::with_capacity(value.len());
+        let bytes = value.as_bytes();
+        result.push(bytes[0].to_ascii_uppercase() as char);
+        result.push_str(&value[1..]);
+        return result;
+    }
+
     let mut chars = value.chars();
     match chars.next() {
         None => String::new(),
-        Some(c) => c.to_uppercase().chain(chars).collect(),
+        Some(c) => {
+            let mut result = String::with_capacity(value.len());
+            for uc in c.to_uppercase() {
+                result.push(uc);
+            }
+            result.push_str(chars.as_str());
+            result
+        }
     }
 }
 
 fn filter_title(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     let mut first_word = true;
+    let mut in_word = false;
 
-    for word in value.split_whitespace() {
-        if !first_word {
-            result.push(' ');
-        }
-        first_word = false;
-
-        let mut chars = word.chars();
-        if let Some(c) = chars.next() {
-            for uc in c.to_uppercase() {
-                result.push(uc);
+    // Fast path: pure ASCII
+    if value.is_ascii() {
+        for &b in value.as_bytes() {
+            if b.is_ascii_whitespace() {
+                in_word = false;
+            } else {
+                if !in_word {
+                    if !first_word {
+                        result.push(' ');
+                    }
+                    first_word = false;
+                    result.push(b.to_ascii_uppercase() as char);
+                    in_word = true;
+                } else {
+                    result.push(b.to_ascii_lowercase() as char);
+                }
             }
-            for c in chars {
+        }
+        return result;
+    }
+
+    // Slow path for unicode
+    let mut chars = value.chars();
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            in_word = false;
+        } else {
+            if !in_word {
+                if !first_word {
+                    result.push(' ');
+                }
+                first_word = false;
+                for uc in c.to_uppercase() {
+                    result.push(uc);
+                }
+                in_word = true;
+            } else {
                 for lc in c.to_lowercase() {
                     result.push(lc);
                 }
