@@ -1,0 +1,10 @@
+--- src/executor/mod.rs
++++ src/executor/mod.rs
+@@ -136,6 +136,7 @@
+     Result, TaskResult,
+ };
+ use console::Term;
++use colored::Colorize;
+ use dialoguer::theme::ColorfulTheme;
+ use parking_lot::RwLock;
+ use std::collections::{HashMap, HashSet};

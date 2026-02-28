@@ -1,0 +1,10 @@
+--- src/executor/mod.rs
++++ src/executor/mod.rs
+@@ -136,6 +136,7 @@
+
+ use dialoguer::theme::ColorfulTheme;
+ use console::Term;
++use colored::Colorize;
+
+ /// Errors that can occur during playbook and task execution.
+ ///
