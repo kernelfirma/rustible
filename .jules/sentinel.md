@@ -95,3 +95,8 @@
 **Vulnerability:** The `validate_command_args` utility was too permissive for Windows environments. It allowed `%` (variable expansion) and `^` (shell escape). This enabled Information Disclosure (reading environment variables) and command obfuscation/filter bypass on Windows systems where commands are executed via `cmd.exe`.
 **Learning:** Shell metacharacters vary significantly by platform. A validation logic that works for POSIX shells is insufficient for Windows `cmd.exe`, which has its own set of special characters (`%`, `^`).
 **Prevention:** Explicitly block Windows-specific shell metacharacters (`%`, `^`) in validation routines intended to be cross-platform or Windows-compatible.
+
+## 2025-06-03 - Shell Command Injection via # (comment character)
+**Vulnerability:** The `validate_command_args` utility was failing to properly reject the hash character (`#`) as it was missing from the `dangerous_patterns` list, which would allow a malicious user to craft a shell comment, short-circuiting part of an execution context.
+**Learning:** Partial validation of shell arguments using character matching without considering characters that stop the parser's lexer in standard bash/POSIX shells can lead to unhandled inputs that enable dangerous injections.
+**Prevention:** Explicitly block `#` in `validate_command_args`.
