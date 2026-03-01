@@ -13,6 +13,7 @@ use super::types::{
     ClusterConfig, ControllerHealth, ControllerId, ControllerInfo, ControllerLoad, ControllerRole,
     TaskSpec, WorkUnit, WorkUnitId, WorkUnitState,
 };
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -235,6 +236,57 @@ impl Controller {
         let mut work_unit_failed = None;
 
         for (task_index, task) in tasks.into_iter().enumerate() {
+            if let Some(condition) = task.when.as_deref() {
+                match crate::parser::evaluate_condition(condition, &IndexMap::new()) {
+                    Ok(false) => {
+                        let mut work_units = self.work_units.write().await;
+                        let execution = work_units
+                            .get_mut(&id)
+                            .ok_or_else(|| ControllerError::WorkUnitNotFound(id.clone()))?;
+                        execution.task_results.insert(
+                            task_index,
+                            TaskResult {
+                                success: true,
+                                changed: false,
+                                result: serde_json::json!({
+                                    "skipped": true,
+                                    "when": condition,
+                                }),
+                                error: None,
+                            },
+                        );
+                        continue;
+                    }
+                    Ok(true) => {}
+                    Err(error) => {
+                        let error = format!(
+                            "task {} ('{}') has invalid when condition '{}': {}",
+                            task_index, task.name, condition, error
+                        );
+                        let mut work_units = self.work_units.write().await;
+                        let execution = work_units
+                            .get_mut(&id)
+                            .ok_or_else(|| ControllerError::WorkUnitNotFound(id.clone()))?;
+                        execution.task_results.insert(
+                            task_index,
+                            Self::task_error(
+                                error.clone(),
+                                serde_json::json!({ "when": condition }),
+                            ),
+                        );
+                        if !task.ignore_errors {
+                            execution.state = WorkUnitState::Failed {
+                                error: error.clone(),
+                            };
+                            execution.work_unit.state = execution.state.clone();
+                            work_unit_failed = Some(error);
+                            break;
+                        }
+                        continue;
+                    }
+                }
+            }
+
             let task_result = self.execute_task(&task).await;
             let task_success = task_result.success;
             let task_error = task_result
@@ -652,5 +704,35 @@ mod tests {
         let task_result = execution.task_results.get(&0).unwrap();
         assert!(!task_result.success);
         assert!(task_result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_execute_work_unit_skips_task_when_condition_is_false() {
+        let controller = Controller::new(test_config()).await.unwrap();
+
+        let mut task = test_task(
+            "conditionally skipped task",
+            "command",
+            HashMap::from([("program".to_string(), json!("echo"))]),
+        );
+        task.when = Some("false".to_string());
+
+        let work_unit = WorkUnit::new(RunId::generate(), 0, vec![]).with_task(task);
+        let work_unit_id = work_unit.id.clone();
+
+        controller.execute_work_unit(work_unit).await.unwrap();
+
+        let state = controller
+            .get_work_unit_status(&work_unit_id)
+            .await
+            .unwrap();
+        assert!(matches!(state, WorkUnitState::Completed));
+
+        let work_units = controller.work_units.read().await;
+        let execution = work_units.get(&work_unit_id).unwrap();
+        let task_result = execution.task_results.get(&0).unwrap();
+        assert!(task_result.success);
+        assert!(task_result.error.is_none());
+        assert_eq!(task_result.result.get("skipped"), Some(&json!(true)));
     }
 }
