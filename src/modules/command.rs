@@ -12,7 +12,7 @@ use super::{
     ParamExt,
 };
 use crate::connection::{Connection, ExecuteOptions};
-use crate::utils::{cmd_escape, powershell_escape, shell_escape};
+use crate::utils::{cmd_arg_escape, powershell_escape, shell_escape};
 use once_cell::sync::Lazy;
 use std::path::Path;
 use std::process::Command;
@@ -89,7 +89,7 @@ impl CommandModule {
             let escaped_args: Vec<std::borrow::Cow<'_, str>> = argv
                 .iter()
                 .map(|arg| match shell_type.as_str() {
-                    "cmd" => cmd_escape(arg),
+                    "cmd" => cmd_arg_escape(arg),
                     "powershell" => powershell_escape(arg),
                     "posix" | "sh" | "bash" => shell_escape(arg),
                     _ => shell_escape(arg), // Default to POSIX for safety/backward compatibility
@@ -470,6 +470,22 @@ impl Module for CommandModule {
             validate_command_args(&cmd)?;
         }
 
+        if params
+            .get_string("shell_type")?
+            .map(|s| s.eq_ignore_ascii_case("cmd"))
+            .unwrap_or(false)
+        {
+            for key in ["cmd", "_raw_params"] {
+                if let Some(value) = params.get_string(key)? {
+                    if value.contains('%') {
+                        return Err(ModuleError::InvalidParameter(
+                            "Percent signs are not allowed in cmd shell command strings; use argv for literal % values".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -703,6 +719,16 @@ mod security_check {
         params.insert("cmd".to_string(), serde_json::json!("ls | grep vulnerable"));
 
         // After fix: This should return Err because validate_command_args is called
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_command_module_rejects_percent_in_cmd_shell_string() {
+        let module = CommandModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("cmd".to_string(), serde_json::json!("echo %USERNAME%"));
+        params.insert("shell_type".to_string(), serde_json::json!("cmd"));
+
         assert!(module.validate_params(&params).is_err());
     }
 }

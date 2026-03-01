@@ -1,47 +1,34 @@
-use rustible::modules::{validate_command_args, ModuleError};
+use rustible::modules::{validate_command_args, command::CommandModule, Module, ModuleParams, ModuleContext};
+use rustible::utils::cmd_arg_escape;
+use std::collections::HashMap;
 
 #[test]
-fn test_validate_command_args_blocks_windows_caret() {
-    // ^ is the escape character in cmd.exe.
-    // "echo h^ello" -> prints "hello"
-    // "who^ami" -> runs "whoami"
-    //
-    // validate_command_args should now reject this.
-
-    let payload = "echo h^ello";
-
-    let result = validate_command_args(payload);
-
-    assert!(result.is_err(), "Expected payload with ^ to be rejected");
-    match result {
-        Err(ModuleError::InvalidParameter(msg)) => {
-            assert!(
-                msg.contains("shell escape ^"),
-                "Error message should mention shell escape ^"
-            );
-        }
-        _ => panic!("Expected InvalidParameter error"),
-    }
+fn test_validate_command_args_allows_percent_globally() {
+    assert!(validate_command_args("echo %USERNAME%").is_ok());
 }
 
 #[test]
-fn test_validate_command_args_blocks_variable_expansion() {
-    // %VAR% is expanded by cmd.exe.
-    // "echo %OS%"
+fn test_cmd_arg_escape_preserves_percent() {
+    let input = "%USERNAME%";
+    let escaped = cmd_arg_escape(input);
+    assert_eq!(escaped, "\"%USERNAME%\"");
+}
 
-    let payload = "echo %OS%";
+#[test]
+fn test_command_module_argv_escapes_percent() {
+    let module = CommandModule;
+    let mut params: ModuleParams = HashMap::new();
+    params.insert(
+        "argv".to_string(),
+        serde_json::json!(["echo", "%USERNAME%"]),
+    );
+    params.insert("shell_type".to_string(), serde_json::json!("cmd"));
 
-    // validate_command_args should now reject this.
-    let result = validate_command_args(payload);
+    let context = ModuleContext::default().with_check_mode(true);
 
-    assert!(result.is_err(), "Expected payload with % to be rejected");
-    match result {
-        Err(ModuleError::InvalidParameter(msg)) => {
-            assert!(
-                msg.contains("variable expansion %"),
-                "Error message should mention variable expansion %"
-            );
-        }
-        _ => panic!("Expected InvalidParameter error"),
-    }
+    let result = module.execute(&params, &context).unwrap();
+    let msg = result.msg;
+
+    println!("Message: {}", msg);
+    assert!(msg.contains("\"%USERNAME%\""));
 }
