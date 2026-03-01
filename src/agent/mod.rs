@@ -188,6 +188,9 @@ pub struct AgentRequest {
     pub method: AgentMethod,
     /// Request parameters
     pub params: Option<serde_json::Value>,
+    /// Optional auth token for runtime authentication
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_token: Option<String>,
 }
 
 /// Agent methods
@@ -521,7 +524,9 @@ impl AgentRuntime {
                 ))
             })?;
 
-            self.handle_connection(stream).await?;
+            if let Err(error) = self.handle_connection(stream).await {
+                tracing::warn!("TCP client session ended with error: {}", error);
+            }
         }
 
         Ok(())
@@ -578,7 +583,9 @@ impl AgentRuntime {
                 ))
             })?;
 
-            self.handle_connection(stream).await?;
+            if let Err(error) = self.handle_connection(stream).await {
+                tracing::warn!("Unix client session ended with error: {}", error);
+            }
         }
 
         Ok(())
@@ -638,6 +645,17 @@ impl AgentRuntime {
     async fn handle_request(&self, request: AgentRequest) -> AgentResponse {
         use serde_json::json;
         use std::sync::atomic::Ordering;
+
+        if let Some(expected) = self.config.auth_token.as_deref() {
+            let provided = request.auth_token.as_deref();
+            if provided != Some(expected) {
+                return AgentResponse {
+                    id: request.id,
+                    result: None,
+                    error: Some(rpc_error(-32001, "Unauthorized")),
+                };
+            }
+        }
 
         match request.method {
             AgentMethod::Execute => {
@@ -825,6 +843,7 @@ impl AgentClient {
             id: uuid::Uuid::new_v4().to_string(),
             method: AgentMethod::Ping,
             params: None,
+            auth_token: self.auth_token.clone(),
         };
 
         let response = self.send_request(request).await?;
@@ -855,6 +874,7 @@ impl AgentClient {
                 serde_json::to_value(&params)
                     .map_err(|e| AgentError::Serialization(e.to_string()))?,
             ),
+            auth_token: self.auth_token.clone(),
         };
 
         let response = self.send_request(request).await?;
@@ -923,6 +943,7 @@ impl AgentClient {
             id: uuid::Uuid::new_v4().to_string(),
             method: AgentMethod::Status,
             params: None,
+            auth_token: self.auth_token.clone(),
         };
 
         let response = self.send_request(request).await?;
@@ -935,6 +956,7 @@ impl AgentClient {
             id: uuid::Uuid::new_v4().to_string(),
             method: AgentMethod::Shutdown,
             params: None,
+            auth_token: self.auth_token.clone(),
         };
 
         let _ = self.send_request(request).await?;
