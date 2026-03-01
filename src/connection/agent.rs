@@ -156,6 +156,7 @@ impl Connection for AgentConnection {
                     ))
                 })?,
             ),
+            auth_token: None,
         };
 
         let agent_cmd = self.build_agent_command(&request)?;

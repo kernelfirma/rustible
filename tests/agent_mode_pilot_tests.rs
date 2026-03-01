@@ -522,6 +522,7 @@ mod protocol_tests {
                 "command": "echo hello",
                 "shell": true
             })),
+            auth_token: None,
         };
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
