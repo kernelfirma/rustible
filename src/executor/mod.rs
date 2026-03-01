@@ -217,6 +217,8 @@ pub enum ExecutionEvent {
     PlayStart(String),
     /// Task execution started
     TaskStart { task: String, host: Option<String> },
+    /// Task execution started globally (all hosts)
+    TaskStartGlobal(String),
     /// Task completed on a host
     HostTaskComplete(String, String, TaskResult), // host, task_name, result
     /// Playbook execution finished
@@ -1029,6 +1031,8 @@ impl Executor {
 
                 if continue_outer_loop { continue; }
             }
+
+            self.emit_event(ExecutionEvent::TaskStartGlobal(task.name.clone()));
 
             // Run task on all active hosts in parallel (limited by semaphore)
             let task_results = self
