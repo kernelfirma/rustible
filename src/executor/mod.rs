@@ -932,8 +932,6 @@ impl Executor {
         let mut step_mode = self.config.step;
 
         for task in tasks {
-            self.emit_event(ExecutionEvent::TaskStartGlobal(task.name.clone()));
-
             // Determine which hosts should run this task based on block state
             let active_hosts: Vec<_> = hosts
                 .iter()
@@ -1033,6 +1031,8 @@ impl Executor {
 
                 if continue_outer_loop { continue; }
             }
+
+            self.emit_event(ExecutionEvent::TaskStartGlobal(task.name.clone()));
 
             // Run task on all active hosts in parallel (limited by semaphore)
             let task_results = self
