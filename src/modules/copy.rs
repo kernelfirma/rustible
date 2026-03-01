@@ -117,6 +117,9 @@ impl CopyModule {
             }
         }
 
+        // Open source first so destination is never truncated on source-side errors.
+        let mut src_file = fs::File::open(src)?;
+
         // Open destination file with specific options for security
         let mut options = fs::OpenOptions::new();
         options.write(true).create(true).truncate(true);
@@ -128,7 +131,6 @@ impl CopyModule {
         }
 
         let mut dest_file = options.open(dest)?;
-        let mut src_file = fs::File::open(src)?;
 
         std::io::copy(&mut src_file, &mut dest_file)?;
 
