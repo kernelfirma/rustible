@@ -93,10 +93,7 @@ impl GitModule {
     }
 
     /// Build execution options with SSH configuration applied
-    fn build_git_exec_options(
-        context: &ModuleContext,
-        ssh_config: &SshConfig,
-    ) -> ExecuteOptions {
+    fn build_git_exec_options(context: &ModuleContext, ssh_config: &SshConfig) -> ExecuteOptions {
         let mut options = Self::get_exec_options(context);
         ssh_config.apply_to_options(&mut options);
         options
@@ -181,10 +178,7 @@ impl GitModule {
         context: &ModuleContext,
     ) -> ModuleResult<bool> {
         let escaped = shell_escape(dest);
-        let cmd = format!(
-            "test -f {}/HEAD && test -d {}/objects",
-            escaped, escaped
-        );
+        let cmd = format!("test -f {}/HEAD && test -d {}/objects", escaped, escaped);
         let options = Self::get_exec_options(context);
         let (success, _, _) = Self::run_command(connection, &cmd, options)?;
         Ok(success)
@@ -213,10 +207,7 @@ impl GitModule {
         dest: &str,
         context: &ModuleContext,
     ) -> ModuleResult<Option<String>> {
-        let cmd = format!(
-            "git -C {} rev-parse --abbrev-ref HEAD",
-            shell_escape(dest)
-        );
+        let cmd = format!("git -C {} rev-parse --abbrev-ref HEAD", shell_escape(dest));
         let options = Self::get_exec_options(context);
         let (success, stdout, _) = Self::run_command(connection, &cmd, options)?;
 
@@ -453,8 +444,8 @@ impl GitModule {
             )?;
         }
 
-        let new_version =
-            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
+        let new_version = Self::get_current_version(connection, dest, context)?
+            .unwrap_or_else(|| "unknown".to_string());
 
         Ok(
             ModuleOutput::changed(format!("Cloned repository '{}' to '{}'", repo, dest))
@@ -487,8 +478,8 @@ impl GitModule {
         let escaped_dest = shell_escape(dest);
 
         // Get current version before update
-        let before_version =
-            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
+        let before_version = Self::get_current_version(connection, dest, context)?
+            .unwrap_or_else(|| "unknown".to_string());
 
         if context.check_mode {
             return Ok((false, before_version.clone(), before_version, vec![]));
@@ -508,11 +499,7 @@ impl GitModule {
                 shell_escape(rs)
             )
         } else {
-            format!(
-                "git -C {} fetch {}",
-                escaped_dest,
-                shell_escape(remote)
-            )
+            format!("git -C {} fetch {}", escaped_dest, shell_escape(remote))
         };
         let options = Self::build_git_exec_options(context, ssh_config);
         let (success, _, stderr) = Self::run_command(connection, &fetch_cmd, options)?;
@@ -530,10 +517,7 @@ impl GitModule {
             format!("{}/HEAD", shell_escape(remote))
         };
 
-        let checkout_cmd = format!(
-            "git -C {} checkout {}",
-            escaped_dest, checkout_target
-        );
+        let checkout_cmd = format!("git -C {} checkout {}", escaped_dest, checkout_target);
         let options = Self::get_exec_options(context);
         let (success, _, stderr) = Self::run_command(connection, &checkout_cmd, options)?;
         if !success {
@@ -547,10 +531,7 @@ impl GitModule {
         let current_branch = Self::get_current_branch(connection, dest, context)?;
         if current_branch.is_some() {
             let pull_flag = if force { "--force" } else { "--ff-only" };
-            let pull_cmd = format!(
-                "git -C {} pull {}",
-                escaped_dest, pull_flag
-            );
+            let pull_cmd = format!("git -C {} pull {}", escaped_dest, pull_flag);
             let options = Self::build_git_exec_options(context, ssh_config);
             let _ = Self::run_command(connection, &pull_cmd, options);
         }
@@ -566,8 +547,8 @@ impl GitModule {
         }
 
         // Get version after update
-        let after_version =
-            Self::get_current_version(connection, dest, context)?.unwrap_or_else(|| "unknown".to_string());
+        let after_version = Self::get_current_version(connection, dest, context)?
+            .unwrap_or_else(|| "unknown".to_string());
 
         // Get commit log if versions differ
         let commits = if before_version != after_version {
@@ -883,9 +864,8 @@ impl Module for GitModule {
             }
         } else {
             // Just check current version
-            let current_version =
-                Self::get_current_version(connection, &dest, context)?
-                    .unwrap_or_else(|| "unknown".to_string());
+            let current_version = Self::get_current_version(connection, &dest, context)?
+                .unwrap_or_else(|| "unknown".to_string());
 
             Ok(ModuleOutput::ok(format!(
                 "Repository exists at version '{}'",

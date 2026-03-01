@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::RwLock;
 
 /// Work assignment strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AssignmentStrategy {
     /// Simple round-robin distribution
     RoundRobin,
@@ -23,7 +22,6 @@ pub enum AssignmentStrategy {
     #[default]
     Adaptive,
 }
-
 
 /// Trait for work assignment strategies
 pub trait WorkAssigner: Send + Sync {

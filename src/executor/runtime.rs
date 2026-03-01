@@ -695,15 +695,10 @@ impl RuntimeContext {
             self.all_hosts.push(host.clone());
         }
 
-        self.host_data
-            .entry(host.clone())
-            .or_default();
+        self.host_data.entry(host.clone()).or_default();
 
         if let Some(group_name) = group {
-            let group = self
-                .groups
-                .entry(group_name.to_string())
-                .or_default();
+            let group = self.groups.entry(group_name.to_string()).or_default();
 
             if !group.hosts.contains(&host) {
                 group.hosts.push(host);
@@ -752,10 +747,7 @@ impl RuntimeContext {
 
     /// Set a fact for a host
     pub fn set_host_fact(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.set_fact(name, value);
     }
 
@@ -768,10 +760,7 @@ impl RuntimeContext {
 
     /// Set all facts for a host
     pub fn set_host_facts(&mut self, host: &str, facts: IndexMap<String, JsonValue>) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         for (k, v) in facts {
             host_data.set_fact(k, v);
         }
@@ -780,10 +769,7 @@ impl RuntimeContext {
     /// Register a task result for a host
     pub fn register_result(&mut self, host: &str, name: String, result: RegisteredResult) {
         debug!("Registering result '{}' for host '{}'", name, host);
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.register(name, result);
     }
 
@@ -796,10 +782,7 @@ impl RuntimeContext {
 
     /// Set a host variable
     pub fn set_host_var(&mut self, host: &str, name: String, value: JsonValue) {
-        let host_data = self
-            .host_data
-            .entry(host.to_string())
-            .or_default();
+        let host_data = self.host_data.entry(host.to_string()).or_default();
         host_data.set_var(name, value);
     }
 
@@ -983,10 +966,7 @@ impl RuntimeContext {
 
     /// Set a group variable
     pub fn set_group_var(&mut self, group: &str, name: String, value: JsonValue) {
-        let group_data = self
-            .groups
-            .entry(group.to_string())
-            .or_default();
+        let group_data = self.groups.entry(group.to_string()).or_default();
         group_data.vars.insert(name, value);
     }
 

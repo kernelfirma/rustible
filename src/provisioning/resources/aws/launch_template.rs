@@ -642,12 +642,14 @@ impl AwsLaunchTemplateResource {
     fn encode_user_data(&self, user_data: &str) -> String {
         if user_data.chars().all(|c| {
             c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' || c.is_whitespace()
-        })
-            && base64::Engine::decode(&base64::engine::general_purpose::STANDARD, user_data.trim())
-                .is_ok()
-            {
-                return user_data.to_string();
-            }
+        }) && base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            user_data.trim(),
+        )
+        .is_ok()
+        {
+            return user_data.to_string();
+        }
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, user_data)
     }
 

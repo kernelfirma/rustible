@@ -35,10 +35,7 @@ impl PodmanConnection {
     }
 
     /// Create a new Podman connection with a custom podman path
-    pub fn with_podman_path(
-        container: impl Into<String>,
-        podman_path: impl Into<String>,
-    ) -> Self {
+    pub fn with_podman_path(container: impl Into<String>, podman_path: impl Into<String>) -> Self {
         Self {
             container: container.into(),
             podman_path: podman_path.into(),
@@ -143,10 +140,7 @@ impl Connection for PodmanConnection {
             let timeout = tokio::time::Duration::from_secs(timeout_secs);
             match tokio::time::timeout(timeout, child.wait_with_output()).await {
                 Ok(result) => result.map_err(|e| {
-                    ConnectionError::ExecutionFailed(format!(
-                        "Failed to wait for process: {}",
-                        e
-                    ))
+                    ConnectionError::ExecutionFailed(format!("Failed to wait for process: {}", e))
                 })?,
                 Err(_) => return Err(ConnectionError::Timeout(timeout_secs)),
             }
@@ -268,10 +262,7 @@ impl Connection for PodmanConnection {
 
         if let Some(parent) = local_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ConnectionError::TransferFailed(format!(
-                    "Failed to create local directory: {}",
-                    e
-                ))
+                ConnectionError::TransferFailed(format!("Failed to create local directory: {}", e))
             })?;
         }
 

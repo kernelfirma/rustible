@@ -38,12 +38,7 @@ fn generate_host_fleet(count: usize) -> Vec<SimulatedHost> {
 
             SimulatedHost {
                 hostname: format!("node{:05}", i),
-                ip: format!(
-                    "10.{}.{}.{}",
-                    (i / 65536) % 256,
-                    (i / 256) % 256,
-                    i % 256
-                ),
+                ip: format!("10.{}.{}.{}", (i / 65536) % 256, (i / 256) % 256, i % 256),
                 groups: vec![
                     format!("rack{:03}", rack),
                     if i % 4 == 0 {

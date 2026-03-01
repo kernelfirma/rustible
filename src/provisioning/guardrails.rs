@@ -11,8 +11,7 @@ use super::plan::ExecutionPlan;
 use super::traits::ChangeType;
 
 /// Configuration for blast radius guardrails.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BlastRadiusConfig {
     /// Maximum absolute number of resources that may be destroyed.
     pub max_destroy_count: Option<usize>,
@@ -50,7 +49,6 @@ impl BlastRadiusConfig {
         self
     }
 }
-
 
 /// Report summarising the blast radius of an execution plan.
 #[derive(Debug, Clone, Serialize, Deserialize)]

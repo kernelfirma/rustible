@@ -240,7 +240,6 @@ pub mod utils;
 /// including host vars, group vars, play vars, and extra vars from the command line.
 pub mod vars;
 
-
 // ============================================================================
 // Playbook Components
 // ============================================================================
@@ -363,7 +362,6 @@ pub mod inventory;
 /// # }
 /// ```
 pub mod executor;
-
 
 // ============================================================================
 // Caching System

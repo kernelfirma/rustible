@@ -491,95 +491,101 @@ impl Inventory {
 
         if let serde_yaml::Value::Mapping(map) = value {
             // Parse hosts
-            if let Some(serde_yaml::Value::Mapping(hosts_map)) = map.get(serde_yaml::Value::String("hosts".to_string())) {
-                    for (host_key, host_value) in hosts_map {
-                        if let serde_yaml::Value::String(host_name) = host_key {
-                            // Check if host already exists
-                            let host_exists = self.hosts.contains_key(host_name);
+            if let Some(serde_yaml::Value::Mapping(hosts_map)) =
+                map.get(serde_yaml::Value::String("hosts".to_string()))
+            {
+                for (host_key, host_value) in hosts_map {
+                    if let serde_yaml::Value::String(host_name) = host_key {
+                        // Check if host already exists
+                        let host_exists = self.hosts.contains_key(host_name);
 
-                            if host_exists {
-                                // Host exists - just add it to this group and merge vars
-                                if let Some(existing_host) = self.hosts.get_mut(host_name) {
-                                    existing_host.add_to_group(name.to_string());
+                        if host_exists {
+                            // Host exists - just add it to this group and merge vars
+                            if let Some(existing_host) = self.hosts.get_mut(host_name) {
+                                existing_host.add_to_group(name.to_string());
 
-                                    // Parse and merge host variables
-                                    if let serde_yaml::Value::Mapping(host_vars) = host_value {
-                                        for (var_key, var_value) in host_vars {
-                                            if let serde_yaml::Value::String(key) = var_key {
-                                                Self::apply_host_var_static(
-                                                    existing_host,
-                                                    key,
-                                                    var_value.clone(),
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Add host to group
-                                if let Some(g) = self.groups.get_mut(name) {
-                                    g.add_host(host_name.clone());
-                                }
-                            } else {
-                                // New host - create it
-                                let mut host = Host::new(host_name.clone());
-
-                                // Parse host variables
+                                // Parse and merge host variables
                                 if let serde_yaml::Value::Mapping(host_vars) = host_value {
                                     for (var_key, var_value) in host_vars {
                                         if let serde_yaml::Value::String(key) = var_key {
                                             Self::apply_host_var_static(
-                                                &mut host,
+                                                existing_host,
                                                 key,
                                                 var_value.clone(),
                                             );
                                         }
                                     }
                                 }
+                            }
 
-                                host.add_to_group(name.to_string());
+                            // Add host to group
+                            if let Some(g) = self.groups.get_mut(name) {
+                                g.add_host(host_name.clone());
+                            }
+                        } else {
+                            // New host - create it
+                            let mut host = Host::new(host_name.clone());
 
-                                // Get mutable reference to group and add host
-                                if let Some(g) = self.groups.get_mut(name) {
-                                    g.add_host(host_name.clone());
-                                }
-
-                                // Add to all group
-                                if name != "all" {
-                                    host.add_to_group("all".to_string());
-                                    if let Some(all_group) = self.groups.get_mut("all") {
-                                        all_group.add_host(host_name.clone());
+                            // Parse host variables
+                            if let serde_yaml::Value::Mapping(host_vars) = host_value {
+                                for (var_key, var_value) in host_vars {
+                                    if let serde_yaml::Value::String(key) = var_key {
+                                        Self::apply_host_var_static(
+                                            &mut host,
+                                            key,
+                                            var_value.clone(),
+                                        );
                                     }
                                 }
-
-                                self.hosts.insert(host_name.clone(), host);
                             }
+
+                            host.add_to_group(name.to_string());
+
+                            // Get mutable reference to group and add host
+                            if let Some(g) = self.groups.get_mut(name) {
+                                g.add_host(host_name.clone());
+                            }
+
+                            // Add to all group
+                            if name != "all" {
+                                host.add_to_group("all".to_string());
+                                if let Some(all_group) = self.groups.get_mut("all") {
+                                    all_group.add_host(host_name.clone());
+                                }
+                            }
+
+                            self.hosts.insert(host_name.clone(), host);
                         }
                     }
+                }
             }
 
             // Parse children
-            if let Some(serde_yaml::Value::Mapping(children_map)) = map.get(serde_yaml::Value::String("children".to_string())) {
-                    for (child_key, child_value) in children_map {
-                        if let serde_yaml::Value::String(child_name) = child_key {
-                            // Get mutable reference to group and add child
-                            if let Some(g) = self.groups.get_mut(name) {
-                                g.add_child(child_name.clone());
-                            }
-                            self.parse_yaml_group(child_name, child_value)?;
+            if let Some(serde_yaml::Value::Mapping(children_map)) =
+                map.get(serde_yaml::Value::String("children".to_string()))
+            {
+                for (child_key, child_value) in children_map {
+                    if let serde_yaml::Value::String(child_name) = child_key {
+                        // Get mutable reference to group and add child
+                        if let Some(g) = self.groups.get_mut(name) {
+                            g.add_child(child_name.clone());
                         }
+                        self.parse_yaml_group(child_name, child_value)?;
                     }
+                }
             }
 
             // Parse vars
-            if let Some(serde_yaml::Value::Mapping(vars_map)) = map.get(serde_yaml::Value::String("vars".to_string())) {
-                    for (var_key, var_value) in vars_map {
-                        if let serde_yaml::Value::String(key) = var_key {
-                            if let Some(g) = self.groups.get_mut(name) {
-                                g.set_var(key.clone(), var_value.clone());
-                            }
+            if let Some(serde_yaml::Value::Mapping(vars_map)) =
+                map.get(serde_yaml::Value::String("vars".to_string()))
+            {
+                for (var_key, var_value) in vars_map {
+                    if let serde_yaml::Value::String(key) = var_key {
+                        if let Some(g) = self.groups.get_mut(name) {
+                            g.set_var(key.clone(), var_value.clone());
                         }
                     }
+                }
             }
         }
 

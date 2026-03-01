@@ -567,14 +567,10 @@ impl K8sConfigMapModule {
                             // Check if update is needed by comparing data
                             let existing_data = existing.get("data");
                             let desired_data = manifest.get("data");
-                            let existing_labels =
-                                existing.pointer("/metadata/labels");
-                            let desired_labels =
-                                manifest.pointer("/metadata/labels");
+                            let existing_labels = existing.pointer("/metadata/labels");
+                            let desired_labels = manifest.pointer("/metadata/labels");
 
-                            if existing_data != desired_data
-                                || existing_labels != desired_labels
-                            {
+                            if existing_data != desired_data || existing_labels != desired_labels {
                                 return Err(ModuleError::ExecutionFailed(
                                     "Cannot update immutable ConfigMap".to_string(),
                                 ));

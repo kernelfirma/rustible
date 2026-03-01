@@ -219,26 +219,17 @@ impl<C: Connection + Send + Sync> Connection for ChaosConnection<C> {
         self.inner.download(src, dest).await
     }
 
-    async fn download_content(
-        &self,
-        src: &std::path::Path,
-    ) -> ConnectionResult<Vec<u8>> {
+    async fn download_content(&self, src: &std::path::Path) -> ConnectionResult<Vec<u8>> {
         self.maybe_fail().await?;
         self.inner.download_content(src).await
     }
 
-    async fn path_exists(
-        &self,
-        path: &std::path::Path,
-    ) -> ConnectionResult<bool> {
+    async fn path_exists(&self, path: &std::path::Path) -> ConnectionResult<bool> {
         self.maybe_fail().await?;
         self.inner.path_exists(path).await
     }
 
-    async fn is_directory(
-        &self,
-        path: &std::path::Path,
-    ) -> ConnectionResult<bool> {
+    async fn is_directory(&self, path: &std::path::Path) -> ConnectionResult<bool> {
         self.maybe_fail().await?;
         self.inner.is_directory(path).await
     }
@@ -289,10 +280,7 @@ async fn test_random_connection_failures_10_percent() {
     let total_ops = 50;
 
     for i in 0..total_ops {
-        match chaos_conn
-            .execute(&format!("echo test_{}", i), None)
-            .await
-        {
+        match chaos_conn.execute(&format!("echo test_{}", i), None).await {
             Ok(result) if result.success => successes += 1,
             _ => failures += 1,
         }
@@ -348,10 +336,7 @@ async fn test_random_connection_failures_30_percent() {
     let total_ops = 50;
 
     for i in 0..total_ops {
-        match chaos_conn
-            .execute(&format!("echo test_{}", i), None)
-            .await
-        {
+        match chaos_conn.execute(&format!("echo test_{}", i), None).await {
             Ok(result) if result.success => successes += 1,
             _ => failures += 1,
         }
@@ -463,9 +448,7 @@ async fn test_high_latency_with_timeout() {
     let start = Instant::now();
 
     // Simple command with high latency
-    let result = chaos_conn
-        .execute("echo 'high latency test'", None)
-        .await;
+    let result = chaos_conn.execute("echo 'high latency test'", None).await;
     let elapsed = start.elapsed();
 
     assert!(result.is_ok(), "Command should complete despite latency");
@@ -511,9 +494,7 @@ async fn test_fail_after_n_operations() {
     let mut results = vec![];
 
     for i in 0..10 {
-        let result = chaos_conn
-            .execute(&format!("echo op_{}", i), None)
-            .await;
+        let result = chaos_conn.execute(&format!("echo op_{}", i), None).await;
         results.push(result.is_ok());
     }
 
@@ -711,9 +692,7 @@ async fn test_connection_pool_exhaustion_recovery() {
                     // Hold connection briefly
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     let conn: Arc<dyn Connection + Send + Sync> = Arc::new(conn);
-                    let _ = conn
-                        .execute(&format!("echo worker_{}", i), None)
-                        .await;
+                    let _ = conn.execute(&format!("echo worker_{}", i), None).await;
                     pool.put(pool_key, conn).await;
                     true
                 }

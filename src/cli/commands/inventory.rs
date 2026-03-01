@@ -617,11 +617,7 @@ impl ListTasksArgs {
 
                             if self.detailed {
                                 if let Some(tags) = &task.tags {
-                                    println!(
-                                        "       {}: {:?}",
-                                        "Tags".yellow(),
-                                        tags
-                                    );
+                                    println!("       {}: {:?}", "Tags".yellow(), tags);
                                 }
                                 if let Some(when) = &task.when {
                                     println!("       {}: {}", "When".yellow(), when);

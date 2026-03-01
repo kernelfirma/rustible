@@ -4159,7 +4159,9 @@ async fn test_nvidia_gpu_sets_compute_mode_and_power_limit() {
 
     let commands = mock.get_commands();
     assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -c 2")));
-    assert!(commands.iter().any(|cmd| cmd.contains("nvidia-smi -pl 300")));
+    assert!(commands
+        .iter()
+        .any(|cmd| cmd.contains("nvidia-smi -pl 300")));
 }
 
 #[cfg(feature = "gpu")]
@@ -4281,6 +4283,8 @@ async fn test_nvidia_gpu_check_mode_reports_changes() {
     assert_eq!(result.status, ModuleStatus::Changed);
 
     let commands = mock.get_commands();
-    assert!(commands.iter().any(|cmd| cmd.contains("dpkg -s nvidia-driver-535")));
+    assert!(commands
+        .iter()
+        .any(|cmd| cmd.contains("dpkg -s nvidia-driver-535")));
     assert!(!commands.iter().any(|cmd| cmd.contains("nvidia-smi -pm")));
 }

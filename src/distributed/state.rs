@@ -11,8 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 /// Consistency level for read operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConsistencyLevel {
     /// Read from any source, may be stale
     Eventual,
@@ -24,7 +23,6 @@ pub enum ConsistencyLevel {
     /// Read from quorum of controllers
     Quorum,
 }
-
 
 /// Hybrid Logical Clock for ordering events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

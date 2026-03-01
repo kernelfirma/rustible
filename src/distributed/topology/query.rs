@@ -12,10 +12,7 @@ pub struct TopologyQuery;
 
 impl TopologyQuery {
     /// Return all nodes matching a given [`NodeType`].
-    pub fn nodes_by_type(
-        topology: &ClusterTopology,
-        node_type: NodeType,
-    ) -> Vec<&TopologyNode> {
+    pub fn nodes_by_type(topology: &ClusterTopology, node_type: NodeType) -> Vec<&TopologyNode> {
         topology
             .nodes()
             .filter(|n| n.node_type == node_type)
@@ -23,10 +20,7 @@ impl TopologyQuery {
     }
 
     /// Return all nodes matching a given [`NodeRole`].
-    pub fn nodes_by_role(
-        topology: &ClusterTopology,
-        role: NodeRole,
-    ) -> Vec<&TopologyNode> {
+    pub fn nodes_by_role(topology: &ClusterTopology, role: NodeRole) -> Vec<&TopologyNode> {
         topology.nodes().filter(|n| n.role == role).collect()
     }
 

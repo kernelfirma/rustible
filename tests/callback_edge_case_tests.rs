@@ -1279,12 +1279,14 @@ async fn test_nested_playbook_calls() {
 async fn test_mixed_success_and_failure() {
     let callback = TrackingCallback::new();
 
-    let scenarios = [(true, false, "Success without changes"),
+    let scenarios = [
+        (true, false, "Success without changes"),
         (true, true, "Success with changes"),
         (false, false, "Failure"),
         (true, false, "Recovery after failure"),
         (false, false, "Another failure"),
-        (true, true, "Final success with changes")];
+        (true, true, "Final success with changes"),
+    ];
 
     for (i, (success, changed, msg)) in scenarios.iter().enumerate() {
         let result = create_result(&format!("host{}", i), "task", *success, *changed, msg);

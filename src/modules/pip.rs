@@ -216,7 +216,11 @@ impl PipModule {
     ) -> ModuleResult<bool> {
         let pkg_name = Self::extract_package_name(package);
 
-        let cmd = format!("{} show {}", config.build_command_string(), shell_escape(&pkg_name));
+        let cmd = format!(
+            "{} show {}",
+            config.build_command_string(),
+            shell_escape(&pkg_name)
+        );
         match conn.execute(&cmd, options).await {
             Ok(result) => Ok(result.success),
             Err(_) => Ok(false),
@@ -244,7 +248,11 @@ impl PipModule {
     ) -> ModuleResult<Option<String>> {
         let pkg_name = Self::extract_package_name(package);
 
-        let cmd = format!("{} show {}", config.build_command_string(), shell_escape(&pkg_name));
+        let cmd = format!(
+            "{} show {}",
+            config.build_command_string(),
+            shell_escape(&pkg_name)
+        );
         match conn.execute(&cmd, options).await {
             Ok(result) if result.success => {
                 for line in result.stdout.lines() {
@@ -329,10 +337,7 @@ impl PipModule {
         // Determine the command to use for creating virtualenv
         let venv_cmd = virtualenv_command.unwrap_or("python3 -m venv");
 
-        let mut parts: Vec<String> = venv_cmd
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
+        let mut parts: Vec<String> = venv_cmd.split_whitespace().map(|s| s.to_string()).collect();
 
         // Add system site-packages option if requested
         if site_packages {
@@ -595,9 +600,7 @@ impl Module for PipModule {
                                     Some(exec_options.clone()),
                                 )
                                 .await?;
-                                if let (Some(inst_ver), Some(req_ver)) =
-                                    (installed_ver, &version)
-                                {
+                                if let (Some(inst_ver), Some(req_ver)) = (installed_ver, &version) {
                                     // Simple exact match check - for complex version specs, always upgrade
                                     if inst_ver == *req_ver
                                         || req_ver.starts_with(&['>', '<', '!', '~'][..])
@@ -674,8 +677,7 @@ impl Module for PipModule {
                     }
 
                     // Convert to refs for the command
-                    let pkg_refs: Vec<&str> =
-                        to_install.iter().map(|s| s.as_str()).collect();
+                    let pkg_refs: Vec<&str> = to_install.iter().map(|s| s.as_str()).collect();
                     args.extend(pkg_refs);
 
                     let (success, stdout, stderr) = Self::execute_pip_command(
@@ -702,8 +704,7 @@ impl Module for PipModule {
 
                 if !to_remove.is_empty() {
                     let mut args: Vec<&str> = vec!["uninstall", "-y"];
-                    let pkg_refs: Vec<&str> =
-                        to_remove.iter().map(|s| s.as_str()).collect();
+                    let pkg_refs: Vec<&str> = to_remove.iter().map(|s| s.as_str()).collect();
                     args.extend(pkg_refs);
 
                     let (success, stdout, stderr) = Self::execute_pip_command(
@@ -747,10 +748,8 @@ impl Module for PipModule {
                         .with_data("results", serde_json::json!(results)))
                 } else {
                     Ok(
-                        ModuleOutput::ok(
-                            "All packages already in desired state".to_string(),
-                        )
-                        .with_data("results", serde_json::json!(results)),
+                        ModuleOutput::ok("All packages already in desired state".to_string())
+                            .with_data("results", serde_json::json!(results)),
                     )
                 }
             })

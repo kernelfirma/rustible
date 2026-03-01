@@ -762,16 +762,19 @@ impl DockerContainerModule {
         if let Some(conn) = context.connection.as_ref() {
             let rt = tokio::runtime::Handle::try_current()
                 .map_err(|_| ModuleError::ExecutionFailed("No tokio runtime available".into()))?;
-            let result = tokio::task::block_in_place(|| {
-                rt.block_on(conn.execute(cmd, None))
-            }).map_err(|e| ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
+            let result = tokio::task::block_in_place(|| rt.block_on(conn.execute(cmd, None)))
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to execute command: {}", e))
+                })?;
             Ok((result.success, result.stdout, result.stderr))
         } else {
             let output = std::process::Command::new("sh")
                 .arg("-c")
                 .arg(cmd)
                 .output()
-                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to run command: {}", e)))?;
+                .map_err(|e| {
+                    ModuleError::ExecutionFailed(format!("Failed to run command: {}", e))
+                })?;
             Ok((
                 output.status.success(),
                 String::from_utf8_lossy(&output.stdout).to_string(),
@@ -801,16 +804,16 @@ impl DockerContainerModule {
             ModuleError::MissingParameter("image is required for creating containers".to_string())
         })?;
 
-        let base = if detach { "docker run -d" } else { "docker create" };
+        let base = if detach {
+            "docker run -d"
+        } else {
+            "docker create"
+        };
         let mut cmd = format!("{} --name {}", base, shell_escape(&config.name));
 
         // Environment variables
         for (k, v) in &config.env {
-            cmd.push_str(&format!(
-                " -e {}={}",
-                shell_escape(k),
-                shell_escape(v)
-            ));
+            cmd.push_str(&format!(" -e {}={}", shell_escape(k), shell_escape(v)));
         }
 
         // Port mappings
@@ -839,11 +842,7 @@ impl DockerContainerModule {
 
         // Labels
         for (k, v) in &config.labels {
-            cmd.push_str(&format!(
-                " --label {}={}",
-                shell_escape(k),
-                shell_escape(v)
-            ));
+            cmd.push_str(&format!(" --label {}={}", shell_escape(k), shell_escape(v)));
         }
 
         // Hostname
@@ -935,8 +934,7 @@ impl DockerContainerModule {
                     } else {
                         // Stop if running
                         if Self::is_container_running(&config.name, context)? {
-                            let mut stop_cmd =
-                                format!("docker stop {}", escaped_name);
+                            let mut stop_cmd = format!("docker stop {}", escaped_name);
                             if let Some(timeout) = config.stop_timeout {
                                 stop_cmd.push_str(&format!(" --time {}", timeout));
                             }
@@ -1002,8 +1000,7 @@ impl DockerContainerModule {
                                     let (img_exists, _, _) = Self::run_cmd(&check_img, context)?;
                                     if !img_exists {
                                         let pull_cmd = format!("docker pull {}", escaped_image);
-                                        let (ok, _, stderr) =
-                                            Self::run_cmd(&pull_cmd, context)?;
+                                        let (ok, _, stderr) = Self::run_cmd(&pull_cmd, context)?;
                                         if !ok {
                                             return Err(ModuleError::ExecutionFailed(format!(
                                                 "Failed to pull image '{}': {}",
@@ -1039,8 +1036,7 @@ impl DockerContainerModule {
                     let running = Self::is_container_running(&config.name, context)?;
                     if !running {
                         if context.check_mode {
-                            messages
-                                .push(format!("Would start container '{}'", config.name));
+                            messages.push(format!("Would start container '{}'", config.name));
                             changed = true;
                         } else {
                             let start_cmd = format!("docker start {}", escaped_name);
@@ -1056,10 +1052,7 @@ impl DockerContainerModule {
                             changed = true;
                         }
                     } else {
-                        messages.push(format!(
-                            "Container '{}' is already running",
-                            config.name
-                        ));
+                        messages.push(format!("Container '{}' is already running", config.name));
                     }
                 } else if context.check_mode {
                     messages.push(format!(
@@ -1085,10 +1078,8 @@ impl DockerContainerModule {
                                 messages.push(format!("Pulled image '{}'", image));
                             }
                             PullPolicy::Missing => {
-                                let check_img = format!(
-                                    "docker image inspect {} 2>/dev/null",
-                                    escaped_image
-                                );
+                                let check_img =
+                                    format!("docker image inspect {} 2>/dev/null", escaped_image);
                                 let (img_exists, _, _) = Self::run_cmd(&check_img, context)?;
                                 if !img_exists {
                                     let pull_cmd = format!("docker pull {}", escaped_image);
@@ -1116,10 +1107,7 @@ impl DockerContainerModule {
                             stderr.trim()
                         )));
                     }
-                    messages.push(format!(
-                        "Created and started container '{}'",
-                        config.name
-                    ));
+                    messages.push(format!("Created and started container '{}'", config.name));
                     changed = true;
                 }
             }
@@ -1129,8 +1117,7 @@ impl DockerContainerModule {
                     let running = Self::is_container_running(&config.name, context)?;
                     if running {
                         if context.check_mode {
-                            messages
-                                .push(format!("Would stop container '{}'", config.name));
+                            messages.push(format!("Would stop container '{}'", config.name));
                             changed = true;
                         } else {
                             let mut stop_cmd = format!("docker stop {}", escaped_name);
@@ -1149,10 +1136,7 @@ impl DockerContainerModule {
                             changed = true;
                         }
                     } else {
-                        messages.push(format!(
-                            "Container '{}' is already stopped",
-                            config.name
-                        ));
+                        messages.push(format!("Container '{}' is already stopped", config.name));
                     }
                 } else {
                     return Err(ModuleError::ExecutionFailed(format!(
@@ -1165,8 +1149,7 @@ impl DockerContainerModule {
             ContainerState::Restarted => {
                 if exists {
                     if context.check_mode {
-                        messages
-                            .push(format!("Would restart container '{}'", config.name));
+                        messages.push(format!("Would restart container '{}'", config.name));
                         changed = true;
                     } else {
                         let restart_cmd = format!("docker restart {}", escaped_name);

@@ -61,7 +61,6 @@ pub enum TaskStatus {
     Unreachable,
 }
 
-
 /// Result of executing a task
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskResult {
@@ -366,7 +365,9 @@ impl From<crate::playbook::Task> for Task {
             // Standard loop or with_items - expect array
             if let Some(arr) = v.as_array() {
                 Some(LoopSource::Items(arr.clone()))
-            } else { v.as_str().map(|s| LoopSource::Template(s.to_string())) }
+            } else {
+                v.as_str().map(|s| LoopSource::Template(s.to_string()))
+            }
         } else if let Some(v) = pt.with_dict {
             // with_dict - convert dict to list of {key, value} objects
             if let Some(obj) = v.as_object() {
@@ -2678,10 +2679,12 @@ fn find_operator_outside_parens(expr: &str, op: &str) -> Option<usize> {
             b'(' => depth += 1,
             b')' => depth -= 1,
             _ => {
-                if depth == 0 && i + op_bytes.len() <= bytes.len()
-                    && &bytes[i..i + op_bytes.len()] == op_bytes {
-                        last_match = Some(i);
-                    }
+                if depth == 0
+                    && i + op_bytes.len() <= bytes.len()
+                    && &bytes[i..i + op_bytes.len()] == op_bytes
+                {
+                    last_match = Some(i);
+                }
             }
         }
         i += 1;

@@ -721,10 +721,12 @@ async fn test_complex_multi_host_playbook() {
     callback_manager.add_callback(recording.clone());
     callback_manager.add_callback(stats.clone());
 
-    let hosts = ["web1".to_string(),
+    let hosts = [
+        "web1".to_string(),
         "web2".to_string(),
         "web3".to_string(),
-        "db1".to_string()];
+        "db1".to_string(),
+    ];
 
     callback_manager
         .on_playbook_start("production_deploy")

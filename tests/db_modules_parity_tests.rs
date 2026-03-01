@@ -655,14 +655,16 @@ mod ansible_parity_tests {
     /// Ansible's postgresql_privs module supports these parameters
     #[test]
     fn test_postgresql_privs_ansible_params_documented() {
-        let ansible_params = ["database",
+        let ansible_params = [
+            "database",
             "state",
             "privs",
             "type",
             "objs",
             "schema",
             "roles",
-            "grant_option"];
+            "grant_option",
+        ];
 
         assert!(ansible_params.len() >= 8);
     }

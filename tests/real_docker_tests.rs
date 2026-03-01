@@ -22,8 +22,8 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 // Import the Connection trait so we can call .execute() / .close() etc.
-use rustible::connection::{Connection, ExecuteOptions};
 use rustible::connection::docker::DockerConnection;
+use rustible::connection::{Connection, ExecuteOptions};
 use rustible::modules::Module;
 
 mod common;
@@ -263,8 +263,7 @@ async fn test_docker_exec_as_different_user() {
     // Use escalation to run as a different user
     let connection = DockerConnection::new(&config.test_container);
 
-    let options = ExecuteOptions::new()
-        .with_escalation(Some("nobody".to_string()));
+    let options = ExecuteOptions::new().with_escalation(Some("nobody".to_string()));
 
     let result = connection.execute("whoami", Some(options)).await;
 
@@ -291,8 +290,7 @@ async fn test_docker_exec_working_directory() {
 
     let connection = DockerConnection::new(&config.test_container);
 
-    let options = ExecuteOptions::new()
-        .with_cwd("/tmp");
+    let options = ExecuteOptions::new().with_cwd("/tmp");
 
     let result = connection.execute("pwd", Some(options)).await;
 
@@ -674,9 +672,7 @@ async fn test_docker_module_execution() {
     assert!(result.is_ok(), "Module execution failed: {:?}", result);
 
     let output = result.unwrap();
-    assert!(
-        output.changed || output.status == rustible::modules::ModuleStatus::Ok
-    );
+    assert!(output.changed || output.status == rustible::modules::ModuleStatus::Ok);
 
     connection.close().await.ok();
 }
