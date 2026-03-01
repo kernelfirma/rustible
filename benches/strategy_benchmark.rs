@@ -912,7 +912,7 @@ fn bench_strategy_type_operations(c: &mut Criterion) {
     group.bench_function("strategy_display_linear", |b| {
         let s = ExecutionStrategy::Linear;
         b.iter(|| {
-            let display = format!("{:?}", s);
+            let display = format!("{}", s);
             black_box(display)
         })
     });
@@ -920,7 +920,7 @@ fn bench_strategy_type_operations(c: &mut Criterion) {
     group.bench_function("strategy_display_free", |b| {
         let s = ExecutionStrategy::Free;
         b.iter(|| {
-            let display = format!("{:?}", s);
+            let display = format!("{}", s);
             black_box(display)
         })
     });
