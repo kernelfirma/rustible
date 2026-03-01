@@ -943,6 +943,7 @@ fn filter_to_nice_json(
     // This avoids:
     // 1. serde_json::to_value() intermediate allocation (massive performance win)
     // 2. serde_json::to_string_pretty() using hardcoded 2 spaces instead of requested 4
+    // 3. UTF-8 validation overhead via unsafe unchecked conversion (safe because serde_json guarantees UTF-8)
     format_json_with_indent(&value, indent)
 }
 
@@ -1008,9 +1009,23 @@ fn format_json_with_indent<T: serde::Serialize>(
     value: &T,
     indent: usize,
 ) -> std::result::Result<String, minijinja::Error> {
-    let mut buf = Vec::new();
-    let indent_bytes = vec![b' '; indent];
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
+    // Pre-allocate buffer to avoid reallocations for small JSONs
+    let mut buf = Vec::with_capacity(128);
+
+    // Optimization: avoid allocating vector for indentation if small enough (<= 32 spaces)
+    const SPACES: [u8; 32] = [b' '; 32];
+    let indent_vec = if indent > 32 {
+        Some(vec![b' '; indent])
+    } else {
+        None
+    };
+
+    let indent_bytes = match &indent_vec {
+        Some(v) => v.as_slice(),
+        None => &SPACES[..indent],
+    };
+
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(indent_bytes);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser).map_err(|e| {
         minijinja::Error::new(
@@ -1018,12 +1033,10 @@ fn format_json_with_indent<T: serde::Serialize>(
             format!("JSON serialization failed: {}", e),
         )
     })?;
-    String::from_utf8(buf).map_err(|e| {
-        minijinja::Error::new(
-            ErrorKind::InvalidOperation,
-            format!("JSON serialization failed: {}", e),
-        )
-    })
+
+    // Optimization: serde_json output is guaranteed to be valid UTF-8
+    // This skips the O(n) UTF-8 validation
+    unsafe { Ok(String::from_utf8_unchecked(buf)) }
 }
 
 fn filter_mandatory(
