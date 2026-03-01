@@ -186,11 +186,11 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Compile bundle
-        run: cargo check --all-targets --features "${{ matrix.bundle.features }}" --verbose
+        run: cargo check --all-targets --no-default-features --features "${{ matrix.bundle.features }}" --verbose
 
       - name: Run bundle tests
         if: matrix.bundle.mode == 'test'
-        run: cargo test --lib --features "${{ matrix.bundle.features }}" --verbose -- --test-threads=1
+        run: cargo test --lib --no-default-features --features "${{ matrix.bundle.features }}" --verbose -- --test-threads=1
         env:
           RUST_LOG: debug
 
