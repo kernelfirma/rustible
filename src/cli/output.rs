@@ -372,6 +372,15 @@ impl OutputFormatter {
         let mut sorted_hosts: Vec<_> = stats.hosts.keys().collect();
         sorted_hosts.sort();
 
+        // Helper to format stats: dim if zero, colored and bold if non-zero
+        let fmt_stat = |label: &str, value: u32, color: colored::Color| -> String {
+            if value > 0 {
+                format!("{}={:<4}", label.color(color).bold(), value)
+            } else {
+                format!("{}={:<4}", label, value).dimmed().to_string()
+            }
+        };
+
         for host in sorted_hosts {
             let host_stats = &stats.hosts[host];
 
@@ -382,15 +391,6 @@ impl OutputFormatter {
                     host.yellow()
                 } else {
                     host.green()
-                };
-
-                // Helper to format stats: dim if zero, colored if non-zero
-                let fmt_stat = |label: &str, value: u32, color: colored::Color| -> String {
-                    if value > 0 {
-                        format!("{}={:<4}", label.color(color), value)
-                    } else {
-                        format!("{}={:<4}", label, value).dimmed().to_string()
-                    }
                 };
 
                 // Manual padding to ensure proper visual alignment with ANSI codes
@@ -433,6 +433,78 @@ impl OutputFormatter {
                     host_stats.skipped,
                     host_stats.rescued,
                     host_stats.ignored,
+                    width = max_host_len
+                );
+                println!("{}", line);
+            }
+        }
+
+        // Print totals row if multiple hosts
+        if stats.hosts.len() > 1 {
+            if self.use_color {
+                // Print separator
+                // Visual width of stats part is roughly:
+                // ok=4 (7) + changed=4 (12) + unreachable=4 (16) + failed=4 (11) + skipped=4 (12) + rescued=4 (12) + ignored=4 (12) + spaces (6)
+                // Total stats width approx 88 chars
+                let width = max_host_len + 90;
+                println!("{}", "─".repeat(width).bright_black());
+
+                let label = "TOTALS";
+                let padding_len = max_host_len.saturating_sub(measure_text_width(label));
+
+                print!(
+                    "{}{:width$}: ",
+                    label.bright_white().bold(),
+                    "",
+                    width = padding_len
+                );
+                print!("{} ", fmt_stat("ok", stats.total_ok(), colored::Color::Green));
+                print!(
+                    "{} ",
+                    fmt_stat("changed", stats.total_changed(), colored::Color::Yellow)
+                );
+                print!(
+                    "{} ",
+                    fmt_stat(
+                        "unreachable",
+                        stats.total_unreachable(),
+                        colored::Color::Red
+                    )
+                );
+                print!(
+                    "{} ",
+                    fmt_stat(
+                        "failed",
+                        stats.total_failed_tasks(),
+                        colored::Color::Red
+                    )
+                );
+                print!(
+                    "{} ",
+                    fmt_stat("skipped", stats.total_skipped(), colored::Color::Cyan)
+                );
+                print!(
+                    "{} ",
+                    fmt_stat("rescued", stats.total_rescued(), colored::Color::Magenta)
+                );
+                print!(
+                    "{} ",
+                    fmt_stat("ignored", stats.total_ignored(), colored::Color::Blue)
+                );
+                println!();
+            } else {
+                let width = max_host_len + 90;
+                println!("{}", "-".repeat(width));
+                let line = format!(
+                    "{:<width$} : ok={:<4} changed={:<4} unreachable={:<4} failed={:<4} skipped={:<4} rescued={:<4} ignored={:<4}",
+                    "TOTALS",
+                    stats.total_ok(),
+                    stats.total_changed(),
+                    stats.total_unreachable(),
+                    stats.total_failed_tasks(),
+                    stats.total_skipped(),
+                    stats.total_rescued(),
+                    stats.total_ignored(),
                     width = max_host_len
                 );
                 println!("{}", line);
@@ -1145,6 +1217,11 @@ impl RecapStats {
             .sum()
     }
 
+    /// Get total ok count
+    pub fn total_ok(&self) -> u32 {
+        self.hosts.values().map(|h| h.ok).sum()
+    }
+
     /// Get total changed count
     pub fn total_changed(&self) -> u32 {
         self.hosts.values().map(|h| h.changed).sum()
@@ -1153,6 +1230,31 @@ impl RecapStats {
     /// Get total failed count (failed + unreachable)
     pub fn total_failed(&self) -> u32 {
         self.hosts.values().map(|h| h.failed + h.unreachable).sum()
+    }
+
+    /// Get total failed tasks count (failed only)
+    pub fn total_failed_tasks(&self) -> u32 {
+        self.hosts.values().map(|h| h.failed).sum()
+    }
+
+    /// Get total unreachable count
+    pub fn total_unreachable(&self) -> u32 {
+        self.hosts.values().map(|h| h.unreachable).sum()
+    }
+
+    /// Get total skipped count
+    pub fn total_skipped(&self) -> u32 {
+        self.hosts.values().map(|h| h.skipped).sum()
+    }
+
+    /// Get total rescued count
+    pub fn total_rescued(&self) -> u32 {
+        self.hosts.values().map(|h| h.rescued).sum()
+    }
+
+    /// Get total ignored count
+    pub fn total_ignored(&self) -> u32 {
+        self.hosts.values().map(|h| h.ignored).sum()
     }
 }
 
@@ -1358,5 +1460,32 @@ mod tests {
         formatter.plan_header("Test");
         formatter.plan_field_change("test", Some("old"), Some("new"), false);
         formatter.plan_note("Note");
+    }
+
+    #[test]
+    fn test_recap_stats_totals() {
+        let mut recap = RecapStats::new();
+        // host1: 1 ok, 1 changed
+        recap.record("host1", TaskStatus::Ok);
+        recap.record("host1", TaskStatus::Changed);
+
+        // host2: 1 failed, 1 skipped
+        recap.record("host2", TaskStatus::Failed);
+        recap.record("host2", TaskStatus::Skipped);
+
+        // host3: 1 unreachable, 1 rescued, 1 ignored
+        recap.record("host3", TaskStatus::Unreachable);
+        recap.record("host3", TaskStatus::Rescued);
+        recap.record("host3", TaskStatus::Ignored);
+
+        assert_eq!(recap.total_ok(), 1);
+        assert_eq!(recap.total_changed(), 1);
+        assert_eq!(recap.total_failed_tasks(), 1);
+        assert_eq!(recap.total_unreachable(), 1);
+        assert_eq!(recap.total_skipped(), 1);
+        assert_eq!(recap.total_rescued(), 1);
+        assert_eq!(recap.total_ignored(), 1);
+
+        assert_eq!(recap.total_failed(), 2); // failed + unreachable
     }
 }
