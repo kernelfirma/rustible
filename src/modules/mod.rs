@@ -447,7 +447,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("$", "variable expansion $"),
         ("#", "shell comment #"),
         ("%", "variable expansion %"),
-        ("^", "cmd.exe escape ^"),
+        ("^", "cmd.exe escape character"),
     ];
 
     for (pattern, description) in dangerous_patterns {

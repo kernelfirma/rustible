@@ -91,12 +91,7 @@
 **Learning:** When generating configuration files that are line-based (like crontabs), always validate user input for newline characters to prevent injection of new entries.
 **Prevention:** Implement strict validation for all parameters that are written to line-based configuration files. Use helper functions like `validate_no_newlines` to enforce this constraint consistently.
 
-## 2025-06-03 - Windows Command Injection via % and ^
-**Vulnerability:** The `validate_command_args` utility was too permissive for Windows environments. It allowed `%` (variable expansion) and `^` (shell escape). This enabled Information Disclosure (reading environment variables) and command obfuscation/filter bypass on Windows systems where commands are executed via `cmd.exe`.
-**Learning:** Shell metacharacters vary significantly by platform. A validation logic that works for POSIX shells is insufficient for Windows `cmd.exe`, which has its own set of special characters (`%`, `^`).
-**Prevention:** Explicitly block Windows-specific shell metacharacters (`%`, `^`) in validation routines intended to be cross-platform or Windows-compatible.
-
-## 2025-06-03 - Shell Command Injection via # (comment character)
-**Vulnerability:** The `validate_command_args` utility was failing to properly reject the hash character (`#`) as it was missing from the `dangerous_patterns` list, which would allow a malicious user to craft a shell comment, short-circuiting part of an execution context.
-**Learning:** Partial validation of shell arguments using character matching without considering characters that stop the parser's lexer in standard bash/POSIX shells can lead to unhandled inputs that enable dangerous injections.
-**Prevention:** Explicitly block `#` in `validate_command_args`.
+## 2025-05-27 - Windows Shell Variable Injection
+**Vulnerability:** Windows `cmd.exe` allows variable expansion (e.g., `%USERNAME%`) and escape character (`^`) usage even inside double-quoted strings or in arguments passed to `cmd /c`. The previous `validate_command_args` function explicitly allowed `%` and did not block `^`, allowing potential information disclosure or command obfuscation on Windows hosts.
+**Learning:** `cmd.exe` parsing rules are complex and counter-intuitive compared to POSIX shells. Standard quoting strategies often fail to prevent variable expansion. Validating "safe" characters must account for platform-specific metacharacters like `%` and `^`.
+**Prevention:** Explicitly block `%` and `^` in command arguments when shell execution is not intended, or use a robust argument passing mechanism that bypasses the shell entirely (though difficult with SSH's `exec` channel on Windows).
