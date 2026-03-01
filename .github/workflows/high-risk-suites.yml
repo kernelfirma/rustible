@@ -89,6 +89,11 @@ jobs:
             exit 1
           fi
 
+          if [[ "$proptest_cases" -eq 0 ]]; then
+            echo "::error::proptest_cases must be greater than zero"
+            exit 1
+          fi
+
           require_full_infra="false"
           if [[ "$signoff_profile" == "beta-signoff" || "$enforce_full_infra" == "true" ]]; then
             require_full_infra="true"
