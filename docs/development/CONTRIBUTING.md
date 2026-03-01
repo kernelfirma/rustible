@@ -99,6 +99,24 @@ cargo test --test '*'
 cargo test --features "russh,local"
 ```
 
+### CI Feature Bundle Gate
+
+GitHub Actions enforces a dedicated optional-feature matrix on Linux stable to
+catch regressions outside the default profile:
+
+- Tested bundles: `aws`, `docker`, `api`, `database`, `provisioning`
+- Broad aggregate compile gate: `full-provisioning,api,database`
+
+Use these commands locally when working on optional feature paths:
+
+```bash
+# Compile all targets for a bundle
+cargo check --all-targets --features "<bundle>"
+
+# Run a fast bundle test path (library tests)
+cargo test --lib --features "<bundle>" -- --test-threads=1
+```
+
 ### Running Benchmarks
 
 ```bash
