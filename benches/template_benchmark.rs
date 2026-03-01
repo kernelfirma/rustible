@@ -896,31 +896,34 @@ fn bench_to_nice_json_opt(c: &mut Criterion) {
     let engine = TemplateEngine::new();
     let mut vars = HashMap::new();
 
-    // Create a moderately complex JSON object
+    // Create a complex nested structure to serialize
     let data = serde_json::json!({
-        "name": "benchmark",
-        "values": (0..100).collect::<Vec<i32>>(),
-        "nested": {
-            "a": 1,
-            "b": "test",
-            "c": [1, 2, 3]
-        },
-        "list_of_objects": (0..50).map(|i| {
-            serde_json::json!({
-                "id": i,
-                "name": format!("item_{}", i)
-            })
-        }).collect::<Vec<_>>()
+        "string": "hello world",
+        "number": 42,
+        "boolean": true,
+        "null": null,
+        "array": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "object": {
+            "nested_string": "nested",
+            "nested_array": [
+                {"id": 1, "name": "first"},
+                {"id": 2, "name": "second"},
+                {"id": 3, "name": "third"},
+                {"id": 4, "name": "fourth"},
+                {"id": 5, "name": "fifth"}
+            ]
+        }
     });
 
     vars.insert("data".to_string(), data);
 
-    // Test with indent=2 (common case)
-    let template = "{{ data | to_nice_json(indent=2) }}";
+    let template = "{{ data | to_nice_json(indent=4) }}";
 
-    group.bench_function("to_nice_json_indent_2", |b| {
+    group.bench_function("to_nice_json_complex_object", |b| {
         b.iter(|| {
-            engine.render(black_box(template), black_box(&vars)).unwrap()
+            engine
+                .render(black_box(template), black_box(&vars))
+                .unwrap()
         })
     });
 

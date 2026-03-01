@@ -40,7 +40,6 @@ use tokio::sync::Semaphore;
 
 use rustible::executor::{ExecutionStats, ExecutionStrategy, ExecutorConfig};
 use rustible::playbook::SerialSpec;
-use rustible::strategy::Strategy;
 
 // ============================================================================
 // Mock Types for Benchmarking (Self-contained)
@@ -905,29 +904,29 @@ fn bench_strategy_type_operations(c: &mut Criterion) {
     // Strategy enum operations
     group.bench_function("strategy_default", |b| {
         b.iter(|| {
-            let s = Strategy::default();
+            let s = ExecutionStrategy::Linear; // Using Linear as default for bench
             black_box(s)
         })
     });
 
     group.bench_function("strategy_display_linear", |b| {
-        let s = Strategy::Linear;
+        let s = ExecutionStrategy::Linear;
         b.iter(|| {
-            let display = format!("{}", s);
+            let display = format!("{:?}", s);
             black_box(display)
         })
     });
 
     group.bench_function("strategy_display_free", |b| {
-        let s = Strategy::Free;
+        let s = ExecutionStrategy::Free;
         b.iter(|| {
-            let display = format!("{}", s);
+            let display = format!("{:?}", s);
             black_box(display)
         })
     });
 
     group.bench_function("strategy_clone", |b| {
-        let s = Strategy::Linear;
+        let s = ExecutionStrategy::Linear;
         b.iter(|| {
             let cloned = s;
             black_box(cloned)
@@ -935,8 +934,8 @@ fn bench_strategy_type_operations(c: &mut Criterion) {
     });
 
     group.bench_function("strategy_eq", |b| {
-        let s1 = Strategy::Linear;
-        let s2 = Strategy::Linear;
+        let s1 = ExecutionStrategy::Linear;
+        let s2 = ExecutionStrategy::Linear;
         b.iter(|| {
             let eq = s1 == s2;
             black_box(eq)
