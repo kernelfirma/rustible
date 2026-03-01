@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use console::Term;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Interactive session state
 pub struct InteractiveSession {
@@ -101,20 +101,58 @@ impl InteractiveSession {
     /// Prompt for playbook selection
     pub fn select_playbook(&self, playbooks: &[PathBuf]) -> Result<Option<PathBuf>> {
         if playbooks.is_empty() {
-            println!("{}", "No playbooks found in current directory.".yellow());
-            return Ok(None);
+            println!(
+                "{}",
+                "No playbooks found. Please enter path manually.".yellow()
+            );
+            let custom: String = Input::with_theme(&self.theme)
+                .with_prompt("✏️  Enter playbook path")
+                .validate_with(|input: &String| -> Result<(), &str> {
+                    let expanded = shellexpand::tilde(input);
+                    let path = Path::new(expanded.as_ref());
+                    if path.is_file() {
+                        Ok(())
+                    } else if path.exists() {
+                        Err("Path is a directory; please provide a playbook file")
+                    } else {
+                        Err("Path does not exist")
+                    }
+                })
+                .interact_on(&self.term)?;
+            let expanded = shellexpand::tilde(&custom);
+            return Ok(Some(PathBuf::from(expanded.as_ref())));
         }
 
-        let items: Vec<String> = playbooks
+        let mut items: Vec<String> = playbooks
             .iter()
             .map(|p| format!("📖 {}", p.display()))
             .collect();
+        items.push("✏️ Enter custom path...".to_string());
 
         let selection = Select::with_theme(&self.theme)
             .with_prompt("📖 Select a playbook")
             .items(&items)
             .default(0)
             .interact_on(&self.term)?;
+
+        if selection == items.len() - 1 {
+            let custom: String = Input::with_theme(&self.theme)
+                .with_prompt("✏️  Enter playbook path")
+                .validate_with(|input: &String| -> Result<(), &str> {
+                    let expanded = shellexpand::tilde(input);
+                    let path = Path::new(expanded.as_ref());
+                    if path.is_file() {
+                        Ok(())
+                    } else if path.exists() {
+                        Err("Path is a directory; please provide a playbook file")
+                    } else {
+                        Err("Path does not exist")
+                    }
+                })
+                .interact_on(&self.term)?;
+            let expanded = shellexpand::tilde(&custom);
+            return Ok(Some(PathBuf::from(expanded.as_ref())));
+        }
 
         Ok(Some(playbooks[selection].clone()))
     }
@@ -125,11 +163,17 @@ impl InteractiveSession {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter inventory path (or 'localhost' for local)")
                 .default("localhost".to_string())
-                .validate_with(|input: &String| -> Result<(), String> {
+                .validate_with(|input: &String| -> Result<(), &str> {
                     if input == "localhost" {
                         return Ok(());
                     }
-                    validate_path_exists(input)
+                    let expanded = shellexpand::tilde(input);
+                    let path = Path::new(expanded.as_ref());
+                    if path.exists() {
+                        Ok(())
+                    } else {
+                        Err("Path does not exist")
+                    }
                 })
                 .interact_on(&self.term)?;
 
@@ -160,8 +204,23 @@ impl InteractiveSession {
         if selection == items.len() - 2 {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter inventory path")
-                .validate_with(validate_path_exists)
+                .validate_with(|input: &String| -> Result<(), &str> {
+                    if input == "localhost" {
+                        return Ok(());
+                    }
+                    let expanded = shellexpand::tilde(input);
+                    let path = Path::new(expanded.as_ref());
+                    if path.exists() {
+                        Ok(())
+                    } else {
+                        Err("Path does not exist")
+                    }
+                })
                 .interact_on(&self.term)?;
+
+            if custom == "localhost" {
+                return Ok(None);
+            }
             let expanded = shellexpand::tilde(&custom);
             return Ok(Some(PathBuf::from(expanded.as_ref())));
         }
