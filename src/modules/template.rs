@@ -359,10 +359,14 @@ impl TemplateModule {
             }
         }
 
-        // Write rendered content
-        fs::write(dest_path, rendered)?;
+        // Write rendered content securely (atomically setting permissions if creating)
+        // Note: secure_write_file handles permission setting for both new and existing files
+        crate::utils::secure_write_file(dest_path, rendered, true, mode).map_err(|e| {
+            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", dest_path.display(), e))
+        })?;
 
-        // Set permissions
+        // We check permissions again just to report if they changed (though secure_write_file already enforced them)
+        // This is a bit redundant but preserves the output behavior
         let perm_changed = Self::set_permissions(dest_path, mode)?;
 
         let mut output =
