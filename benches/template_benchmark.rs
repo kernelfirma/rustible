@@ -890,6 +890,43 @@ fn bench_template_memory_patterns(c: &mut Criterion) {
 // Filter Optimization Benchmarks
 // ============================================================================
 
+fn bench_to_nice_json_opt(c: &mut Criterion) {
+    let mut group = c.benchmark_group("to_nice_json_optimization");
+
+    let engine = TemplateEngine::new();
+    let mut vars = HashMap::new();
+
+    // Create a moderately complex JSON object
+    let data = serde_json::json!({
+        "name": "benchmark",
+        "values": (0..100).collect::<Vec<i32>>(),
+        "nested": {
+            "a": 1,
+            "b": "test",
+            "c": [1, 2, 3]
+        },
+        "list_of_objects": (0..50).map(|i| {
+            serde_json::json!({
+                "id": i,
+                "name": format!("item_{}", i)
+            })
+        }).collect::<Vec<_>>()
+    });
+
+    vars.insert("data".to_string(), data);
+
+    // Test with indent=2 (common case)
+    let template = "{{ data | to_nice_json(indent=2) }}";
+
+    group.bench_function("to_nice_json_indent_2", |b| {
+        b.iter(|| {
+            engine.render(black_box(template), black_box(&vars)).unwrap()
+        })
+    });
+
+    group.finish();
+}
+
 fn bench_filter_join_opt(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_join_optimization");
 
@@ -941,6 +978,7 @@ fn bench_filter_title_opt(c: &mut Criterion) {
 
 criterion_group!(
     optimization_benches,
+    bench_to_nice_json_opt,
     bench_filter_join_opt,
     bench_filter_title_opt,
 );
