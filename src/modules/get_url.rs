@@ -30,7 +30,6 @@ use super::{
 };
 use reqwest::Client;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -240,6 +239,7 @@ impl Module for GetUrlModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_get_url_name() {
