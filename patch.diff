@@ -1,0 +1,24 @@
+--- src/executor/mod.rs
++++ src/executor/mod.rs
+@@ -136,6 +136,7 @@
+     Result, TaskResult,
+ };
+ use console::Term;
++use colored::Colorize;
+ use dialoguer::theme::ColorfulTheme;
+ use parking_lot::RwLock;
+ use std::collections::{HashMap, HashSet};
+@@ -991,7 +992,12 @@
+
+             if step_mode {
+                 let term = Term::stderr();
+-                let prompt = format!("Perform task: {}?", task.name);
++                let prompt = format!(
++                    "{} {} {}",
++                    "▶".cyan(),
++                    task.name.cyan().bold(),
++                    "[y,n,c,a]".dimmed()
++                );
+                 let mut continue_outer_loop = false;
+
+                 loop {

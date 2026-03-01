@@ -993,7 +993,12 @@ impl Executor {
 
             if step_mode {
                 let term = Term::stderr();
-                let prompt = format!("▶️ Perform task: {} ({})?", task.name.cyan().bold(), task.module.dimmed());
+                let prompt = format!(
+                    "{} {} {}",
+                    "▶".cyan(),
+                    task.name.cyan().bold(),
+                    "[y,n,c,a]".dimmed()
+                );
                 let mut continue_outer_loop = false;
 
                 loop {
