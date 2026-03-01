@@ -91,7 +91,7 @@
 **Learning:** When generating configuration files that are line-based (like crontabs), always validate user input for newline characters to prevent injection of new entries.
 **Prevention:** Implement strict validation for all parameters that are written to line-based configuration files. Use helper functions like `validate_no_newlines` to enforce this constraint consistently.
 
-## 2025-05-27 - Windows Shell Variable Injection
-**Vulnerability:** Windows `cmd.exe` allows variable expansion (e.g., `%USERNAME%`) and escape character (`^`) usage even inside double-quoted strings or in arguments passed to `cmd /c`. The previous `validate_command_args` function explicitly allowed `%` and did not block `^`, allowing potential information disclosure or command obfuscation on Windows hosts.
-**Learning:** `cmd.exe` parsing rules are complex and counter-intuitive compared to POSIX shells. Standard quoting strategies often fail to prevent variable expansion. Validating "safe" characters must account for platform-specific metacharacters like `%` and `^`.
-**Prevention:** Explicitly block `%` and `^` in command arguments when shell execution is not intended, or use a robust argument passing mechanism that bypasses the shell entirely (though difficult with SSH's `exec` channel on Windows).
+## 2025-05-18 - [Windows Command Injection via Environment Variables]
+**Vulnerability:** `validate_command_args` allowed `%` characters, enabling environment variable expansion (e.g., `%USERNAME%`) on Windows. It also allowed `^` (escape character).
+**Learning:** Checking for "safe" characters in a whitelist must be platform-aware or extremely conservative. `%` is safe on POSIX but dangerous on Windows. Fast-path optimizations can inadvertently whitelist dangerous characters if not careful.
+**Prevention:** Explicitly block `%` and `^` in command validation logic intended for cross-platform use, or use platform-specific validation. Always treat `%` as dangerous in contexts where Windows CMD might process the input.
