@@ -28,6 +28,7 @@
 use super::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
+use crate::connection::TransferOptions;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -107,7 +108,9 @@ impl Module for GetUrlModule {
             .map(|t| t as u64)
             .unwrap_or(DEFAULT_TIMEOUT_SECS);
         let validate_certs = params.get_bool_or("validate_certs", true);
-        let mode = params.get_string("mode")?;
+        let mode = params.get_u32("mode")?;
+        let owner = params.get_string("owner")?;
+        let group = params.get_string("group")?;
 
         // Validate URL scheme
         if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -194,21 +197,18 @@ impl Module for GetUrlModule {
         // Upload to remote host
         if let Some(ref conn) = context.connection {
             let dest_path = Path::new(&dest);
-            rt.block_on(async { conn.upload_content(&bytes, dest_path, None).await })
+            let transfer_opts = TransferOptions {
+                mode,
+                owner,
+                group,
+                create_dirs: false,
+                backup: false,
+            };
+
+            rt.block_on(async { conn.upload_content(&bytes, dest_path, Some(transfer_opts)).await })
                 .map_err(|e| {
                     ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
                 })?;
-
-            // Set file mode if specified
-            if let Some(ref file_mode) = mode {
-                rt.block_on(async {
-                    conn.execute(&format!("chmod {} {}", file_mode, dest), None)
-                        .await
-                })
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to set file mode: {}", e))
-                })?;
-            }
         }
 
         let mut output = ModuleOutput::changed(format!(
