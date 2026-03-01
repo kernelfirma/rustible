@@ -247,6 +247,7 @@ impl ClusterManager {
             peer.pending_messages = 0;
         }
         drop(peers);
+        self.peer_info.write().await.clear();
 
         *self.known_leader.write().await = None;
 
@@ -292,19 +293,15 @@ impl ClusterManager {
                     let mut snapshots = Vec::with_capacity(peers_guard.len());
 
                     for (id, peer) in peers_guard.iter_mut() {
-                        if matches!(peer.state, PeerConnectionState::Connected)
-                            && now.saturating_duration_since(peer.last_seen) > stale_after
-                        {
-                            peer.state = PeerConnectionState::Failed {
-                                reason: "health timeout".to_string(),
-                            };
-                        }
+                        let stale = matches!(peer.state, PeerConnectionState::Connected)
+                            && now.saturating_duration_since(peer.last_seen) > stale_after;
 
                         snapshots.push((
                             id.clone(),
                             peer.address,
                             peer.state.clone(),
                             peer.last_seen,
+                            stale,
                         ));
                     }
 
@@ -312,14 +309,20 @@ impl ClusterManager {
                 };
 
                 let mut peer_info_guard = peer_info.write().await;
-                for (id, address, state, last_seen) in snapshots {
+                for (id, address, state, last_seen, stale) in snapshots {
                     let info = peer_info_guard
                         .entry(id.clone())
                         .or_insert_with(|| ControllerInfo::new(id.clone(), address));
                     info.address = address;
                     info.last_heartbeat = Some(last_seen);
                     info.health = match state {
-                        PeerConnectionState::Connected => ControllerHealth::Healthy,
+                        PeerConnectionState::Connected => {
+                            if stale {
+                                ControllerHealth::Degraded
+                            } else {
+                                ControllerHealth::Healthy
+                            }
+                        }
                         PeerConnectionState::Connecting => ControllerHealth::Degraded,
                         PeerConnectionState::Disconnected | PeerConnectionState::Failed { .. } => {
                             ControllerHealth::Down
@@ -790,5 +793,49 @@ mod tests {
         .expect("health loop should reconcile failed peer to down");
 
         manager.stop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_health_loop_keeps_stale_connected_peer_sendable() {
+        let manager = ClusterManager::new(test_config()).await.unwrap();
+        let peer_id = ControllerId::new("peer-0");
+        manager.start().await.unwrap();
+
+        {
+            let mut peers = manager.peers.write().await;
+            let peer = peers.get_mut(&peer_id).unwrap();
+            peer.state = PeerConnectionState::Connected;
+            peer.last_seen = Instant::now() - Duration::from_millis(500);
+        }
+
+        timeout(Duration::from_millis(500), async {
+            loop {
+                let peers = manager.peers.read().await;
+                let state = peers.get(&peer_id).map(|p| p.state.clone());
+                drop(peers);
+                let info = manager.connected_peers().await;
+                let health = info.get(&peer_id).map(|i| i.health.clone());
+                if matches!(state, Some(PeerConnectionState::Connected))
+                    && matches!(health, Some(ControllerHealth::Degraded))
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("health loop should mark stale peers degraded without disconnecting");
+
+        manager.stop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_stop_clears_peer_info_cache() {
+        let manager = ClusterManager::new(test_config()).await.unwrap();
+        manager.start().await.unwrap();
+
+        assert!(!manager.peer_info.read().await.is_empty());
+        manager.stop().await.unwrap();
+        assert!(manager.peer_info.read().await.is_empty());
     }
 }
