@@ -1,0 +1,492 @@
+name: High-Risk Suite Validation
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      signoff_profile:
+        description: Execution profile
+        type: choice
+        options:
+          - scheduled-smoke
+          - beta-signoff
+        default: scheduled-smoke
+      proptest_cases:
+        description: PROPTEST_CASES override (integer)
+        required: false
+        default: ''
+      enforce_full_infra:
+        description: Fail if SSH or WinRM infrastructure is unavailable
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      signoff_profile:
+        description: Execution profile
+        required: false
+        type: string
+        default: scheduled-smoke
+      proptest_cases:
+        description: PROPTEST_CASES override (integer)
+        required: false
+        type: string
+        default: ''
+      enforce_full_infra:
+        description: Fail if SSH or WinRM infrastructure is unavailable
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: high-risk-suite-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Determine High-Risk Profile
+    runs-on: ubuntu-latest
+    outputs:
+      signoff_profile: ${{ steps.profile.outputs.signoff_profile }}
+      proptest_cases: ${{ steps.profile.outputs.proptest_cases }}
+      require_full_infra: ${{ steps.profile.outputs.require_full_infra }}
+    steps:
+      - id: profile
+        name: Resolve workflow inputs
+        run: |
+          set -euo pipefail
+
+          signoff_profile="$(jq -r '.inputs.signoff_profile // empty' "$GITHUB_EVENT_PATH")"
+          proptest_cases="$(jq -r '.inputs.proptest_cases // empty' "$GITHUB_EVENT_PATH")"
+          enforce_full_infra="$(jq -r '.inputs.enforce_full_infra // empty' "$GITHUB_EVENT_PATH")"
+
+          if [[ -z "$signoff_profile" ]]; then
+            signoff_profile="scheduled-smoke"
+          fi
+
+          if [[ "$signoff_profile" != "scheduled-smoke" && "$signoff_profile" != "beta-signoff" ]]; then
+            echo "::error::Unsupported signoff_profile '$signoff_profile'"
+            exit 1
+          fi
+
+          if [[ -z "$proptest_cases" ]]; then
+            if [[ "$signoff_profile" == "beta-signoff" ]]; then
+              proptest_cases="512"
+            else
+              proptest_cases="128"
+            fi
+          fi
+
+          if ! [[ "$proptest_cases" =~ ^[0-9]+$ ]]; then
+            echo "::error::proptest_cases must be a positive integer, got '$proptest_cases'"
+            exit 1
+          fi
+
+          if [[ "$proptest_cases" -eq 0 ]]; then
+            echo "::error::proptest_cases must be greater than zero"
+            exit 1
+          fi
+
+          require_full_infra="false"
+          if [[ "$signoff_profile" == "beta-signoff" || "$enforce_full_infra" == "true" ]]; then
+            require_full_infra="true"
+          fi
+
+          echo "signoff_profile=$signoff_profile" >> "$GITHUB_OUTPUT"
+          echo "proptest_cases=$proptest_cases" >> "$GITHUB_OUTPUT"
+          echo "require_full_infra=$require_full_infra" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## High-Risk Profile"
+            echo "- Event: \`$GITHUB_EVENT_NAME\`"
+            echo "- Profile: \`$signoff_profile\`"
+            echo "- PROPTEST_CASES: \`$proptest_cases\`"
+            echo "- Require full SSH/WinRM infra: \`$require_full_infra\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ssh:
+    name: SSH High-Risk Suites
+    runs-on: ubuntu-latest
+    needs: prepare
+    timeout-minutes: 90
+    outputs:
+      coverage_mode: ${{ steps.report.outputs.coverage_mode }}
+      infra_ready: ${{ steps.detect.outputs.infra_ready }}
+      missing_inputs: ${{ steps.detect.outputs.missing_inputs }}
+    env:
+      CI_SSH_HOSTS: ${{ vars.CI_SSH_HOSTS }}
+      CI_SCALE_HOSTS: ${{ vars.CI_SCALE_HOSTS }}
+      CI_SSH_USER: ${{ vars.CI_SSH_USER }}
+      CI_TEST_INVENTORY: ${{ vars.CI_TEST_INVENTORY }}
+      CI_SSH_PRIVATE_KEY: ${{ secrets.CI_SSH_PRIVATE_KEY }}
+      CI_SSH_PASSWORD: ${{ secrets.CI_SSH_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - id: detect
+        name: Detect SSH test infrastructure
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [[ -z "${CI_SSH_HOSTS}" ]] && missing+=("vars.CI_SSH_HOSTS")
+          [[ -z "${CI_SSH_USER}" ]] && missing+=("vars.CI_SSH_USER")
+          [[ -z "${CI_SSH_PRIVATE_KEY}" ]] && missing+=("secrets.CI_SSH_PRIVATE_KEY")
+
+          if (( ${#missing[@]} > 0 )); then
+            missing_csv="$(IFS=,; echo "${missing[*]}")"
+            echo "infra_ready=false" >> "$GITHUB_OUTPUT"
+            echo "missing_inputs=$missing_csv" >> "$GITHUB_OUTPUT"
+            echo "::warning::SSH infra unavailable. Falling back to smoke mode (missing: $missing_csv)."
+          else
+            echo "infra_ready=true" >> "$GITHUB_OUTPUT"
+            echo "missing_inputs=" >> "$GITHUB_OUTPUT"
+            echo "SSH infra is configured for full integration run."
+          fi
+
+      - name: Prepare SSH key
+        if: steps.detect.outputs.infra_ready == 'true'
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/ci_ssh_key"
+          printf '%s\n' "$CI_SSH_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          echo "RUSTIBLE_TEST_SSH_KEY=$key_path" >> "$GITHUB_ENV"
+
+      - name: Run SSH full suites
+        if: steps.detect.outputs.infra_ready == 'true'
+        env:
+          RUSTIBLE_TEST_SSH_ENABLED: '1'
+          RUSTIBLE_TEST_PARALLEL_ENABLED: '1'
+          RUSTIBLE_TEST_CHAOS_ENABLED: '1'
+          RUSTIBLE_TEST_SSH_USER: ${{ env.CI_SSH_USER }}
+          RUSTIBLE_TEST_SSH_HOSTS: ${{ env.CI_SSH_HOSTS }}
+          RUSTIBLE_TEST_SCALE_HOSTS: ${{ env.CI_SCALE_HOSTS || env.CI_SSH_HOSTS }}
+          RUSTIBLE_TEST_INVENTORY: ${{ env.CI_TEST_INVENTORY || 'tests/infrastructure/test_inventory.yml' }}
+          RUSTIBLE_TEST_SSH_PASSWORD: ${{ env.CI_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cargo test --test real_ssh_tests --features ssh2-backend -- --test-threads=1
+          cargo test --test parallel_stress_tests --features ssh2-backend -- --test-threads=1
+          cargo test --test chaos_tests --features ssh2-backend -- --test-threads=1
+
+      - name: Run SSH smoke fallback
+        if: steps.detect.outputs.infra_ready != 'true'
+        run: |
+          set -euo pipefail
+          cargo test --test ssh_tests --features ssh2-backend -- --test-threads=1
+          cargo test --test real_ssh_tests --features ssh2-backend --no-run
+          cargo test --test parallel_stress_tests --features ssh2-backend --no-run
+          cargo test --test chaos_tests --features ssh2-backend --no-run
+
+      - name: Enforce full SSH suite for beta sign-off
+        if: needs.prepare.outputs.require_full_infra == 'true' && steps.detect.outputs.infra_ready != 'true'
+        run: |
+          echo "::error::SSH full suite is required for beta sign-off. Missing: ${{ steps.detect.outputs.missing_inputs }}"
+          exit 1
+
+      - id: report
+        if: always()
+        name: Report SSH suite mode
+        env:
+          MISSING_INPUTS: ${{ steps.detect.outputs.missing_inputs }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.detect.outputs.infra_ready }}" == "true" ]]; then
+            coverage_mode="full"
+            executed="real_ssh_tests + parallel_stress_tests + chaos_tests"
+          else
+            coverage_mode="smoke"
+            executed="ssh_tests + compile-only checks for real_ssh/parallel/chaos suites"
+          fi
+
+          echo "coverage_mode=$coverage_mode" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## SSH High-Risk Result"
+            echo "- Coverage mode: \`$coverage_mode\`"
+            echo "- Executed: $executed"
+            if [[ -n "$MISSING_INPUTS" ]]; then
+              echo "- Missing CI inputs: \`$MISSING_INPUTS\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  winrm:
+    name: WinRM High-Risk Suites
+    runs-on: ubuntu-latest
+    needs: prepare
+    timeout-minutes: 90
+    outputs:
+      coverage_mode: ${{ steps.report.outputs.coverage_mode }}
+      infra_ready: ${{ steps.detect.outputs.infra_ready }}
+      missing_inputs: ${{ steps.detect.outputs.missing_inputs }}
+    env:
+      CI_WINRM_HOST: ${{ vars.CI_WINRM_HOST }}
+      CI_WINRM_PORT: ${{ vars.CI_WINRM_PORT }}
+      CI_WINRM_SSL: ${{ vars.CI_WINRM_SSL }}
+      CI_WINRM_USER: ${{ vars.CI_WINRM_USER }}
+      CI_WINRM_PASS: ${{ secrets.CI_WINRM_PASS }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - id: detect
+        name: Detect WinRM test infrastructure
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [[ -z "${CI_WINRM_HOST}" ]] && missing+=("vars.CI_WINRM_HOST")
+          [[ -z "${CI_WINRM_USER}" ]] && missing+=("vars.CI_WINRM_USER")
+          [[ -z "${CI_WINRM_PASS}" ]] && missing+=("secrets.CI_WINRM_PASS")
+
+          if (( ${#missing[@]} > 0 )); then
+            missing_csv="$(IFS=,; echo "${missing[*]}")"
+            echo "infra_ready=false" >> "$GITHUB_OUTPUT"
+            echo "missing_inputs=$missing_csv" >> "$GITHUB_OUTPUT"
+            echo "::warning::WinRM infra unavailable. Falling back to smoke mode (missing: $missing_csv)."
+          else
+            echo "infra_ready=true" >> "$GITHUB_OUTPUT"
+            echo "missing_inputs=" >> "$GITHUB_OUTPUT"
+            echo "WinRM infra is configured for integration run."
+          fi
+
+      - name: Run WinRM parity tests (always required)
+        run: |
+          set -euo pipefail
+          cargo test --test winrm_parity_tests --features winrm -- --test-threads=1
+
+      - name: Run WinRM integration suite (ignored tests)
+        if: steps.detect.outputs.infra_ready == 'true'
+        env:
+          RUSTIBLE_WINRM_HOST: ${{ env.CI_WINRM_HOST }}
+          RUSTIBLE_WINRM_PORT: ${{ env.CI_WINRM_PORT || '5985' }}
+          RUSTIBLE_WINRM_SSL: ${{ env.CI_WINRM_SSL || 'false' }}
+          RUSTIBLE_WINRM_USER: ${{ env.CI_WINRM_USER }}
+          RUSTIBLE_WINRM_PASS: ${{ env.CI_WINRM_PASS }}
+        run: |
+          set -euo pipefail
+          cargo test --test winrm_integration_tests --features winrm -- --ignored --test-threads=1
+
+      - name: Run WinRM integration smoke fallback (compile-only)
+        if: steps.detect.outputs.infra_ready != 'true'
+        run: |
+          set -euo pipefail
+          cargo test --test winrm_integration_tests --features winrm --no-run
+
+      - name: Enforce full WinRM suite for beta sign-off
+        if: needs.prepare.outputs.require_full_infra == 'true' && steps.detect.outputs.infra_ready != 'true'
+        run: |
+          echo "::error::WinRM full suite is required for beta sign-off. Missing: ${{ steps.detect.outputs.missing_inputs }}"
+          exit 1
+
+      - id: report
+        if: always()
+        name: Report WinRM suite mode
+        env:
+          MISSING_INPUTS: ${{ steps.detect.outputs.missing_inputs }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.detect.outputs.infra_ready }}" == "true" ]]; then
+            coverage_mode="full"
+            executed="winrm_parity_tests + winrm_integration_tests --ignored"
+          else
+            coverage_mode="smoke"
+            executed="winrm_parity_tests + compile-only winrm_integration_tests"
+          fi
+
+          echo "coverage_mode=$coverage_mode" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## WinRM High-Risk Result"
+            echo "- Coverage mode: \`$coverage_mode\`"
+            echo "- Executed: $executed"
+            if [[ -n "$MISSING_INPUTS" ]]; then
+              echo "- Missing CI inputs: \`$MISSING_INPUTS\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  hpc:
+    name: HPC Scale Validation
+    runs-on: ubuntu-latest
+    needs: prepare
+    timeout-minutes: 60
+    outputs:
+      coverage_mode: ${{ steps.report.outputs.coverage_mode }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run ignored HPC scale suite
+        run: |
+          set -euo pipefail
+          cargo test --test hpc_scale_validation_tests --features hpc -- --ignored --test-threads=1
+
+      - id: report
+        name: Report HPC suite mode
+        run: |
+          echo "coverage_mode=full" >> "$GITHUB_OUTPUT"
+          {
+            echo "## HPC High-Risk Result"
+            echo "- Coverage mode: \`full\`"
+            echo "- Executed: hpc_scale_validation_tests (--ignored) with \`hpc\` feature"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  fuzz:
+    name: Fuzz Regression Suites
+    runs-on: ubuntu-latest
+    needs: prepare
+    timeout-minutes: 90
+    outputs:
+      coverage_mode: ${{ steps.report.outputs.coverage_mode }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run deterministic property-fuzz suites
+        env:
+          PROPTEST_CASES: ${{ needs.prepare.outputs.proptest_cases }}
+          PROPTEST_MAX_SHRINK_ITERS: '128'
+        run: |
+          set -euo pipefail
+          echo "Using PROPTEST_CASES=$PROPTEST_CASES"
+          cargo test --test callback_fuzz_tests -- --test-threads=1
+          cargo test --test proptest_tests -- --test-threads=1
+
+      - id: report
+        name: Report fuzz suite mode
+        env:
+          PROPTEST_CASES: ${{ needs.prepare.outputs.proptest_cases }}
+        run: |
+          echo "coverage_mode=full" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Fuzz High-Risk Result"
+            echo "- Coverage mode: \`full\`"
+            echo "- Executed: callback_fuzz_tests + proptest_tests"
+            echo "- PROPTEST_CASES: \`$PROPTEST_CASES\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: High-Risk Sign-Off Summary
+    runs-on: ubuntu-latest
+    needs: [prepare, ssh, winrm, hpc, fuzz]
+    if: always()
+    steps:
+      - name: Publish summary and enforce beta requirements
+        env:
+          PROFILE: ${{ needs.prepare.outputs.signoff_profile }}
+          REQUIRE_FULL_INFRA: ${{ needs.prepare.outputs.require_full_infra }}
+
+          SSH_RESULT: ${{ needs.ssh.result }}
+          SSH_MODE: ${{ needs.ssh.outputs.coverage_mode }}
+          SSH_MISSING: ${{ needs.ssh.outputs.missing_inputs }}
+
+          WINRM_RESULT: ${{ needs.winrm.result }}
+          WINRM_MODE: ${{ needs.winrm.outputs.coverage_mode }}
+          WINRM_MISSING: ${{ needs.winrm.outputs.missing_inputs }}
+
+          HPC_RESULT: ${{ needs.hpc.result }}
+          HPC_MODE: ${{ needs.hpc.outputs.coverage_mode }}
+
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
+          FUZZ_MODE: ${{ needs.fuzz.outputs.coverage_mode }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## High-Risk Suite Summary"
+            echo ""
+            echo "| Suite | Job Result | Coverage Mode | Required for Beta Sign-Off |"
+            echo "|---|---|---|---|"
+            echo "| SSH integration/stress/chaos | $SSH_RESULT | ${SSH_MODE:-n/a} | Yes (full) |"
+            echo "| WinRM parity + integration | $WINRM_RESULT | ${WINRM_MODE:-n/a} | Yes (full) |"
+            echo "| HPC scale validation | $HPC_RESULT | ${HPC_MODE:-n/a} | Yes |"
+            echo "| Fuzz regression suites | $FUZZ_RESULT | ${FUZZ_MODE:-n/a} | Yes |"
+            echo ""
+            echo "Profile: \`$PROFILE\`"
+            echo "Require full infra: \`$REQUIRE_FULL_INFRA\`"
+            if [[ -n "${SSH_MISSING:-}" ]]; then
+              echo "- SSH missing inputs: \`$SSH_MISSING\`"
+            fi
+            if [[ -n "${WINRM_MISSING:-}" ]]; then
+              echo "- WinRM missing inputs: \`$WINRM_MISSING\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          errors=0
+
+          if [[ "$SSH_RESULT" != "success" ]]; then
+            echo "::error::SSH high-risk job did not succeed (result: $SSH_RESULT)."
+            errors=1
+          fi
+
+          if [[ "$WINRM_RESULT" != "success" ]]; then
+            echo "::error::WinRM high-risk job did not succeed (result: $WINRM_RESULT)."
+            errors=1
+          fi
+
+          if [[ "$HPC_RESULT" != "success" ]]; then
+            echo "::error::HPC high-risk job did not succeed (result: $HPC_RESULT)."
+            errors=1
+          fi
+
+          if [[ "$FUZZ_RESULT" != "success" ]]; then
+            echo "::error::Fuzz high-risk job did not succeed (result: $FUZZ_RESULT)."
+            errors=1
+          fi
+
+          if [[ "$PROFILE" == "beta-signoff" ]]; then
+            if [[ "${SSH_MODE:-}" != "full" ]]; then
+              echo "::error::Beta sign-off requires SSH suite in full mode."
+              errors=1
+            fi
+
+            if [[ "${WINRM_MODE:-}" != "full" ]]; then
+              echo "::error::Beta sign-off requires WinRM suite in full mode."
+              errors=1
+            fi
+          fi
+
+          if (( errors > 0 )); then
+            exit 1
+          fi
