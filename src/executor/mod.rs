@@ -136,7 +136,7 @@ use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 use console::Term;
-use dialoguer::theme::ColorfulTheme;
+use colored::Colorize;
 
 /// Errors that can occur during playbook and task execution.
 ///
@@ -993,13 +993,7 @@ impl Executor {
 
             if step_mode {
                 let term = Term::stderr();
-                let prompt = format!(
-                    "{} {} ({}) {}",
-                    "Perform task:".bold(),
-                    task.name.cyan().bold(),
-                    task.module.dimmed(),
-                    "[y,n,c,a]".dimmed()
-                );
+                let prompt = format!("▶️ Perform task: {} ({})?", task.name.cyan().bold(), task.module.dimmed());
                 let mut continue_outer_loop = false;
 
                 loop {
