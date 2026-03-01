@@ -609,49 +609,20 @@ fn filter_capitalize(value: &str) -> String {
 
 fn filter_title(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
-    let mut first_word = true;
-    let mut in_word = false;
+    let mut next_is_start = true;
 
-    // Fast path: pure ASCII
-    if value.is_ascii() {
-        for &b in value.as_bytes() {
-            if b.is_ascii_whitespace() {
-                in_word = false;
-            } else {
-                if !in_word {
-                    if !first_word {
-                        result.push(' ');
-                    }
-                    first_word = false;
-                    result.push(b.to_ascii_uppercase() as char);
-                    in_word = true;
-                } else {
-                    result.push(b.to_ascii_lowercase() as char);
-                }
-            }
-        }
-        return result;
-    }
-
-    // Slow path for unicode
-    let mut chars = value.chars();
-    while let Some(c) = chars.next() {
+    for c in value.chars() {
         if c.is_whitespace() {
-            in_word = false;
+            result.push(c);
+            next_is_start = true;
+        } else if next_is_start {
+            for uc in c.to_uppercase() {
+                result.push(uc);
+            }
+            next_is_start = false;
         } else {
-            if !in_word {
-                if !first_word {
-                    result.push(' ');
-                }
-                first_word = false;
-                for uc in c.to_uppercase() {
-                    result.push(uc);
-                }
-                in_word = true;
-            } else {
-                for lc in c.to_lowercase() {
-                    result.push(lc);
-                }
+            for lc in c.to_lowercase() {
+                result.push(lc);
             }
         }
     }
@@ -1861,5 +1832,14 @@ mod tests {
 
         // Test empty string (should be false)
         assert_eq!(engine.render("{{ '' | bool }}", &vars).unwrap(), "false");
+    }
+
+    #[test]
+    fn test_filter_title() {
+        assert_eq!(filter_title("hello world"), "Hello World");
+        // Verify whitespace preservation (fixes bug where multiple spaces were collapsed)
+        assert_eq!(filter_title("hello   world"), "Hello   World");
+        // Verify behavior with mixed characters
+        assert_eq!(filter_title("a-b"), "A-b");
     }
 }
