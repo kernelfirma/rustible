@@ -125,12 +125,19 @@ impl InteractiveSession {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter inventory path (or 'localhost' for local)")
                 .default("localhost".to_string())
+                .validate_with(|input: &String| -> Result<(), String> {
+                    if input == "localhost" {
+                        return Ok(());
+                    }
+                    validate_path_exists(input)
+                })
                 .interact_on(&self.term)?;
 
             if custom == "localhost" {
                 return Ok(None);
             }
-            return Ok(Some(PathBuf::from(custom)));
+            let expanded = shellexpand::tilde(&custom);
+            return Ok(Some(PathBuf::from(expanded.as_ref())));
         }
 
         let mut items: Vec<String> = inventories
@@ -153,8 +160,10 @@ impl InteractiveSession {
         if selection == items.len() - 2 {
             let custom: String = Input::with_theme(&self.theme)
                 .with_prompt("✏️  Enter inventory path")
+                .validate_with(validate_path_exists)
                 .interact_on(&self.term)?;
-            return Ok(Some(PathBuf::from(custom)));
+            let expanded = shellexpand::tilde(&custom);
+            return Ok(Some(PathBuf::from(expanded.as_ref())));
         }
 
         Ok(Some(inventories[selection].clone()))
@@ -324,12 +333,14 @@ impl InteractiveSession {
         })
     }
 
-    /// Prompt for file path
-    pub fn get_file_path(&self, prompt: &str) -> Result<PathBuf> {
+    /// Prompt for an existing file path
+    pub fn get_existing_file_path(&self, prompt: &str) -> Result<PathBuf> {
         let path: String = Input::with_theme(&self.theme)
             .with_prompt(prompt)
+            .validate_with(validate_path_exists)
             .interact_on(&self.term)?;
-        Ok(PathBuf::from(path))
+        let expanded = shellexpand::tilde(&path);
+        Ok(PathBuf::from(expanded.as_ref()))
     }
 
     /// Prompt for confirmation
@@ -403,6 +414,17 @@ pub struct RunOptions {
     pub diff_mode: bool,
     pub verbosity: u8,
     pub limit: Option<String>,
+}
+
+/// Validate that a path exists (supports tilde expansion)
+fn validate_path_exists(input: &String) -> Result<(), String> {
+    let expanded = shellexpand::tilde(input);
+    let path = PathBuf::from(expanded.as_ref());
+    if path.exists() {
+        Ok(())
+    } else {
+        Err(format!("File does not exist: {}", path.display()))
+    }
 }
 
 /// Find playbooks in the current directory and common locations
@@ -578,5 +600,16 @@ mod tests {
         // These tests would require actual files, so we test the logic path
         let path = PathBuf::from("nonexistent.yml");
         assert!(!is_playbook(&path)); // File doesn't exist
+    }
+
+    #[test]
+    fn test_validate_path_exists() {
+        // Test with existing file
+        let existing = "Cargo.toml".to_string();
+        assert!(validate_path_exists(&existing).is_ok());
+
+        // Test with non-existent file
+        let non_existent = "nonexistent_file_12345.txt".to_string();
+        assert!(validate_path_exists(&non_existent).is_err());
     }
 }
