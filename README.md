@@ -20,8 +20,9 @@ performance/security characteristics.
   focuses on state inventory and workflow bridging, not full replacement.
 - Several feature flags remain stubbed or partial and require explicit
   `experimental` opt-in (see `Cargo.toml`).
-- Security hardening and coverage gaps are tracked in `docs/ALPHA_READINESS_ISSUES.md`.
-- Maintainers can track release tasks in `docs/ALPHA_LAUNCH_CHECKLIST.md`.
+- Alpha readiness risks and active ownership are tracked in `docs/ALPHA_READINESS_ISSUES.md`.
+- Alpha release execution tasks are tracked in `docs/ALPHA_LAUNCH_CHECKLIST.md`.
+- Beta promotion criteria and sign-off requirements are defined in `docs/BETA_ENTRY_CRITERIA.md`.
 - Use in production environments only after validating against your own risk model.
 
 ## Quick Start
