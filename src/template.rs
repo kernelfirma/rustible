@@ -982,16 +982,17 @@ fn format_json_with_indent<T: serde::Serialize>(
 ) -> std::result::Result<String, minijinja::Error> {
     let mut buf = Vec::new();
 
-    // Optimization: Use a static buffer for common indentation sizes
-    // to avoid Vec allocation for simple indentations (which is 99% of cases).
-    const SPACES: [u8; 32] = [b' '; 32];
-    let indent_vec; // Keep alive if allocation is needed
+    // Optimization: Stack-allocate up to 32 spaces to avoid heap allocation
+    // Most JSON indentation is <= 32 spaces
+    const MAX_STACK_SPACES: usize = 32;
+    static SPACES: [u8; MAX_STACK_SPACES] = [b' '; MAX_STACK_SPACES];
 
-    let indent_bytes: &[u8] = if indent <= SPACES.len() {
+    let heap_spaces;
+    let indent_bytes = if indent <= MAX_STACK_SPACES {
         &SPACES[..indent]
     } else {
-        indent_vec = vec![b' '; indent];
-        &indent_vec
+        heap_spaces = vec![b' '; indent];
+        &heap_spaces[..]
     };
 
     let formatter = serde_json::ser::PrettyFormatter::with_indent(indent_bytes);
@@ -1003,8 +1004,7 @@ fn format_json_with_indent<T: serde::Serialize>(
         )
     })?;
 
-    // Optimization: serde_json is guaranteed to produce valid UTF-8,
-    // so we can skip the validation check.
+    // Optimization: serde_json guarantees valid UTF-8, skip validation
     Ok(unsafe { String::from_utf8_unchecked(buf) })
 }
 
