@@ -28,6 +28,8 @@
 use super::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
+use crate::connection::TransferOptions;
+use crate::utils::shell_escape;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -43,6 +45,40 @@ const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 pub struct GetUrlModule;
 
 impl GetUrlModule {
+    fn parse_mode(params: &ModuleParams) -> ModuleResult<Option<u32>> {
+        let Some(raw_mode) = params.get("mode") else {
+            return Ok(None);
+        };
+
+        let raw = match raw_mode {
+            serde_json::Value::String(s) => s.trim().to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            _ => {
+                return Err(ModuleError::InvalidParameter(
+                    "mode must be a string or integer".to_string(),
+                ))
+            }
+        };
+
+        let normalized = raw
+            .strip_prefix("0o")
+            .or_else(|| raw.strip_prefix("0O"))
+            .unwrap_or(&raw);
+
+        if normalized.is_empty() || !normalized.chars().all(|c| matches!(c, '0'..='7')) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Invalid mode '{}': expected octal digits (e.g., 0644)",
+                raw
+            )));
+        }
+
+        let mode = u32::from_str_radix(normalized, 8).map_err(|e| {
+            ModuleError::InvalidParameter(format!("Invalid mode '{}': {}", raw, e))
+        })?;
+
+        Ok(Some(mode))
+    }
+
     /// Verify a checksum against downloaded content
     fn verify_checksum(data: &[u8], checksum: &str) -> ModuleResult<()> {
         let (algorithm, expected) = checksum.split_once(':').ok_or_else(|| {
@@ -107,7 +143,9 @@ impl Module for GetUrlModule {
             .map(|t| t as u64)
             .unwrap_or(DEFAULT_TIMEOUT_SECS);
         let validate_certs = params.get_bool_or("validate_certs", true);
-        let mode = params.get_string("mode")?;
+        let mode = Self::parse_mode(params)?;
+        let owner = params.get_string("owner")?;
+        let group = params.get_string("group")?;
 
         // Validate URL scheme
         if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -194,20 +232,35 @@ impl Module for GetUrlModule {
         // Upload to remote host
         if let Some(ref conn) = context.connection {
             let dest_path = Path::new(&dest);
-            rt.block_on(async { conn.upload_content(&bytes, dest_path, None).await })
+            let transfer_opts = TransferOptions {
+                mode,
+                owner,
+                group,
+                create_dirs: false,
+                backup: false,
+            };
+
+            rt.block_on(async { conn.upload_content(&bytes, dest_path, Some(transfer_opts)).await })
                 .map_err(|e| {
                     ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
                 })?;
 
-            // Set file mode if specified
-            if let Some(ref file_mode) = mode {
-                rt.block_on(async {
-                    conn.execute(&format!("chmod {} {}", file_mode, dest), None)
-                        .await
-                })
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to set file mode: {}", e))
-                })?;
+            if let Some(mode) = mode {
+                let os_family = context
+                    .vars
+                    .get("ansible_os_family")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                if !os_family.eq_ignore_ascii_case("windows") {
+                    let chmod_cmd = format!("chmod {:o} {}", mode, shell_escape(&dest));
+                    rt.block_on(async { conn.execute(&chmod_cmd, None).await })
+                        .map_err(|e| {
+                            ModuleError::ExecutionFailed(format!(
+                                "Failed to enforce mode on destination file: {}",
+                                e
+                            ))
+                        })?;
+                }
             }
         }
 
@@ -320,6 +373,23 @@ mod tests {
         let result = module.execute(&params, &context).unwrap();
         assert!(result.changed);
         assert!(result.msg.contains("Would download"));
+    }
+
+    #[test]
+    fn test_parse_mode_accepts_octal_string_and_number() {
+        let mut params = HashMap::new();
+        params.insert("mode".to_string(), serde_json::json!("0644"));
+        assert_eq!(GetUrlModule::parse_mode(&params).unwrap(), Some(0o644));
+
+        params.insert("mode".to_string(), serde_json::json!(644));
+        assert_eq!(GetUrlModule::parse_mode(&params).unwrap(), Some(0o644));
+    }
+
+    #[test]
+    fn test_parse_mode_rejects_invalid_digits() {
+        let mut params = HashMap::new();
+        params.insert("mode".to_string(), serde_json::json!("689"));
+        assert!(GetUrlModule::parse_mode(&params).is_err());
     }
 
     #[test]

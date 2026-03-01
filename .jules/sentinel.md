@@ -91,7 +91,11 @@
 **Learning:** When generating configuration files that are line-based (like crontabs), always validate user input for newline characters to prevent injection of new entries.
 **Prevention:** Implement strict validation for all parameters that are written to line-based configuration files. Use helper functions like `validate_no_newlines` to enforce this constraint consistently.
 
-## 2025-05-18 - [Windows Command Injection via Environment Variables]
-**Vulnerability:** `validate_command_args` allowed `%` characters, enabling environment variable expansion (e.g., `%USERNAME%`) on Windows. It also allowed `^` (escape character).
-**Learning:** Checking for "safe" characters in a whitelist must be platform-aware or extremely conservative. `%` is safe on POSIX but dangerous on Windows. Fast-path optimizations can inadvertently whitelist dangerous characters if not careful.
-**Prevention:** Explicitly block `%` and `^` in command validation logic intended for cross-platform use, or use platform-specific validation. Always treat `%` as dangerous in contexts where Windows CMD might process the input.
+## 2025-06-03 - Windows Command Injection via % and ^
+**Vulnerability:** The `validate_command_args` utility was too permissive for Windows environments. It allowed `%` (variable expansion) and `^` (shell escape). This enabled Information Disclosure (reading environment variables) and command obfuscation/filter bypass on Windows systems where commands are executed via `cmd.exe`.
+**Learning:** Shell metacharacters vary significantly by platform. A validation logic that works for POSIX shells is insufficient for Windows `cmd.exe`, which has its own set of special characters (`%`, `^`).
+**Prevention:** Explicitly block Windows-specific shell metacharacters (`%`, `^`) in validation routines intended to be cross-platform or Windows-compatible.
+## 2024-06-04 - TOCTOU and Command Injection in GetUrlModule
+**Vulnerability:** The `GetUrlModule` was vulnerable to both Time-Of-Check to Time-Of-Use (TOCTOU) and Command Injection. It uploaded a file with default permissions, leaving it temporarily exposed, and then constructed an unescaped shell command (`chmod {mode} {dest}`) to set permissions. If `dest` or `mode` contained spaces or shell metacharacters, it could lead to arbitrary command execution or failure.
+**Learning:** Post-creation permission setting via shell commands is both a race condition risk (TOCTOU) and an injection risk if parameters aren't strictly validated or escaped. Built-in file transfer methods that accept permissions natively are inherently safer.
+**Prevention:** Use `TransferOptions` with `conn.upload_content` to pass `mode`, `owner`, and `group` directly to the connection layer. This ensures permissions are applied atomically during creation and avoids risky shell command construction entirely.
