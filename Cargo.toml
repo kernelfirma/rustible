@@ -319,6 +319,10 @@ harness = false
 name = "inventory_scale"
 harness = false
 
+[[bench]]
+name = "utils_benchmark"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1

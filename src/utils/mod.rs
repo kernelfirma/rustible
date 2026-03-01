@@ -128,19 +128,24 @@ pub fn shell_escape(s: &str) -> Cow<'_, str> {
         return Cow::Borrowed(s);
     }
 
-    let mut escaped = String::with_capacity(s.len() + 16);
-    escaped.push('\'');
+    // Optimization: avoid UTF-8 decoding in chars() iterator
+    let mut escaped = Vec::with_capacity(s.len() + 16);
+    escaped.push(b'\'');
 
-    for c in s.chars() {
-        if c == '\'' {
-            escaped.push_str("'\\''");
+    for b in s.bytes() {
+        if b == b'\'' {
+            escaped.extend_from_slice(b"'\\''");
         } else {
-            escaped.push(c);
+            escaped.push(b);
         }
     }
 
-    escaped.push('\'');
-    Cow::Owned(escaped)
+    escaped.push(b'\'');
+
+    // Safety: The input string `s` is valid UTF-8. We only append ASCII bytes
+    // (single quotes and backslashes), so the result is guaranteed to be valid UTF-8.
+    let escaped_str = unsafe { String::from_utf8_unchecked(escaped) };
+    Cow::Owned(escaped_str)
 }
 
 /// Escape a string for safe use in Windows cmd.exe.
