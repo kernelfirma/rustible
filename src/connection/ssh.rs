@@ -16,6 +16,7 @@ use tokio::task;
 use tracing::{debug, trace, warn};
 
 use crate::security::BecomeValidator;
+use crate::utils::shell_escape;
 
 use super::config::{ConnectionConfig, HostConfig};
 use super::ssh_common;
@@ -557,7 +558,7 @@ impl SshConnection {
 
         // Add working directory
         if let Some(cwd) = &options.cwd {
-            parts.push(format!("cd {} && ", cwd));
+            parts.push(format!("cd {} && ", shell_escape(cwd)));
         }
 
         // Handle privilege escalation
@@ -1240,5 +1241,14 @@ mod tests {
         );
 
         assert_eq!(attempts, vec![AuthAttempt::Agent, AuthAttempt::PublicKey]);
+    }
+
+    #[test]
+    fn test_build_command_with_malicious_cwd() {
+        let options = ExecuteOptions::new().with_cwd("/tmp; rm -rf /");
+        let cmd = SshConnection::build_command("echo hello", &options).unwrap();
+        // This assertion checks for proper escaping to prevent command injection
+        // The cwd should be quoted: cd '/tmp; rm -rf /' && echo hello
+        assert_eq!(cmd, "cd '/tmp; rm -rf /' && echo hello");
     }
 }
