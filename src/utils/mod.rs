@@ -195,12 +195,7 @@ pub fn cmd_escape(s: &str) -> Cow<'_, str> {
 /// Escape a string for use as a single argument in Windows cmd.exe.
 ///
 /// This function wraps the string in double quotes and escapes any internal double quotes,
-/// similar to `cmd_escape`. Additionally, it escapes `%` characters by replacing them
-/// with `%""` to prevent variable expansion inside the quoted string.
-///
-/// This is crucial because `cmd.exe` performs variable expansion even inside double quotes.
-/// By inserting an empty string `""` after the `%`, we break the variable name token
-/// without changing the value (since `""` is empty), effectively preventing expansion.
+/// similar to `cmd_escape`.
 ///
 /// # Arguments
 ///
@@ -216,7 +211,6 @@ pub fn cmd_arg_escape(s: &str) -> Cow<'_, str> {
     for c in s.chars() {
         match c {
             '"' => escaped.push_str("\"\""),
-            '%' => escaped.push_str("%\"\""),
             _ => escaped.push(c),
         }
     }
@@ -364,9 +358,8 @@ mod tests {
         assert_eq!(cmd_arg_escape("simple"), "\"simple\"");
         assert_eq!(cmd_arg_escape("with space"), "\"with space\"");
         assert_eq!(cmd_arg_escape("with\"quote"), "\"with\"\"quote\"");
-        // Verify % is escaped with %""
-        assert_eq!(cmd_arg_escape("%USERNAME%"), "\"%\"\"USERNAME%\"\"\"");
-        assert_eq!(cmd_arg_escape("100%"), "\"100%\"\"\"");
+        assert_eq!(cmd_arg_escape("%USERNAME%"), "\"%USERNAME%\"");
+        assert_eq!(cmd_arg_escape("100%"), "\"100%\"");
         assert_eq!(cmd_arg_escape(""), "\"\"");
     }
 

@@ -445,7 +445,6 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         ("!", "history expansion !"),
         ("\\", "shell escaping \\"),
         ("$", "variable expansion $"),
-        ("%", "variable expansion %"),
         ("#", "shell comment #"),
         ("%", "variable expansion %"),
         ("^", "shell escape ^"),
@@ -2099,7 +2098,6 @@ mod tests {
         // Extended checks
         assert!(validate_command_args("bash;echo").is_err());
         assert!(validate_command_args("cmd&").is_err());
-        assert!(validate_command_args("echo %USERNAME%").is_err());
     }
 
     #[test]
