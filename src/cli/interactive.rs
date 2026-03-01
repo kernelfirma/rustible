@@ -110,8 +110,10 @@ impl InteractiveSession {
                 .validate_with(|input: &String| -> Result<(), &str> {
                     let expanded = shellexpand::tilde(input);
                     let path = Path::new(expanded.as_ref());
-                    if path.exists() {
+                    if path.is_file() {
                         Ok(())
+                    } else if path.exists() {
+                        Err("Path is a directory; please provide a playbook file")
                     } else {
                         Err("Path does not exist")
                     }
@@ -139,8 +141,10 @@ impl InteractiveSession {
                 .validate_with(|input: &String| -> Result<(), &str> {
                     let expanded = shellexpand::tilde(input);
                     let path = Path::new(expanded.as_ref());
-                    if path.exists() {
+                    if path.is_file() {
                         Ok(())
+                    } else if path.exists() {
+                        Err("Path is a directory; please provide a playbook file")
                     } else {
                         Err("Path does not exist")
                     }
