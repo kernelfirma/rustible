@@ -2305,8 +2305,16 @@ impl RunArgs {
 
     /// Template a string by replacing {{ variable }} patterns with values
     fn template_string(template: &str, vars: &IndexMap<String, serde_yaml::Value>) -> String {
+        // OPTIMIZATION: Fast path - if no template syntax, return early
+        if !template.contains("{{") {
+            return template.to_string();
+        }
+
         // Simple Jinja2-like templating for {{ variable }} syntax
-        let re = Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").unwrap();
+        // Use a static regex to avoid compiling it for every string
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        let re = RE.get_or_init(|| Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").unwrap());
+
         let mut result = template.to_string();
 
         for cap in re.captures_iter(template) {

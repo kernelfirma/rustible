@@ -30,3 +30,7 @@
 ## 2024-05-27 - [Optimized Context Serialization]
 **Learning:** Using `BTreeSet<&str>` to sort and deduplicate keys for deterministic serialization of merged contexts is significantly slower (~15%) than using `Vec<&str>` with `sort_unstable` and `dedup`, due to the overhead of tree node allocations and pointer chasing.
 **Action:** When preparing a list of keys for serialization where the number of keys is moderate to large (e.g. merging vars + facts), prefer flat `Vec` with `sort_unstable` and `dedup` over `BTreeSet`. Pre-calculate capacity using `Vec::with_capacity` to avoid reallocations.
+
+## 2024-05-24 - [Optimize template_string]
+**Learning:** `template_string` function in `src/cli/commands/run.rs` was recompiling `Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").unwrap()` every time it was called, resulting in huge performance overhead. Caching the regex and performing a fast check avoids significant processing time.
+**Action:** Always check if regexes in frequently-used paths can be static or cached, and perform early string content checks if applicable.

@@ -398,7 +398,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // and the O(24*N) loop for quoted strings.
     const DANGEROUS_CHARS: &[char] = &[
         '$', '`', '&', '|', ';', '<', '>', '\n', '\r', '{', '}', '(', ')', '[', ']', '*', '?',
-        '!', '\\', '#',
+        '!', '\\', '#', '%', '^',
     ];
 
     if args.find(DANGEROUS_CHARS).is_none() {
@@ -417,7 +417,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         b'+' | b'=' | b',' | b'@'
     ));
 
-    if !has_dangerous_chars {
+    if is_safe {
         return Ok(());
     }
 
