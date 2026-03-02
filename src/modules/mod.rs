@@ -417,7 +417,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         b'+' | b'=' | b',' | b'@'
     ));
 
-    if !has_dangerous_chars {
+    if is_safe {
         return Ok(());
     }
 
