@@ -2811,7 +2811,7 @@ fn evaluate_jinja_test(
         "match" | "regex" => {
             if let (JsonValue::String(s), Some(pattern)) = (value, test_arg) {
                 let pattern = pattern.trim().trim_matches(|c| c == '\'' || c == '"');
-                regex::Regex::new(pattern)
+                crate::utils::get_regex(pattern)
                     .map(|re| re.is_match(s))
                     .unwrap_or(false)
             } else {
@@ -2821,7 +2821,7 @@ fn evaluate_jinja_test(
         "search" => {
             if let (JsonValue::String(s), Some(pattern)) = (value, test_arg) {
                 let pattern = pattern.trim().trim_matches(|c| c == '\'' || c == '"');
-                regex::Regex::new(pattern)
+                crate::utils::get_regex(pattern)
                     .map(|re| re.find(s).is_some())
                     .unwrap_or(false)
             } else {
