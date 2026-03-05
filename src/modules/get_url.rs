@@ -29,7 +29,6 @@ use super::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult, ParamExt,
 };
 use crate::connection::TransferOptions;
-use crate::utils::shell_escape;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -244,24 +243,6 @@ impl Module for GetUrlModule {
                 .map_err(|e| {
                     ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
                 })?;
-
-            if let Some(mode) = mode {
-                let os_family = context
-                    .vars
-                    .get("ansible_os_family")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                if !os_family.eq_ignore_ascii_case("windows") {
-                    let chmod_cmd = format!("chmod {:o} {}", mode, shell_escape(&dest));
-                    rt.block_on(async { conn.execute(&chmod_cmd, None).await })
-                        .map_err(|e| {
-                            ModuleError::ExecutionFailed(format!(
-                                "Failed to enforce mode on destination file: {}",
-                                e
-                            ))
-                        })?;
-                }
-            }
         }
 
         let mut output = ModuleOutput::changed(format!(
