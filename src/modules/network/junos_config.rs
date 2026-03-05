@@ -60,6 +60,7 @@ use crate::modules::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
 };
+use crate::utils::shell_escape;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -432,28 +433,22 @@ impl JunosNetconfTransport {
 
     /// Send raw NETCONF message and receive response
     async fn send_rpc_raw(&self, message: &str) -> ConnectionResult<String> {
-        // Use NETCONF subsystem for SSH
-        // In practice, we execute via CLI as a fallback when subsystem isn't available
-        let cmd = format!(
-            "echo '{}' | ssh -s {} -p {} localhost 2>/dev/null || echo '{}'",
-            message.replace('\'', "'\\''"),
-            NETCONF_SUBSYSTEM,
-            DEFAULT_NETCONF_PORT,
-            message.replace('\'', "'\\''")
-        );
-
-        // For simplicity, we use CLI-based NETCONF simulation
-        // Real implementation would use proper SSH subsystem
-        let result = self.connection.execute(&cmd, None).await?;
-
-        if result.success {
-            Ok(result.stdout)
-        } else {
-            Err(ConnectionError::ExecutionFailed(format!(
-                "NETCONF operation failed: {}",
-                result.stderr
-            )))
+        // First try NETCONF over SSH subsystem.
+        let subsystem_cmd = build_netconf_subsystem_command(message);
+        let result = self.connection.execute(&subsystem_cmd, None).await?;
+        if result.success && !result.stdout.trim().is_empty() {
+            return Ok(result.stdout);
         }
+
+        // Fallback to JunOS CLI XML-mode execution.
+        let fallback = self.execute_netconf_via_cli(message).await?;
+        if fallback.trim().is_empty() {
+            return Err(ConnectionError::ExecutionFailed(
+                "NETCONF operation returned empty response via both subsystem and CLI fallback"
+                    .to_string(),
+            ));
+        }
+        Ok(fallback)
     }
 
     /// Send NETCONF RPC operation
@@ -472,10 +467,19 @@ impl JunosNetconfTransport {
     }
 
     /// Execute NETCONF operation via JunOS CLI (fallback for direct NETCONF)
-    async fn execute_netconf_via_cli(&self, _rpc: &str) -> ConnectionResult<String> {
-        // For now, we simulate NETCONF via CLI commands
-        // Real NETCONF would use SSH subsystem directly
-        Ok(String::new())
+    async fn execute_netconf_via_cli(&self, rpc: &str) -> ConnectionResult<String> {
+        // JunOS CLI can accept NETCONF payloads via xml-mode.
+        let cmd = build_netconf_cli_fallback_command(rpc);
+        let result = self.connection.execute(&cmd, None).await?;
+
+        if result.success && !result.stdout.trim().is_empty() {
+            Ok(result.stdout)
+        } else {
+            Err(ConnectionError::ExecutionFailed(format!(
+                "NETCONF CLI fallback failed: {}",
+                result.stderr
+            )))
+        }
     }
 
     /// Load configuration into candidate datastore
@@ -941,8 +945,9 @@ impl JunosConfigModule {
         commands: &[&str],
         context: &ModuleContext,
     ) -> ModuleResult<CommandResult> {
-        // Build CLI script that enters configure mode and runs commands
-        let script = format!("cli -c 'configure; {}; exit'", commands.join("; "));
+        // Build CLI script that enters configure mode and runs commands.
+        let cli_script = format!("configure; {}; exit", commands.join("; "));
+        let script = format!("cli -c {}", shell_escape(&cli_script));
 
         Self::execute_cli(connection, &script, context).await
     }
@@ -970,9 +975,12 @@ impl JunosConfigModule {
         };
 
         // Create temporary file with configuration
-        let temp_file = "/var/tmp/rustible_config.tmp";
-        let escaped_config = config.replace('\'', "'\\''");
-        let write_cmd = format!("echo '{}' > {}", escaped_config, temp_file);
+        let temp_file = format!("/var/tmp/rustible_config_{}.tmp", next_message_id());
+        let write_cmd = format!(
+            "printf %s {} > {}",
+            shell_escape(config),
+            shell_escape(&temp_file)
+        );
         Self::execute_cli(connection, &write_cmd, context).await?;
 
         // Load configuration
@@ -985,7 +993,8 @@ impl JunosConfigModule {
         let result = Self::execute_junos_cli(connection, &[&load_cmd], context).await?;
 
         // Clean up temporary file
-        let _ = Self::execute_cli(connection, &format!("rm -f {}", temp_file), context).await;
+        let cleanup_cmd = format!("rm -f {}", shell_escape(&temp_file));
+        let _ = Self::execute_cli(connection, &cleanup_cmd, context).await;
 
         if result.success {
             Ok(result.stdout)
@@ -1371,7 +1380,11 @@ impl Module for JunosConfigModule {
         std::thread::scope(|s| {
             s.spawn(|| handle.block_on(module.execute_async(&params, &context, connection)))
                 .join()
-                .unwrap()
+                .map_err(|_| {
+                    ModuleError::ExecutionFailed(
+                        "Junos async execution thread panicked".to_string(),
+                    )
+                })?
         })
     }
 
@@ -1392,6 +1405,26 @@ fn escape_xml(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+/// Build SSH subsystem NETCONF command with shell-safe interpolation.
+fn build_netconf_subsystem_command(message: &str) -> String {
+    format!(
+        "printf %s {} | ssh -s -p {} localhost {} 2>/dev/null",
+        shell_escape(message),
+        DEFAULT_NETCONF_PORT,
+        shell_escape(NETCONF_SUBSYSTEM)
+    )
+}
+
+/// Build CLI fallback command for NETCONF XML mode.
+fn build_netconf_cli_fallback_command(rpc: &str) -> String {
+    let xml_mode = "xml-mode netconf need-trailer";
+    format!(
+        "printf %s {} | cli -c {}",
+        shell_escape(rpc),
+        shell_escape(xml_mode)
+    )
 }
 
 // ============================================================================
@@ -1506,6 +1539,23 @@ mod tests {
         assert_eq!(escape_xml("<test>"), "&lt;test&gt;");
         assert_eq!(escape_xml("a & b"), "a &amp; b");
         assert_eq!(escape_xml("\"quoted\""), "&quot;quoted&quot;");
+    }
+
+    #[test]
+    fn test_build_netconf_subsystem_command_escapes_payload() {
+        let cmd = build_netconf_subsystem_command("<rpc message-id=\"1\">x'y</rpc>");
+        assert!(cmd.contains("printf %s"));
+        assert!(cmd.contains("ssh -s -p 830 localhost"));
+        assert!(cmd.contains("\\''"));
+        assert!(cmd.contains("message-id=\"1\""));
+    }
+
+    #[test]
+    fn test_build_netconf_cli_fallback_command_escapes_rpc() {
+        let cmd = build_netconf_cli_fallback_command("<rpc>set system host-name r1</rpc>");
+        assert!(cmd.contains("cli -c"));
+        assert!(cmd.contains("xml-mode netconf need-trailer"));
+        assert!(cmd.contains("printf %s"));
     }
 
     #[test]

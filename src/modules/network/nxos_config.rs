@@ -86,6 +86,7 @@ use crate::modules::{
     Diff, Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParallelizationHint, ParamExt,
 };
+use crate::utils::shell_escape;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -443,6 +444,51 @@ impl NxosConfig {
 pub struct NxosConfigModule;
 
 impl NxosConfigModule {
+    fn validate_checkpoint_name(checkpoint_name: &str) -> ModuleResult<()> {
+        if checkpoint_name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            Ok(())
+        } else {
+            Err(ModuleError::InvalidParameter(format!(
+                "Invalid checkpoint name '{}': must contain only alphanumeric characters, underscores, and hyphens",
+                checkpoint_name
+            )))
+        }
+    }
+
+    /// Prevent shell metacharacters before joining commands with `;` on SSH transport.
+    fn validate_nxos_cli_fragment(fragment: &str, field_name: &str) -> ModuleResult<()> {
+        if fragment.is_empty() {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} cannot be empty",
+                field_name
+            )));
+        }
+
+        if fragment.chars().any(|c| {
+            matches!(
+                c,
+                '\n' | '\r' | '\0' | ';' | '|' | '&' | '`' | '$' | '<' | '>'
+            )
+        }) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "{} contains unsafe shell metacharacters",
+                field_name
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn validate_nxos_command_list(commands: &[String]) -> ModuleResult<()> {
+        for (idx, cmd) in commands.iter().enumerate() {
+            Self::validate_nxos_cli_fragment(cmd, &format!("command[{}]", idx))?;
+        }
+        Ok(())
+    }
+
     /// Build execute options with privilege escalation if needed
     fn build_execute_options(context: &ModuleContext) -> Option<ExecuteOptions> {
         if context.r#become {
@@ -701,18 +747,8 @@ impl NxosConfigModule {
         checkpoint_name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Validate checkpoint name (alphanumeric and underscores only)
-        if !checkpoint_name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ModuleError::InvalidParameter(format!(
-                "Invalid checkpoint name '{}': must contain only alphanumeric characters, underscores, and hyphens",
-                checkpoint_name
-            )));
-        }
-
-        let cmd = format!("checkpoint {}", checkpoint_name);
+        Self::validate_checkpoint_name(checkpoint_name)?;
+        let cmd = format!("checkpoint {}", shell_escape(checkpoint_name));
         let result = Self::execute_ssh_command(connection, &cmd, context).await?;
 
         if result.success || result.stdout.contains("done") {
@@ -731,16 +767,7 @@ impl NxosConfigModule {
         checkpoint_name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Validate checkpoint name
-        if !checkpoint_name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ModuleError::InvalidParameter(format!(
-                "Invalid checkpoint name '{}': must contain only alphanumeric characters, underscores, and hyphens",
-                checkpoint_name
-            )));
-        }
+        Self::validate_checkpoint_name(checkpoint_name)?;
 
         let cmd = format!("checkpoint {}", checkpoint_name);
         Self::execute_nxapi_commands(config, &[cmd], context).await?;
@@ -753,18 +780,11 @@ impl NxosConfigModule {
         checkpoint_name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Validate checkpoint name
-        if !checkpoint_name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ModuleError::InvalidParameter(format!(
-                "Invalid checkpoint name '{}': must contain only alphanumeric characters, underscores, and hyphens",
-                checkpoint_name
-            )));
-        }
-
-        let cmd = format!("rollback running-config checkpoint {}", checkpoint_name);
+        Self::validate_checkpoint_name(checkpoint_name)?;
+        let cmd = format!(
+            "rollback running-config checkpoint {}",
+            shell_escape(checkpoint_name)
+        );
         let result = Self::execute_ssh_command(connection, &cmd, context).await?;
 
         if result.success || result.stdout.contains("Rollback Done") {
@@ -783,16 +803,7 @@ impl NxosConfigModule {
         checkpoint_name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Validate checkpoint name
-        if !checkpoint_name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ModuleError::InvalidParameter(format!(
-                "Invalid checkpoint name '{}': must contain only alphanumeric characters, underscores, and hyphens",
-                checkpoint_name
-            )));
-        }
+        Self::validate_checkpoint_name(checkpoint_name)?;
 
         let cmd = format!("rollback running-config checkpoint {}", checkpoint_name);
         Self::execute_nxapi_commands(config, &[cmd], context).await?;
@@ -842,18 +853,8 @@ impl NxosConfigModule {
         checkpoint_name: &str,
         context: &ModuleContext,
     ) -> ModuleResult<()> {
-        // Validate checkpoint name
-        if !checkpoint_name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ModuleError::InvalidParameter(format!(
-                "Invalid checkpoint name '{}'",
-                checkpoint_name
-            )));
-        }
-
-        let cmd = format!("no checkpoint {}", checkpoint_name);
+        Self::validate_checkpoint_name(checkpoint_name)?;
+        let cmd = format!("no checkpoint {}", shell_escape(checkpoint_name));
         let result = Self::execute_ssh_command(connection, &cmd, context).await?;
 
         if result.success {
@@ -904,6 +905,8 @@ impl NxosConfigModule {
         if commands.is_empty() {
             return Ok((false, Vec::new()));
         }
+
+        Self::validate_nxos_command_list(&commands)?;
 
         // Enter configuration mode and apply commands
         #[allow(unused_assignments)]
@@ -1018,6 +1021,8 @@ impl NxosConfigModule {
         if commands.is_empty() {
             return Ok(false);
         }
+
+        Self::validate_nxos_command_list(&commands)?;
 
         // Clear existing config sections and apply new
         let conf_cmd = format!("configure terminal ; {} ; end", commands.join(" ; "));
@@ -1452,6 +1457,26 @@ impl Module for NxosConfigModule {
             ));
         }
 
+        if let Some(ref checkpoint) = config.checkpoint {
+            NxosConfigModule::validate_checkpoint_name(checkpoint)?;
+        }
+        if let Some(ref rollback_to) = config.rollback_to {
+            NxosConfigModule::validate_checkpoint_name(rollback_to)?;
+        }
+        if let Some(ref parents) = config.parents {
+            for (idx, parent) in parents.iter().enumerate() {
+                NxosConfigModule::validate_nxos_cli_fragment(
+                    parent,
+                    &format!("parents[{}]", idx),
+                )?;
+            }
+        }
+        if let Some(ref lines) = config.lines {
+            for (idx, line) in lines.iter().enumerate() {
+                NxosConfigModule::validate_nxos_cli_fragment(line, &format!("lines[{}]", idx))?;
+            }
+        }
+
         // Config replace requires src
         if config.replace == ReplaceMode::Config && config.src.is_none() {
             return Err(ModuleError::MissingParameter(
@@ -1478,7 +1503,11 @@ impl Module for NxosConfigModule {
         std::thread::scope(|s| {
             s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
                 .join()
-                .unwrap()
+                .map_err(|_| {
+                    ModuleError::ExecutionFailed(
+                        "Nxos async execution thread panicked".to_string(),
+                    )
+                })?
         })
     }
 }
@@ -1723,5 +1752,22 @@ mod tests {
 
         let result = module.validate_params(&params);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_checkpoint_name() {
+        assert!(NxosConfigModule::validate_checkpoint_name("good_name-1").is_ok());
+        assert!(NxosConfigModule::validate_checkpoint_name("bad name").is_err());
+        assert!(NxosConfigModule::validate_checkpoint_name("bad;name").is_err());
+    }
+
+    #[test]
+    fn test_validate_nxos_cli_fragment_rejects_shell_chars() {
+        assert!(NxosConfigModule::validate_nxos_cli_fragment("vlan 100", "line").is_ok());
+        assert!(NxosConfigModule::validate_nxos_cli_fragment("name prod", "line").is_ok());
+        assert!(
+            NxosConfigModule::validate_nxos_cli_fragment("vlan 100; reload", "line").is_err()
+        );
+        assert!(NxosConfigModule::validate_nxos_cli_fragment("name `whoami`", "line").is_err());
     }
 }
