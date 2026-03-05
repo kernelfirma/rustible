@@ -31,6 +31,7 @@ pub mod include_vars;
 pub mod k8s;
 pub mod known_hosts;
 pub mod lineinfile;
+pub mod locale;
 pub mod meta;
 pub mod mount;
 pub mod network;
@@ -417,7 +418,7 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
         b'+' | b'=' | b',' | b'@'
     ));
 
-    if !has_dangerous_chars {
+    if is_safe {
         return Ok(());
     }
 
@@ -1598,6 +1599,7 @@ impl ModuleRegistry {
                 cron::CronModule,
                 group::GroupModule,
                 hostname::HostnameModule,
+                locale::LocaleModule,
                 mount::MountModule,
                 service::ServiceModule,
                 sysctl::SysctlModule,

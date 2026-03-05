@@ -1491,7 +1491,7 @@ impl RunArgs {
             "assert" => {
                 let that = args
                     .and_then(|a| a.get("that"))
-                    .map(|t| Self::yaml_value_to_string(t))
+                    .map(Self::yaml_value_to_string)
                     .unwrap_or_else(|| "<condition>".to_string());
                 format!("will assert that {}", that)
             }
@@ -1557,7 +1557,7 @@ impl RunArgs {
                     .unwrap_or("<param>");
                 let value = args
                     .and_then(|a| a.get("value"))
-                    .map(|v| Self::yaml_value_to_string(v))
+                    .map(Self::yaml_value_to_string)
                     .unwrap_or_default();
                 let state = args
                     .and_then(|a| a.get("state"))

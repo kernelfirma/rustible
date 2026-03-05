@@ -5,7 +5,9 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::path::{Path, PathBuf};
+#[cfg(feature = "provisioning")]
+use std::path::Path;
+use std::path::PathBuf;
 
 use super::CommandContext;
 

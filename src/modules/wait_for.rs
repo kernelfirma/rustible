@@ -521,18 +521,27 @@ impl WaitForModule {
     ) -> ModuleResult<bool> {
         match config.state {
             WaitState::Started => {
-                let port = config.port.expect("port required for started state");
+                let port = config.port.ok_or_else(|| {
+                    ModuleError::InvalidParameter(
+                        "state 'started' requires 'port' parameter".to_string(),
+                    )
+                })?;
                 Ok(Self::check_port_open(&config.host, port, connect_timeout))
             }
             WaitState::Stopped => {
-                let port = config.port.expect("port required for stopped state");
+                let port = config.port.ok_or_else(|| {
+                    ModuleError::InvalidParameter(
+                        "state 'stopped' requires 'port' parameter".to_string(),
+                    )
+                })?;
                 Ok(!Self::check_port_open(&config.host, port, connect_timeout))
             }
             WaitState::Present => {
-                let path = config
-                    .path
-                    .as_ref()
-                    .expect("path required for present state");
+                let path = config.path.as_ref().ok_or_else(|| {
+                    ModuleError::InvalidParameter(
+                        "state 'present' requires 'path' parameter".to_string(),
+                    )
+                })?;
 
                 // If search_regex is provided, check for pattern
                 if let Some(ref regex) = config.compiled_regex {
@@ -545,14 +554,19 @@ impl WaitForModule {
                 }
             }
             WaitState::Absent => {
-                let path = config
-                    .path
-                    .as_ref()
-                    .expect("path required for absent state");
+                let path = config.path.as_ref().ok_or_else(|| {
+                    ModuleError::InvalidParameter(
+                        "state 'absent' requires 'path' parameter".to_string(),
+                    )
+                })?;
                 Ok(!Self::check_path_exists(path))
             }
             WaitState::Drained => {
-                let port = config.port.expect("port required for drained state");
+                let port = config.port.ok_or_else(|| {
+                    ModuleError::InvalidParameter(
+                        "state 'drained' requires 'port' parameter".to_string(),
+                    )
+                })?;
                 Self::check_port_drained(
                     port,
                     &config.exclude_hosts,
@@ -1101,5 +1115,27 @@ mod tests {
             &exclude_hosts_local,
             &active_states
         ));
+    }
+
+    #[test]
+    fn test_check_condition_missing_required_parameter_returns_error() {
+        let module = WaitForModule;
+        let config = WaitForConfig {
+            host: "127.0.0.1".to_string(),
+            port: None,
+            path: None,
+            search_regex: None,
+            compiled_regex: None,
+            state: WaitState::Started,
+            timeout: 1,
+            delay: 0,
+            sleep: 1,
+            connect_timeout: 1,
+            msg: None,
+            exclude_hosts: vec![],
+            active_connection_states: vec!["ESTABLISHED".to_string()],
+        };
+        let result = module.check_condition(&config, Duration::from_secs(1));
+        assert!(matches!(result, Err(ModuleError::InvalidParameter(_))));
     }
 }

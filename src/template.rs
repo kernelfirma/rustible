@@ -263,11 +263,11 @@ impl TemplateEngine {
         let template_count = self
             .template_cache
             .as_ref()
-            .map_or(0, |cache| cache.lock().len());
+            .map_or_else(|| 0, |cache| cache.lock().len());
         let expression_count = self
             .expression_cache
             .as_ref()
-            .map_or(0, |cache| cache.lock().len());
+            .map_or_else(|| 0, |cache| cache.lock().len());
         (template_count, expression_count)
     }
 
@@ -784,7 +784,7 @@ fn filter_last(value: MiniJinjaValue) -> MiniJinjaValue {
         }
     } else if let Some(s) = value.as_str() {
         s.chars()
-            .last()
+            .next_back()
             .map(|c| MiniJinjaValue::from(c.to_string()))
             .unwrap_or(MiniJinjaValue::UNDEFINED)
     } else {
