@@ -328,3 +328,35 @@ impl Module for MungeModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, MungeModule};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_for_munge() {
+        assert_eq!(detect_os_family("ID=ubuntu\nID_LIKE=debian"), Some("debian"));
+        assert_eq!(detect_os_family("ID=rocky\nID_LIKE=rhel"), Some("rhel"));
+        assert_eq!(detect_os_family("ID=arch"), None);
+    }
+
+    #[test]
+    fn test_munge_module_metadata() {
+        let module = MungeModule;
+        assert_eq!(module.name(), "munge");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_munge_optional_params_defaults() {
+        let module = MungeModule;
+        let optional = module.optional_params();
+        assert_eq!(optional.get("state"), Some(&serde_json::json!("present")));
+        assert_eq!(optional.get("munge_user"), Some(&serde_json::json!("munge")));
+        assert_eq!(optional.get("munge_group"), Some(&serde_json::json!("munge")));
+        assert!(optional.contains_key("key_source"));
+        assert!(optional.contains_key("key_content"));
+    }
+}

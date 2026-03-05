@@ -42,6 +42,7 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+use crate::utils::shell_escape;
 
 /// Result of a preflight check before performing Redfish operations.
 #[derive(Debug, Serialize)]
@@ -110,14 +111,18 @@ fn run_cmd_ok(
 }
 
 /// Build base curl command with authentication and SSL options
-fn build_curl_base(host: &str, user: &str, password: &str, verify_ssl: bool) -> String {
+fn build_curl_base(user: &str, password: &str, verify_ssl: bool) -> String {
     let ssl_flag = if verify_ssl { "-s" } else { "-sk" };
+    let auth = format!("{}:{}", user, password);
     format!(
-        "curl {} -u '{}:{}' ",
+        "curl {} -u {} ",
         ssl_flag,
-        user.replace('\'', "'\\''"),
-        password.replace('\'', "'\\''")
+        shell_escape(&auth)
     )
+}
+
+fn redfish_url(host: &str, path: &str) -> String {
+    shell_escape(&format!("https://{}{}", host, path)).into_owned()
 }
 
 /// Parse a JSON string into a `serde_json::Value`, returning a `ModuleError` on failure.
@@ -200,10 +205,9 @@ fn poll_task_status(
         }
 
         let cmd = format!(
-            "{}https://{}{} 2>/dev/null",
-            build_curl_base(host, user, password, verify_ssl),
-            host,
-            task_uri
+            "{}{} 2>/dev/null",
+            build_curl_base(user, password, verify_ssl),
+            redfish_url(host, task_uri)
         );
 
         let stdout = match run_cmd_ok(connection, &cmd, context) {
@@ -437,9 +441,9 @@ impl RedfishPowerModule {
     /// Build curl command for power status query
     fn build_status_command(host: &str, user: &str, password: &str, verify_ssl: bool) -> String {
         format!(
-            "{}https://{}/redfish/v1/Systems/1 2>/dev/null",
-            build_curl_base(host, user, password, verify_ssl),
-            host
+            "{}{} 2>/dev/null",
+            build_curl_base(user, password, verify_ssl),
+            redfish_url(host, "/redfish/v1/Systems/1")
         )
     }
 
@@ -451,13 +455,14 @@ impl RedfishPowerModule {
         reset_type: &str,
         verify_ssl: bool,
     ) -> String {
+        let payload = format!(r#"{{"ResetType": "{}"}}"#, reset_type);
         format!(
             "{}-X POST -H 'Content-Type: application/json' \
-             -d '{{\"ResetType\": \"{}\"}}' \
-             https://{}/redfish/v1/Systems/1/Actions/ComputerSystem.Reset 2>/dev/null",
-            build_curl_base(host, user, password, verify_ssl),
-            reset_type,
-            host
+             -d {} \
+             {} 2>/dev/null",
+            build_curl_base(user, password, verify_ssl),
+            shell_escape(&payload),
+            redfish_url(host, "/redfish/v1/Systems/1/Actions/ComputerSystem.Reset")
         )
     }
 
@@ -525,9 +530,9 @@ impl RedfishPowerModule {
         verify_ssl: bool,
     ) -> String {
         let cmd = format!(
-            "{}https://{}/redfish/v1/UpdateService/FirmwareInventory 2>/dev/null",
-            build_curl_base(host, user, password, verify_ssl),
-            host
+            "{}{} 2>/dev/null",
+            build_curl_base(user, password, verify_ssl),
+            redfish_url(host, "/redfish/v1/UpdateService/FirmwareInventory")
         );
         match run_cmd(connection, &cmd, context) {
             Ok((true, stdout, _)) => stdout,
@@ -673,6 +678,18 @@ impl Module for RedfishPowerModule {
                     .map(|uri| uri.to_string())
             })
             .map(|task_uri| {
+                let normalized_task_uri = if task_uri.starts_with("http://")
+                    || task_uri.starts_with("https://")
+                {
+                    task_uri
+                        .split_once("/redfish/")
+                        .map(|(_, suffix)| format!("/redfish/{}", suffix))
+                        .unwrap_or_else(|| "/redfish/v1/TaskService/Tasks".to_string())
+                } else if task_uri.starts_with('/') {
+                    task_uri
+                } else {
+                    format!("/{}", task_uri)
+                };
                 poll_task_status(
                     connection,
                     context,
@@ -680,7 +697,7 @@ impl Module for RedfishPowerModule {
                     &user,
                     &password,
                     verify_ssl,
-                    &task_uri,
+                    &normalized_task_uri,
                     timeout_secs,
                 )
             });
@@ -730,10 +747,9 @@ impl RedfishInfoModule {
         verify_ssl: bool,
     ) -> String {
         format!(
-            "{}https://{}{} 2>/dev/null",
-            build_curl_base(host, user, password, verify_ssl),
-            host,
-            query_type.to_endpoint()
+            "{}{} 2>/dev/null",
+            build_curl_base(user, password, verify_ssl),
+            redfish_url(host, query_type.to_endpoint())
         )
     }
 }
@@ -949,12 +965,12 @@ mod tests {
 
     #[test]
     fn test_build_curl_base() {
-        let cmd = build_curl_base("bmc.example.com", "admin", "pass123", false);
+        let cmd = build_curl_base("admin", "pass123", false);
         assert!(cmd.contains("curl"));
         assert!(cmd.contains("-sk"));
         assert!(cmd.contains("admin:pass123"));
 
-        let cmd_verify = build_curl_base("bmc.example.com", "admin", "pass123", true);
+        let cmd_verify = build_curl_base("admin", "pass123", true);
         assert!(cmd_verify.contains("curl"));
         assert!(!cmd_verify.contains("-k"));
         assert!(cmd_verify.contains("admin:pass123"));
@@ -962,8 +978,14 @@ mod tests {
 
     #[test]
     fn test_build_curl_base_password_escaping() {
-        let cmd = build_curl_base("host", "user", "p'ass", false);
+        let cmd = build_curl_base("user", "p'ass", false);
         assert!(cmd.contains("p'\\''ass"));
+    }
+
+    #[test]
+    fn test_redfish_url_escapes_host_and_path() {
+        let url = redfish_url("bmc.example.com;touch /tmp/pwn", "/redfish/v1/Systems/1");
+        assert_eq!(url, "'https://bmc.example.com;touch /tmp/pwn/redfish/v1/Systems/1'");
     }
 
     #[test]

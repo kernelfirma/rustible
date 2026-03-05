@@ -603,3 +603,40 @@ impl SlurmOpsModule {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, SlurmConfigModule, SlurmOpsModule};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_for_slurm() {
+        assert_eq!(detect_os_family("ID=debian"), Some("debian"));
+        assert_eq!(detect_os_family("ID=almalinux"), Some("rhel"));
+        assert_eq!(detect_os_family("ID=nixos"), None);
+    }
+
+    #[test]
+    fn test_slurm_config_module_metadata() {
+        let module = SlurmConfigModule;
+        assert_eq!(module.name(), "slurm_config");
+        assert!(!module.description().is_empty());
+        assert_eq!(module.required_params(), ["role"]);
+        let optional = module.optional_params();
+        assert!(optional.contains_key("slurm_conf"));
+        assert!(optional.contains_key("cgroup_conf"));
+        assert!(optional.contains_key("gres_conf"));
+    }
+
+    #[test]
+    fn test_slurm_ops_module_metadata() {
+        let module = SlurmOpsModule;
+        assert_eq!(module.name(), "slurm_ops");
+        assert!(!module.description().is_empty());
+        assert_eq!(module.required_params(), ["action"]);
+        let optional = module.optional_params();
+        assert!(optional.contains_key("nodes"));
+        assert!(optional.contains_key("reason"));
+        assert!(optional.contains_key("partition_config"));
+    }
+}

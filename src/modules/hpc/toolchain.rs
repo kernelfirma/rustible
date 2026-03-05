@@ -263,3 +263,34 @@ impl Module for HpcToolchainModule {
         HashMap::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, toolchain_packages, HpcToolchainModule, VALID_SETS};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_for_toolchain() {
+        assert_eq!(detect_os_family("ID=ubuntu"), Some("debian"));
+        assert_eq!(detect_os_family("ID=centos"), Some("rhel"));
+        assert_eq!(detect_os_family("ID=gentoo"), None);
+    }
+
+    #[test]
+    fn test_toolchain_packages_mapping() {
+        let openmpi = toolchain_packages("build_essentials", "debian").unwrap();
+        assert!(openmpi.contains(&"build-essential"));
+        assert!(toolchain_packages("unknown", "debian").is_none());
+        assert!(toolchain_packages("perf_tools", "rhel").unwrap().contains(&"perf"));
+    }
+
+    #[test]
+    fn test_toolchain_module_metadata() {
+        let module = HpcToolchainModule;
+        assert_eq!(module.name(), "hpc_toolchain");
+        assert!(!module.description().is_empty());
+        assert_eq!(module.required_params(), ["sets"]);
+        assert!(module.optional_params().is_empty());
+        assert!(VALID_SETS.contains(&"rdma_userland"));
+    }
+}

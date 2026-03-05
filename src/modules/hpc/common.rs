@@ -296,3 +296,35 @@ impl Module for HpcBaselineModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, HpcBaselineModule};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_variants() {
+        assert_eq!(detect_os_family("ID=ubuntu\nID_LIKE=debian"), Some("debian"));
+        assert_eq!(detect_os_family("ID=rocky\nID_LIKE=\"rhel fedora\""), Some("rhel"));
+        assert_eq!(detect_os_family("ID=alpine"), None);
+    }
+
+    #[test]
+    fn test_hpc_baseline_module_metadata() {
+        let module = HpcBaselineModule;
+        assert_eq!(module.name(), "hpc_baseline");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_hpc_baseline_optional_params_defaults() {
+        let module = HpcBaselineModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("limits"));
+        assert!(optional.contains_key("sysctl"));
+        assert!(optional.contains_key("packages"));
+        assert!(optional.contains_key("directories"));
+        assert!(optional.contains_key("tuned_profile"));
+    }
+}

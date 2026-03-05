@@ -23,6 +23,7 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+use crate::utils::shell_escape;
 
 // ---- Robustness result structs (BM-01) ----
 
@@ -247,11 +248,11 @@ fn expected_state_for_action(action: &str) -> &'static str {
 
 fn build_ipmi_base(host: &str, user: &str, password: &str, interface: &str) -> String {
     format!(
-        "ipmitool -I {} -H {} -U {} -P '{}'",
-        interface,
-        host,
-        user,
-        password.replace('\'', "'\\''"),
+        "ipmitool -I {} -H {} -U {} -P {}",
+        shell_escape(interface),
+        shell_escape(host),
+        shell_escape(user),
+        shell_escape(password),
     )
 }
 
@@ -656,6 +657,13 @@ mod tests {
     fn test_build_ipmi_base_password_escaping() {
         let base = build_ipmi_base("10.0.0.1", "admin", "p'ass", "lanplus");
         assert!(base.contains("p'\\''ass"));
+    }
+
+    #[test]
+    fn test_build_ipmi_base_escapes_host_and_user() {
+        let base = build_ipmi_base("10.0.0.1;touch /tmp/pwn", "admin user", "secret", "lanplus");
+        assert!(base.contains("-H '10.0.0.1;touch /tmp/pwn'"));
+        assert!(base.contains("-U 'admin user'"));
     }
 
     #[test]
