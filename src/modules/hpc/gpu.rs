@@ -23,6 +23,7 @@ use crate::modules::{
     Module, ModuleContext, ModuleError, ModuleOutput, ModuleParams, ModuleResult,
     ParallelizationHint, ParamExt,
 };
+use crate::utils::shell_escape;
 
 fn get_exec_options(context: &ModuleContext) -> ExecuteOptions {
     let mut options = ExecuteOptions::new();
@@ -131,8 +132,27 @@ fn normalize_compute_mode(mode: &str) -> ModuleResult<String> {
 fn gpu_selector_arg(gpu_id: &Option<String>) -> String {
     gpu_id
         .as_ref()
-        .map(|id| format!(" -i {}", id))
+        .map(|id| format!(" -i {}", shell_escape(id)))
         .unwrap_or_default()
+}
+
+fn validate_gpu_id(gpu_id: &str) -> ModuleResult<()> {
+    if gpu_id.is_empty() {
+        return Err(ModuleError::InvalidParameter(
+            "gpu_id cannot be empty".to_string(),
+        ));
+    }
+    if gpu_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_'))
+    {
+        Ok(())
+    } else {
+        Err(ModuleError::InvalidParameter(format!(
+            "gpu_id '{}' contains invalid characters",
+            gpu_id
+        )))
+    }
 }
 
 fn parse_power_limit(value: &str) -> Option<f64> {
@@ -300,6 +320,10 @@ impl Module for NvidiaGpuModule {
         let gpu_id = params.get_string("gpu_id")?;
         let gres_config = params.get_bool_or("gres_config", false);
 
+        if let Some(ref gpu_id) = gpu_id {
+            validate_gpu_id(gpu_id)?;
+        }
+
         // Detect OS family
         let os_stdout = run_cmd_ok(connection, "cat /etc/os-release", context)?;
         let os_family = detect_os_family(&os_stdout).ok_or_else(|| {
@@ -321,6 +345,13 @@ impl Module for NvidiaGpuModule {
             .as_deref()
             .and_then(driver_branch)
             .unwrap_or_else(|| "535".to_string());
+        if !desired_branch.chars().all(|c| c.is_ascii_digit()) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "driver_version '{}' resolved to invalid driver branch '{}'",
+                driver_version.as_deref().unwrap_or(""),
+                desired_branch
+            )));
+        }
         let check_cmd = match os_family {
             "rhel" => {
                 if driver_version.is_some() {
@@ -597,7 +628,10 @@ impl Module for NvidiaGpuModule {
 
 #[cfg(test)]
 mod tests {
-    use super::{driver_branch, normalize_compute_mode};
+    use super::{
+        driver_branch, gpu_selector_arg, normalize_compute_mode, validate_gpu_id, NvidiaGpuModule,
+    };
+    use crate::modules::Module;
 
     #[test]
     fn test_driver_branch_parses_versions() {
@@ -613,5 +647,31 @@ mod tests {
         assert_eq!(normalize_compute_mode("exclusive_process").unwrap(), "2");
         assert_eq!(normalize_compute_mode("prohibited").unwrap(), "3");
         assert_eq!(normalize_compute_mode("2").unwrap(), "2");
+    }
+
+    #[test]
+    fn test_gpu_selector_is_shell_escaped() {
+        let safe = gpu_selector_arg(&Some("0".to_string()));
+        assert_eq!(safe, " -i 0");
+
+        let escaped = gpu_selector_arg(&Some("0; reboot".to_string()));
+        assert_eq!(escaped, " -i '0; reboot'");
+    }
+
+    #[test]
+    fn test_validate_gpu_id() {
+        assert!(validate_gpu_id("0").is_ok());
+        assert!(validate_gpu_id("GPU-1234_abcd").is_ok());
+        assert!(validate_gpu_id("GPU-1234;rm -rf /").is_err());
+        assert!(validate_gpu_id("").is_err());
+    }
+
+    #[test]
+    fn test_nvidia_gpu_module_metadata() {
+        let module = NvidiaGpuModule;
+        assert_eq!(module.name(), "nvidia_gpu");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+        assert!(module.optional_params().contains_key("gpu_id"));
     }
 }

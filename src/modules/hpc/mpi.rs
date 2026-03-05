@@ -316,3 +316,33 @@ impl Module for MpiModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, MpiModule};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_for_mpi() {
+        assert_eq!(detect_os_family("ID=debian"), Some("debian"));
+        assert_eq!(detect_os_family("ID_LIKE=\"rhel fedora\""), Some("rhel"));
+        assert_eq!(detect_os_family("ID=sles"), None);
+    }
+
+    #[test]
+    fn test_mpi_module_metadata() {
+        let module = MpiModule;
+        assert_eq!(module.name(), "mpi_config");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_mpi_optional_params_defaults() {
+        let module = MpiModule;
+        let optional = module.optional_params();
+        assert_eq!(optional.get("flavor"), Some(&serde_json::json!("openmpi")));
+        assert!(optional.contains_key("mca_params"));
+        assert_eq!(optional.get("lmod_module"), Some(&serde_json::json!(false)));
+    }
+}

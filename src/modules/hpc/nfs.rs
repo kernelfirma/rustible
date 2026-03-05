@@ -474,3 +474,41 @@ impl Module for NfsClientModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_os_family, NfsClientModule, NfsServerModule};
+    use crate::modules::Module;
+
+    #[test]
+    fn test_detect_os_family_for_nfs() {
+        assert_eq!(detect_os_family("ID=ubuntu"), Some("debian"));
+        assert_eq!(detect_os_family("ID_LIKE=\"rhel fedora\""), Some("rhel"));
+        assert_eq!(detect_os_family("ID=freebsd"), None);
+    }
+
+    #[test]
+    fn test_nfs_server_module_metadata() {
+        let module = NfsServerModule;
+        assert_eq!(module.name(), "nfs_server");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+        assert_eq!(
+            module.optional_params().get("state"),
+            Some(&serde_json::json!("present"))
+        );
+    }
+
+    #[test]
+    fn test_nfs_client_module_metadata_and_defaults() {
+        let module = NfsClientModule;
+        assert_eq!(module.name(), "nfs_client");
+        assert_eq!(module.required_params(), ["server", "export", "mount_point"]);
+        let optional = module.optional_params();
+        assert_eq!(optional.get("state"), Some(&serde_json::json!("mounted")));
+        assert_eq!(
+            optional.get("mount_options"),
+            Some(&serde_json::json!("defaults,hard,intr"))
+        );
+    }
+}

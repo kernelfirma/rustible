@@ -321,3 +321,30 @@ impl Module for HpcFactsModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::HpcFactsModule;
+    use crate::modules::{Module, ModuleClassification};
+
+    #[test]
+    fn test_hpc_facts_module_metadata() {
+        let module = HpcFactsModule;
+        assert_eq!(module.name(), "hpc_facts");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_hpc_facts_optional_params() {
+        let module = HpcFactsModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("gather"));
+    }
+
+    #[test]
+    fn test_hpc_facts_classification_is_remote_command() {
+        let module = HpcFactsModule;
+        assert_eq!(module.classification(), ModuleClassification::RemoteCommand);
+    }
+}

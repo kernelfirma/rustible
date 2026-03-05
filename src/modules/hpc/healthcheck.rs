@@ -244,3 +244,37 @@ impl Module for HpcHealthcheckModule {
         m
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::HpcHealthcheckModule;
+    use crate::modules::Module;
+
+    #[test]
+    fn test_hpc_healthcheck_module_metadata() {
+        let module = HpcHealthcheckModule;
+        assert_eq!(module.name(), "hpc_healthcheck");
+        assert!(!module.description().is_empty());
+        assert!(module.required_params().is_empty());
+    }
+
+    #[test]
+    fn test_hpc_healthcheck_optional_params_defaults() {
+        let module = HpcHealthcheckModule;
+        let optional = module.optional_params();
+        assert!(optional.contains_key("checks"));
+        assert!(optional.contains_key("nfs_mounts"));
+        assert!(optional.contains_key("services"));
+        assert!(optional.contains_key("fail_on_error"));
+    }
+
+    #[test]
+    fn test_hpc_healthcheck_default_fail_on_error_is_false() {
+        let module = HpcHealthcheckModule;
+        let optional = module.optional_params();
+        assert_eq!(
+            optional.get("fail_on_error"),
+            Some(&serde_json::json!(false))
+        );
+    }
+}
