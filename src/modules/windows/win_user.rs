@@ -107,6 +107,23 @@ impl GroupsAction {
 pub struct WinUserModule;
 
 impl WinUserModule {
+    fn validate_local_group_name(name: &str) -> ModuleResult<()> {
+        if name.is_empty() {
+            return Err(ModuleError::InvalidParameter(
+                "Group names cannot be empty".to_string(),
+            ));
+        }
+
+        if name.contains('\0') || name.contains('\n') || name.contains('\r') {
+            return Err(ModuleError::InvalidParameter(format!(
+                "Invalid group name '{}': contains control characters",
+                name
+            )));
+        }
+
+        Ok(())
+    }
+
     /// Generate PowerShell script to get user information
     fn generate_get_user_script(name: &str) -> String {
         format!(
@@ -345,7 +362,7 @@ $result | ConvertTo-Json -Compress
     ) -> String {
         let groups_json: Vec<String> = groups
             .iter()
-            .map(|g| format!("'{}'", g.replace('\'', "''")))
+            .map(|g| powershell_escape(g).into_owned())
             .collect();
 
         match action {
@@ -650,6 +667,10 @@ impl Module for WinUserModule {
         // Handle group membership
         if let Some(ref group_list) = groups {
             if !group_list.is_empty() {
+                for group in group_list {
+                    Self::validate_local_group_name(group)?;
+                }
+
                 if context.check_mode {
                     messages.push("Would update group membership".to_string());
                     changed = true;
@@ -767,5 +788,25 @@ mod tests {
         assert!(script.contains("Get-LocalUser"));
         assert!(script.contains("testuser"));
         assert!(script.contains("ConvertTo-Json"));
+    }
+
+    #[test]
+    fn test_validate_local_group_name_rejects_control_chars() {
+        assert!(WinUserModule::validate_local_group_name("Users").is_ok());
+        assert!(WinUserModule::validate_local_group_name("Admins\nInjected").is_err());
+    }
+
+    #[test]
+    fn test_generate_manage_groups_script_escapes_group_names() {
+        let groups = vec!["Domain Users".to_string(), "O'Hare Admins".to_string()];
+        let script = WinUserModule::generate_manage_groups_script(
+            "svc_user",
+            &groups,
+            &GroupsAction::Add,
+        );
+
+        assert!(script.contains("Domain Users"));
+        assert!(script.contains("O''Hare Admins"));
+        assert!(script.contains("Add-LocalGroupMember"));
     }
 }

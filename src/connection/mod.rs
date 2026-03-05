@@ -1431,6 +1431,21 @@ impl ConnectionBuilder {
                     ))
                 }
             }
+            #[cfg(feature = "aws")]
+            ConnectionType::Ssm {
+                instance_id,
+                region,
+                profile,
+            } => {
+                let mut conn = ssm::SsmConnection::new(instance_id);
+                if let Some(region) = region {
+                    conn = conn.with_region(region);
+                }
+                if let Some(profile) = profile {
+                    conn = conn.with_profile(profile);
+                }
+                Ok(Arc::new(conn))
+            }
             #[cfg(feature = "winrm")]
             ConnectionType::WinRm { host, port, user } => {
                 let conn = winrm::WinRmConnectionBuilder::new(&host)
