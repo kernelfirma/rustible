@@ -43,7 +43,9 @@
 //!     password: "{{ service_password }}"
 //! ```
 
-use crate::modules::windows::{execute_powershell_sync, powershell_escape, validate_service_name};
+use crate::modules::windows::{
+    execute_powershell_sync, powershell_escape, validate_service_name, validate_windows_path,
+};
 use crate::modules::{
     Module, ModuleClassification, ModuleContext, ModuleError, ModuleOutput, ModuleParams,
     ModuleResult, ParamExt,
@@ -440,6 +442,7 @@ impl Module for WinServiceModule {
             .as_str()
             .unwrap_or("")
             .to_lowercase();
+        let current_username = current_state["username"].as_str().unwrap_or("").to_string();
 
         // Handle service removal
         if let Some(ServiceState::Absent) = state {
@@ -472,11 +475,10 @@ impl Module for WinServiceModule {
 
         // Handle service creation
         if !service_exists {
-            if path.is_none() {
-                return Err(ModuleError::MissingParameter(
-                    "path is required to create a new service".to_string(),
-                ));
-            }
+            let service_path = path.as_deref().ok_or_else(|| {
+                ModuleError::MissingParameter("path is required to create a new service".to_string())
+            })?;
+            validate_windows_path(service_path)?;
 
             if context.check_mode {
                 return Ok(ModuleOutput::changed(format!(
@@ -488,7 +490,7 @@ impl Module for WinServiceModule {
             let mode = start_mode.clone().unwrap_or(ServiceStartMode::Manual);
             let create_script = Self::generate_create_service_script(
                 &name,
-                path.as_ref().unwrap(),
+                service_path,
                 display_name.as_deref(),
                 description.as_deref(),
                 &mode,
@@ -541,25 +543,27 @@ impl Module for WinServiceModule {
 
         // Handle service account change
         if let Some(ref user) = username {
-            if context.check_mode {
-                messages.push(format!("Would change service account to '{}'", user));
-                changed = true;
-            } else {
-                let script =
-                    Self::generate_set_service_account_script(&name, user, password.as_deref());
-                let (success, stdout, stderr) = execute_powershell_sync(connection, &script)?;
-
-                if !success {
-                    return Err(ModuleError::ExecutionFailed(format!(
-                        "Failed to set service account: {}",
-                        stderr
-                    )));
-                }
-
-                let result = Self::parse_json_result(&stdout)?;
-                if result["changed"].as_bool().unwrap_or(false) {
-                    messages.push(format!("Changed service account to '{}'", user));
+            if !current_username.eq_ignore_ascii_case(user) {
+                if context.check_mode {
+                    messages.push(format!("Would change service account to '{}'", user));
                     changed = true;
+                } else {
+                    let script =
+                        Self::generate_set_service_account_script(&name, user, password.as_deref());
+                    let (success, stdout, stderr) = execute_powershell_sync(connection, &script)?;
+
+                    if !success {
+                        return Err(ModuleError::ExecutionFailed(format!(
+                            "Failed to set service account: {}",
+                            stderr
+                        )));
+                    }
+
+                    let result = Self::parse_json_result(&stdout)?;
+                    if result["changed"].as_bool().unwrap_or(false) {
+                        messages.push(format!("Changed service account to '{}'", user));
+                        changed = true;
+                    }
                 }
             }
         }
@@ -778,5 +782,39 @@ mod tests {
         assert!(script.contains("Get-Service"));
         assert!(script.contains("wuauserv"));
         assert!(script.contains("ConvertTo-Json"));
+    }
+
+    #[test]
+    fn test_generate_create_service_script_escapes_path() {
+        let script = WinServiceModule::generate_create_service_script(
+            "svc",
+            "C:\\Program Files\\App\\service'svc.exe",
+            Some("Svc Display"),
+            None,
+            &ServiceStartMode::Manual,
+        );
+
+        assert!(script.contains("New-Service"));
+        assert!(script.contains("service''svc.exe"));
+        assert!(script.contains("Svc Display"));
+    }
+
+    #[test]
+    fn test_validate_windows_path_blocks_shell_metacharacters() {
+        assert!(validate_windows_path("C:\\Windows\\System32\\svchost.exe").is_ok());
+        assert!(validate_windows_path("C:\\tmp\\evil;calc.exe").is_err());
+    }
+
+    #[test]
+    fn test_generate_set_service_account_script_escapes_credentials() {
+        let script = WinServiceModule::generate_set_service_account_script(
+            "svc_name",
+            r#".\domain\svc'user"#,
+            Some("p'ass\"word"),
+        );
+
+        assert!(script.contains("svc''user"));
+        assert!(script.contains("p''ass"));
+        assert!(script.contains("ConvertTo-SecureString"));
     }
 }

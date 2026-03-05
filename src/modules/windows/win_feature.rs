@@ -508,4 +508,21 @@ mod tests {
         assert!(script.contains("IIS-WebServerRole"));
         assert!(script.contains("NetFx4-AdvSrvs"));
     }
+
+    #[test]
+    fn test_build_install_script_escapes_source_path() {
+        let config = WinFeatureConfig {
+            names: vec!["IIS-WebServerRole".to_string()],
+            state: WinFeatureState::Present,
+            include_management_tools: true,
+            include_sub_features: false,
+            source: Some("D:\\sources\\win'sxs".to_string()),
+            restart: false,
+        };
+
+        let script = WinFeatureModule::build_install_script(&config);
+        assert!(script.contains("Install-WindowsFeature"));
+        assert!(script.contains("win''sxs"));
+        assert!(script.contains("-IncludeManagementTools"));
+    }
 }

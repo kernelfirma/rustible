@@ -95,6 +95,30 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+fn serialize_output_data<T: Serialize + ?Sized>(
+    field: &str,
+    value: &T,
+) -> ModuleResult<serde_json::Value> {
+    serde_json::to_value(value).map_err(|e| {
+        ModuleError::ExecutionFailed(format!(
+            "Failed to serialize '{}' output data: {}",
+            field, e
+        ))
+    })
+}
+
+fn join_scoped_module_thread(
+    result: std::thread::Result<ModuleResult<ModuleOutput>>,
+    module_name: &str,
+) -> ModuleResult<ModuleOutput> {
+    result.map_err(|_| {
+        ModuleError::ExecutionFailed(format!(
+            "{} worker thread panicked during execution",
+            module_name
+        ))
+    })?
+}
+
 /// Represents the desired state of an EC2 instance
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -1104,7 +1128,7 @@ impl Ec2InstanceModule {
                 final_instances.len(),
                 config.name
             ))
-            .with_data("instances", serde_json::to_value(&final_instances).unwrap())
+            .with_data("instances", serialize_output_data("instances", &final_instances)?)
             .with_data("instance_ids", serde_json::json!(instance_ids)))
         } else {
             // Check if any instances need to be started
@@ -1122,7 +1146,7 @@ impl Ec2InstanceModule {
                     existing.len(),
                     config.name
                 ))
-                .with_data("instances", serde_json::to_value(existing).unwrap())
+                .with_data("instances", serialize_output_data("instances", existing)?)
                 .with_data("instance_ids", serde_json::json!(instance_ids)));
             }
 
@@ -1151,7 +1175,7 @@ impl Ec2InstanceModule {
 
             Ok(
                 ModuleOutput::changed(format!("Started {} instance(s)", stopped.len()))
-                    .with_data("instances", serde_json::to_value(&final_instances).unwrap())
+                    .with_data("instances", serialize_output_data("instances", &final_instances)?)
                     .with_data("started_instance_ids", serde_json::json!(stopped)),
             )
         }
@@ -1184,7 +1208,7 @@ impl Ec2InstanceModule {
                 existing.len(),
                 config.name
             ))
-            .with_data("instances", serde_json::to_value(existing).unwrap())
+            .with_data("instances", serialize_output_data("instances", existing)?)
             .with_data("instance_ids", serde_json::json!(instance_ids)));
         }
 
@@ -1213,7 +1237,7 @@ impl Ec2InstanceModule {
 
         Ok(
             ModuleOutput::changed(format!("Stopped {} instance(s)", running.len()))
-                .with_data("instances", serde_json::to_value(&final_instances).unwrap())
+                .with_data("instances", serialize_output_data("instances", &final_instances)?)
                 .with_data("stopped_instance_ids", serde_json::json!(running)),
         )
     }
@@ -1356,9 +1380,11 @@ impl Module for Ec2InstanceModule {
         let module = self;
 
         std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
-                .join()
-                .unwrap()
+            join_scoped_module_thread(
+                s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
+                    .join(),
+                module.name(),
+            )
         })
     }
 
@@ -1705,7 +1731,10 @@ impl Ec2SecurityGroupModule {
                             "Security group '{}' already exists",
                             config.name
                         ))
-                        .with_data("security_group", serde_json::to_value(&sg).unwrap()));
+                        .with_data(
+                            "security_group",
+                            serialize_output_data("security_group", &sg)?,
+                        ));
                     }
 
                     let mut changed = false;
@@ -1741,13 +1770,19 @@ impl Ec2SecurityGroupModule {
                             "Updated security group '{}'",
                             config.name
                         ))
-                        .with_data("security_group", serde_json::to_value(&sg).unwrap()))
+                        .with_data(
+                            "security_group",
+                            serialize_output_data("security_group", &sg)?,
+                        ))
                     } else {
                         Ok(ModuleOutput::ok(format!(
                             "Security group '{}' is up to date",
                             config.name
                         ))
-                        .with_data("security_group", serde_json::to_value(&sg).unwrap()))
+                        .with_data(
+                            "security_group",
+                            serialize_output_data("security_group", &sg)?,
+                        ))
                     }
                 } else {
                     // Create new security group
@@ -1781,7 +1816,10 @@ impl Ec2SecurityGroupModule {
 
                     Ok(
                         ModuleOutput::changed(format!("Created security group '{}'", config.name))
-                            .with_data("security_group", serde_json::to_value(&sg).unwrap()),
+                            .with_data(
+                                "security_group",
+                                serialize_output_data("security_group", &sg)?,
+                            ),
                     )
                 }
             }
@@ -1847,9 +1885,11 @@ impl Module for Ec2SecurityGroupModule {
         let module = self;
 
         std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
-                .join()
-                .unwrap()
+            join_scoped_module_thread(
+                s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
+                    .join(),
+                module.name(),
+            )
         })
     }
 }
@@ -2114,7 +2154,7 @@ impl Ec2VpcModule {
                     // VPC exists - check if configuration matches
                     Ok(
                         ModuleOutput::ok(format!("VPC '{}' already exists", config.name))
-                            .with_data("vpc", serde_json::to_value(&vpc).unwrap()),
+                            .with_data("vpc", serialize_output_data("vpc", &vpc)?),
                     )
                 } else {
                     // Create new VPC
@@ -2129,7 +2169,7 @@ impl Ec2VpcModule {
 
                     Ok(
                         ModuleOutput::changed(format!("Created VPC '{}'", config.name))
-                            .with_data("vpc", serde_json::to_value(&vpc).unwrap()),
+                            .with_data("vpc", serialize_output_data("vpc", &vpc)?),
                     )
                 }
             }
@@ -2195,9 +2235,11 @@ impl Module for Ec2VpcModule {
         let module = self;
 
         std::thread::scope(|s| {
-            s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
-                .join()
-                .unwrap()
+            join_scoped_module_thread(
+                s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
+                    .join(),
+                module.name(),
+            )
         })
     }
 }
@@ -2424,5 +2466,44 @@ mod tests {
         assert_eq!(permission.ip_protocol(), Some("tcp"));
         assert_eq!(permission.from_port(), Some(443));
         assert_eq!(permission.to_port(), Some(443));
+    }
+
+    #[test]
+    fn test_serialize_output_data_success() {
+        let value = vec!["i-123".to_string(), "i-456".to_string()];
+        let serialized = serialize_output_data("instance_ids", &value).unwrap();
+        assert_eq!(serialized, serde_json::json!(["i-123", "i-456"]));
+    }
+
+    #[test]
+    fn test_serialize_output_data_reports_serialization_error() {
+        struct BadPayload;
+
+        impl Serialize for BadPayload {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("intentional serialization failure"))
+            }
+        }
+
+        let bad = BadPayload;
+        let err = serialize_output_data("bad_payload", &bad).unwrap_err();
+        assert!(format!("{}", err).contains("Failed to serialize"));
+        assert!(format!("{}", err).contains("bad_payload"));
+    }
+
+    #[test]
+    fn test_join_scoped_module_thread_maps_panic_to_module_error() {
+        let join_result: std::thread::Result<ModuleResult<ModuleOutput>> = std::thread::scope(|s| {
+            s.spawn(|| -> ModuleResult<ModuleOutput> {
+                panic!("simulated panic");
+            })
+            .join()
+        });
+
+        let err = join_scoped_module_thread(join_result, "aws_ec2_instance").unwrap_err();
+        assert!(format!("{}", err).contains("worker thread panicked"));
     }
 }
