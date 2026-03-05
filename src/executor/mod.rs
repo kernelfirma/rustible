@@ -103,6 +103,7 @@ pub mod host_metrics;
 pub mod work_stealing;
 
 // Re-exports for commonly used types from enhancement modules
+use dialoguer::theme::ColorfulTheme;
 pub use async_runtime::{RuntimeConfig, RuntimeMetrics, SpawnOptions, TaskSpawner};
 pub use async_task::{AsyncConfig, AsyncJobInfo, AsyncJobStatus, AsyncTaskManager};
 pub use batch_processor::{BatchConfig, BatchProcessor, BatchResult, BatchStrategy};
