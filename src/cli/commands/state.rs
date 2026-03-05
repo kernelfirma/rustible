@@ -622,7 +622,7 @@ impl StateArgs {
                         if path.extension().is_some_and(|ext| ext == "json") {
                             let name = path.file_stem().unwrap_or_default().to_string_lossy();
                             let metadata = std::fs::metadata(&path).ok();
-                            let size = metadata.as_ref().map_or(0, |m| m.len());
+                            let size = metadata.as_ref().map_or_else(|| 0, |m| m.len());
                             let modified = metadata
                                 .and_then(|m| m.modified().ok())
                                 .map(|t| {
@@ -995,12 +995,12 @@ fn convert_terraform_state(tf_state: &serde_json::Value) -> serde_json::Value {
                 .map(|p| {
                     // Extract provider name from full provider path
                     p.split('/')
-                        .last()
+                        .next_back()
                         .unwrap_or(p)
                         .trim_start_matches("provider[\"")
                         .trim_end_matches("\"]")
                         .split('.')
-                        .last()
+                        .next_back()
                         .unwrap_or("unknown")
                 })
                 .or_else(|| resource_type.split('_').next())

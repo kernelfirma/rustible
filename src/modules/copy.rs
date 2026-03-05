@@ -18,7 +18,7 @@ use super::{
 use crate::connection::{Connection, TransferOptions};
 use crate::utils::{compute_checksum, get_file_checksum, shell_escape};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;

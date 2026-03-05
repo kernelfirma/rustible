@@ -137,6 +137,7 @@ use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 use console::Term;
 use colored::Colorize;
+use dialoguer::theme::ColorfulTheme;
 
 /// Errors that can occur during playbook and task execution.
 ///

@@ -168,6 +168,78 @@ pub struct UriResponse {
 pub struct UriModule;
 
 impl UriModule {
+    fn parse_status_code_item(value: &Value) -> ModuleResult<Option<u16>> {
+        let parsed = if let Some(num) = value.as_i64() {
+            Some(num)
+        } else if let Some(text) = value.as_str() {
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(text.trim().parse::<i64>().map_err(|_| {
+                    ModuleError::InvalidParameter(format!("Invalid HTTP status code '{}'", text))
+                })?)
+            }
+        } else {
+            None
+        };
+
+        let Some(code) = parsed else {
+            return Ok(None);
+        };
+
+        if !(100..=599).contains(&code) {
+            return Err(ModuleError::InvalidParameter(format!(
+                "HTTP status code must be between 100 and 599, got {}",
+                code
+            )));
+        }
+
+        Ok(Some(code as u16))
+    }
+
+    fn parse_status_code_list(raw: Option<&Value>) -> ModuleResult<Vec<u16>> {
+        let Some(value) = raw else {
+            return Ok(Vec::new());
+        };
+
+        if let Some(arr) = value.as_array() {
+            let mut out = Vec::with_capacity(arr.len());
+            for item in arr {
+                if let Some(code) = Self::parse_status_code_item(item)? {
+                    out.push(code);
+                }
+            }
+            return Ok(out);
+        }
+
+        if let Some(text) = value.as_str() {
+            let mut out = Vec::new();
+            for part in text.split(',') {
+                let trimmed = part.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let code = Self::parse_status_code_item(&Value::String(trimmed.to_string()))?
+                    .ok_or_else(|| {
+                        ModuleError::InvalidParameter(format!(
+                            "Invalid HTTP status code '{}'",
+                            trimmed
+                        ))
+                    })?;
+                out.push(code);
+            }
+            return Ok(out);
+        }
+
+        if let Some(code) = Self::parse_status_code_item(value)? {
+            return Ok(vec![code]);
+        }
+
+        Err(ModuleError::InvalidParameter(
+            "status_code must be an integer, comma-separated string, or list".to_string(),
+        ))
+    }
+
     /// Build the HTTP client with configured options
     fn build_client(
         timeout_secs: u64,
@@ -715,6 +787,9 @@ impl Module for UriModule {
             }
         }
 
+        // Validate status code list values if provided
+        let _ = Self::parse_status_code_list(params.get("status_code"))?;
+
         Ok(())
     }
 
@@ -797,27 +872,7 @@ impl Module for UriModule {
             .unwrap_or(DEFAULT_MAX_CONTENT_LENGTH);
 
         // Status code validation
-        let status_code_list: Vec<u16> = params
-            .get("status_code")
-            .and_then(|v| {
-                if let Some(arr) = v.as_array() {
-                    Some(
-                        arr.iter()
-                            .filter_map(|item| item.as_i64().map(|n| n as u16))
-                            .collect(),
-                    )
-                } else if let Some(n) = v.as_i64() {
-                    Some(vec![n as u16])
-                } else if let Some(s) = v.as_str() {
-                    s.split(',')
-                        .filter_map(|part| part.trim().parse::<u16>().ok())
-                        .collect::<Vec<_>>()
-                        .into()
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default();
+        let status_code_list = Self::parse_status_code_list(params.get("status_code"))?;
 
         // Retry configuration
         let retries = params
@@ -1196,5 +1251,24 @@ mod tests {
         ]);
 
         assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_parse_status_code_list_accepts_multiple_formats() {
+        let codes_from_csv = UriModule::parse_status_code_list(Some(&serde_json::json!("200, 201,204")))
+            .expect("csv status list should parse");
+        assert_eq!(codes_from_csv, vec![200, 201, 204]);
+
+        let codes_from_array =
+            UriModule::parse_status_code_list(Some(&serde_json::json!([200, "404"])))
+                .expect("array status list should parse");
+        assert_eq!(codes_from_array, vec![200, 404]);
+    }
+
+    #[test]
+    fn test_parse_status_code_list_rejects_out_of_range_values() {
+        let err = UriModule::parse_status_code_list(Some(&serde_json::json!([99, 700])))
+            .expect_err("invalid status values must fail");
+        assert!(matches!(err, ModuleError::InvalidParameter(_)));
     }
 }
