@@ -122,6 +122,7 @@ pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, Wor
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use dialoguer::theme::ColorfulTheme;
 use futures::future::join_all;
 use indexmap::IndexMap;
 use thiserror::Error;
