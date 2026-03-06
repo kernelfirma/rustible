@@ -455,6 +455,7 @@ impl PlanArgs {
     /// Execute the plan command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE PLAN");
 
         if !self.config_file.exists() {
@@ -526,6 +527,7 @@ impl ApplyArgs {
     /// Execute the apply command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE APPLY");
 
         if !self.config_file.exists() {
@@ -613,6 +615,7 @@ impl DestroyArgs {
     /// Execute the destroy command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE DESTROY");
 
         if !self.config_file.exists() {
@@ -697,6 +700,7 @@ impl ImportArgs {
     /// Execute the import command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE IMPORT");
 
         if !self.config_file.exists() {
@@ -762,6 +766,7 @@ impl ShowArgs {
     /// Execute the show command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         let project_root = PathBuf::from(".");
         let (backend_config, state_path) = resolve_state_backend(
             self.backend_config.as_ref(),
@@ -823,6 +828,7 @@ impl RefreshArgs {
     /// Execute the refresh command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE REFRESH");
 
         if !self.config_file.exists() {
@@ -872,6 +878,7 @@ impl MigrateArgs {
     /// Execute the migrate command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("INFRASTRUCTURE STATE MIGRATE");
 
         let project_root = project_root_for_config(&self.config_file);
@@ -918,6 +925,7 @@ impl ImportTerraformArgs {
     /// Execute the import-terraform command
     #[cfg(feature = "provisioning")]
     pub async fn execute(&self, ctx: &mut CommandContext) -> Result<i32> {
+        ctx.output.init_progress();
         ctx.output.banner("IMPORT TERRAFORM STATE");
 
         let project_root = project_root_for_config(&self.config_file);

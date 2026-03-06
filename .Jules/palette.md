@@ -56,3 +56,7 @@
 ## 2024-05-27 - [Aggregated Summaries in CLI Output]
 **Learning:** In multi-host CLI executions, individual host results can scroll off-screen, making it difficult to assess overall success/failure at a glance. Adding a distinct "TOTALS" row at the bottom provides immediate, high-level feedback that is essential for larger deployments.
 **Action:** For commands that execute across multiple items/hosts, calculate and display an aggregated summary row (e.g., "TOTALS") aligned with the detail columns to allow quick validation of the entire operation.
+
+## 2024-05-24 - [CLI Progress Indicators]
+**Learning:** `indicatif` progress bars in `OutputFormatter` require explicit initialization via `init_progress()` before they can be used. Without this call, `create_spinner()` returns `None` or fails silently, leaving the user staring at a static screen during long operations.
+**Action:** Always call `ctx.output.init_progress()` at the start of any long-running CLI command execution (like `run` or `provision`) to enable visual feedback.
