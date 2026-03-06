@@ -21,7 +21,6 @@
 //! ```
 
 use minijinja::{Environment, Value};
-use regex::Regex;
 
 /// Register all regex filters with the given environment.
 pub fn register_filters(env: &mut Environment<'static>) {
@@ -63,7 +62,7 @@ fn regex_search(
         multiline.unwrap_or(false),
     );
 
-    match Regex::new(&pattern) {
+    match crate::utils::get_regex(&pattern) {
         Ok(re) => {
             if let Some(caps) = re.captures(&input) {
                 // If there are capture groups, return the first one
@@ -89,7 +88,7 @@ fn regex_search(
 fn regex_match(input: String, pattern: String, ignorecase: Option<bool>) -> bool {
     let pattern = build_pattern(&pattern, ignorecase.unwrap_or(false), false);
 
-    match Regex::new(&pattern) {
+    match crate::utils::get_regex(&pattern) {
         Ok(re) => re.is_match(&input),
         Err(_) => false,
     }
@@ -130,7 +129,7 @@ fn regex_replace(
         .replace("\\8", "$8")
         .replace("\\9", "$9");
 
-    match Regex::new(&pattern) {
+    match crate::utils::get_regex(&pattern) {
         Ok(re) => match count {
             Some(n) if n > 0 => {
                 let mut result = input.clone();
@@ -181,7 +180,7 @@ fn regex_findall(
         multiline.unwrap_or(false),
     );
 
-    match Regex::new(&pattern) {
+    match crate::utils::get_regex(&pattern) {
         Ok(re) => {
             // Check if pattern has capture groups
             let has_groups = re.captures_len() > 1;
@@ -243,7 +242,7 @@ fn regex_escape(input: String) -> String {
 ///
 /// A list of substrings.
 fn regex_split(input: String, pattern: String, maxsplit: Option<usize>) -> Vec<String> {
-    match Regex::new(&pattern) {
+    match crate::utils::get_regex(&pattern) {
         Ok(re) => {
             let splits: Vec<&str> = match maxsplit {
                 Some(n) if n > 0 => re.splitn(&input, n + 1).collect(),
