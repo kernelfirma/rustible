@@ -267,9 +267,10 @@ impl InteractiveSession {
             return Ok(vec![]);
         }
 
-        let mut vars = Vec::new();
+        let mut vars: Vec<String> = Vec::new();
         let mut lines_to_clear = 0;
         let mut error_msg: Option<String> = None;
+        let mut success_msg: Option<String> = None;
 
         loop {
             if lines_to_clear > 0 {
@@ -284,11 +285,17 @@ impl InteractiveSession {
                 current_lines += 1;
                 for var in &vars {
                     self.term
-                        .write_line(&format!("  {} {}", "•".green(), var))?;
+                        .write_line(&format!("  {} {}", "•".green(), var.dimmed()))?;
                     current_lines += 1;
                 }
                 self.term.write_line("")?;
                 current_lines += 1;
+            }
+
+            if let Some(msg) = &success_msg {
+                self.term.write_line(msg)?;
+                current_lines += 1;
+                success_msg = None;
             }
 
             if let Some(msg) = &error_msg {
@@ -308,6 +315,7 @@ impl InteractiveSession {
             }
 
             if var.contains('=') || var.starts_with('@') {
+                success_msg = Some(format!("{} Added {}", "✔".green(), var.as_str().bold()));
                 vars.push(var);
             } else {
                 error_msg = Some(format!(
