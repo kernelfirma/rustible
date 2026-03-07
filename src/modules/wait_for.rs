@@ -812,7 +812,7 @@ mod tests {
 
     #[test]
     fn test_check_regex_in_file_nonexistent() {
-        let regex = Regex::new("pattern").unwrap();
+        let regex = crate::utils::get_regex("pattern").unwrap();
         let result = WaitForModule::check_regex_in_file("/nonexistent/file", &regex);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -832,13 +832,13 @@ mod tests {
         let path = file.path().to_str().unwrap();
 
         // Pattern exists
-        let regex = Regex::new("started successfully").unwrap();
+        let regex = crate::utils::get_regex("started successfully").unwrap();
         let result = WaitForModule::check_regex_in_file(path, &regex);
         assert!(result.is_ok());
         assert!(result.unwrap());
 
         // Pattern doesn't exist
-        let regex_not_found = Regex::new("does not exist").unwrap();
+        let regex_not_found = crate::utils::get_regex("does not exist").unwrap();
         let result = WaitForModule::check_regex_in_file(path, &regex_not_found);
         assert!(result.is_ok());
         assert!(!result.unwrap());
