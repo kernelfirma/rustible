@@ -660,8 +660,9 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_get_group_root() {
-        // root group should always exist
-        let group = get_group_by_name("root").unwrap();
+        // GID 0 should always exist, but the group name varies by platform
+        // (e.g. "root" on Linux, "wheel" on macOS).
+        let group = get_group_by_gid(0).unwrap();
         assert!(group.is_some());
         let group = group.unwrap();
         assert_eq!(group.gid, 0);
