@@ -329,13 +329,22 @@ mod tests {
     fn test_sorted_phases() {
         let mut metrics = StartupMetrics::new();
 
-        metrics.start_phase(StartupPhase::ConfigLoading);
-        thread::sleep(Duration::from_millis(20));
-        metrics.end_phase(StartupPhase::ConfigLoading);
-
-        metrics.start_phase(StartupPhase::ModuleRegistry);
-        thread::sleep(Duration::from_millis(5));
-        metrics.end_phase(StartupPhase::ModuleRegistry);
+        metrics.phases.insert(
+            StartupPhase::ConfigLoading,
+            PhaseMetrics {
+                start: None,
+                duration: Duration::from_millis(20),
+                completed: true,
+            },
+        );
+        metrics.phases.insert(
+            StartupPhase::ModuleRegistry,
+            PhaseMetrics {
+                start: None,
+                duration: Duration::from_millis(5),
+                completed: true,
+            },
+        );
 
         let sorted = metrics.sorted_phases();
         assert_eq!(sorted.len(), 2);
