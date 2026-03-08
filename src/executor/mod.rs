@@ -123,7 +123,6 @@ pub use work_stealing::{WorkItem, WorkStealingConfig, WorkStealingScheduler, Wor
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use dialoguer::theme::ColorfulTheme;
 use futures::future::join_all;
 use indexmap::IndexMap;
 use thiserror::Error;
@@ -139,7 +138,6 @@ use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
 use console::Term;
 use colored::Colorize;
-use dialoguer::theme::ColorfulTheme;
 
 /// Errors that can occur during playbook and task execution.
 ///
