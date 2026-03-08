@@ -43,6 +43,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
 use indexmap::IndexMap;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use thiserror::Error;
@@ -958,12 +959,14 @@ impl DependencyAnalyzer {
 
     /// Extract variable names from a template string
     fn extract_variables_from_string(&self, s: &str, vars: &mut HashSet<String>) {
+        // PERFORMANCE: Use cached regex to avoid compiling on every string
+        static EXTRACT_VAR_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+            regex::Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:[|}\s])")
+                .expect("Invalid regex")
+        });
+
         // Match {{ variable }} patterns
-        let re = regex::Regex::new(
-            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:[|}\s])",
-        )
-        .unwrap();
-        for cap in re.captures_iter(s) {
+        for cap in EXTRACT_VAR_REGEX.captures_iter(s) {
             if let Some(m) = cap.get(1) {
                 // Get the root variable name (before any dots)
                 let var_name = m.as_str().split('.').next().unwrap_or(m.as_str());
