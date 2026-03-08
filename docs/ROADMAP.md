@@ -285,70 +285,37 @@ A comprehensive roadmap for Rustible development, outlining current features, pl
 
 ---
 
-## v0.2 - Planned Features
+## v0.2 - Beta Readiness
 
-**Target**: Q1 2026
-**Focus**: Stability, execution preview, enhanced testing
+**Target**: Beta-quality baseline with current docs, reliable CI, and accurate feature status.
 
-### Critical Path (Stabilization)
+For the canonical shipped status, see [FEATURE_STATUS.md](FEATURE_STATUS.md).
 
-| Task | Priority | Description |
-|------|----------|-------------|
-| Fix remaining tests | Critical | Achieve 100% test pass rate |
-| Ansible boolean compat | High | Done: handle y/n/t/f and string boolean variants consistently |
-| Block parsing | High | Done: treat null block/rescue/always as empty lists |
-| Python/FQCN edge cases | High | Done: normalize ansible.builtin/ansible.legacy module names |
-| CLI edge cases | Medium | Done: support comma-separated tags and richer extra-vars parsing |
+### Current Priorities
 
-### Execution Plan Preview
+| Task | Status | Notes |
+|------|--------|-------|
+| Docs/source-of-truth cleanup | :construction: In progress | Consolidate status in `FEATURE_STATUS.md`, then keep README and roadmap aligned. |
+| Default CI baseline | :construction: In progress | The remaining beta gate is a consistently green default CI/test suite. |
+| Lock rollback execution | :white_check_mark: Complete | `rustible lock rollback` now uses snapshot-backed checkpoints, supports dry-run, and executes live rollback actions. |
+| WinRM hardening | :white_check_mark: Complete | `winrm` no longer requires `experimental`; parity/integration tests cover explicit unsupported Kerberos/CredSSP behavior. |
+| AWS native module parity | :white_check_mark: Complete | `aws_iam_role`, `aws_iam_policy`, `aws_security_group_rule`, and `aws_ebs_volume` are available as native playbook modules. |
 
-```bash
-rustible plan playbook.yml -i inventory.yml
+### v0.2 Deliverables Landed
 
-# Output
-Execution Plan:
-  web1.example.com:
-    + [package] Install nginx (will install)
-    ~ [template] Configure nginx.conf (will modify)
-    - [file] Remove old config (will delete)
+| Area | Status | Description |
+|------|--------|-------------|
+| Execution preview | :white_check_mark: Complete | Plan structures and preview output are already present in the CLI. |
+| Checkpoint rollback | :white_check_mark: Complete | Checkpoints include snapshot metadata and rollback can restore recorded state transitions. |
+| Windows targeting | :test_tube: Beta | Linux/macOS controllers can target Windows hosts over WinRM with Beta-level support. |
+| AWS module coverage | :test_tube: Beta | Native AWS coverage includes EC2, S3, IAM roles/policies, standalone SG rules, and EBS volumes. |
+| State manifests | :construction: In progress | State and lockfile foundations exist; remote/state-team workflows continue to mature. |
 
-  web2.example.com:
-    . [package] Install nginx (already installed)
-    ~ [template] Configure nginx.conf (will modify)
+### Remaining Beta Gate
 
-Apply this plan? [y/N]
-```
-
-### Schema Validation
-
-Parse-time validation of module arguments:
-
-```rust
-fn schema(&self) -> JsonSchema;
-
-// Validate before execution
-module.schema().validate(&task.args)?;
-```
-
-### State Manifest Foundation
-
-```
-~/.rustible/state/
-  web1.example.com.json
-  web2.example.com.json
-  db1.example.com.json
-```
-
-### New Modules (Completed)
-
-| Module | Status | Description |
-|--------|--------|-------------|
-| `fail` | :white_check_mark: Complete | Fail with custom message |
-| `meta` | :white_check_mark: Complete | Meta actions (flush handlers, etc.) |
-| `raw` | :white_check_mark: Complete | Raw command execution (no Python) |
-| `script` | :white_check_mark: Complete | Transfer and execute script |
-| `synchronize` | :white_check_mark: Complete | rsync wrapper |
-| `get_url` | :white_check_mark: Complete | Download files from HTTP/HTTPS/FTP |
+1. Keep the default CI and required workflows green on the candidate commit.
+2. Keep status docs synchronized with the real code surface.
+3. Continue treating WinRM and rollback as Beta-quality features until high-risk sign-off infrastructure is consistently available.
 
 ---
 

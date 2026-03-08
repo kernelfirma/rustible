@@ -961,8 +961,10 @@ impl DependencyAnalyzer {
     fn extract_variables_from_string(&self, s: &str, vars: &mut HashSet<String>) {
         // PERFORMANCE: Use cached regex to avoid compiling on every string
         static EXTRACT_VAR_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
-            regex::Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:[|}\s])")
-                .expect("Invalid regex")
+            regex::Regex::new(
+                r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:[|}\s])",
+            )
+            .expect("Invalid regex")
         });
 
         // Match {{ variable }} patterns

@@ -343,9 +343,10 @@ impl TemplateEngine {
                 let templated = self.render_with_indexmap(s, vars)?;
 
                 // Optimization: fast check if string starts with digit or sign before attempting expensive float parse
-                let is_maybe_number = templated.as_bytes().first().is_some_and(|&c| {
-                    c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.'
-                });
+                let is_maybe_number = templated
+                    .as_bytes()
+                    .first()
+                    .is_some_and(|&c| c.is_ascii_digit() || c == b'-' || c == b'+' || c == b'.');
 
                 // Try to parse as JSON if it looks like a structured value
                 if templated.starts_with('[')

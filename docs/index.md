@@ -108,6 +108,7 @@ For teams managing HPC clusters and high-performance infrastructure.
 
 | Topic | Document |
 |-------|----------|
+| Feature status | [Feature Status](FEATURE_STATUS.md) |
 | All modules | [Module Reference](reference/modules.md) |
 | Variable precedence | [Variables Reference](reference/variables.md) |
 | Inventory formats | [Inventory Reference](reference/inventory.md) |
@@ -142,3 +143,4 @@ docs/
 - **Issues:** Report bugs or request features on GitHub
 - **Troubleshooting:** See the [Troubleshooting Guide](guides/troubleshooting.md)
 - **Security:** See [Security Audit Report](security/SECURITY_AUDIT_REPORT.md)
+- **Current feature status:** See [Feature Status](FEATURE_STATUS.md)

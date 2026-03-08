@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod tests {
     use rustible::modules::validate_command_args;
@@ -6,7 +5,10 @@ mod tests {
     #[test]
     fn test_validate_command_args_rejects_percent() {
         // New behavior: % is rejected (Windows variable expansion)
-        assert!(validate_command_args("echo %USERNAME%").is_err(), "Should reject %");
+        assert!(
+            validate_command_args("echo %USERNAME%").is_err(),
+            "Should reject %"
+        );
     }
 
     #[test]

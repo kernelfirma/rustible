@@ -114,9 +114,6 @@ compile_error!("Feature 'gcp' is experimental. Enable with --features experiment
 #[cfg(all(feature = "database", not(feature = "experimental")))]
 compile_error!("Feature 'database' is experimental. Enable with --features experimental,database");
 
-#[cfg(all(feature = "winrm", not(feature = "experimental")))]
-compile_error!("Feature 'winrm' is experimental. Enable with --features experimental,winrm");
-
 #[cfg(all(feature = "reqwest", not(feature = "experimental")))]
 compile_error!("Feature 'reqwest' is experimental. Enable with --features experimental,reqwest");
 

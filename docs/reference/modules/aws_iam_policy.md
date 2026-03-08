@@ -73,6 +73,5 @@ and requires building with `--features aws`.
 
 - Requires AWS credentials in the environment or config files.
 - Build with `--features aws` to enable this module.
-- This module is planned and may have limited implementation.
 - Updating a policy creates a new version; old versions may need manual cleanup.
 - Deleting a policy removes all non-default versions first.

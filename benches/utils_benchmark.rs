@@ -16,9 +16,7 @@ fn bench_shell_escape(c: &mut Criterion) {
     let long_string = "a".repeat(10000);
     let long_string_with_quotes = "a'".repeat(5000);
 
-    group.bench_function("simple", |b| {
-        b.iter(|| shell_escape(black_box(simple)))
-    });
+    group.bench_function("simple", |b| b.iter(|| shell_escape(black_box(simple))));
 
     group.bench_function("with_space", |b| {
         b.iter(|| shell_escape(black_box(with_space)))
@@ -36,9 +34,7 @@ fn bench_shell_escape(c: &mut Criterion) {
         b.iter(|| shell_escape(black_box(complex)))
     });
 
-    group.bench_function("unicode", |b| {
-        b.iter(|| shell_escape(black_box(unicode)))
-    });
+    group.bench_function("unicode", |b| b.iter(|| shell_escape(black_box(unicode))));
 
     group.throughput(Throughput::Bytes(long_string.len() as u64));
     group.bench_function("long_string_safe", |b| {

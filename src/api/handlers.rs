@@ -2,6 +2,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
@@ -11,10 +12,11 @@ use chrono::{DateTime, Utc};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use super::auth::{AuthenticatedUser, Claims};
+use super::auth::{AuthenticatedUser, Claims, InternalService};
 use super::error::{ApiError, ApiResult};
 use super::state::AppState;
 use super::types::*;
+use crate::connection::{CommandResult, Connection, ConnectionBuilder, ExecuteOptions};
 use crate::executor::task::TaskStatus;
 use crate::executor::{ExecutionEvent, ExecutionStrategy, Executor, ExecutorConfig};
 use crate::inventory::{Host, Inventory};
@@ -192,6 +194,81 @@ pub async fn execute_playbook(
         status: JobStatus::Pending,
         message: "Playbook execution started".to_string(),
         websocket_url: Some(ws_url),
+    }))
+}
+
+/// Submit a dedicated kernel deployment workflow for internal callers.
+pub async fn submit_kernel_deployment(
+    State(state): State<Arc<AppState>>,
+    _service: InternalService,
+    Json(req): Json<KernelDeploymentRequest>,
+) -> ApiResult<Json<KernelDeploymentResponse>> {
+    if req.targets.is_empty() {
+        return Err(ApiError::BadRequest(
+            "At least one target host is required".to_string(),
+        ));
+    }
+
+    if req.artifact_url.trim().is_empty()
+        || req.artifact_sha256.trim().is_empty()
+        || req.package_name.trim().is_empty()
+        || req.expected_kernel_release.trim().is_empty()
+    {
+        return Err(ApiError::BadRequest(
+            "artifact_url, artifact_sha256, package_name, and expected_kernel_release are required"
+                .to_string(),
+        ));
+    }
+
+    let inventory = load_inventory_for_request(&state, req.inventory.as_deref())?;
+    let resolved_hosts = resolve_target_hosts(&inventory, &req.targets)?;
+    if resolved_hosts.is_empty() {
+        return Err(ApiError::NotFound(
+            "No hosts matched the requested deployment targets".to_string(),
+        ));
+    }
+
+    let extra_vars = std::collections::HashMap::from([
+        (
+            "artifact_url".to_string(),
+            serde_json::json!(req.artifact_url),
+        ),
+        (
+            "expected_kernel_release".to_string(),
+            serde_json::json!(req.expected_kernel_release),
+        ),
+        (
+            "package_name".to_string(),
+            serde_json::json!(req.package_name),
+        ),
+        (
+            "target_count".to_string(),
+            serde_json::json!(resolved_hosts.len()),
+        ),
+    ]);
+
+    let job_id = state.create_job(
+        "internal/kernel-deploy".to_string(),
+        req.inventory
+            .clone()
+            .or_else(|| state.config.inventory_path.clone()),
+        Some("esse-control-plane".to_string()),
+        extra_vars,
+    );
+
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        run_kernel_deployment_job(state_clone, job_id, req).await;
+    });
+
+    Ok(Json(KernelDeploymentResponse {
+        job_id,
+        status: JobStatus::Pending,
+        message: format!(
+            "Kernel deployment queued for {} host(s)",
+            resolved_hosts.len()
+        ),
+        websocket_url: Some(format!("/api/v1/ws/jobs/{}", job_id)),
     }))
 }
 
@@ -417,6 +494,7 @@ async fn run_playbook_job(
         distributed: false,
         workers: 1,
         distribution_strategy: "adaptive".to_string(),
+        step: false,
     };
 
     // Create runtime context
@@ -444,6 +522,9 @@ async fn run_playbook_job(
                 } else {
                     format!("TASK [{}] ***", task)
                 }
+            }
+            ExecutionEvent::TaskStartGlobal(task) => {
+                format!("TASK [{}] ***", task)
             }
             ExecutionEvent::HostTaskComplete(host, _task, result) => {
                 let status_str = match result.status {
@@ -539,10 +620,41 @@ pub async fn get_job(
     }))
 }
 
+/// Get job details using internal service-token auth.
+pub async fn get_job_internal(
+    State(state): State<Arc<AppState>>,
+    _service: InternalService,
+    AxumPath(job_id): AxumPath<Uuid>,
+) -> ApiResult<Json<JobDetails>> {
+    let job = state
+        .get_job(job_id)
+        .ok_or_else(|| ApiError::NotFound(format!("Job not found: {}", job_id)))?;
+
+    Ok(Json(JobDetails {
+        info: job.to_info(),
+        stats: job.stats.clone(),
+        output: Some(job.full_output()),
+        error: job.error.clone(),
+    }))
+}
+
 /// Get job output.
 pub async fn get_job_output(
     State(state): State<Arc<AppState>>,
     _user: AuthenticatedUser,
+    AxumPath(job_id): AxumPath<Uuid>,
+) -> ApiResult<impl IntoResponse> {
+    let job = state
+        .get_job(job_id)
+        .ok_or_else(|| ApiError::NotFound(format!("Job not found: {}", job_id)))?;
+
+    Ok(job.full_output())
+}
+
+/// Get job output using internal service-token auth.
+pub async fn get_job_output_internal(
+    State(state): State<Arc<AppState>>,
+    _service: InternalService,
     AxumPath(job_id): AxumPath<Uuid>,
 ) -> ApiResult<impl IntoResponse> {
     let job = state
@@ -743,6 +855,568 @@ fn host_to_response(host: &Host) -> HostResponse {
     }
 }
 
+fn load_inventory_for_request(
+    state: &Arc<AppState>,
+    inventory_override: Option<&str>,
+) -> ApiResult<Inventory> {
+    if let Some(path) = inventory_override {
+        return Inventory::load(path).map_err(ApiError::from);
+    }
+
+    if let Some(inventory) = state.get_inventory() {
+        return Ok((*inventory).clone());
+    }
+
+    state
+        .load_inventory()
+        .map(|inventory| (*inventory).clone())
+        .map_err(ApiError::from)
+}
+
+fn resolve_target_hosts(inventory: &Inventory, targets: &[String]) -> ApiResult<Vec<Host>> {
+    let mut resolved = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for target in targets {
+        if let Some(host) = inventory.get_host(target) {
+            if seen.insert(host.name.clone()) {
+                resolved.push(host.clone());
+            }
+            continue;
+        }
+
+        for host in inventory.get_hosts_for_pattern(target)? {
+            if seen.insert(host.name.clone()) {
+                resolved.push(host.clone());
+            }
+        }
+    }
+
+    Ok(resolved)
+}
+
+async fn run_kernel_deployment_job(
+    state: Arc<AppState>,
+    job_id: Uuid,
+    req: KernelDeploymentRequest,
+) {
+    state.update_job_status(job_id, JobStatus::Running);
+    log_job(
+        &state,
+        job_id,
+        "Starting internal kernel deployment workflow",
+    );
+
+    if let Some(signature_url) = &req.signature_url {
+        log_job(
+            &state,
+            job_id,
+            &format!("Signature reference recorded: {}", signature_url),
+        );
+    }
+
+    let inventory = match load_inventory_for_request(&state, req.inventory.as_deref()) {
+        Ok(inventory) => inventory,
+        Err(err) => {
+            fail_job(&state, job_id, format!("Failed to load inventory: {}", err));
+            return;
+        }
+    };
+
+    let hosts = match resolve_target_hosts(&inventory, &req.targets) {
+        Ok(hosts) if !hosts.is_empty() => hosts,
+        Ok(_) => {
+            fail_job(
+                &state,
+                job_id,
+                "No hosts matched the requested deployment targets".to_string(),
+            );
+            return;
+        }
+        Err(err) => {
+            fail_job(
+                &state,
+                job_id,
+                format!("Failed to resolve deployment targets: {}", err),
+            );
+            return;
+        }
+    };
+
+    let mut stats = JobStats {
+        hosts: hosts.len(),
+        ..Default::default()
+    };
+
+    for host in hosts {
+        match deploy_kernel_to_host(&state, job_id, &host, &req).await {
+            Ok(HostDeploymentOutcome::Changed) => stats.changed += 1,
+            Ok(HostDeploymentOutcome::Ok) => stats.ok += 1,
+            Err(HostDeploymentError::Unreachable(message)) => {
+                stats.unreachable += 1;
+                log_job(&state, job_id, &format!("[{}] {}", host.name, message));
+            }
+            Err(HostDeploymentError::Failed(message)) => {
+                stats.failed += 1;
+                log_job(&state, job_id, &format!("[{}] {}", host.name, message));
+            }
+        }
+    }
+
+    state.set_job_stats(job_id, stats.clone());
+
+    if stats.failed > 0 || stats.unreachable > 0 {
+        let summary = format!(
+            "Kernel deployment finished with failures: {} failed, {} unreachable",
+            stats.failed, stats.unreachable
+        );
+        state.set_job_error(job_id, summary.clone());
+        state.update_job_status(job_id, JobStatus::Failed);
+        log_job(&state, job_id, &summary);
+    } else {
+        state.update_job_status(job_id, JobStatus::Success);
+        log_job(&state, job_id, "Kernel deployment completed successfully");
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HostDeploymentOutcome {
+    Ok,
+    Changed,
+}
+
+#[derive(Debug)]
+enum HostDeploymentError {
+    Failed(String),
+    Unreachable(String),
+}
+
+async fn deploy_kernel_to_host(
+    state: &Arc<AppState>,
+    job_id: Uuid,
+    host: &Host,
+    req: &KernelDeploymentRequest,
+) -> Result<HostDeploymentOutcome, HostDeploymentError> {
+    log_job(state, job_id, &format!("[{}] Connecting", host.name));
+    let connection = build_connection_for_host(host)
+        .await
+        .map_err(|err| HostDeploymentError::Unreachable(err.to_string()))?;
+
+    let exec_options = build_execute_options(host, 900);
+    let current_kernel = run_command(connection.as_ref(), "uname -r", None)
+        .await
+        .map_err(|err| HostDeploymentError::Unreachable(err.to_string()))?
+        .stdout
+        .trim()
+        .to_string();
+    log_job(
+        state,
+        job_id,
+        &format!("[{}] Current kernel: {}", host.name, current_kernel),
+    );
+
+    let distro = run_command(
+        connection.as_ref(),
+        r#"bash -lc '. /etc/os-release >/dev/null 2>&1 && printf "%s\n" "${ID:-unknown}"'"#,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+    .stdout
+    .trim()
+    .to_lowercase();
+    if distro != "ubuntu" && distro != "debian" {
+        return Err(HostDeploymentError::Failed(format!(
+            "unsupported distro '{}'; only ubuntu/debian are supported",
+            distro
+        )));
+    }
+
+    let arch = run_command(connection.as_ref(), "uname -m", Some(exec_options.clone()))
+        .await
+        .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+        .stdout
+        .trim()
+        .to_lowercase();
+    if arch != "x86_64" && arch != "amd64" {
+        return Err(HostDeploymentError::Failed(format!(
+            "unsupported architecture '{}'; only x86_64 is supported",
+            arch
+        )));
+    }
+
+    let boot_space = run_command(
+        connection.as_ref(),
+        r#"bash -lc '(df -Pk /boot 2>/dev/null || df -Pk /) | awk "NR==2 {print \$4}"'"#,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+    .stdout
+    .trim()
+    .parse::<u64>()
+    .unwrap_or(0);
+    if boot_space < 262_144 {
+        return Err(HostDeploymentError::Failed(format!(
+            "insufficient /boot space: {} KiB available",
+            boot_space
+        )));
+    }
+
+    let remote_package_path = format!("/tmp/rustible-kernel-{}.deb", job_id);
+    let fetch_command = build_fetch_command(&req.artifact_url, &remote_package_path);
+    log_job(
+        state,
+        job_id,
+        &format!("[{}] Fetching {}", host.name, req.artifact_url),
+    );
+    run_command(
+        connection.as_ref(),
+        &fetch_command,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+
+    let checksum_command = format!(
+        "sha256sum {} | awk '{{print $1}}'",
+        shell_quote(&remote_package_path)
+    );
+    let observed_checksum = run_command(
+        connection.as_ref(),
+        &checksum_command,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+    .stdout
+    .trim()
+    .to_lowercase();
+    if observed_checksum != req.artifact_sha256.to_lowercase() {
+        return Err(HostDeploymentError::Failed(format!(
+            "checksum mismatch: expected {}, got {}",
+            req.artifact_sha256, observed_checksum
+        )));
+    }
+    log_job(state, job_id, &format!("[{}] SHA-256 verified", host.name));
+
+    let install_command = format!(
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg} || (dpkg -i {pkg} && DEBIAN_FRONTEND=noninteractive apt-get -f install -y)",
+        pkg = shell_quote(&remote_package_path)
+    );
+    run_command(
+        connection.as_ref(),
+        &install_command,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+    run_command(
+        connection.as_ref(),
+        "bash -lc 'command -v update-initramfs >/dev/null 2>&1 && update-initramfs -u || true; command -v update-grub >/dev/null 2>&1 && update-grub || true'",
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+
+    match req.reboot_policy {
+        KernelDeploymentRebootPolicy::Skip => {
+            let running_kernel =
+                run_command(connection.as_ref(), "uname -r", Some(exec_options.clone()))
+                    .await
+                    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+                    .stdout
+                    .trim()
+                    .to_string();
+
+            if running_kernel != req.expected_kernel_release {
+                return Err(HostDeploymentError::Failed(format!(
+                    "kernel package installed but reboot_policy=skip and running kernel is still {}",
+                    running_kernel
+                )));
+            }
+        }
+        KernelDeploymentRebootPolicy::Required => {
+            log_job(state, job_id, &format!("[{}] Rebooting host", host.name));
+            let reboot_command =
+                "bash -lc 'nohup sh -c \"sleep 2; systemctl reboot || reboot\" >/dev/null 2>&1 &'";
+            run_command(
+                connection.as_ref(),
+                reboot_command,
+                Some(exec_options.clone()),
+            )
+            .await
+            .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            match wait_for_reboot(host, 180).await {
+                Ok(reconnected) => {
+                    let verify_options = build_execute_options(host, 120);
+                    let running_kernel = run_command(
+                        reconnected.as_ref(),
+                        "uname -r",
+                        Some(verify_options.clone()),
+                    )
+                    .await
+                    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+                    .stdout
+                    .trim()
+                    .to_string();
+
+                    if running_kernel != req.expected_kernel_release {
+                        log_job(
+                            state,
+                            job_id,
+                            &format!(
+                                "[{}] Verification failed on {}; attempting rollback",
+                                host.name, running_kernel
+                            ),
+                        );
+                        attempt_kernel_rollback(
+                            state,
+                            job_id,
+                            host,
+                            &req.package_name,
+                            &current_kernel,
+                        )
+                        .await?;
+                        return Err(HostDeploymentError::Failed(format!(
+                            "expected kernel {}, got {} after reboot",
+                            req.expected_kernel_release, running_kernel
+                        )));
+                    }
+
+                    log_job(
+                        state,
+                        job_id,
+                        &format!("[{}] Verified running kernel {}", host.name, running_kernel),
+                    );
+                }
+                Err(err) => {
+                    attempt_kernel_rollback(
+                        state,
+                        job_id,
+                        host,
+                        &req.package_name,
+                        &current_kernel,
+                    )
+                    .await?;
+                    return Err(err);
+                }
+            }
+        }
+    }
+
+    Ok(HostDeploymentOutcome::Changed)
+}
+
+async fn attempt_kernel_rollback(
+    state: &Arc<AppState>,
+    job_id: Uuid,
+    host: &Host,
+    package_name: &str,
+    previous_kernel: &str,
+) -> Result<(), HostDeploymentError> {
+    log_job(
+        state,
+        job_id,
+        &format!(
+            "[{}] Attempting rollback by removing package {}",
+            host.name, package_name
+        ),
+    );
+    let connection = build_connection_for_host(host)
+        .await
+        .map_err(|err| HostDeploymentError::Unreachable(err.to_string()))?;
+    let exec_options = build_execute_options(host, 900);
+    let rollback_command = format!(
+        "DEBIAN_FRONTEND=noninteractive apt-get remove -y {pkg} || true; command -v update-grub >/dev/null 2>&1 && update-grub || true",
+        pkg = shell_quote(package_name)
+    );
+    run_command(
+        connection.as_ref(),
+        &rollback_command,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+
+    let reboot_command =
+        "bash -lc 'nohup sh -c \"sleep 2; systemctl reboot || reboot\" >/dev/null 2>&1 &'";
+    run_command(
+        connection.as_ref(),
+        reboot_command,
+        Some(exec_options.clone()),
+    )
+    .await
+    .map_err(|err| HostDeploymentError::Failed(err.to_string()))?;
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let reconnected = wait_for_reboot(host, 180).await?;
+    let verify_options = build_execute_options(host, 120);
+    let running_kernel = run_command(reconnected.as_ref(), "uname -r", Some(verify_options))
+        .await
+        .map_err(|err| HostDeploymentError::Failed(err.to_string()))?
+        .stdout
+        .trim()
+        .to_string();
+
+    if running_kernel == previous_kernel {
+        log_job(
+            state,
+            job_id,
+            &format!(
+                "[{}] Rollback restored kernel {}",
+                host.name, previous_kernel
+            ),
+        );
+        Ok(())
+    } else {
+        Err(HostDeploymentError::Failed(format!(
+            "rollback did not restore the previous kernel; expected {}, got {}",
+            previous_kernel, running_kernel
+        )))
+    }
+}
+
+async fn wait_for_reboot(
+    host: &Host,
+    timeout_secs: u64,
+) -> Result<Arc<dyn Connection + Send + Sync>, HostDeploymentError> {
+    let started = tokio::time::Instant::now();
+    let mut last_error = String::new();
+
+    while started.elapsed() < Duration::from_secs(timeout_secs) {
+        match build_connection_for_host(host).await {
+            Ok(connection) => {
+                let options = build_execute_options(host, 30);
+                match connection.execute("uname -r", Some(options)).await {
+                    Ok(CommandResult { success: true, .. }) => return Ok(connection),
+                    Ok(result) => last_error = result.combined_output(),
+                    Err(err) => last_error = err.to_string(),
+                }
+            }
+            Err(err) => last_error = err.to_string(),
+        }
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+
+    Err(HostDeploymentError::Unreachable(format!(
+        "host did not come back after reboot: {}",
+        last_error
+    )))
+}
+
+async fn build_connection_for_host(
+    host: &Host,
+) -> Result<Arc<dyn Connection + Send + Sync>, crate::connection::ConnectionError> {
+    let mut builder = ConnectionBuilder::new(match host.connection.connection {
+        crate::inventory::ConnectionType::Local => "local".to_string(),
+        crate::inventory::ConnectionType::Docker | crate::inventory::ConnectionType::Podman => {
+            host.address().to_string()
+        }
+        _ => host.address().to_string(),
+    });
+
+    match host.connection.connection {
+        crate::inventory::ConnectionType::Local => {
+            builder = builder.connection_type("local");
+        }
+        crate::inventory::ConnectionType::Docker => {
+            builder = builder.connection_type("docker");
+        }
+        crate::inventory::ConnectionType::Podman => {
+            builder = builder.connection_type("podman");
+        }
+        crate::inventory::ConnectionType::Winrm => {
+            return Err(crate::connection::ConnectionError::InvalidConfig(
+                "WinRM targets are not supported for kernel deployments".to_string(),
+            ));
+        }
+        crate::inventory::ConnectionType::Ssh => {
+            builder = builder.port(host.connection.ssh.port);
+            if let Some(user) = &host.connection.ssh.user {
+                builder = builder.user(user.clone());
+            }
+            if let Some(password) = &host.connection.ssh.password {
+                builder = builder.password(password.clone());
+            }
+            if let Some(private_key) = &host.connection.ssh.private_key_file {
+                builder = builder.private_key(private_key.clone());
+            }
+            builder = builder.timeout(host.connection.ssh.timeout as u64);
+        }
+    }
+
+    builder.connect().await
+}
+
+fn build_execute_options(host: &Host, timeout_secs: u64) -> ExecuteOptions {
+    let mut options = ExecuteOptions::new().with_timeout(timeout_secs);
+
+    if host.connection.r#become {
+        options = options
+            .with_escalation(Some(host.connection.become_user.clone()))
+            .with_escalate_method(host.connection.become_method.clone());
+        if let Some(password) = &host.connection.become_password {
+            options = options.with_escalate_password(password.clone());
+        }
+    }
+
+    options
+}
+
+async fn run_command(
+    connection: &dyn Connection,
+    command: &str,
+    options: Option<ExecuteOptions>,
+) -> Result<CommandResult, ApiError> {
+    let result = connection
+        .execute(command, options)
+        .await
+        .map_err(|err| ApiError::JobExecution(err.to_string()))?;
+    if result.success {
+        Ok(result)
+    } else {
+        Err(ApiError::JobExecution(result.combined_output()))
+    }
+}
+
+fn log_job(state: &Arc<AppState>, job_id: Uuid, message: &str) {
+    state.append_job_output(job_id, message.to_string(), "stdout");
+}
+
+fn fail_job(state: &Arc<AppState>, job_id: Uuid, message: String) {
+    error!("{}", message);
+    state.append_job_output(job_id, message.clone(), "stderr");
+    state.set_job_error(job_id, message);
+    state.update_job_status(job_id, JobStatus::Failed);
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn build_fetch_command(artifact_url: &str, destination: &str) -> String {
+    if let Some(path) = artifact_url.strip_prefix("file://") {
+        format!("cp {} {}", shell_quote(path), shell_quote(destination))
+    } else if artifact_url.starts_with('/') {
+        format!(
+            "cp {} {}",
+            shell_quote(artifact_url),
+            shell_quote(destination)
+        )
+    } else {
+        format!(
+            "curl -fsSL {} -o {}",
+            shell_quote(artifact_url),
+            shell_quote(destination)
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -828,5 +1502,43 @@ mod tests {
             // Canonicalization resolves the link to outside search path
             assert!(matches!(result, Err(ApiError::Forbidden(_))));
         }
+    }
+
+    #[test]
+    fn test_build_fetch_command_supports_file_urls() {
+        let command = build_fetch_command("file:///tmp/kernel.deb", "/tmp/out.deb");
+        assert_eq!(command, "cp '/tmp/kernel.deb' '/tmp/out.deb'");
+    }
+
+    #[test]
+    fn test_resolve_target_hosts_deduplicates_matches() {
+        let temp_dir = TempDir::new().unwrap();
+        let inventory_path = temp_dir.path().join("hosts.yml");
+        fs::write(
+            &inventory_path,
+            r#"
+all:
+  children:
+    web:
+      hosts:
+        web1:
+          ansible_connection: local
+        web2:
+          ansible_connection: local
+"#,
+        )
+        .unwrap();
+        let inventory = Inventory::load(&inventory_path).unwrap();
+
+        let hosts = resolve_target_hosts(
+            &inventory,
+            &["web".to_string(), "web1".to_string(), "web*".to_string()],
+        )
+        .unwrap();
+
+        let names: Vec<_> = hosts.into_iter().map(|host| host.name).collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"web1".to_string()));
+        assert!(names.contains(&"web2".to_string()));
     }
 }

@@ -44,6 +44,19 @@ use crate::modules::{
 pub struct WinCopyModule;
 
 impl WinCopyModule {
+    fn normalize_checksum_algorithm(algo: &str) -> ModuleResult<&'static str> {
+        match algo.trim().to_ascii_uppercase().as_str() {
+            "MD5" => Ok("MD5"),
+            "SHA1" => Ok("SHA1"),
+            "SHA256" => Ok("SHA256"),
+            "SHA512" => Ok("SHA512"),
+            other => Err(ModuleError::InvalidParameter(format!(
+                "Unsupported checksum algorithm '{}'. Valid values: md5, sha1, sha256, sha512",
+                other
+            ))),
+        }
+    }
+
     /// Generate PowerShell script to check if file exists and get its hash
     fn generate_file_check_script(dest: &str, checksum_algo: &str) -> String {
         format!(
@@ -262,6 +275,10 @@ impl Module for WinCopyModule {
             }
         }
 
+        if let Some(checksum) = params.get_string("checksum")? {
+            Self::normalize_checksum_algorithm(&checksum)?;
+        }
+
         Ok(())
     }
 
@@ -284,11 +301,12 @@ impl Module for WinCopyModule {
         let checksum_algo = params
             .get_string("checksum")?
             .unwrap_or_else(|| "SHA256".to_string());
+        let checksum_algo = Self::normalize_checksum_algorithm(&checksum_algo)?;
 
         validate_windows_path(&dest)?;
 
         // Check current state
-        let check_script = Self::generate_file_check_script(&dest, &checksum_algo);
+        let check_script = Self::generate_file_check_script(&dest, checksum_algo);
         let (success, stdout, stderr) = execute_powershell_sync(connection, &check_script)?;
 
         if !success {
@@ -308,13 +326,13 @@ impl Module for WinCopyModule {
 
         // Calculate checksum of source content
         let (source_content, source_checksum) = if let Some(ref content_str) = inline_content {
-            let hash = Self::compute_checksum(content_str.as_bytes(), &checksum_algo);
+            let hash = Self::compute_checksum(content_str.as_bytes(), checksum_algo);
             (content_str.clone(), hash)
         } else if let Some(ref src_path) = src {
             let content_bytes = std::fs::read(src_path).map_err(|e| {
                 ModuleError::ExecutionFailed(format!("Failed to read source file: {}", e))
             })?;
-            let hash = Self::compute_checksum(&content_bytes, &checksum_algo);
+            let hash = Self::compute_checksum(&content_bytes, checksum_algo);
             // For binary files, we'll transfer as base64
             (
                 base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &content_bytes),
@@ -397,21 +415,15 @@ impl Module for WinCopyModule {
 impl WinCopyModule {
     /// Compute checksum of content
     fn compute_checksum(data: &[u8], algo: &str) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use sha1::Sha1;
+        use sha2::{Digest, Sha256, Sha512};
 
-        // Simple hash for now - in production would use proper crypto hashes
-        match algo.to_uppercase().as_str() {
-            "MD5" | "SHA1" | "SHA256" | "SHA512" => {
-                let mut hasher = DefaultHasher::new();
-                data.hash(&mut hasher);
-                format!("{:016x}", hasher.finish())
-            }
-            _ => {
-                let mut hasher = DefaultHasher::new();
-                data.hash(&mut hasher);
-                format!("{:016x}", hasher.finish())
-            }
+        match algo {
+            "MD5" => format!("{:x}", md5::compute(data)),
+            "SHA1" => format!("{:x}", Sha1::digest(data)),
+            "SHA256" => format!("{:x}", Sha256::digest(data)),
+            "SHA512" => format!("{:x}", Sha512::digest(data)),
+            _ => unreachable!("checksum algorithm must be normalized before hashing"),
         }
     }
 }
@@ -476,10 +488,40 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_params_rejects_invalid_checksum() {
+        let module = WinCopyModule;
+        let mut params: ModuleParams = HashMap::new();
+        params.insert("content".to_string(), serde_json::json!("content"));
+        params.insert("dest".to_string(), serde_json::json!("C:\\test.txt"));
+        params.insert("checksum".to_string(), serde_json::json!("crc32"));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
     fn test_generate_file_check_script() {
         let script = WinCopyModule::generate_file_check_script("C:\\test.txt", "SHA256");
         assert!(script.contains("Test-Path"));
         assert!(script.contains("Get-FileHash"));
         assert!(script.contains("SHA256"));
+    }
+
+    #[test]
+    fn test_compute_checksum_uses_real_algorithms() {
+        let data = b"hello";
+
+        assert_eq!(
+            WinCopyModule::compute_checksum(data, "MD5"),
+            "5d41402abc4b2a76b9719d911017c592"
+        );
+        assert_eq!(
+            WinCopyModule::compute_checksum(data, "SHA1"),
+            "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+        );
+        assert_eq!(
+            WinCopyModule::compute_checksum(data, "SHA256"),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+        assert_eq!(WinCopyModule::compute_checksum(data, "SHA512").len(), 128);
     }
 }

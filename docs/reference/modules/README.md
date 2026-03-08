@@ -93,10 +93,12 @@ This directory contains documentation for all Rustible modules. Modules are the 
 | Module | Description |
 |--------|-------------|
 | [aws_ec2](aws_ec2.md) | Manage EC2 instances |
+| [aws_ebs_volume](aws_ebs_volume.md) | Manage EBS volumes |
 | [aws_iam_policy](aws_iam_policy.md) | Manage IAM policies |
 | [aws_iam_role](aws_iam_role.md) | Manage IAM roles |
 | [aws_s3](aws_s3.md) | Manage S3 objects |
 | [aws_security_group](aws_security_group.md) | Manage security groups |
+| [aws_security_group_rule](aws_security_group_rule.md) | Manage standalone security group rules |
 | [aws_vpc](aws_vpc.md) | Manage VPCs |
 
 ### Cloud - Azure (feature flag: `azure`, experimental)
@@ -140,7 +142,7 @@ This directory contains documentation for all Rustible modules. Modules are the 
 | [postgresql_query](postgresql_query.md) | Execute PostgreSQL queries |
 | [postgresql_user](postgresql_user.md) | Manage PostgreSQL users |
 
-### Windows (feature flag: `winrm`, experimental)
+### Windows (feature flag: `winrm`, Beta / Partial)
 | Module | Description |
 |--------|-------------|
 | [win_copy](win_copy.md) | Copy files to Windows hosts |

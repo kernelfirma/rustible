@@ -18,8 +18,9 @@ performance/security characteristics.
 
 - Terraform-like provisioning is experimental and limited in scope; Terraform integration
   focuses on state inventory and workflow bridging, not full replacement.
-- Several feature flags remain stubbed or partial and require explicit
-  `experimental` opt-in (see `Cargo.toml`).
+- Current shipped status is tracked in `docs/FEATURE_STATUS.md`.
+- Some feature flags remain experimental and still require explicit
+  `experimental` opt-in, but `winrm` no longer does.
 - Alpha readiness risks and active ownership are tracked in `docs/ALPHA_READINESS_ISSUES.md`.
 - Alpha release execution tasks are tracked in `docs/ALPHA_LAUNCH_CHECKLIST.md`.
 - Beta promotion criteria and sign-off requirements are defined in `docs/BETA_ENTRY_CRITERIA.md`.
@@ -79,6 +80,8 @@ Options:
 
 ```bash
 rustible check <PLAYBOOK>     # Syntax validation
+rustible lock checkpoint NAME # Create a rollback checkpoint
+rustible lock rollback NAME   # Dry-run or execute rollback from a checkpoint
 rustible vault encrypt <FILE> # AES-256-GCM encryption
 rustible vault decrypt <FILE> # Decrypt files
 rustible galaxy install <PKG> # Install collections/roles
@@ -105,7 +108,7 @@ rustible init <PATH>          # Initialize new project
 - **Kubernetes**: Pod execution (feature flag)
 - **Podman**: Rootless container execution
 - **AWS SSM**: EC2 Session Manager connection
-- **WinRM**: Windows remote management (Beta, feature flag)
+- **WinRM**: Windows remote management (Beta, feature flag, no `experimental` gate)
 
 ### Built-in Modules
 
@@ -119,7 +122,7 @@ rustible init <PATH>          # Initialize new project
 
 **Security**: authorized_key, known_hosts, ufw, firewalld
 
-**Cloud modules** (feature flags): aws_ec2_instance, aws_s3, azure_vm, gcp_compute_instance
+**Cloud modules** (feature flags): aws_ec2_instance, aws_s3, aws_iam_role, aws_iam_policy, aws_security_group_rule, aws_ebs_volume, azure_vm, gcp_compute_instance
 
 **Docker**: docker_container, docker_image, docker_network, docker_volume, docker_compose
 
@@ -194,7 +197,7 @@ cargo build --features docker,kubernetes,aws
 | `openstack` | OpenStack cloud provider (experimental) |
 | `redfish` | Bare-metal BMC management via Redfish/IPMI |
 | `database` | Database modules (PostgreSQL, MySQL) |
-| `winrm` | Windows Remote Management (Beta) |
+| `winrm` | Windows Remote Management (Beta, no `experimental` opt-in required) |
 | `azure` | Azure cloud modules (experimental) |
 | `gcp` | GCP cloud modules (experimental) |
 | `reqwest` | HTTP client backend (experimental) |
@@ -212,6 +215,7 @@ Benchmarks demonstrate significant performance improvements:
 
 ## Documentation
 
+- [Feature Status](docs/FEATURE_STATUS.md) - Canonical implementation status
 - [User Guide](docs/guides/README.md) - Comprehensive usage guide
 - [API Reference](docs/reference/README.md) - Module documentation
 - [Architecture](docs/architecture/ARCHITECTURE.md) - Technical design

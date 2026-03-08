@@ -3,8 +3,8 @@
 //! Implements 50+ commonly used Jinja2 filters to maintain compatibility
 //! with existing Ansible templates.
 
-use chrono::{DateTime, TimeZone, Utc};
 use crate::utils::get_regex;
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
 use std::env;
 use std::path::Path;

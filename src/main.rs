@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
         Commands::Provision(args) => execute_provision(&args.command, &mut ctx).await?,
         Commands::Drift(args) => args.execute(&mut ctx).await?,
         Commands::Lock(args) => {
-            args.execute().await?;
+            args.execute_with_context(Some(&ctx)).await?;
             0
         }
         Commands::Provisioner(args) => {

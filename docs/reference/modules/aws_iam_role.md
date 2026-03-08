@@ -76,6 +76,5 @@ and requires building with `--features aws`.
 
 - Requires AWS credentials in the environment or config files.
 - Build with `--features aws` to enable this module.
-- This module is planned and may have limited implementation.
 - Managed policies are attached after role creation.
 - Deleting a role detaches all policies first.

@@ -16,6 +16,8 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .nest("/api/v1", public_routes())
         // Protected routes (auth required)
         .nest("/api/v1", protected_routes())
+        // Internal service routes (service token required)
+        .nest("/api/v1/internal", internal_routes())
         // WebSocket routes
         .nest("/api/v1/ws", websocket_routes())
         // Add state
@@ -55,6 +57,17 @@ fn protected_routes() -> Router<Arc<AppState>> {
         .route("/inventory/hosts/:name", get(handlers::get_host))
         .route("/inventory/groups", get(handlers::list_groups))
         .route("/inventory/groups/:name", get(handlers::get_group))
+}
+
+/// Internal routes protected by a service token.
+fn internal_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route(
+            "/kernel-deployments",
+            post(handlers::submit_kernel_deployment),
+        )
+        .route("/jobs/:id", get(handlers::get_job_internal))
+        .route("/jobs/:id/output", get(handlers::get_job_output_internal))
 }
 
 /// WebSocket routes for real-time updates.

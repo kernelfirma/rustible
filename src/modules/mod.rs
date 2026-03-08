@@ -180,9 +180,24 @@ pub fn validate_shell_safe_string(value: &str, param_name: &str) -> ModuleResult
     // Reject shell metacharacters that enable command injection
     // Optimization: Check bytes directly to avoid UTF-8 decoding and linear slice scan.
     // All these metacharacters are ASCII (single byte), so this is safe and correct even for UTF-8 strings.
-    if value.bytes().any(|b| matches!(b,
-        b'$' | b'`' | b'|' | b'&' | b';' | b'<' | b'>' | b'(' | b')' | b'\n' | b'\r' | b'\t' | b'\\' | b'!'
-    )) {
+    if value.bytes().any(|b| {
+        matches!(
+            b,
+            b'$' | b'`'
+                | b'|'
+                | b'&'
+                | b';'
+                | b'<'
+                | b'>'
+                | b'('
+                | b')'
+                | b'\n'
+                | b'\r'
+                | b'\t'
+                | b'\\'
+                | b'!'
+        )
+    }) {
         const SHELL_METACHARACTERS: &[char] = &[
             '$', '`', '|', '&', ';', '<', '>', '(', ')', '\n', '\r', '\t', '\\', '!',
         ];
@@ -398,8 +413,8 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     // This replaces the previous fast-path (which only allowed alphanumeric/safe chars)
     // and the O(24*N) loop for quoted strings.
     const DANGEROUS_CHARS: &[char] = &[
-        '$', '`', '&', '|', ';', '<', '>', '\n', '\r', '{', '}', '(', ')', '[', ']', '*', '?',
-        '!', '\\', '#', '%', '^',
+        '$', '`', '&', '|', ';', '<', '>', '\n', '\r', '{', '}', '(', ')', '[', ']', '*', '?', '!',
+        '\\', '#', '%', '^',
     ];
 
     if args.find(DANGEROUS_CHARS).is_none() {
@@ -412,11 +427,13 @@ pub fn validate_command_args(args: &str) -> ModuleResult<()> {
     //
     // Safe characters: alphanumeric, space, _, -, ., /, :, +, =, ,, @
     // NOTE: % is NOT safe on Windows (variable expansion)
-    let is_safe = args.bytes().all(|b| matches!(b,
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
-        b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
-        b'+' | b'=' | b',' | b'@'
-    ));
+    let is_safe = args.bytes().all(|b| {
+        matches!(b,
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+            b' ' | b'_' | b'-' | b'.' | b'/' | b':' |
+            b'+' | b'=' | b',' | b'@'
+        )
+    });
 
     if is_safe {
         return Ok(());
@@ -1671,6 +1688,8 @@ impl ModuleRegistry {
                 cloud::Ec2InstanceModule,
                 cloud::AwsS3Module,
                 cloud::Ec2SecurityGroupModule,
+                cloud::AwsSecurityGroupRuleModule,
+                cloud::AwsEbsVolumeModule,
                 cloud::Ec2VpcModule,
                 cloud::AwsIamRoleModule,
                 cloud::AwsIamPolicyModule,

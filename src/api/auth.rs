@@ -169,8 +169,7 @@ pub struct AuthenticatedUser {
 impl AuthenticatedUser {
     /// Validate token from headers using the provided JWT auth handler.
     fn validate_from_headers(headers: &HeaderMap, jwt_auth: &JwtAuth) -> Result<Self, ApiError> {
-        // Extract the Authorization header
-        let auth_header = extract_auth_header(headers)?;
+        let auth_header = extract_bearer_token(headers)?;
 
         // Validate the token
         let claims = jwt_auth
@@ -205,6 +204,11 @@ impl FromRequestParts<Arc<AppState>> for AuthenticatedUser {
 
 /// Extract the bearer token from the Authorization header.
 fn extract_auth_header(headers: &HeaderMap) -> Result<&str, ApiError> {
+    extract_bearer_token(headers)
+}
+
+/// Extract the bearer token from the Authorization header.
+fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     let auth_header = headers
         .get("Authorization")
         .ok_or_else(|| ApiError::Unauthorized("Missing Authorization header".to_string()))?
@@ -218,6 +222,50 @@ fn extract_auth_header(headers: &HeaderMap) -> Result<&str, ApiError> {
     }
 
     Ok(&auth_header[7..])
+}
+
+/// Internal service-to-service authentication extractor.
+pub struct InternalService;
+
+impl InternalService {
+    fn validate_from_headers(headers: &HeaderMap, state: &AppState) -> Result<Self, ApiError> {
+        if state.config.service_tokens.is_empty() {
+            return Err(ApiError::ServiceUnavailable(
+                "No internal service tokens configured".to_string(),
+            ));
+        }
+
+        let token = extract_bearer_token(headers)?;
+        if state
+            .config
+            .service_tokens
+            .iter()
+            .any(|expected| expected == token)
+        {
+            Ok(Self)
+        } else {
+            Err(ApiError::Unauthorized(
+                "Invalid internal service token".to_string(),
+            ))
+        }
+    }
+}
+
+impl FromRequestParts<Arc<AppState>> for InternalService {
+    type Rejection = ApiError;
+
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 Arc<AppState>,
+    ) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        let result = Self::validate_from_headers(&parts.headers, state);
+        Box::pin(async move { result })
+    }
 }
 
 /// Optional authentication extractor.
@@ -339,5 +387,24 @@ mod tests {
         assert_ne!(config1.secret, "rustible-default-secret-change-me");
         // Should be random (different each time)
         assert_ne!(config1.secret, config2.secret);
+    }
+
+    #[test]
+    fn test_internal_service_rejects_missing_token() {
+        let state = AppState::new(super::super::ApiConfig::default().with_service_token("secret"));
+        let headers = HeaderMap::new();
+
+        let result = InternalService::validate_from_headers(&headers, &state);
+        assert!(matches!(result, Err(ApiError::Unauthorized(_))));
+    }
+
+    #[test]
+    fn test_internal_service_accepts_matching_token() {
+        let state = AppState::new(super::super::ApiConfig::default().with_service_token("secret"));
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "Bearer secret".parse().unwrap());
+
+        let result = InternalService::validate_from_headers(&headers, &state);
+        assert!(result.is_ok());
     }
 }

@@ -22,7 +22,7 @@
 use std::env;
 
 use rustible::connection::winrm::{WinRmAuth, WinRmConnectionBuilder};
-use rustible::connection::Connection;
+use rustible::connection::{Connection, ConnectionError};
 
 /// Helper to check if WinRM test environment is configured
 fn winrm_configured() -> bool {
@@ -50,6 +50,36 @@ fn get_winrm_config() -> Option<(String, String, String, u16, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_credssp_auth_fails_fast_without_network() {
+        let result = WinRmConnectionBuilder::new("192.0.2.1")
+            .auth(WinRmAuth::credssp("DOMAIN\\user", "password"))
+            .connect()
+            .await;
+
+        match result {
+            Err(ConnectionError::UnsupportedOperation(message)) => {
+                assert!(message.contains("CredSSP authentication"));
+            }
+            other => panic!("expected unsupported CredSSP auth error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_kerberos_auth_fails_fast_without_network() {
+        let result = WinRmConnectionBuilder::new("192.0.2.1")
+            .auth(WinRmAuth::kerberos("user", "EXAMPLE.COM"))
+            .connect()
+            .await;
+
+        match result {
+            Err(ConnectionError::UnsupportedOperation(message)) => {
+                assert!(message.contains("Kerberos authentication"));
+            }
+            other => panic!("expected unsupported Kerberos auth error, got {other:?}"),
+        }
+    }
 
     /// Test basic WinRM connection
     #[tokio::test]

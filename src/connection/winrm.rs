@@ -1,8 +1,10 @@
 //! Windows Remote Management (WinRM) connection module
 //!
 //! This module provides connectivity to Windows hosts using the WinRM protocol.
-//! It supports both NTLM and Kerberos authentication mechanisms, PowerShell
-//! remote execution, and file transfers via WinRM.
+//! The current implementation supports NTLM, Basic, and certificate
+//! authentication for PowerShell remote execution and file transfers via WinRM.
+//! Kerberos and CredSSP are parsed and validated but return explicit
+//! unsupported-operation errors in this build.
 //!
 //! # Overview
 //!
@@ -10,7 +12,9 @@
 //! for managing remote hosts. This module provides:
 //!
 //! - **NTLM Authentication**: Windows challenge-response authentication
-//! - **Kerberos Authentication**: Enterprise single sign-on authentication
+//! - **Basic Authentication**: Simple credential-based authentication
+//! - **Certificate Authentication**: Client certificate-based authentication
+//! - **Explicit Unsupported Auth Paths**: Kerberos and CredSSP fail fast
 //! - **PowerShell Remoting**: Execute PowerShell commands and scripts
 //! - **File Transfer**: Upload/download files using PowerShell Base64 encoding
 //!
@@ -38,7 +42,7 @@
 //! # Security Considerations
 //!
 //! - Use HTTPS (port 5986) in production environments
-//! - Prefer Kerberos authentication when available
+//! - Prefer NTLM or certificate authentication in the current build
 //! - Store credentials securely using the vault module
 //! - Consider using certificate-based authentication for automation
 
@@ -192,6 +196,26 @@ impl WinRmAuth {
             cert_path: cert_path.into(),
             key_path: key_path.into(),
             ca_cert_path: None,
+        }
+    }
+
+    /// Create CredSSP authentication.
+    pub fn credssp(username: impl Into<String>, password: impl Into<String>) -> Self {
+        let username = username.into();
+        let (domain, user) = if username.contains('\\') {
+            let parts: Vec<&str> = username.splitn(2, '\\').collect();
+            (Some(parts[0].to_string()), parts[1].to_string())
+        } else if username.contains('@') {
+            let parts: Vec<&str> = username.splitn(2, '@').collect();
+            (Some(parts[1].to_string()), parts[0].to_string())
+        } else {
+            (None, username)
+        };
+
+        WinRmAuth::CredSSP {
+            username: user,
+            password: SecretString::new(password.into()),
+            domain,
         }
     }
 
@@ -653,8 +677,26 @@ pub struct WinRmConnection {
 }
 
 impl WinRmConnection {
+    fn unsupported_auth_error(auth: &WinRmAuth) -> Option<ConnectionError> {
+        match auth {
+            WinRmAuth::Basic { .. } | WinRmAuth::Ntlm { .. } | WinRmAuth::Certificate { .. } => {
+                None
+            }
+            WinRmAuth::Kerberos { .. } => Some(ConnectionError::UnsupportedOperation(
+                "Kerberos authentication is not implemented in this build. Use NTLM, Basic, or certificate authentication instead.".to_string(),
+            )),
+            WinRmAuth::CredSSP { .. } => Some(ConnectionError::UnsupportedOperation(
+                "CredSSP authentication is not implemented".to_string(),
+            )),
+        }
+    }
+
     /// Create a new WinRM connection
     pub async fn connect(config: WinRmConfig) -> ConnectionResult<Self> {
+        if let Some(err) = Self::unsupported_auth_error(&config.auth) {
+            return Err(err);
+        }
+
         // Build HTTP client
         let mut client_builder = Client::builder()
             .timeout(Duration::from_secs(config.timeout))
@@ -742,10 +784,9 @@ impl WinRmConnection {
                     ConnectionError::ConnectionFailed(format!("HTTP request failed: {}", e))
                 }),
             WinRmAuth::Ntlm { .. } => self.send_ntlm_request(body).await,
-            WinRmAuth::Kerberos { .. } => self.send_kerberos_request(body).await,
-            WinRmAuth::CredSSP { .. } => Err(ConnectionError::UnsupportedOperation(
-                "CredSSP authentication not yet implemented".to_string(),
-            )),
+            WinRmAuth::Kerberos { .. } | WinRmAuth::CredSSP { .. } => {
+                Err(Self::unsupported_auth_error(&self.config.auth).expect("unsupported auth"))
+            }
             WinRmAuth::Certificate { .. } => {
                 // Certificate auth is handled at the TLS level
                 self.client
@@ -1894,5 +1935,48 @@ mod tests {
         assert!(builder.config.use_ssl);
         assert_eq!(builder.config.timeout, 120);
         assert_eq!(builder.config.shell, ShellType::PowerShell);
+    }
+
+    #[test]
+    fn test_supported_auth_detection() {
+        assert!(
+            WinRmConnection::unsupported_auth_error(&WinRmAuth::basic("user", test_pw())).is_none()
+        );
+        assert!(
+            WinRmConnection::unsupported_auth_error(&WinRmAuth::ntlm("user", test_pw())).is_none()
+        );
+        assert!(
+            WinRmConnection::unsupported_auth_error(&WinRmAuth::certificate("cert", "key"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_unsupported_auth_detection() {
+        let kerberos =
+            WinRmConnection::unsupported_auth_error(&WinRmAuth::kerberos("user", "EXAMPLE.COM"))
+                .expect("kerberos should be unsupported");
+        assert!(kerberos.to_string().contains("Kerberos authentication"));
+
+        let credssp =
+            WinRmConnection::unsupported_auth_error(&WinRmAuth::credssp("DOMAIN\\user", test_pw()))
+                .expect("credssp should be unsupported");
+        assert!(credssp.to_string().contains("CredSSP authentication"));
+    }
+
+    #[test]
+    fn test_windows_credential_manager_store_credential_is_explicitly_unsupported() {
+        let password = SecretString::new(test_pw());
+        let result = WindowsCredentialManager::store_credential("rustible:test", "user", &password);
+
+        let err = result.expect_err("store_credential should be unsupported");
+        #[cfg(target_os = "windows")]
+        assert!(err
+            .to_string()
+            .contains("Windows Credential Manager not yet implemented"));
+        #[cfg(not(target_os = "windows"))]
+        assert!(err
+            .to_string()
+            .contains("Windows Credential Manager only available on Windows"));
     }
 }

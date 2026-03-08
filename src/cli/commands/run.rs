@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
@@ -177,6 +177,87 @@ struct RunSummary {
     hosts: HashMap<String, HostStats>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plan: Option<Vec<String>>,
+}
+
+fn state_dir_for_playbook(playbook: &Path) -> PathBuf {
+    playbook
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(".rustible")
+        .join("state")
+}
+
+fn build_host_states(
+    tasks: &[rustible::state::TaskStateRecord],
+) -> HashMap<String, rustible::state::HostState> {
+    let mut host_states = HashMap::new();
+
+    for task in tasks {
+        let entry =
+            host_states
+                .entry(task.host.clone())
+                .or_insert_with(|| rustible::state::HostState {
+                    host: task.host.clone(),
+                    ..Default::default()
+                });
+
+        match task.status {
+            rustible::state::TaskStatus::Ok => entry.ok += 1,
+            rustible::state::TaskStatus::Changed => entry.changed += 1,
+            rustible::state::TaskStatus::Failed => {
+                entry.failed += 1;
+                entry.last_error = task.error.clone();
+            }
+            rustible::state::TaskStatus::Skipped => entry.skipped += 1,
+            rustible::state::TaskStatus::Unreachable => entry.unreachable = true,
+            _ => {}
+        }
+
+        entry.last_successful_task = Some(task.task_name.clone());
+    }
+
+    host_states
+}
+
+fn persist_execution_snapshot(
+    playbook: &Path,
+    inventory_path: Option<&Path>,
+    tasks: Vec<rustible::state::TaskStateRecord>,
+    success: bool,
+    description: &str,
+) -> Result<()> {
+    use rustible::state::{PersistenceBackend, StateConfig, StateManager, StateSnapshot};
+
+    let state_dir = state_dir_for_playbook(playbook);
+    let state_config = StateConfig::builder()
+        .state_dir(state_dir.clone())
+        .persistence(PersistenceBackend::Json(state_dir))
+        .build();
+    let state_manager = StateManager::new(state_config)?;
+    let playbook_name = playbook.display().to_string();
+
+    let mut snapshot = StateSnapshot::new(Uuid::new_v4().to_string(), &playbook_name)
+        .with_description(description.to_string());
+    snapshot.tasks = tasks;
+    snapshot.host_states = build_host_states(&snapshot.tasks);
+    snapshot.calculate_stats();
+    snapshot
+        .metadata
+        .insert("success".to_string(), serde_json::json!(success));
+
+    if let Some(path) = inventory_path {
+        snapshot.metadata.insert(
+            "inventory_path".to_string(),
+            serde_json::json!(path.to_string_lossy().to_string()),
+        );
+    }
+
+    if let Some(previous) = state_manager.get_latest_snapshot(&playbook_name)? {
+        snapshot.parent_id = Some(previous.id);
+    }
+
+    state_manager.save_snapshot(&snapshot)?;
+    Ok(())
 }
 
 impl OutputBundle {
@@ -713,8 +794,10 @@ impl RunArgs {
         let output = ctx.output.clone();
         let bundle_callback = if let Some(bundle) = output_bundle.as_ref() {
             let bundle = Arc::clone(bundle);
-            Some(Arc::new(move |event| handle_execution_event(&bundle, event))
-                as rustible::executor::EventCallback)
+            Some(
+                Arc::new(move |event| handle_execution_event(&bundle, event))
+                    as rustible::executor::EventCallback,
+            )
         } else {
             None
         };
@@ -758,6 +841,19 @@ impl RunArgs {
             Err(e) => {
                 ctx.output
                     .error(&format!("Playbook execution failed: {}", e));
+
+                if let Err(save_err) = persist_execution_snapshot(
+                    &self.playbook,
+                    inventory_path.as_deref(),
+                    executor.changed_task_records().await,
+                    false,
+                    "Failed run",
+                ) {
+                    ctx.output.warning(&format!(
+                        "Failed to persist execution snapshot for rollback: {}",
+                        save_err
+                    ));
+                }
 
                 if let Some(bundle) = output_bundle.as_ref() {
                     let mut bundle = bundle.lock().expect("output bundle lock poisoned");
@@ -824,6 +920,23 @@ impl RunArgs {
             if result.failed || result.unreachable {
                 has_failures = true;
             }
+        }
+
+        if let Err(save_err) = persist_execution_snapshot(
+            &self.playbook,
+            inventory_path.as_deref(),
+            executor.changed_task_records().await,
+            !has_failures,
+            if has_failures {
+                "Completed run with failures"
+            } else {
+                "Completed run"
+            },
+        ) {
+            ctx.output.warning(&format!(
+                "Failed to persist execution snapshot for rollback: {}",
+                save_err
+            ));
         }
 
         // Print recap

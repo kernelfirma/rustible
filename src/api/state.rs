@@ -52,15 +52,16 @@ impl AppState {
 
         let jwt_auth = JwtAuth::new(&auth_config);
 
-        // Create default admin user
         let mut users = HashMap::new();
-        users.insert(
-            "admin".to_string(),
-            UserCredentials {
-                password_hash: "admin".to_string(), // In production, hash this!
-                roles: vec!["admin".to_string(), "user".to_string()],
-            },
-        );
+        for (username, user) in &config.users {
+            users.insert(
+                username.clone(),
+                UserCredentials {
+                    password_hash: user.password.clone(),
+                    roles: user.roles.clone(),
+                },
+            );
+        }
 
         Self {
             jwt_auth,
@@ -85,18 +86,6 @@ impl AppState {
             .values()
             .filter(|j| j.status == JobStatus::Running)
             .count()
-    }
-
-    /// Authenticate a user and return their credentials.
-    pub fn authenticate(&self, username: &str, password: &str) -> Option<&UserCredentials> {
-        let users = self.users.read();
-        users.get(username).filter(|creds| {
-            // In production, use proper password verification (bcrypt, argon2, etc.)
-            creds.password_hash == password
-        });
-        // Need to return owned data or use a different approach
-        drop(users);
-        None
     }
 
     /// Check user credentials (returns roles if valid).

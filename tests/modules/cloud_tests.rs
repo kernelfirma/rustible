@@ -218,7 +218,9 @@ mod aws_s3_tests {
 #[cfg(feature = "aws")]
 mod aws_iam_tests {
     use super::*;
-    use rustible::modules::cloud::{AwsIamPolicyModule, AwsIamRoleModule};
+    use rustible::modules::cloud::{
+        AwsEbsVolumeModule, AwsIamPolicyModule, AwsIamRoleModule, AwsSecurityGroupRuleModule,
+    };
 
     #[test]
     fn test_aws_iam_role_module_metadata() {
@@ -331,6 +333,230 @@ mod aws_iam_tests {
             "policy_document".to_string(),
             serde_json::json!(r#"{"Version":"2012-10-17","Statement":[]}"#),
         );
+
+        let context = ModuleContext::default().with_check_mode(true);
+        let result = module.execute(&params, &context);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_module_metadata() {
+        let module = AwsSecurityGroupRuleModule;
+        assert_eq!(module.name(), "aws_security_group_rule");
+        assert_eq!(module.classification(), ModuleClassification::LocalLogic);
+        match module.parallelization_hint() {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => assert!(requests_per_second > 0),
+            _ => panic!("Expected rate-limited parallelization for aws_security_group_rule"),
+        }
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_validate_valid_params() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("ingress"));
+        params.insert("protocol".to_string(), serde_json::json!("tcp"));
+        params.insert("from_port".to_string(), serde_json::json!(443));
+        params.insert("to_port".to_string(), serde_json::json!(443));
+        params.insert(
+            "cidr_blocks".to_string(),
+            serde_json::json!(["10.0.0.0/24"]),
+        );
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_validate_group_id_alias() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "security_group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("egress"));
+        params.insert("ipv6_cidr_blocks".to_string(), serde_json::json!(["::/0"]));
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_validate_missing_selector() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("ingress"));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_validate_invalid_cidr() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("ingress"));
+        params.insert(
+            "cidr_blocks".to_string(),
+            serde_json::json!(["10.0.0.0/33"]),
+        );
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_security_group_rule_validate_protocol_port_mismatch() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("ingress"));
+        params.insert("protocol".to_string(), serde_json::json!("-1"));
+        params.insert("from_port".to_string(), serde_json::json!(53));
+        params.insert("to_port".to_string(), serde_json::json!(53));
+        params.insert("cidr_blocks".to_string(), serde_json::json!(["0.0.0.0/0"]));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    #[ignore = "Requires AWS credentials and tokio runtime"]
+    fn test_aws_security_group_rule_check_mode_create() {
+        let module = AwsSecurityGroupRuleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "group_id".to_string(),
+            serde_json::json!("sg-1234567890abcdef0"),
+        );
+        params.insert("type".to_string(), serde_json::json!("ingress"));
+        params.insert("protocol".to_string(), serde_json::json!("tcp"));
+        params.insert("from_port".to_string(), serde_json::json!(443));
+        params.insert("to_port".to_string(), serde_json::json!(443));
+        params.insert(
+            "cidr_blocks".to_string(),
+            serde_json::json!(["10.0.0.0/24"]),
+        );
+
+        let context = ModuleContext::default().with_check_mode(true);
+        let result = module.execute(&params, &context);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_module_metadata() {
+        let module = AwsEbsVolumeModule;
+        assert_eq!(module.name(), "aws_ebs_volume");
+        assert_eq!(module.classification(), ModuleClassification::LocalLogic);
+        match module.parallelization_hint() {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => assert!(requests_per_second > 0),
+            _ => panic!("Expected rate-limited parallelization for aws_ebs_volume"),
+        }
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_validate_valid_params() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("data-volume"));
+        params.insert(
+            "availability_zone".to_string(),
+            serde_json::json!("us-east-1a"),
+        );
+        params.insert("size".to_string(), serde_json::json!(100));
+        params.insert("type".to_string(), serde_json::json!("gp3"));
+        params.insert("iops".to_string(), serde_json::json!(3000));
+        params.insert("throughput".to_string(), serde_json::json!(125));
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_validate_invalid_identifierless_request() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "availability_zone".to_string(),
+            serde_json::json!("us-east-1a"),
+        );
+        params.insert("size".to_string(), serde_json::json!(100));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_validate_invalid_type_throughput_combo() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("data-volume"));
+        params.insert(
+            "availability_zone".to_string(),
+            serde_json::json!("us-east-1a"),
+        );
+        params.insert("size".to_string(), serde_json::json!(100));
+        params.insert("type".to_string(), serde_json::json!("io2"));
+        params.insert("throughput".to_string(), serde_json::json!(125));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_validate_volume_type_alias() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert(
+            "volume_id".to_string(),
+            serde_json::json!("vol-1234567890abcdef0"),
+        );
+        params.insert("volume_type".to_string(), serde_json::json!("io2"));
+        params.insert("iops".to_string(), serde_json::json!(6000));
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_ebs_volume_validate_conflicting_type_aliases() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("data-volume"));
+        params.insert(
+            "availability_zone".to_string(),
+            serde_json::json!("us-east-1a"),
+        );
+        params.insert("size".to_string(), serde_json::json!(100));
+        params.insert("type".to_string(), serde_json::json!("gp3"));
+        params.insert("volume_type".to_string(), serde_json::json!("io2"));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    #[ignore = "Requires AWS credentials and tokio runtime"]
+    fn test_aws_ebs_volume_check_mode_create() {
+        let module = AwsEbsVolumeModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("data-volume"));
+        params.insert(
+            "availability_zone".to_string(),
+            serde_json::json!("us-east-1a"),
+        );
+        params.insert("size".to_string(), serde_json::json!(100));
+        params.insert("type".to_string(), serde_json::json!("gp3"));
 
         let context = ModuleContext::default().with_check_mode(true);
         let result = module.execute(&params, &context);

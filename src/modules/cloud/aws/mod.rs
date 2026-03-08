@@ -11,6 +11,9 @@
 //! - [`Ec2VpcModule`](ec2::Ec2VpcModule): VPC and subnet management
 //! - [`AwsIamRoleModule`](iam::AwsIamRoleModule): IAM role management
 //! - [`AwsIamPolicyModule`](iam::AwsIamPolicyModule): IAM managed policy management
+//! - [`AwsEbsVolumeModule`](ebs_volume::AwsEbsVolumeModule): EBS volume management
+//! - [`AwsSecurityGroupRuleModule`](security_group_rule::AwsSecurityGroupRuleModule):
+//!   standalone security group rule management
 //!
 //! ## Authentication
 //!
@@ -26,10 +29,14 @@
 //! - Environment variable (`AWS_REGION` or `AWS_DEFAULT_REGION`)
 //! - AWS config file (`~/.aws/config`)
 
+pub mod ebs_volume;
 pub mod ec2;
 pub mod iam;
 pub mod s3;
+pub mod security_group_rule;
 
+pub use ebs_volume::AwsEbsVolumeModule;
 pub use ec2::{Ec2InstanceModule, Ec2SecurityGroupModule, Ec2VpcModule};
 pub use iam::{AwsIamPolicyModule, AwsIamRoleModule};
 pub use s3::AwsS3Module;
+pub use security_group_rule::AwsSecurityGroupRuleModule;

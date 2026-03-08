@@ -90,6 +90,54 @@ pub struct PlaybookExecuteResponse {
     pub websocket_url: Option<String>,
 }
 
+/// Internal kernel deployment request.
+#[derive(Debug, Deserialize)]
+pub struct KernelDeploymentRequest {
+    /// Inventory path override (optional, falls back to configured inventory)
+    #[serde(default)]
+    pub inventory: Option<String>,
+    /// Target host names from the inventory
+    pub targets: Vec<String>,
+    /// Download URL or local file path for the kernel package
+    pub artifact_url: String,
+    /// Expected SHA-256 digest for the kernel package
+    pub artifact_sha256: String,
+    /// Debian package name used for rollback/uninstall
+    pub package_name: String,
+    /// Expected kernel release after reboot (uname -r)
+    pub expected_kernel_release: String,
+    /// Optional signature reference for auditability
+    #[serde(default)]
+    pub signature_url: Option<String>,
+    /// Reboot policy to use after installation
+    #[serde(default)]
+    pub reboot_policy: KernelDeploymentRebootPolicy,
+}
+
+/// Reboot policy for kernel deployments.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelDeploymentRebootPolicy {
+    /// Always reboot and verify the new kernel.
+    #[default]
+    Required,
+    /// Skip the reboot and fail verification if the kernel is not active yet.
+    Skip,
+}
+
+/// Response for an accepted kernel deployment job.
+#[derive(Debug, Serialize)]
+pub struct KernelDeploymentResponse {
+    /// Unique job ID
+    pub job_id: Uuid,
+    /// Job status
+    pub status: JobStatus,
+    /// Message
+    pub message: String,
+    /// WebSocket URL for real-time output
+    pub websocket_url: Option<String>,
+}
+
 /// List playbooks response.
 #[derive(Debug, Serialize)]
 pub struct PlaybookListResponse {

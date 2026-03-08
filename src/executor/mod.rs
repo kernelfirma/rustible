@@ -103,7 +103,6 @@ pub mod host_metrics;
 pub mod work_stealing;
 
 // Re-exports for commonly used types from enhancement modules
-use dialoguer::theme::ColorfulTheme;
 pub use async_runtime::{RuntimeConfig, RuntimeMetrics, SpawnOptions, TaskSpawner};
 pub use async_task::{AsyncConfig, AsyncJobInfo, AsyncJobStatus, AsyncTaskManager};
 pub use batch_processor::{BatchConfig, BatchProcessor, BatchResult, BatchStrategy};
@@ -111,6 +110,7 @@ pub use condition::{Condition, ConditionContext, ConditionEvaluator};
 pub use dependency::{
     DependencyError, DependencyGraph as AdvancedDependencyGraph, DependencyKind, DependencyNode,
 };
+use dialoguer::theme::ColorfulTheme;
 pub use fact_pipeline::{FactPipeline, FactPipelineConfig, FactResult};
 pub use host_metrics::{FailureSummary, HostTaskMetrics, MetricsCollector};
 pub use host_pinned::{HostPinnedConfig, HostPinnedExecutor, HostPinnedPool};
@@ -136,8 +136,8 @@ use crate::executor::task::{Handler, Task, TaskResult, TaskStatus};
 use crate::modules::ModuleRegistry;
 use crate::recovery::{RecoveryManager, TaskOutcome, TransactionId};
 
-use console::Term;
 use colored::Colorize;
+use console::Term;
 
 /// Errors that can occur during playbook and task execution.
 ///
@@ -607,7 +607,7 @@ impl Executor {
 
         let rollback_available = Self::REVERSIBLE_MODULES.contains(&task.module.as_str());
 
-        crate::state::TaskStateRecord {
+        let mut record = crate::state::TaskStateRecord {
             task_id: task.name.clone(),
             task_name: task.name.clone(),
             host: host.to_string(),
@@ -616,7 +616,14 @@ impl Executor {
             status,
             rollback_available,
             ..Default::default()
-        }
+        };
+        record.complete(status);
+        record
+    }
+
+    /// Return a snapshot of changed task records accumulated during execution.
+    pub async fn changed_task_records(&self) -> Vec<crate::state::TaskStateRecord> {
+        self.changed_tasks.lock().await.clone()
     }
 
     /// Get a connection for a host from the connection factory

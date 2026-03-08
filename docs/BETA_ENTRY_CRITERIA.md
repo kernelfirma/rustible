@@ -17,6 +17,9 @@ release candidate. All required criteria must be checked, or explicitly waived.
 - [ ] No open **Blocker** issues remain in `docs/ALPHA_READINESS_ISSUES.md`.
   - Owner: `TBD`
   - Evidence: Link to current readiness doc review.
+- [ ] `docs/FEATURE_STATUS.md` matches the candidate commit and all beta-facing status docs reference it.
+  - Owner: `TBD`
+  - Evidence: Link to the status-doc sync review.
 - [ ] No open **High** issues remain, or each has an approved waiver.
   - Owner: `TBD`
   - Evidence: Readiness doc + waiver links.
@@ -53,6 +56,9 @@ release candidate. All required criteria must be checked, or explicitly waived.
 - [ ] README status and limitations are current for beta-facing users.
   - Owner: `TBD`
   - Evidence: `README.md` update link.
+- [ ] `docs/FEATURE_STATUS.md` is current and matches roadmap/checklist language.
+  - Owner: `TBD`
+  - Evidence: Status-doc review link.
 - [ ] `docs/CHANGELOG.md` contains beta entry notes and known limitations.
   - Owner: `TBD`
   - Evidence: Changelog section link.

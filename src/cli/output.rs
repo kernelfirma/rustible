@@ -458,7 +458,10 @@ impl OutputFormatter {
                     "",
                     width = padding_len
                 );
-                print!("{} ", fmt_stat("ok", stats.total_ok(), colored::Color::Green));
+                print!(
+                    "{} ",
+                    fmt_stat("ok", stats.total_ok(), colored::Color::Green)
+                );
                 print!(
                     "{} ",
                     fmt_stat("changed", stats.total_changed(), colored::Color::Yellow)
@@ -473,11 +476,7 @@ impl OutputFormatter {
                 );
                 print!(
                     "{} ",
-                    fmt_stat(
-                        "failed",
-                        stats.total_failed_tasks(),
-                        colored::Color::Red
-                    )
+                    fmt_stat("failed", stats.total_failed_tasks(), colored::Color::Red)
                 );
                 print!(
                     "{} ",

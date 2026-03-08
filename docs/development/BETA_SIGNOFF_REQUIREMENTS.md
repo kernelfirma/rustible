@@ -16,6 +16,11 @@ Rustible beta releases must pass the dedicated high-risk workflow:
 
 If `ssh` or `winrm` falls back to `smoke` mode during `beta-signoff`, the workflow fails.
 
+Current WinRM scope for beta sign-off:
+
+- Supported: NTLM, Basic, and certificate authentication.
+- Explicitly unsupported: Kerberos, CredSSP, and Windows Credential Manager integration.
+
 ## CI Inputs for Full Coverage
 
 Configure these repository variables/secrets so CI can run full infrastructure-backed suites:

@@ -75,8 +75,8 @@ pub mod kubernetes;
 // Re-export AWS modules
 #[cfg(feature = "aws")]
 pub use aws::{
-    AwsIamPolicyModule, AwsIamRoleModule, AwsS3Module, Ec2InstanceModule, Ec2SecurityGroupModule,
-    Ec2VpcModule,
+    AwsEbsVolumeModule, AwsIamPolicyModule, AwsIamRoleModule, AwsS3Module,
+    AwsSecurityGroupRuleModule, Ec2InstanceModule, Ec2SecurityGroupModule, Ec2VpcModule,
 };
 
 // Re-export Azure modules

@@ -24,9 +24,10 @@ fn test_credential(label: &str) -> String {
 mod winrm_connection_tests {
     use super::test_credential;
     use rustible::connection::winrm::{
-        WinRmAuth, WinRmConnectionBuilder, DEFAULT_TIMEOUT, DEFAULT_WINRM_PORT,
-        DEFAULT_WINRM_SSL_PORT,
+        WinRmAuth, WinRmConnectionBuilder, WindowsCredentialManager, DEFAULT_TIMEOUT,
+        DEFAULT_WINRM_PORT, DEFAULT_WINRM_SSL_PORT,
     };
+    use secrecy::SecretString;
 
     #[test]
     fn test_default_winrm_port() {
@@ -144,6 +145,36 @@ mod winrm_connection_tests {
         assert_eq!(WinRmAuth::ntlm("u", &cred).scheme(), "Negotiate");
         assert_eq!(WinRmAuth::kerberos("u", "R").scheme(), "Kerberos");
         assert_eq!(WinRmAuth::certificate("c", "k").scheme(), "Certificate");
+    }
+
+    #[test]
+    fn test_credssp_auth_parsing() {
+        let auth = WinRmAuth::credssp("DOMAIN\\user", test_credential("password"));
+        match auth {
+            WinRmAuth::CredSSP {
+                username, domain, ..
+            } => {
+                assert_eq!(username, "user");
+                assert_eq!(domain, Some("DOMAIN".to_string()));
+            }
+            _ => panic!("Expected CredSSP auth"),
+        }
+    }
+
+    #[test]
+    fn test_windows_credential_manager_is_explicitly_unsupported() {
+        let password = SecretString::new(test_credential("secret"));
+        let err = WindowsCredentialManager::store_credential("rustible:test", "user", &password)
+            .expect_err("Windows credential manager should not silently succeed");
+
+        #[cfg(target_os = "windows")]
+        assert!(err
+            .to_string()
+            .contains("Windows Credential Manager not yet implemented"));
+        #[cfg(not(target_os = "windows"))]
+        assert!(err
+            .to_string()
+            .contains("Windows Credential Manager only available on Windows"));
     }
 
     #[test]

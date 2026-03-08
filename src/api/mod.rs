@@ -39,6 +39,7 @@ pub mod awx;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::http::{HeaderValue, Method};
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -51,6 +52,18 @@ pub use error::{ApiError, ApiResult};
 pub use state::AppState;
 pub use types::*;
 
+/// Static API user configuration.
+#[derive(Debug, Clone)]
+pub struct ApiUser {
+    /// Plaintext password used for bootstrapping a local JWT account.
+    ///
+    /// This is intentionally opt-in and intended only for explicitly configured
+    /// internal deployments. The API no longer seeds a demo account.
+    pub password: String,
+    /// Roles granted to the user.
+    pub roles: Vec<String>,
+}
+
 /// Configuration for the API server.
 #[derive(Debug, Clone)]
 pub struct ApiConfig {
@@ -62,12 +75,18 @@ pub struct ApiConfig {
     pub token_expiration_secs: u64,
     /// Whether to enable CORS
     pub enable_cors: bool,
+    /// Explicit list of allowed origins when CORS is enabled
+    pub allowed_origins: Vec<String>,
     /// Maximum request body size in bytes
     pub max_body_size: usize,
     /// Path to inventory file/directory
     pub inventory_path: Option<String>,
     /// Playbook search paths
     pub playbook_paths: Vec<String>,
+    /// Bearer tokens allowed to access internal service-to-service routes
+    pub service_tokens: Vec<String>,
+    /// Optional statically configured API users for JWT auth
+    pub users: Vec<(String, ApiUser)>,
 }
 
 impl Default for ApiConfig {
@@ -76,10 +95,13 @@ impl Default for ApiConfig {
             bind_address: "127.0.0.1:8080".parse().unwrap(),
             jwt_secret: Uuid::new_v4().to_string(),
             token_expiration_secs: 3600, // 1 hour
-            enable_cors: true,
+            enable_cors: false,
+            allowed_origins: Vec::new(),
             max_body_size: 10 * 1024 * 1024, // 10MB
             inventory_path: None,
             playbook_paths: vec!["./playbooks".to_string()],
+            service_tokens: Vec::new(),
+            users: Vec::new(),
         }
     }
 }
@@ -108,6 +130,36 @@ impl ApiConfig {
         self.playbook_paths.push(path.into());
         self
     }
+
+    /// Add an allowed CORS origin.
+    pub fn with_allowed_origin(mut self, origin: impl Into<String>) -> Self {
+        self.allowed_origins.push(origin.into());
+        self.enable_cors = true;
+        self
+    }
+
+    /// Add an internal service token.
+    pub fn with_service_token(mut self, token: impl Into<String>) -> Self {
+        self.service_tokens.push(token.into());
+        self
+    }
+
+    /// Add a static JWT user.
+    pub fn with_user(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+        roles: Vec<String>,
+    ) -> Self {
+        self.users.push((
+            username.into(),
+            ApiUser {
+                password: password.into(),
+                roles,
+            },
+        ));
+        self
+    }
 }
 
 /// The main API server.
@@ -133,10 +185,16 @@ impl ApiServer {
         let mut app = Router::new().merge(routes::api_routes(self.state.clone()));
 
         // Add CORS layer if enabled
-        if self.config.enable_cors {
+        if self.config.enable_cors && !self.config.allowed_origins.is_empty() {
+            let origins: Vec<HeaderValue> = self
+                .config
+                .allowed_origins
+                .iter()
+                .filter_map(|origin| HeaderValue::from_str(origin).ok())
+                .collect();
             let cors = CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
+                .allow_origin(origins)
+                .allow_methods([Method::GET, Method::POST])
                 .allow_headers(Any);
             app = app.layer(cors);
         }
@@ -188,7 +246,7 @@ mod tests {
     fn test_api_config_default() {
         let config = ApiConfig::default();
         assert_eq!(config.bind_address.port(), 8080);
-        assert!(config.enable_cors);
+        assert!(!config.enable_cors);
     }
 
     #[test]
@@ -196,13 +254,20 @@ mod tests {
         let config = ApiConfig::default()
             .with_address("0.0.0.0:3000".parse().unwrap())
             .with_jwt_secret("my-secret")
-            .with_inventory("/etc/rustible/inventory");
+            .with_inventory("/etc/rustible/inventory")
+            .with_service_token("token-1")
+            .with_allowed_origin("https://esse.example.com");
 
         assert_eq!(config.bind_address.port(), 3000);
         assert_eq!(config.jwt_secret, "my-secret");
         assert_eq!(
             config.inventory_path,
             Some("/etc/rustible/inventory".to_string())
+        );
+        assert_eq!(config.service_tokens, vec!["token-1".to_string()]);
+        assert_eq!(
+            config.allowed_origins,
+            vec!["https://esse.example.com".to_string()]
         );
     }
 
