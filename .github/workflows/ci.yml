@@ -261,8 +261,10 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          # Using default features only; --all-features includes experimental cloud modules
-          cargo llvm-cov --workspace --lcov --output-path lcov.info -- --test-threads=1
+          # Keep coverage focused on the default-feature library and CLI surface.
+          # The full workspace integration matrix is already covered elsewhere in CI
+          # and regularly exhausts runner resources under llvm-cov instrumentation.
+          cargo llvm-cov --lib --bins --lcov --output-path lcov.info -- --test-threads=1
         env:
           RUST_LOG: debug
 
