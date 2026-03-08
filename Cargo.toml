@@ -246,7 +246,7 @@ tempfile = "3.9"
 # REST API server (optional)
 axum = { version = "0.7", features = ["macros", "ws"], optional = true }
 tower-http = { version = "0.5", features = ["cors", "trace"], optional = true }
-jsonwebtoken = { version = "10.3", optional = true }
+jsonwebtoken = { version = "10.3", optional = true, features = ["rust_crypto"] }
 futures-util = { version = "0.3", optional = true }
 blake3 = "1.8.2"
 

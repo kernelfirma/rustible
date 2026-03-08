@@ -372,6 +372,12 @@ fn find_playbook(search_paths: &[String], playbook: &str) -> ApiResult<String> {
                 }
             }
         }
+        if playbook_path.exists() {
+            return Err(ApiError::Forbidden(format!(
+                "Access denied to playbook outside search paths: {}",
+                playbook
+            )));
+        }
         return Err(ApiError::NotFound(format!(
             "Playbook not found or access denied: {}",
             playbook
