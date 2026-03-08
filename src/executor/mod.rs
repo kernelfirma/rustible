@@ -407,6 +407,19 @@ pub enum ExecutionStrategy {
     DebugStrategy,
 }
 
+impl std::fmt::Display for ExecutionStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let strategy = match self {
+            Self::Linear => "linear",
+            Self::Free => "free",
+            Self::HostPinned => "host_pinned",
+            Self::DebugStrategy => "debug",
+        };
+
+        f.write_str(strategy)
+    }
+}
+
 /// Statistics collected during playbook execution.
 ///
 /// Tracks the count of tasks in each final state across all hosts.

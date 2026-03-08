@@ -317,6 +317,15 @@ pub fn get_user_groups(username: &str) -> NativeResult<Vec<String>> {
         // Convert GIDs to group names
         let mut group_names = Vec::new();
         for gid in groups {
+            #[cfg(target_os = "macos")]
+            let gid = match u32::try_from(gid) {
+                Ok(gid) => gid,
+                Err(_) => continue,
+            };
+
+            #[cfg(not(target_os = "macos"))]
+            let gid = gid;
+
             if let Ok(Some(group)) = get_group_by_gid(gid) {
                 group_names.push(group.name);
             }

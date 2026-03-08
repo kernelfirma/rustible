@@ -10,6 +10,8 @@
 //! Tests ensure rustible supports all authentication methods expected
 //! by users migrating from Ansible.
 
+#![cfg(feature = "russh")]
+
 use rustible::connection::config::HostConfig;
 use rustible::connection::russh_auth::{
     default_identity_files, is_key_encrypted, standard_key_locations, AuthConfig, AuthMethod,
@@ -538,7 +540,7 @@ mod key_locations_tests {
 
     #[test]
     fn test_standard_key_locations_returns_existing_only() {
-        let locations = standard_key_locations();
+        let locations: Vec<PathBuf> = standard_key_locations();
 
         // All returned paths should exist
         for path in &locations {
@@ -548,7 +550,7 @@ mod key_locations_tests {
 
     #[test]
     fn test_default_identity_files() {
-        let files = default_identity_files();
+        let files: Vec<PathBuf> = default_identity_files();
 
         // All returned files should exist
         for file in &files {

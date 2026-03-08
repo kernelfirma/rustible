@@ -483,6 +483,7 @@ fn test_copy_task_with_large_file_path() {
     assert_eq!(task.module_name(), "copy");
 }
 
+#[cfg(feature = "russh")]
 #[tokio::test]
 async fn test_file_transfer_progress_types() {
     // Test progress tracking types are defined and work correctly
