@@ -198,14 +198,15 @@ pub fn get_group_by_name(name: &str) -> NativeResult<Option<GroupInfo>> {
         let grp = &*grp;
 
         let mut members = Vec::new();
-        let mut i = 0;
-        while !(*grp.gr_mem.add(i)).is_null() {
-            members.push(
-                CStr::from_ptr(*grp.gr_mem.add(i))
-                    .to_string_lossy()
-                    .to_string(),
-            );
-            i += 1;
+        let mut current = grp.gr_mem;
+        while !current.is_null() {
+            let member = std::ptr::read_unaligned(current);
+            if member.is_null() {
+                break;
+            }
+
+            members.push(CStr::from_ptr(member).to_string_lossy().to_string());
+            current = current.add(1);
         }
 
         let group = GroupInfo {
@@ -238,14 +239,15 @@ pub fn get_group_by_gid(gid: u32) -> NativeResult<Option<GroupInfo>> {
         let grp = &*grp;
 
         let mut members = Vec::new();
-        let mut i = 0;
-        while !(*grp.gr_mem.add(i)).is_null() {
-            members.push(
-                CStr::from_ptr(*grp.gr_mem.add(i))
-                    .to_string_lossy()
-                    .to_string(),
-            );
-            i += 1;
+        let mut current = grp.gr_mem;
+        while !current.is_null() {
+            let member = std::ptr::read_unaligned(current);
+            if member.is_null() {
+                break;
+            }
+
+            members.push(CStr::from_ptr(member).to_string_lossy().to_string());
+            current = current.add(1);
         }
 
         let group = GroupInfo {

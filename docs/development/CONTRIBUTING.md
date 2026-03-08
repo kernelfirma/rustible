@@ -105,7 +105,10 @@ GitHub Actions enforces a dedicated optional-feature matrix on Linux stable to
 catch regressions outside the default profile:
 
 - Tested bundles: `aws`, `docker`, `api`, `database`, `provisioning`
-- Broad aggregate compile gate: `full-provisioning,api,database`
+- Broad aggregate compile gate: `experimental,full-provisioning,api,database`
+
+The `database` lane currently runs as `experimental,database` because the
+database module family is still behind the experimental gate.
 
 Use these commands locally when working on optional feature paths:
 

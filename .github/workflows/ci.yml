@@ -142,13 +142,13 @@ jobs:
             features: api
             mode: test
           - name: database
-            features: database
+            features: experimental,database
             mode: test
           - name: provisioning
             features: provisioning
             mode: test
           - name: aggregate
-            features: full-provisioning,api,database
+            features: experimental,full-provisioning,api,database
             mode: compile
 
     steps:
