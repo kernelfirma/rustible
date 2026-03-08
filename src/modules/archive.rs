@@ -860,8 +860,14 @@ mod tests {
         let dest_archive = temp.path().join("archive.tar");
         let module = ArchiveModule;
         let mut params: ModuleParams = HashMap::new();
-        params.insert("path".to_string(), serde_json::json!(source_dir.to_str().unwrap()));
-        params.insert("dest".to_string(), serde_json::json!(dest_archive.to_str().unwrap()));
+        params.insert(
+            "path".to_string(),
+            serde_json::json!(source_dir.to_str().unwrap()),
+        );
+        params.insert(
+            "dest".to_string(),
+            serde_json::json!(dest_archive.to_str().unwrap()),
+        );
         params.insert("format".to_string(), serde_json::json!("tar"));
 
         let context = ModuleContext::default();

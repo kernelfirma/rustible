@@ -281,7 +281,9 @@ mod tests {
         let openmpi = toolchain_packages("build_essentials", "debian").unwrap();
         assert!(openmpi.contains(&"build-essential"));
         assert!(toolchain_packages("unknown", "debian").is_none());
-        assert!(toolchain_packages("perf_tools", "rhel").unwrap().contains(&"perf"));
+        assert!(toolchain_packages("perf_tools", "rhel")
+            .unwrap()
+            .contains(&"perf"));
     }
 
     #[test]

@@ -476,7 +476,9 @@ impl Module for WinServiceModule {
         // Handle service creation
         if !service_exists {
             let service_path = path.as_deref().ok_or_else(|| {
-                ModuleError::MissingParameter("path is required to create a new service".to_string())
+                ModuleError::MissingParameter(
+                    "path is required to create a new service".to_string(),
+                )
             })?;
             validate_windows_path(service_path)?;
 

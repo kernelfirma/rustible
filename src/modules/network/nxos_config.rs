@@ -1465,10 +1465,7 @@ impl Module for NxosConfigModule {
         }
         if let Some(ref parents) = config.parents {
             for (idx, parent) in parents.iter().enumerate() {
-                NxosConfigModule::validate_nxos_cli_fragment(
-                    parent,
-                    &format!("parents[{}]", idx),
-                )?;
+                NxosConfigModule::validate_nxos_cli_fragment(parent, &format!("parents[{}]", idx))?;
             }
         }
         if let Some(ref lines) = config.lines {
@@ -1504,9 +1501,7 @@ impl Module for NxosConfigModule {
             s.spawn(|| handle.block_on(module.execute_async(&params, &context)))
                 .join()
                 .map_err(|_| {
-                    ModuleError::ExecutionFailed(
-                        "Nxos async execution thread panicked".to_string(),
-                    )
+                    ModuleError::ExecutionFailed("Nxos async execution thread panicked".to_string())
                 })?
         })
     }
@@ -1765,9 +1760,7 @@ mod tests {
     fn test_validate_nxos_cli_fragment_rejects_shell_chars() {
         assert!(NxosConfigModule::validate_nxos_cli_fragment("vlan 100", "line").is_ok());
         assert!(NxosConfigModule::validate_nxos_cli_fragment("name prod", "line").is_ok());
-        assert!(
-            NxosConfigModule::validate_nxos_cli_fragment("vlan 100; reload", "line").is_err()
-        );
+        assert!(NxosConfigModule::validate_nxos_cli_fragment("vlan 100; reload", "line").is_err());
         assert!(NxosConfigModule::validate_nxos_cli_fragment("name `whoami`", "line").is_err());
     }
 }

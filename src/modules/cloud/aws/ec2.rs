@@ -1128,7 +1128,10 @@ impl Ec2InstanceModule {
                 final_instances.len(),
                 config.name
             ))
-            .with_data("instances", serialize_output_data("instances", &final_instances)?)
+            .with_data(
+                "instances",
+                serialize_output_data("instances", &final_instances)?,
+            )
             .with_data("instance_ids", serde_json::json!(instance_ids)))
         } else {
             // Check if any instances need to be started
@@ -1175,7 +1178,10 @@ impl Ec2InstanceModule {
 
             Ok(
                 ModuleOutput::changed(format!("Started {} instance(s)", stopped.len()))
-                    .with_data("instances", serialize_output_data("instances", &final_instances)?)
+                    .with_data(
+                        "instances",
+                        serialize_output_data("instances", &final_instances)?,
+                    )
                     .with_data("started_instance_ids", serde_json::json!(stopped)),
             )
         }
@@ -1237,7 +1243,10 @@ impl Ec2InstanceModule {
 
         Ok(
             ModuleOutput::changed(format!("Stopped {} instance(s)", running.len()))
-                .with_data("instances", serialize_output_data("instances", &final_instances)?)
+                .with_data(
+                    "instances",
+                    serialize_output_data("instances", &final_instances)?,
+                )
                 .with_data("stopped_instance_ids", serde_json::json!(running)),
         )
     }
@@ -2484,7 +2493,9 @@ mod tests {
             where
                 S: serde::Serializer,
             {
-                Err(serde::ser::Error::custom("intentional serialization failure"))
+                Err(serde::ser::Error::custom(
+                    "intentional serialization failure",
+                ))
             }
         }
 
@@ -2496,12 +2507,13 @@ mod tests {
 
     #[test]
     fn test_join_scoped_module_thread_maps_panic_to_module_error() {
-        let join_result: std::thread::Result<ModuleResult<ModuleOutput>> = std::thread::scope(|s| {
-            s.spawn(|| -> ModuleResult<ModuleOutput> {
-                panic!("simulated panic");
-            })
-            .join()
-        });
+        let join_result: std::thread::Result<ModuleResult<ModuleOutput>> =
+            std::thread::scope(|s| {
+                s.spawn(|| -> ModuleResult<ModuleOutput> {
+                    panic!("simulated panic");
+                })
+                .join()
+            });
 
         let err = join_scoped_module_thread(join_result, "aws_ec2_instance").unwrap_err();
         assert!(format!("{}", err).contains("worker thread panicked"));

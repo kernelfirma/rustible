@@ -152,11 +152,7 @@ impl LocaleModule {
             (locale.to_string(), "UTF-8".to_string())
         };
 
-        let input = base
-            .split('@')
-            .next()
-            .map(str::to_string)
-            .unwrap_or(base);
+        let input = base.split('@').next().map(str::to_string).unwrap_or(base);
 
         (input, charset)
     }
@@ -285,14 +281,16 @@ impl Module for LocaleModule {
                 || Self::normalize_locale(&current_lang) != Self::normalize_locale(&locale));
 
         if !needs_generate && !needs_set {
-            return Ok(ModuleOutput::ok(format!("Locale '{}' is already configured", locale))
-                .with_data("locale", serde_json::json!(locale))
-                .with_data("generated", serde_json::json!(generated))
-                .with_data("current_lang", serde_json::json!(current_lang))
-                .with_data(
-                    "strategy",
-                    serde_json::json!(format!("{:?}", effective_strategy).to_lowercase()),
-                ));
+            return Ok(
+                ModuleOutput::ok(format!("Locale '{}' is already configured", locale))
+                    .with_data("locale", serde_json::json!(locale))
+                    .with_data("generated", serde_json::json!(generated))
+                    .with_data("current_lang", serde_json::json!(current_lang))
+                    .with_data(
+                        "strategy",
+                        serde_json::json!(format!("{:?}", effective_strategy).to_lowercase()),
+                    ),
+            );
         }
 
         if context.check_mode {
@@ -304,14 +302,16 @@ impl Module for LocaleModule {
                 actions.push(format!("set LANG/LC_ALL to '{}'", locale));
             }
 
-            return Ok(ModuleOutput::changed(format!("Would {}", actions.join(" and ")))
-                .with_data("locale", serde_json::json!(locale))
-                .with_data("generated", serde_json::json!(generated))
-                .with_data("current_lang", serde_json::json!(current_lang))
-                .with_data(
-                    "strategy",
-                    serde_json::json!(format!("{:?}", effective_strategy).to_lowercase()),
-                ));
+            return Ok(
+                ModuleOutput::changed(format!("Would {}", actions.join(" and ")))
+                    .with_data("locale", serde_json::json!(locale))
+                    .with_data("generated", serde_json::json!(generated))
+                    .with_data("current_lang", serde_json::json!(current_lang))
+                    .with_data(
+                        "strategy",
+                        serde_json::json!(format!("{:?}", effective_strategy).to_lowercase()),
+                    ),
+            );
         }
 
         if needs_generate {
@@ -347,9 +347,18 @@ mod tests {
 
     #[test]
     fn test_locale_strategy_from_str() {
-        assert_eq!(LocaleStrategy::from_str("locale-gen").unwrap(), LocaleStrategy::LocaleGen);
-        assert_eq!(LocaleStrategy::from_str("localedef").unwrap(), LocaleStrategy::Localedef);
-        assert_eq!(LocaleStrategy::from_str("auto").unwrap(), LocaleStrategy::Auto);
+        assert_eq!(
+            LocaleStrategy::from_str("locale-gen").unwrap(),
+            LocaleStrategy::LocaleGen
+        );
+        assert_eq!(
+            LocaleStrategy::from_str("localedef").unwrap(),
+            LocaleStrategy::Localedef
+        );
+        assert_eq!(
+            LocaleStrategy::from_str("auto").unwrap(),
+            LocaleStrategy::Auto
+        );
         assert!(LocaleStrategy::from_str("invalid").is_err());
     }
 

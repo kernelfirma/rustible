@@ -212,6 +212,133 @@ mod aws_s3_tests {
 }
 
 // ============================================================================
+// AWS IAM Module Tests
+// ============================================================================
+
+#[cfg(feature = "aws")]
+mod aws_iam_tests {
+    use super::*;
+    use rustible::modules::cloud::{AwsIamPolicyModule, AwsIamRoleModule};
+
+    #[test]
+    fn test_aws_iam_role_module_metadata() {
+        let module = AwsIamRoleModule;
+        assert_eq!(module.name(), "aws_iam_role");
+        assert_eq!(module.classification(), ModuleClassification::LocalLogic);
+        match module.parallelization_hint() {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => assert!(requests_per_second > 0),
+            _ => panic!("Expected rate-limited parallelization for aws_iam_role"),
+        }
+    }
+
+    #[test]
+    fn test_aws_iam_role_validate_valid_params() {
+        let module = AwsIamRoleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("example-role"));
+        params.insert(
+            "assume_role_policy_document".to_string(),
+            serde_json::json!(r#"{"Version":"2012-10-17","Statement":[]}"#),
+        );
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_iam_role_validate_invalid_state() {
+        let module = AwsIamRoleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("example-role"));
+        params.insert("state".to_string(), serde_json::json!("invalid"));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_iam_role_validate_invalid_policy_json() {
+        let module = AwsIamRoleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("example-role"));
+        params.insert(
+            "assume_role_policy_document".to_string(),
+            serde_json::json!("not json"),
+        );
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_aws_iam_policy_module_metadata() {
+        let module = AwsIamPolicyModule;
+        assert_eq!(module.name(), "aws_iam_policy");
+        assert_eq!(module.classification(), ModuleClassification::LocalLogic);
+        match module.parallelization_hint() {
+            ParallelizationHint::RateLimited {
+                requests_per_second,
+            } => assert!(requests_per_second > 0),
+            _ => panic!("Expected rate-limited parallelization for aws_iam_policy"),
+        }
+    }
+
+    #[test]
+    fn test_aws_iam_policy_validate_valid_params() {
+        let module = AwsIamPolicyModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("example-policy"));
+        params.insert(
+            "policy_document".to_string(),
+            serde_json::json!(r#"{"Version":"2012-10-17","Statement":[]}"#),
+        );
+
+        assert!(module.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn test_aws_iam_policy_validate_invalid_policy_json() {
+        let module = AwsIamPolicyModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("example-policy"));
+        params.insert("policy_document".to_string(), serde_json::json!("not json"));
+
+        assert!(module.validate_params(&params).is_err());
+    }
+
+    #[test]
+    #[ignore = "Requires AWS credentials and tokio runtime"]
+    fn test_aws_iam_role_check_mode_create() {
+        let module = AwsIamRoleModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("test-role"));
+        params.insert(
+            "assume_role_policy_document".to_string(),
+            serde_json::json!(r#"{"Version":"2012-10-17","Statement":[]}"#),
+        );
+
+        let context = ModuleContext::default().with_check_mode(true);
+        let result = module.execute(&params, &context);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "Requires AWS credentials and tokio runtime"]
+    fn test_aws_iam_policy_check_mode_create() {
+        let module = AwsIamPolicyModule;
+        let mut params: HashMap<String, serde_json::Value> = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("test-policy"));
+        params.insert(
+            "policy_document".to_string(),
+            serde_json::json!(r#"{"Version":"2012-10-17","Statement":[]}"#),
+        );
+
+        let context = ModuleContext::default().with_check_mode(true);
+        let result = module.execute(&params, &context);
+        assert!(result.is_ok());
+    }
+}
+
+// ============================================================================
 // Azure VM Module Tests
 // ============================================================================
 

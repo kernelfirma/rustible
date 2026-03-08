@@ -799,11 +799,8 @@ mod tests {
     #[test]
     fn test_generate_manage_groups_script_escapes_group_names() {
         let groups = vec!["Domain Users".to_string(), "O'Hare Admins".to_string()];
-        let script = WinUserModule::generate_manage_groups_script(
-            "svc_user",
-            &groups,
-            &GroupsAction::Add,
-        );
+        let script =
+            WinUserModule::generate_manage_groups_script("svc_user", &groups, &GroupsAction::Add);
 
         assert!(script.contains("Domain Users"));
         assert!(script.contains("O''Hare Admins"));

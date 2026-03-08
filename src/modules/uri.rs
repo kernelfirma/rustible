@@ -1255,8 +1255,9 @@ mod tests {
 
     #[test]
     fn test_parse_status_code_list_accepts_multiple_formats() {
-        let codes_from_csv = UriModule::parse_status_code_list(Some(&serde_json::json!("200, 201,204")))
-            .expect("csv status list should parse");
+        let codes_from_csv =
+            UriModule::parse_status_code_list(Some(&serde_json::json!("200, 201,204")))
+                .expect("csv status list should parse");
         assert_eq!(codes_from_csv, vec![200, 201, 204]);
 
         let codes_from_array =

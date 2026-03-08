@@ -71,9 +71,8 @@ impl GetUrlModule {
             )));
         }
 
-        let mode = u32::from_str_radix(normalized, 8).map_err(|e| {
-            ModuleError::InvalidParameter(format!("Invalid mode '{}': {}", raw, e))
-        })?;
+        let mode = u32::from_str_radix(normalized, 8)
+            .map_err(|e| ModuleError::InvalidParameter(format!("Invalid mode '{}': {}", raw, e)))?;
 
         Ok(Some(mode))
     }
@@ -239,10 +238,11 @@ impl Module for GetUrlModule {
                 backup: false,
             };
 
-            rt.block_on(async { conn.upload_content(&bytes, dest_path, Some(transfer_opts)).await })
-                .map_err(|e| {
-                    ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e))
-                })?;
+            rt.block_on(async {
+                conn.upload_content(&bytes, dest_path, Some(transfer_opts))
+                    .await
+            })
+            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to upload file: {}", e)))?;
         }
 
         let mut output = ModuleOutput::changed(format!(

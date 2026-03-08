@@ -1672,6 +1672,8 @@ impl ModuleRegistry {
                 cloud::AwsS3Module,
                 cloud::Ec2SecurityGroupModule,
                 cloud::Ec2VpcModule,
+                cloud::AwsIamRoleModule,
+                cloud::AwsIamPolicyModule,
             ],
         );
 

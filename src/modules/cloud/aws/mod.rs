@@ -9,6 +9,8 @@
 //! - [`Ec2InstanceModule`](ec2::Ec2InstanceModule): EC2 instance lifecycle management
 //! - [`Ec2SecurityGroupModule`](ec2::Ec2SecurityGroupModule): Security group management
 //! - [`Ec2VpcModule`](ec2::Ec2VpcModule): VPC and subnet management
+//! - [`AwsIamRoleModule`](iam::AwsIamRoleModule): IAM role management
+//! - [`AwsIamPolicyModule`](iam::AwsIamPolicyModule): IAM managed policy management
 //!
 //! ## Authentication
 //!
@@ -25,7 +27,9 @@
 //! - AWS config file (`~/.aws/config`)
 
 pub mod ec2;
+pub mod iam;
 pub mod s3;
 
 pub use ec2::{Ec2InstanceModule, Ec2SecurityGroupModule, Ec2VpcModule};
+pub use iam::{AwsIamPolicyModule, AwsIamRoleModule};
 pub use s3::AwsS3Module;

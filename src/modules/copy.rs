@@ -99,7 +99,11 @@ impl CopyModule {
     fn copy_content(content: &str, dest: &Path, mode: Option<u32>) -> ModuleResult<()> {
         // Use secure_write_file for atomic creation and permission setting
         crate::utils::secure_write_file(dest, content, true, mode).map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", dest.display(), e))
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write file '{}': {}",
+                dest.display(),
+                e
+            ))
         })?;
         Ok(())
     }

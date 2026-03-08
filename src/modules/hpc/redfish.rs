@@ -114,11 +114,7 @@ fn run_cmd_ok(
 fn build_curl_base(user: &str, password: &str, verify_ssl: bool) -> String {
     let ssl_flag = if verify_ssl { "-s" } else { "-sk" };
     let auth = format!("{}:{}", user, password);
-    format!(
-        "curl {} -u {} ",
-        ssl_flag,
-        shell_escape(&auth)
-    )
+    format!("curl {} -u {} ", ssl_flag, shell_escape(&auth))
 }
 
 fn redfish_url(host: &str, path: &str) -> String {
@@ -678,18 +674,17 @@ impl Module for RedfishPowerModule {
                     .map(|uri| uri.to_string())
             })
             .map(|task_uri| {
-                let normalized_task_uri = if task_uri.starts_with("http://")
-                    || task_uri.starts_with("https://")
-                {
-                    task_uri
-                        .split_once("/redfish/")
-                        .map(|(_, suffix)| format!("/redfish/{}", suffix))
-                        .unwrap_or_else(|| "/redfish/v1/TaskService/Tasks".to_string())
-                } else if task_uri.starts_with('/') {
-                    task_uri
-                } else {
-                    format!("/{}", task_uri)
-                };
+                let normalized_task_uri =
+                    if task_uri.starts_with("http://") || task_uri.starts_with("https://") {
+                        task_uri
+                            .split_once("/redfish/")
+                            .map(|(_, suffix)| format!("/redfish/{}", suffix))
+                            .unwrap_or_else(|| "/redfish/v1/TaskService/Tasks".to_string())
+                    } else if task_uri.starts_with('/') {
+                        task_uri
+                    } else {
+                        format!("/{}", task_uri)
+                    };
                 poll_task_status(
                     connection,
                     context,
@@ -985,7 +980,10 @@ mod tests {
     #[test]
     fn test_redfish_url_escapes_host_and_path() {
         let url = redfish_url("bmc.example.com;touch /tmp/pwn", "/redfish/v1/Systems/1");
-        assert_eq!(url, "'https://bmc.example.com;touch /tmp/pwn/redfish/v1/Systems/1'");
+        assert_eq!(
+            url,
+            "'https://bmc.example.com;touch /tmp/pwn/redfish/v1/Systems/1'"
+        );
     }
 
     #[test]

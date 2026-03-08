@@ -336,7 +336,10 @@ mod tests {
 
     #[test]
     fn test_detect_os_family_for_munge() {
-        assert_eq!(detect_os_family("ID=ubuntu\nID_LIKE=debian"), Some("debian"));
+        assert_eq!(
+            detect_os_family("ID=ubuntu\nID_LIKE=debian"),
+            Some("debian")
+        );
         assert_eq!(detect_os_family("ID=rocky\nID_LIKE=rhel"), Some("rhel"));
         assert_eq!(detect_os_family("ID=arch"), None);
     }
@@ -354,8 +357,14 @@ mod tests {
         let module = MungeModule;
         let optional = module.optional_params();
         assert_eq!(optional.get("state"), Some(&serde_json::json!("present")));
-        assert_eq!(optional.get("munge_user"), Some(&serde_json::json!("munge")));
-        assert_eq!(optional.get("munge_group"), Some(&serde_json::json!("munge")));
+        assert_eq!(
+            optional.get("munge_user"),
+            Some(&serde_json::json!("munge"))
+        );
+        assert_eq!(
+            optional.get("munge_group"),
+            Some(&serde_json::json!("munge"))
+        );
         assert!(optional.contains_key("key_source"));
         assert!(optional.contains_key("key_content"));
     }

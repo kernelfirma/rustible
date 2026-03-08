@@ -304,8 +304,14 @@ mod tests {
 
     #[test]
     fn test_detect_os_family_variants() {
-        assert_eq!(detect_os_family("ID=ubuntu\nID_LIKE=debian"), Some("debian"));
-        assert_eq!(detect_os_family("ID=rocky\nID_LIKE=\"rhel fedora\""), Some("rhel"));
+        assert_eq!(
+            detect_os_family("ID=ubuntu\nID_LIKE=debian"),
+            Some("debian")
+        );
+        assert_eq!(
+            detect_os_family("ID=rocky\nID_LIKE=\"rhel fedora\""),
+            Some("rhel")
+        );
         assert_eq!(detect_os_family("ID=alpine"), None);
     }
 

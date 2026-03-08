@@ -503,7 +503,10 @@ mod tests {
     fn test_nfs_client_module_metadata_and_defaults() {
         let module = NfsClientModule;
         assert_eq!(module.name(), "nfs_client");
-        assert_eq!(module.required_params(), ["server", "export", "mount_point"]);
+        assert_eq!(
+            module.required_params(),
+            ["server", "export", "mount_point"]
+        );
         let optional = module.optional_params();
         assert_eq!(optional.get("state"), Some(&serde_json::json!("mounted")));
         assert_eq!(

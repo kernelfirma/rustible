@@ -362,7 +362,11 @@ impl TemplateModule {
         // Write rendered content securely (atomically setting permissions if creating)
         // Note: secure_write_file handles permission setting for both new and existing files
         crate::utils::secure_write_file(dest_path, rendered, true, mode).map_err(|e| {
-            ModuleError::ExecutionFailed(format!("Failed to write file '{}': {}", dest_path.display(), e))
+            ModuleError::ExecutionFailed(format!(
+                "Failed to write file '{}': {}",
+                dest_path.display(),
+                e
+            ))
         })?;
 
         // We check permissions again just to report if they changed (though secure_write_file already enforced them)
