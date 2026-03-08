@@ -379,36 +379,19 @@ mod tests {
     #[cfg_attr(tarpaulin, ignore)]
     #[tokio::test]
     async fn test_host_exclusive_different_hosts_parallel() {
-        let manager = Arc::new(ParallelizationManager::new());
+        let manager = ParallelizationManager::new();
 
-        // Operations on different hosts should not block each other
-        let start = Instant::now();
+        // Operations on different hosts should be able to hold their permits at the same time.
+        let _guard1 = manager
+            .acquire(ParallelizationHint::HostExclusive, "host1", "test")
+            .await;
+        let _guard2 = manager
+            .acquire(ParallelizationHint::HostExclusive, "host2", "test")
+            .await;
 
-        let manager1 = manager.clone();
-        let handle1 = tokio::spawn(async move {
-            let _guard = manager1
-                .acquire(ParallelizationHint::HostExclusive, "host1", "test")
-                .await;
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        });
-
-        let manager2 = manager.clone();
-        let handle2 = tokio::spawn(async move {
-            let _guard = manager2
-                .acquire(ParallelizationHint::HostExclusive, "host2", "test")
-                .await;
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        });
-
-        futures::future::join_all(vec![handle1, handle2]).await;
-        let elapsed = start.elapsed();
-
-        // Should execute in parallel
-        assert!(
-            elapsed < Duration::from_millis(80),
-            "Different hosts should run in parallel: took {:?}",
-            elapsed
-        );
+        let stats = manager.stats();
+        assert_eq!(stats.host_locks.get("host1"), Some(&0));
+        assert_eq!(stats.host_locks.get("host2"), Some(&0));
     }
 
     #[tokio::test]
