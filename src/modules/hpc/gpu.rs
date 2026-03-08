@@ -45,9 +45,29 @@ fn run_cmd(
     context: &ModuleContext,
 ) -> ModuleResult<(bool, String, String)> {
     let options = get_exec_options(context);
-    let result = Handle::current()
-        .block_on(async { connection.execute(cmd, Some(options)).await })
-        .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
+    let connection = Arc::clone(connection);
+    let cmd = cmd.to_string();
+
+    let result = match Handle::try_current() {
+        Ok(handle) => std::thread::scope(|s| {
+            s.spawn(move || {
+                handle.block_on(async { connection.execute(&cmd, Some(options)).await })
+            })
+            .join()
+        })
+        .map_err(|_| {
+            ModuleError::ExecutionFailed("nvidia_gpu command execution thread panicked".to_string())
+        })?,
+        Err(_) => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| {
+                ModuleError::ExecutionFailed(format!("Failed to create tokio runtime: {}", e))
+            })?
+            .block_on(async { connection.execute(&cmd, Some(options)).await }),
+    }
+    .map_err(|e| ModuleError::ExecutionFailed(format!("Connection error: {}", e)))?;
+
     Ok((result.success, result.stdout, result.stderr))
 }
 
