@@ -25,10 +25,16 @@ pub enum AdmissionRule {
     },
 
     /// Forbid creation of a specific resource type.
-    ForbidResourceType(String),
+    ForbidResourceType {
+        #[serde(alias = "ForbidResourceType")]
+        resource_type: String,
+    },
 
     /// Limit the maximum number of resources that can be created in one plan.
-    MaxResourceCount(usize),
+    MaxResourceCount {
+        #[serde(alias = "MaxResourceCount")]
+        max: usize,
+    },
 
     /// Require that resources have an `encrypted` or `encryption` field set
     /// to `true` in their configuration.
@@ -43,8 +49,10 @@ impl AdmissionRule {
     pub fn name(&self) -> String {
         match self {
             Self::RequireTag { key, .. } => format!("require_tag:{}", key),
-            Self::ForbidResourceType(rt) => format!("forbid_resource_type:{}", rt),
-            Self::MaxResourceCount(n) => format!("max_resource_count:{}", n),
+            Self::ForbidResourceType { resource_type } => {
+                format!("forbid_resource_type:{}", resource_type)
+            }
+            Self::MaxResourceCount { max } => format!("max_resource_count:{}", max),
             Self::RequireEncryption => "require_encryption".to_string(),
             Self::Custom { name, .. } => format!("custom:{}", name),
         }
@@ -101,10 +109,10 @@ impl AdmissionPolicy {
                 AdmissionRule::RequireTag { key, value_pattern } => {
                     self.check_require_tag(plan, key, value_pattern.as_deref(), &mut violations);
                 }
-                AdmissionRule::ForbidResourceType(forbidden) => {
-                    self.check_forbid_resource_type(plan, forbidden, &mut violations);
+                AdmissionRule::ForbidResourceType { resource_type } => {
+                    self.check_forbid_resource_type(plan, resource_type, &mut violations);
                 }
-                AdmissionRule::MaxResourceCount(max) => {
+                AdmissionRule::MaxResourceCount { max } => {
                     self.check_max_resource_count(plan, *max, &mut violations);
                 }
                 AdmissionRule::RequireEncryption => {
@@ -385,9 +393,9 @@ mod tests {
 
     #[test]
     fn test_forbid_resource_type() {
-        let policy = AdmissionPolicy::new("no-ec2").with_rule(AdmissionRule::ForbidResourceType(
-            "aws_instance".to_string(),
-        ));
+        let policy = AdmissionPolicy::new("no-ec2").with_rule(AdmissionRule::ForbidResourceType {
+            resource_type: "aws_instance".to_string(),
+        });
 
         let plan = plan_with_actions(vec![make_action("aws_instance", "web", ChangeType::Create)]);
 
@@ -399,9 +407,9 @@ mod tests {
 
     #[test]
     fn test_forbid_resource_type_ignores_destroy() {
-        let policy = AdmissionPolicy::new("no-ec2").with_rule(AdmissionRule::ForbidResourceType(
-            "aws_instance".to_string(),
-        ));
+        let policy = AdmissionPolicy::new("no-ec2").with_rule(AdmissionRule::ForbidResourceType {
+            resource_type: "aws_instance".to_string(),
+        });
 
         let plan = plan_with_actions(vec![make_action(
             "aws_instance",
@@ -414,7 +422,8 @@ mod tests {
 
     #[test]
     fn test_max_resource_count_within_limit() {
-        let policy = AdmissionPolicy::new("limit-5").with_rule(AdmissionRule::MaxResourceCount(5));
+        let policy =
+            AdmissionPolicy::new("limit-5").with_rule(AdmissionRule::MaxResourceCount { max: 5 });
 
         let plan = plan_with_actions(vec![
             make_action("aws_vpc", "a", ChangeType::Create),
@@ -426,7 +435,8 @@ mod tests {
 
     #[test]
     fn test_max_resource_count_exceeded() {
-        let policy = AdmissionPolicy::new("limit-1").with_rule(AdmissionRule::MaxResourceCount(1));
+        let policy =
+            AdmissionPolicy::new("limit-1").with_rule(AdmissionRule::MaxResourceCount { max: 1 });
 
         let plan = plan_with_actions(vec![
             make_action("aws_vpc", "a", ChangeType::Create),
@@ -548,10 +558,10 @@ mod tests {
     #[test]
     fn test_multiple_rules_combined() {
         let policy = AdmissionPolicy::new("strict")
-            .with_rule(AdmissionRule::ForbidResourceType(
-                "aws_instance".to_string(),
-            ))
-            .with_rule(AdmissionRule::MaxResourceCount(2));
+            .with_rule(AdmissionRule::ForbidResourceType {
+                resource_type: "aws_instance".to_string(),
+            })
+            .with_rule(AdmissionRule::MaxResourceCount { max: 2 });
 
         let plan = plan_with_actions(vec![
             make_action("aws_instance", "web1", ChangeType::Create),
@@ -575,11 +585,14 @@ mod tests {
             "require_tag:Env"
         );
         assert_eq!(
-            AdmissionRule::ForbidResourceType("aws_instance".to_string()).name(),
+            AdmissionRule::ForbidResourceType {
+                resource_type: "aws_instance".to_string(),
+            }
+            .name(),
             "forbid_resource_type:aws_instance"
         );
         assert_eq!(
-            AdmissionRule::MaxResourceCount(10).name(),
+            AdmissionRule::MaxResourceCount { max: 10 }.name(),
             "max_resource_count:10"
         );
         assert_eq!(
@@ -603,10 +616,10 @@ mod tests {
                 key: "Environment".to_string(),
                 value_pattern: Some("^prod$".to_string()),
             })
-            .with_rule(AdmissionRule::ForbidResourceType(
-                "aws_instance".to_string(),
-            ))
-            .with_rule(AdmissionRule::MaxResourceCount(10))
+            .with_rule(AdmissionRule::ForbidResourceType {
+                resource_type: "aws_instance".to_string(),
+            })
+            .with_rule(AdmissionRule::MaxResourceCount { max: 10 })
             .with_rule(AdmissionRule::RequireEncryption);
 
         let yaml = serde_yaml::to_string(&policy).expect("serialize");
