@@ -112,6 +112,41 @@ impl GroupInfo {
     }
 }
 
+#[cfg(unix)]
+fn group_buffer_len() -> usize {
+    let size = unsafe { libc::sysconf(libc::_SC_GETGR_R_SIZE_MAX) };
+    if size > 0 {
+        size as usize
+    } else {
+        1024
+    }
+}
+
+#[cfg(unix)]
+unsafe fn read_group_members(mut current: *mut *mut libc::c_char) -> Vec<String> {
+    let mut members = Vec::new();
+    while !current.is_null() {
+        let member = std::ptr::read_unaligned(current);
+        if member.is_null() {
+            break;
+        }
+
+        members.push(CStr::from_ptr(member).to_string_lossy().to_string());
+        current = current.add(1);
+    }
+    members
+}
+
+#[cfg(unix)]
+unsafe fn build_group_info(grp: &libc::group) -> GroupInfo {
+    GroupInfo {
+        name: CStr::from_ptr(grp.gr_name).to_string_lossy().to_string(),
+        gid: grp.gr_gid,
+        password: None,
+        members: read_group_members(grp.gr_mem),
+    }
+}
+
 /// Get user information by name using libc
 #[cfg(unix)]
 pub fn get_user_by_name(name: &str) -> NativeResult<Option<UserInfo>> {
@@ -189,34 +224,29 @@ pub fn get_group_by_name(name: &str) -> NativeResult<Option<GroupInfo>> {
     let c_name = CString::new(name)
         .map_err(|_| NativeError::InvalidArgument("Invalid group name".to_string()))?;
 
-    unsafe {
-        let grp = libc::getgrnam(c_name.as_ptr());
-        if grp.is_null() {
-            return Ok(None);
-        }
+    let mut buffer = vec![0u8; group_buffer_len()];
+    let mut grp = unsafe { std::mem::zeroed::<libc::group>() };
+    let mut result: *mut libc::group = std::ptr::null_mut();
 
-        let grp = &*grp;
-
-        let mut members = Vec::new();
-        let mut current = grp.gr_mem;
-        while !current.is_null() {
-            let member = std::ptr::read_unaligned(current);
-            if member.is_null() {
-                break;
-            }
-
-            members.push(CStr::from_ptr(member).to_string_lossy().to_string());
-            current = current.add(1);
-        }
-
-        let group = GroupInfo {
-            name: CStr::from_ptr(grp.gr_name).to_string_lossy().to_string(),
-            gid: grp.gr_gid,
-            password: None,
-            members,
+    loop {
+        let status = unsafe {
+            libc::getgrnam_r(
+                c_name.as_ptr(),
+                &mut grp,
+                buffer.as_mut_ptr() as *mut libc::c_char,
+                buffer.len(),
+                &mut result,
+            )
         };
 
-        Ok(Some(group))
+        match status {
+            0 if result.is_null() => return Ok(None),
+            0 => return Ok(Some(unsafe { build_group_info(&grp) })),
+            x if x == libc::ERANGE => {
+                buffer.resize(buffer.len().saturating_mul(2), 0);
+            }
+            x => return Err(NativeError::Io(std::io::Error::from_raw_os_error(x))),
+        }
     }
 }
 
@@ -230,34 +260,29 @@ pub fn get_group_by_name(_name: &str) -> NativeResult<Option<GroupInfo>> {
 /// Get group information by GID using libc
 #[cfg(unix)]
 pub fn get_group_by_gid(gid: u32) -> NativeResult<Option<GroupInfo>> {
-    unsafe {
-        let grp = libc::getgrgid(gid);
-        if grp.is_null() {
-            return Ok(None);
-        }
+    let mut buffer = vec![0u8; group_buffer_len()];
+    let mut grp = unsafe { std::mem::zeroed::<libc::group>() };
+    let mut result: *mut libc::group = std::ptr::null_mut();
 
-        let grp = &*grp;
-
-        let mut members = Vec::new();
-        let mut current = grp.gr_mem;
-        while !current.is_null() {
-            let member = std::ptr::read_unaligned(current);
-            if member.is_null() {
-                break;
-            }
-
-            members.push(CStr::from_ptr(member).to_string_lossy().to_string());
-            current = current.add(1);
-        }
-
-        let group = GroupInfo {
-            name: CStr::from_ptr(grp.gr_name).to_string_lossy().to_string(),
-            gid: grp.gr_gid,
-            password: None,
-            members,
+    loop {
+        let status = unsafe {
+            libc::getgrgid_r(
+                gid as libc::gid_t,
+                &mut grp,
+                buffer.as_mut_ptr() as *mut libc::c_char,
+                buffer.len(),
+                &mut result,
+            )
         };
 
-        Ok(Some(group))
+        match status {
+            0 if result.is_null() => return Ok(None),
+            0 => return Ok(Some(unsafe { build_group_info(&grp) })),
+            x if x == libc::ERANGE => {
+                buffer.resize(buffer.len().saturating_mul(2), 0);
+            }
+            x => return Err(NativeError::Io(std::io::Error::from_raw_os_error(x))),
+        }
     }
 }
 
