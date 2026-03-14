@@ -36,7 +36,10 @@
 //!    - Callback-free fast path
 
 use async_trait::async_trait;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{
+    black_box, criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, BenchmarkId,
+    Criterion, Throughput,
+};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -610,12 +613,19 @@ fn generate_host_stats(num_hosts: usize) -> HashMap<String, HostStats> {
     stats
 }
 
+fn configure_group(group: &mut BenchmarkGroup<'_, WallTime>, sample_size: usize) {
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(2));
+    group.sample_size(sample_size);
+}
+
 // ============================================================================
 // 1. Callback Dispatch Overhead Benchmarks
 // ============================================================================
 
 fn bench_callback_dispatch_overhead(c: &mut Criterion) {
     let mut group = c.benchmark_group("callback_dispatch_overhead");
+    configure_group(&mut group, 20);
 
     // Baseline: NoOp callback
     let noop_callback = NoOpCallback;
@@ -756,6 +766,7 @@ fn bench_callback_dispatch_overhead(c: &mut Criterion) {
 fn bench_async_callback_overhead(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("async_callback_overhead");
+    configure_group(&mut group, 20);
 
     let callback = Arc::new(AsyncMockCallback::default());
     let hosts = vec!["host1".to_string(), "host2".to_string()];
@@ -820,12 +831,13 @@ fn bench_async_callback_overhead(c: &mut Criterion) {
 
 fn bench_multiple_plugins(c: &mut Criterion) {
     let mut group = c.benchmark_group("multiple_plugins");
+    configure_group(&mut group, 20);
 
     let args = generate_args(5);
     let result = generate_simple_result();
 
     // Test with different numbers of plugins
-    for num_plugins in [1, 2, 5, 10, 20].iter() {
+    for num_plugins in [1, 2, 5, 10].iter() {
         group.throughput(Throughput::Elements(*num_plugins as u64));
 
         // All NoOp plugins (baseline)
@@ -939,9 +951,10 @@ fn bench_multiple_plugins(c: &mut Criterion) {
 
 fn bench_plugin_registration(c: &mut Criterion) {
     let mut group = c.benchmark_group("plugin_registration");
+    configure_group(&mut group, 20);
 
     // Benchmark plugin addition
-    for num_plugins in [1, 10, 50, 100].iter() {
+    for num_plugins in [1, 10, 50].iter() {
         group.bench_with_input(
             BenchmarkId::new("add_plugins", num_plugins),
             num_plugins,
@@ -986,9 +999,10 @@ fn bench_plugin_registration(c: &mut Criterion) {
 
 fn bench_large_event_data(c: &mut Criterion) {
     let mut group = c.benchmark_group("large_event_data");
+    configure_group(&mut group, 20);
 
     // Different payload sizes
-    for size in [1, 10, 50, 100].iter() {
+    for size in [1, 10, 50].iter() {
         let args = generate_args(*size);
 
         group.bench_with_input(BenchmarkId::new("args_size", size), size, |b, _| {
@@ -1054,7 +1068,7 @@ fn bench_large_event_data(c: &mut Criterion) {
     });
 
     // Host stats with many hosts
-    for num_hosts in [10, 100, 500].iter() {
+    for num_hosts in [10, 100].iter() {
         let stats = generate_host_stats(*num_hosts);
 
         group.bench_with_input(
@@ -1078,6 +1092,7 @@ fn bench_large_event_data(c: &mut Criterion) {
 
 fn bench_serialization_overhead(c: &mut Criterion) {
     let mut group = c.benchmark_group("serialization_overhead");
+    configure_group(&mut group, 20);
 
     let result = generate_complex_result();
 
@@ -1153,10 +1168,10 @@ fn bench_serialization_overhead(c: &mut Criterion) {
 
 fn bench_callback_state_accumulation(c: &mut Criterion) {
     let mut group = c.benchmark_group("callback_state_accumulation");
-    group.sample_size(50);
+    configure_group(&mut group, 10);
 
     // Test event buffer growth
-    for num_events in [100, 1000, 5000].iter() {
+    for num_events in [100, 1000, 2500].iter() {
         let result = generate_simple_result();
         let args = generate_args(5);
 
@@ -1213,6 +1228,7 @@ fn bench_callback_state_accumulation(c: &mut Criterion) {
 
 fn bench_host_stats_aggregation(c: &mut Criterion) {
     let mut group = c.benchmark_group("host_stats_aggregation");
+    configure_group(&mut group, 15);
 
     // HostStats operations
     group.bench_function("hoststats_new", |b| {
@@ -1243,7 +1259,7 @@ fn bench_host_stats_aggregation(c: &mut Criterion) {
     });
 
     // HashMap of host stats
-    for num_hosts in [10, 100, 500, 1000].iter() {
+    for num_hosts in [10, 100, 500].iter() {
         group.bench_with_input(
             BenchmarkId::new("aggregate_host_stats", num_hosts),
             num_hosts,
@@ -1282,9 +1298,10 @@ fn bench_host_stats_aggregation(c: &mut Criterion) {
 
 fn bench_buffer_flush(c: &mut Criterion) {
     let mut group = c.benchmark_group("buffer_flush");
+    configure_group(&mut group, 15);
 
     // Pre-populate buffer and measure flush
-    for buffer_size in [100, 1000, 5000].iter() {
+    for buffer_size in [100, 1000, 2500].iter() {
         let callback = BufferingCallback::default();
         let args = generate_args(5);
         let result = generate_simple_result();
@@ -1316,11 +1333,11 @@ fn bench_buffer_flush(c: &mut Criterion) {
 fn bench_with_without_callbacks(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("with_without_callbacks");
-    group.sample_size(50);
+    configure_group(&mut group, 10);
 
     // Simulate task execution workload
-    let num_tasks = 100;
-    let num_hosts = 10;
+    let num_tasks = 50;
+    let num_hosts = 5;
 
     // Baseline: No callbacks at all
     group.bench_function("no_callbacks", |b| {
@@ -1470,12 +1487,12 @@ fn bench_with_without_callbacks(c: &mut Criterion) {
 fn bench_callback_impact_on_parallelism(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("callback_parallelism_impact");
-    group.sample_size(30);
+    configure_group(&mut group, 10);
 
-    let num_tasks = 50;
+    let num_tasks = 30;
 
     // Test different levels of parallelism
-    for concurrency in [1, 5, 10, 20].iter() {
+    for concurrency in [1, 5, 10].iter() {
         // Without callbacks
         group.bench_with_input(
             BenchmarkId::new("no_callbacks", concurrency),
