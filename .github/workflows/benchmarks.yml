@@ -88,7 +88,7 @@ jobs:
         id: run-bench
         timeout-minutes: 20
         run: |
-          cargo bench --bench ${{ matrix.suite.bench }} -- --verbose 2>&1 | tee ${{ matrix.suite.log }}
+          cargo bench --locked --no-default-features --bench ${{ matrix.suite.bench }} -- --verbose 2>&1 | tee ${{ matrix.suite.log }}
 
       - name: Check for regressions
         id: regression-check
