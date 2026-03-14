@@ -108,7 +108,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          # Keep default-branch pushes fast; the dedicated tag-only multi-arch job handles release images.
+          platforms: linux/amd64
 
   # ============================================================================
   # Integration Tests with Docker Compose
