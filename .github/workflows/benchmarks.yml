@@ -24,9 +24,25 @@ env:
 
 jobs:
   benchmark:
-    name: Run Benchmarks
+    name: Benchmark (${{ matrix.suite.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - id: performance
+            name: Performance
+            bench: performance_benchmark
+            log: benchmark_performance.log
+          - id: callback
+            name: Callback
+            bench: callback_benchmark
+            log: benchmark_callback.log
+          - id: sprint2
+            name: Sprint2
+            bench: sprint2_feature_benchmark
+            log: benchmark_sprint2.log
 
     steps:
       - name: Checkout repository
@@ -55,9 +71,9 @@ jobs:
         id: baseline-cache
         with:
           path: .criterion-baseline
-          key: benchmark-baseline-${{ github.base_ref || 'main' }}
+          key: benchmark-baseline-${{ matrix.suite.id }}-${{ github.base_ref || 'main' }}
           restore-keys: |
-            benchmark-baseline-main
+            benchmark-baseline-${{ matrix.suite.id }}-main
 
       - name: Restore baseline
         if: steps.baseline-cache.outputs.cache-hit == 'true'
@@ -68,37 +84,25 @@ jobs:
             echo "Baseline restored"
           fi
 
-      - name: Run performance benchmarks
-        continue-on-error: true
-        timeout-minutes: 10
+      - name: Run benchmark suite
+        id: run-bench
+        timeout-minutes: 20
         run: |
-          cargo bench --bench performance_benchmark -- --verbose 2>&1 | tee benchmark_performance.log
-
-      - name: Run callback benchmarks
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          cargo bench --bench callback_benchmark -- --verbose 2>&1 | tee benchmark_callback.log
-
-      - name: Run sprint2 benchmarks
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          cargo bench --bench sprint2_feature_benchmark -- --verbose 2>&1 | tee benchmark_sprint2.log
+          cargo bench --bench ${{ matrix.suite.bench }} -- --verbose 2>&1 | tee ${{ matrix.suite.log }}
 
       - name: Check for regressions
         id: regression-check
+        if: always()
         run: |
           # Parse benchmark logs for regression indicators
           REGRESSIONS=0
 
-          for log in benchmark_*.log; do
-            if grep -q "Performance has regressed" "$log"; then
-              echo "::warning::Regression detected in $log"
-              grep "Performance has regressed" "$log" || true
-              REGRESSIONS=$((REGRESSIONS + 1))
-            fi
-          done
+          LOG="${{ matrix.suite.log }}"
+          if [ -f "$LOG" ] && grep -q "Performance has regressed" "$LOG"; then
+            echo "::warning::Regression detected in $LOG"
+            grep "Performance has regressed" "$LOG" || true
+            REGRESSIONS=1
+          fi
 
           echo "regressions=$REGRESSIONS" >> $GITHUB_OUTPUT
 
@@ -107,26 +111,23 @@ jobs:
           fi
 
       - name: Generate benchmark summary
+        if: always()
         run: |
-          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "## ${{ matrix.suite.name }} Benchmark Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Performance Benchmarks" >> $GITHUB_STEP_SUMMARY
+          echo "### Suite" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          grep -E "^(Benchmarking|test |time:)" benchmark_performance.log | head -50 >> $GITHUB_STEP_SUMMARY || echo "No results" >> $GITHUB_STEP_SUMMARY
+          grep -E "^(Benchmarking|test |time:)" "${{ matrix.suite.log }}" | head -50 >> $GITHUB_STEP_SUMMARY || echo "No results" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ steps.regression-check.outputs.regressions }}" != "0" ]; then
             echo "### Regressions Detected" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            for log in benchmark_*.log; do
-              if grep -q "Performance has regressed" "$log"; then
-                echo "#### $log" >> $GITHUB_STEP_SUMMARY
-                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                grep -A2 "Performance has regressed" "$log" >> $GITHUB_STEP_SUMMARY || true
-                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
+            echo "#### ${{ matrix.suite.log }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            grep -A2 "Performance has regressed" "${{ matrix.suite.log }}" >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Save baseline (main branch only)
@@ -140,86 +141,25 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .criterion-baseline
-          key: benchmark-baseline-main-${{ github.sha }}
+          key: benchmark-baseline-${{ matrix.suite.id }}-main-${{ github.sha }}
 
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.sha }}
+          name: benchmark-results-${{ matrix.suite.id }}-${{ github.sha }}
           path: |
             target/criterion/
-            benchmark_*.log
+            ${{ matrix.suite.log }}
           retention-days: 30
 
       - name: Upload HTML reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-html-reports-${{ github.sha }}
+          name: benchmark-html-reports-${{ matrix.suite.id }}-${{ github.sha }}
           path: target/criterion/report/
           retention-days: 30
-
-      - name: Comment on PR with results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            let body = '## Benchmark Results\n\n';
-
-            // Read regression check
-            const regressions = '${{ steps.regression-check.outputs.regressions }}';
-            if (regressions !== '0') {
-              body += `:warning: **${regressions} performance regression(s) detected!**\n\n`;
-            } else {
-              body += ':white_check_mark: No significant performance regressions detected.\n\n';
-            }
-
-            // Add summary of benchmarks
-            body += '### Summary\n\n';
-            body += '| Suite | Status |\n';
-            body += '|-------|--------|\n';
-
-            const logs = ['performance', 'callback', 'sprint2'];
-            for (const suite of logs) {
-              const logFile = `benchmark_${suite}.log`;
-              if (fs.existsSync(logFile)) {
-                const content = fs.readFileSync(logFile, 'utf8');
-                const hasRegression = content.includes('Performance has regressed');
-                const status = hasRegression ? ':x: Regression' : ':white_check_mark: OK';
-                body += `| ${suite} | ${status} |\n`;
-              }
-            }
-
-            body += '\n---\n';
-            body += '*Full results available in workflow artifacts.*\n';
-
-            // Find existing comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.find(comment =>
-              comment.user.type === 'Bot' && comment.body.includes('## Benchmark Results')
-            );
-
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
 
   benchmark-comparison:
     name: Ansible Comparison (Manual)

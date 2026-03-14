@@ -248,6 +248,7 @@ impl From<JobStatus> for AwxJobStatus {
         match status {
             JobStatus::Pending => AwxJobStatus::Pending,
             JobStatus::Running => AwxJobStatus::Running,
+            JobStatus::ActionRequired => AwxJobStatus::Waiting,
             JobStatus::Success => AwxJobStatus::Successful,
             JobStatus::Failed => AwxJobStatus::Failed,
             JobStatus::Cancelled => AwxJobStatus::Canceled,
@@ -580,6 +581,10 @@ mod tests {
         assert_eq!(
             AwxJobStatus::from(JobStatus::Running),
             AwxJobStatus::Running
+        );
+        assert_eq!(
+            AwxJobStatus::from(JobStatus::ActionRequired),
+            AwxJobStatus::Waiting
         );
         assert_eq!(
             AwxJobStatus::from(JobStatus::Success),

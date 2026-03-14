@@ -6,11 +6,14 @@ use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex, Notify};
 use uuid::Uuid;
 
 use super::auth::{AuthConfig, JwtAuth};
-use super::types::{JobInfo, JobStats, JobStatus, WsMessage};
+use super::types::{
+    JobInfo, JobStats, JobStatus, KernelDeploymentActionRequired, KernelDeploymentHost,
+    KernelDeploymentProgress, KernelDeploymentStage, WsMessage,
+};
 use super::ApiConfig;
 use crate::inventory::Inventory;
 
@@ -30,6 +33,8 @@ pub struct AppState {
     pub ws_channels: RwLock<HashMap<Uuid, broadcast::Sender<WsMessage>>>,
     /// User credentials (simple in-memory store for demo)
     pub users: RwLock<HashMap<String, UserCredentials>>,
+    /// Kernel deployment runtime state keyed by job ID.
+    pub kernel_jobs: RwLock<HashMap<Uuid, Arc<KernelJobRuntime>>>,
 }
 
 /// User credentials for authentication.
@@ -71,6 +76,7 @@ impl AppState {
             start_time: Instant::now(),
             ws_channels: RwLock::new(HashMap::new()),
             users: RwLock::new(users),
+            kernel_jobs: RwLock::new(HashMap::new()),
         }
     }
 
@@ -84,7 +90,7 @@ impl AppState {
         self.jobs
             .read()
             .values()
-            .filter(|j| j.status == JobStatus::Running)
+            .filter(|j| matches!(j.status, JobStatus::Running | JobStatus::ActionRequired))
             .count()
     }
 
@@ -193,6 +199,30 @@ impl AppState {
         }
     }
 
+    /// Register runtime metadata for a kernel deployment job.
+    pub fn register_kernel_job(&self, id: Uuid, hosts: &[KernelDeploymentHost]) {
+        let runtime = Arc::new(KernelJobRuntime::new(
+            hosts.iter().map(|host| host.name.clone()).collect(),
+        ));
+        self.kernel_jobs.write().insert(id, runtime);
+    }
+
+    /// Remove kernel runtime metadata after completion.
+    pub fn remove_kernel_job(&self, id: Uuid) {
+        self.kernel_jobs.write().remove(&id);
+    }
+
+    /// Get a clone of the runtime handle for a kernel deployment job.
+    pub fn get_kernel_job_runtime(&self, id: Uuid) -> Option<Arc<KernelJobRuntime>> {
+        self.kernel_jobs.read().get(&id).cloned()
+    }
+
+    /// Snapshot the current kernel deployment progress.
+    pub async fn kernel_job_progress(&self, id: Uuid) -> Option<KernelDeploymentProgress> {
+        let runtime = self.get_kernel_job_runtime(id)?;
+        Some(runtime.snapshot().await)
+    }
+
     /// Get WebSocket sender for a job.
     pub fn get_ws_sender(&self, id: Uuid) -> Option<broadcast::Sender<WsMessage>> {
         self.ws_channels.read().get(&id).cloned()
@@ -258,9 +288,16 @@ impl AppState {
     /// Cancel a job.
     pub fn cancel_job(&self, id: Uuid) -> bool {
         if let Some(job) = self.jobs.write().get_mut(&id) {
-            if job.status == JobStatus::Pending || job.status == JobStatus::Running {
+            if matches!(
+                job.status,
+                JobStatus::Pending | JobStatus::Running | JobStatus::ActionRequired
+            ) {
                 job.status = JobStatus::Cancelled;
                 job.finished_at = Some(Utc::now());
+
+                if let Some(runtime) = self.kernel_jobs.read().get(&id).cloned() {
+                    runtime.resume_notify.notify_waiters();
+                }
 
                 // Broadcast cancellation
                 if let Some(tx) = self.ws_channels.read().get(&id) {
@@ -274,6 +311,95 @@ impl AppState {
             }
         }
         false
+    }
+}
+
+/// Runtime state for a kernel deployment job.
+#[derive(Debug)]
+pub struct KernelJobRuntime {
+    state: Mutex<KernelJobRuntimeState>,
+    pub resume_notify: Notify,
+}
+
+impl KernelJobRuntime {
+    fn new(hosts: Vec<String>) -> Self {
+        Self {
+            state: Mutex::new(KernelJobRuntimeState {
+                stage: KernelDeploymentStage::Queued,
+                current_host: None,
+                hosts,
+                action_required: None,
+            }),
+            resume_notify: Notify::new(),
+        }
+    }
+
+    /// Update the visible workflow stage.
+    pub async fn set_stage(
+        &self,
+        stage: KernelDeploymentStage,
+        current_host: Option<String>,
+    ) -> KernelDeploymentProgress {
+        let mut state = self.state.lock().await;
+        state.stage = stage;
+        state.current_host = current_host;
+        if stage != KernelDeploymentStage::ActionRequired {
+            state.action_required = None;
+        }
+        state.snapshot()
+    }
+
+    /// Set the current action-required payload.
+    pub async fn set_action_required(
+        &self,
+        action: KernelDeploymentActionRequired,
+    ) -> KernelDeploymentProgress {
+        let mut state = self.state.lock().await;
+        state.stage = KernelDeploymentStage::ActionRequired;
+        state.current_host = Some(action.host.clone());
+        state.action_required = Some(action);
+        state.snapshot()
+    }
+
+    /// Snapshot the current runtime state.
+    pub async fn snapshot(&self) -> KernelDeploymentProgress {
+        self.state.lock().await.snapshot()
+    }
+
+    /// Validate and clear the current action-required state.
+    pub async fn clear_action_required(
+        &self,
+        action_id: &str,
+    ) -> Result<KernelDeploymentProgress, &'static str> {
+        let mut state = self.state.lock().await;
+        match state.action_required.as_ref() {
+            Some(action) if action.action_id == action_id => {
+                state.action_required = None;
+                state.stage = KernelDeploymentStage::Preflight;
+                Ok(state.snapshot())
+            }
+            Some(_) => Err("action_id does not match the pending action"),
+            None => Err("job is not waiting for an action"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct KernelJobRuntimeState {
+    stage: KernelDeploymentStage,
+    current_host: Option<String>,
+    hosts: Vec<String>,
+    action_required: Option<KernelDeploymentActionRequired>,
+}
+
+impl KernelJobRuntimeState {
+    fn snapshot(&self) -> KernelDeploymentProgress {
+        KernelDeploymentProgress {
+            stage: self.stage,
+            current_host: self.current_host.clone(),
+            hosts: self.hosts.clone(),
+            action_required: self.action_required.clone(),
+        }
     }
 }
 
@@ -311,7 +437,9 @@ impl Job {
     pub fn to_info(&self) -> JobInfo {
         let duration_secs = match (self.started_at, self.finished_at) {
             (Some(start), Some(end)) => Some((end - start).num_milliseconds() as f64 / 1000.0),
-            (Some(start), None) if self.status == JobStatus::Running => {
+            (Some(start), None)
+                if matches!(self.status, JobStatus::Running | JobStatus::ActionRequired) =>
+            {
                 Some((Utc::now() - start).num_milliseconds() as f64 / 1000.0)
             }
             _ => None,
@@ -334,5 +462,37 @@ impl Job {
     /// Get full output as a single string.
     pub fn full_output(&self) -> String {
         self.output.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::types::{
+        KernelDeploymentActionKind, KernelDeploymentBmcActionHint, KernelDeploymentBmcProvider,
+    };
+
+    #[tokio::test]
+    async fn test_kernel_runtime_action_required_round_trip() {
+        let runtime = KernelJobRuntime::new(vec!["node-a".to_string()]);
+        let action = KernelDeploymentActionRequired {
+            action_id: "node-a:1".to_string(),
+            kind: KernelDeploymentActionKind::SecureBootEnrollment,
+            host: "node-a".to_string(),
+            message: "enroll cert".to_string(),
+            instructions: vec!["step 1".to_string()],
+            bmc: Some(KernelDeploymentBmcActionHint {
+                provider: KernelDeploymentBmcProvider::Redfish,
+                endpoint: "https://bmc.example.test".to_string(),
+            }),
+        };
+
+        let progress = runtime.set_action_required(action.clone()).await;
+        assert_eq!(progress.stage, KernelDeploymentStage::ActionRequired);
+        assert_eq!(progress.action_required, Some(action.clone()));
+
+        let resumed = runtime.clear_action_required("node-a:1").await.unwrap();
+        assert_eq!(resumed.stage, KernelDeploymentStage::Preflight);
+        assert!(resumed.action_required.is_none());
     }
 }

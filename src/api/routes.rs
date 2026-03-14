@@ -66,8 +66,17 @@ fn internal_routes() -> Router<Arc<AppState>> {
             "/kernel-deployments",
             post(handlers::submit_kernel_deployment),
         )
+        .route(
+            "/kernel-deployments/:id",
+            get(handlers::get_kernel_deployment),
+        )
+        .route(
+            "/kernel-deployments/:id/resume",
+            post(handlers::resume_kernel_deployment),
+        )
         .route("/jobs/:id", get(handlers::get_job_internal))
         .route("/jobs/:id/output", get(handlers::get_job_output_internal))
+        .route("/jobs/:id/resume", post(handlers::resume_kernel_deployment))
 }
 
 /// WebSocket routes for real-time updates.

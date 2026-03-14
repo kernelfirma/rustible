@@ -91,27 +91,228 @@ pub struct PlaybookExecuteResponse {
 }
 
 /// Internal kernel deployment request.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KernelDeploymentRequest {
-    /// Inventory path override (optional, falls back to configured inventory)
-    #[serde(default)]
-    pub inventory: Option<String>,
-    /// Target host names from the inventory
-    pub targets: Vec<String>,
-    /// Download URL or local file path for the kernel package
-    pub artifact_url: String,
-    /// Expected SHA-256 digest for the kernel package
-    pub artifact_sha256: String,
-    /// Debian package name used for rollback/uninstall
-    pub package_name: String,
-    /// Expected kernel release after reboot (uname -r)
-    pub expected_kernel_release: String,
-    /// Optional signature reference for auditability
-    #[serde(default)]
-    pub signature_url: Option<String>,
-    /// Reboot policy to use after installation
+    /// Inline managed-host definitions. This is the preferred portable format.
+    pub hosts: Vec<KernelDeploymentHost>,
+    /// Signed kernel artifact metadata.
+    pub artifact: KernelDeploymentArtifact,
+    /// Reboot policy to use after installation.
     #[serde(default)]
     pub reboot_policy: KernelDeploymentRebootPolicy,
+}
+
+/// Inline connection and managed-host metadata for a deployment target.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KernelDeploymentHost {
+    /// Stable host identifier used in status reporting.
+    pub name: String,
+    /// Hostname or IP address to connect to.
+    pub address: String,
+    /// SSH port.
+    #[serde(default = "default_kernel_host_port")]
+    pub port: u16,
+    /// SSH username.
+    pub username: String,
+    /// Optional SSH password.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Optional inline private key content.
+    #[serde(default)]
+    pub private_key: Option<String>,
+    /// Whether commands should use sudo escalation.
+    #[serde(default)]
+    pub sudo_enabled: bool,
+    /// Secure Boot handling mode for this host.
+    #[serde(default)]
+    pub secure_boot_mode: KernelSecureBootMode,
+    /// Optional bootloader hint supplied by the control plane.
+    #[serde(default)]
+    pub bootloader_hint: Option<KernelBootloader>,
+    /// Optional BMC metadata for action-required recovery.
+    #[serde(default)]
+    pub bmc: Option<KernelDeploymentBmc>,
+}
+
+fn default_kernel_host_port() -> u16 {
+    22
+}
+
+/// Signed artifact metadata used for a kernel deployment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KernelDeploymentArtifact {
+    /// Download URL or local file path for the kernel package.
+    pub url: String,
+    /// Expected SHA-256 digest for the kernel package.
+    pub sha256: String,
+    /// Debian package name used for rollback/uninstall.
+    pub package_name: String,
+    /// Expected kernel release after reboot (`uname -r`).
+    pub expected_kernel_release: String,
+    /// Detached cosign signature for the package blob.
+    pub signature_url: String,
+    /// Pinned public key used for `cosign verify-blob`.
+    pub public_key_url: String,
+    /// Expected SHA-256 fingerprint of the public key bytes.
+    pub public_key_fingerprint: String,
+    /// Optional immutable manifest URL.
+    #[serde(default)]
+    pub manifest_url: Option<String>,
+    /// Optional Secure Boot certificate URL.
+    #[serde(default)]
+    pub secure_boot_cert_url: Option<String>,
+    /// Optional SHA-256 fingerprint of the Secure Boot certificate.
+    #[serde(default)]
+    pub secure_boot_cert_fingerprint: Option<String>,
+}
+
+/// Secure Boot handling mode for a host.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelSecureBootMode {
+    /// The host should not require Secure Boot orchestration.
+    #[default]
+    Disabled,
+    /// The signing certificate must already be enrolled on the host.
+    PreEnrolled,
+    /// Enrollment requires an operator and BMC-assisted console flow.
+    ConsoleBmc,
+}
+
+/// Supported bootloader types for kernel deployments.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelBootloader {
+    /// GNU GRUB.
+    Grub,
+    /// systemd-boot.
+    SystemdBoot,
+}
+
+/// BMC metadata used for action-required recovery flows.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KernelDeploymentBmc {
+    /// Power-control provider.
+    pub provider: KernelDeploymentBmcProvider,
+    /// BMC endpoint or host.
+    pub endpoint: String,
+    /// Optional BMC username.
+    #[serde(default)]
+    pub username: Option<String>,
+    /// Optional BMC password.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Whether to verify Redfish TLS certificates.
+    #[serde(default)]
+    pub verify_tls: bool,
+}
+
+/// Supported BMC providers.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelDeploymentBmcProvider {
+    /// Redfish over HTTPS.
+    Redfish,
+    /// IPMI via `ipmitool`.
+    Ipmi,
+}
+
+/// Current kernel deployment stage.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelDeploymentStage {
+    /// Job is queued.
+    Queued,
+    /// Host preflight and policy checks are running.
+    Preflight,
+    /// Operator intervention is required before the workflow can continue.
+    ActionRequired,
+    /// Package installation is in progress.
+    Installing,
+    /// Host reboot is in progress.
+    Rebooting,
+    /// Post-boot verification is in progress.
+    Verifying,
+    /// The new kernel is being committed as the default boot entry.
+    Committing,
+    /// The workflow is reverting to the prior kernel.
+    RollingBack,
+    /// All targets completed successfully.
+    Succeeded,
+    /// The workflow failed.
+    Failed,
+}
+
+/// Action the control plane must resolve before a deployment can continue.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct KernelDeploymentActionRequired {
+    /// Stable identifier used when resuming the job.
+    pub action_id: String,
+    /// Action type.
+    pub kind: KernelDeploymentActionKind,
+    /// Host currently blocked.
+    pub host: String,
+    /// Human-readable summary.
+    pub message: String,
+    /// Concrete operator instructions.
+    #[serde(default)]
+    pub instructions: Vec<String>,
+    /// Optional BMC information for the operator.
+    #[serde(default)]
+    pub bmc: Option<KernelDeploymentBmcActionHint>,
+}
+
+/// Supported action-required categories.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KernelDeploymentActionKind {
+    /// Secure Boot certificate enrollment through the firmware console.
+    SecureBootEnrollment,
+}
+
+/// Minimal BMC information exposed in action-required payloads.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct KernelDeploymentBmcActionHint {
+    /// Power-control provider.
+    pub provider: KernelDeploymentBmcProvider,
+    /// BMC endpoint or host.
+    pub endpoint: String,
+}
+
+/// Current kernel deployment progress.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KernelDeploymentProgress {
+    /// Current workflow stage.
+    pub stage: KernelDeploymentStage,
+    /// Host currently being processed, if any.
+    #[serde(default)]
+    pub current_host: Option<String>,
+    /// Inline host inventory known to the job.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    /// Pending operator action, if any.
+    #[serde(default)]
+    pub action_required: Option<KernelDeploymentActionRequired>,
+}
+
+/// Resume request for an action-required deployment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KernelDeploymentResumeRequest {
+    /// The action identifier returned by the last status response.
+    pub action_id: String,
+}
+
+/// Kernel deployment status response for internal callers.
+#[derive(Debug, Clone, Serialize)]
+pub struct KernelDeploymentStatusResponse {
+    /// Unique job ID.
+    pub job_id: Uuid,
+    /// Top-level job status.
+    pub status: JobStatus,
+    /// Current kernel deployment progress.
+    pub deployment: KernelDeploymentProgress,
+    /// Error message if the job has failed.
+    pub error: Option<String>,
 }
 
 /// Reboot policy for kernel deployments.
@@ -136,6 +337,8 @@ pub struct KernelDeploymentResponse {
     pub message: String,
     /// WebSocket URL for real-time output
     pub websocket_url: Option<String>,
+    /// Initial deployment progress snapshot.
+    pub deployment: KernelDeploymentProgress,
 }
 
 /// List playbooks response.
@@ -170,6 +373,8 @@ pub enum JobStatus {
     Pending,
     /// Job is currently running
     Running,
+    /// Job is paused waiting for an operator action.
+    ActionRequired,
     /// Job completed successfully
     Success,
     /// Job failed
@@ -183,6 +388,7 @@ impl std::fmt::Display for JobStatus {
         match self {
             JobStatus::Pending => write!(f, "pending"),
             JobStatus::Running => write!(f, "running"),
+            JobStatus::ActionRequired => write!(f, "action_required"),
             JobStatus::Success => write!(f, "success"),
             JobStatus::Failed => write!(f, "failed"),
             JobStatus::Cancelled => write!(f, "cancelled"),
@@ -227,6 +433,9 @@ pub struct JobDetails {
     pub output: Option<String>,
     /// Error message if failed
     pub error: Option<String>,
+    /// Kernel deployment progress for internal deployment jobs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kernel_deployment: Option<KernelDeploymentProgress>,
 }
 
 /// Execution statistics.

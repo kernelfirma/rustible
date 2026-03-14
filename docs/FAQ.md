@@ -21,7 +21,7 @@ Comprehensive FAQ and troubleshooting guide for Rustible - the high-performance 
 ### Q: What are the system requirements for Rustible?
 
 **A:** Rustible requires:
-- **Rust 1.85+** (for building from source)
+- **Rust 1.88+** (for building from source)
 - **OpenSSL development headers** (if using `ssh2-backend` feature)
 - **Linux, macOS, or Windows** (with WSL2 recommended for Windows)
 

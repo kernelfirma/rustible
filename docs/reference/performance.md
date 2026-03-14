@@ -43,7 +43,7 @@ Rustible demonstrates significant performance improvements over Ansible through:
 
 **Software:**
 - Rustible v0.1.0-alpha (commit: 1ad53f1)
-- Rust 1.85+, rustc with LTO optimizations
+- Rust 1.88+, rustc with LTO optimizations
 - SSH: Ed25519 key authentication
 
 ### Benchmark Tools

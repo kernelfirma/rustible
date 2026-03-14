@@ -529,7 +529,7 @@ We welcome contributions from the community! Here's how to get started.
 
 2. **Set up development environment**
    ```bash
-   # Install Rust (1.85+)
+   # Install Rust (1.88+)
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
    # Build the project
